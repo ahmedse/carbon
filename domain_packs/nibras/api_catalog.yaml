@@ -14,6 +14,8 @@ tools:
     kind: read
     requires_confirmation: false
     source_type: carbon_api
+    examples:
+      - {ar: "اعرض تشغيلات الرواتب", en: "list October payroll runs"}
 
   - name: get_payroll_run
     kind: read

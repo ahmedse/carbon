@@ -496,6 +496,67 @@ def test_context_snapshot_json_set_after_send_message(user):
 
 
 @pytest.mark.django_db
+def test_send_message_threads_pulse_mode_plan_into_chat_request(user):
+    """Wave 2 (R3): the non-stream POST /messages/ endpoint must not drop
+    ``pulse_mode`` before it reaches the router. ``send_message_stream``
+    already persists it to ``task_payload_json`` first; ``send_message``
+    must do the same so ``_send_chat_message`` sees ``process_mode='plan'``
+    on the very first turn, not the ``'ask'`` fallback.
+    """
+    ci = CarbonIntelligence()
+
+    provider = MagicMock()
+    provider.provider_name = "dummy"
+    provider.chat.return_value = ChatResponse(status="completed", content="ok")
+    ci._provider = provider
+
+    conversation = ci.create_conversation(user, "chat")
+    conversation_id = conversation["id"]
+
+    scope = Scope(
+        user_identifier=str(user.pk),
+        is_superuser=True,
+        org_unit_ids=["*"],
+    )
+    with patch("ai.intelligence.build_scope", return_value=scope):
+        ci.send_message(
+            user, conversation_id,
+            "Read my profile then my leave balance. Do not write.",
+            pulse_mode="plan",
+        )
+
+    sent_request = provider.chat.call_args[0][0]
+    assert sent_request.process_mode == "plan"
+
+
+@pytest.mark.django_db
+def test_send_message_without_pulse_mode_stays_ask(user):
+    """Regression guard: an ordinary first turn (no dial) must not be
+    silently upgraded to Plan just because the parameter now exists.
+    """
+    ci = CarbonIntelligence()
+
+    provider = MagicMock()
+    provider.provider_name = "dummy"
+    provider.chat.return_value = ChatResponse(status="completed", content="ok")
+    ci._provider = provider
+
+    conversation = ci.create_conversation(user, "chat")
+    conversation_id = conversation["id"]
+
+    scope = Scope(
+        user_identifier=str(user.pk),
+        is_superuser=True,
+        org_unit_ids=["*"],
+    )
+    with patch("ai.intelligence.build_scope", return_value=scope):
+        ci.send_message(user, conversation_id, "hello world")
+
+    sent_request = provider.chat.call_args[0][0]
+    assert sent_request.process_mode == "ask"
+
+
+@pytest.mark.django_db
 def test_context_snapshot_json_persists_kg_entities_after_send_message(user):
     # Seed a schema KG entity + attribute (exactly what T3 reads). The autouse
     # ``_clear_carbon_kg`` fixture hides committed leaks; these in-test rows

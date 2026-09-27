@@ -675,3 +675,12 @@ Append a new entry every time you confirm+fix a non-trivial bug (see `shared/deb
 - Best practice note: host figures come from a read. Compensation is explicit-ask. Arabic UX is language + direction together (ADR-0018), not a Pulse-only dir that fights the header.
 - Regression guard: `ai/tests/test_pv21_catalog.py::test_a_leave_limit_question_ranks_the_balance_read` · `ai/tests/test_catalog_render.py::test_sensitive_pay_stays_off_a_profile_dump` · `carbon-frontend/src/__tests__/PulseWorkspaceFooter.test.jsx`.
 - First seen: 2026-09-26 (live Chat screenshots, emp_2378).
+
+### PB-65 — Tasks Plan promises, binds without an id, then Halt eats the next read
+- Symptom: Plan first turn says “I’ll fetch / I’ll read” and never offers Create task. A GOSI list drafts `get_gosi_wps_sif` with no payroll run id and the run fails. A 3-step repair lists runs then the Halt step refuses the GOSI fetch. Result banner says “Here’s what changed” on a read. Now-tab labels GOSI steps “Payroll records.”
+- Layer: Pulse Plan / Agent Tasks (nibras, emp_2378 live 2026-09-27)
+- Root cause: Plan can exit on a promise. `get_gosi_wps_sif` is a bind, not a list. Halt was modelled as “stop everything remaining,” not “stop after the last intended read.” Result copy is `coworkerDone` (write-shaped) for every finished task. Step chrome reuses a payroll family label.
+- Fix: Recorded, not product-fixed. Evidence `docs/pulse/evidence/PV2-tasks-live-notes-2026-09-27.md`. Workbench locks the graph: missing run id stops; list then bind then halt; halt cannot skip the fetch; October with no hits observes and does not export. Do **not** write `PV2-tasks-retest-*.json` from this partial wave.
+- Best practice note: A promise is not a task. Bind tools wait for a prior list. Halt is a successor, not a cancel of unread steps. Read results are not “what changed.” T9 closed 2026-09-27 on the last three full `tier: live_retest` files (`080231`, `080255`, `080333`). The browser wave and the 0758 / 080144 FAILs stay on the record.
+- Regression guard: `domain_packs/nibras/banks/tasks_workbench.yaml` (`nibras.gosi.needs-run-id-stop`, `nibras.gosi.list-then-bind-halt`, `nibras.gosi.halt-after-fetch`) · `python -m ai.eval.tasks_workbench --gate` · RULE_36 · PB-63.
+- First seen: 2026-09-27 (live Tasks wave, emp_2378).

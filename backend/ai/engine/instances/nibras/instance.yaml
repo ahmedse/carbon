@@ -425,6 +425,8 @@ api_catalog:
       One person's payslip lines. Pay-structure aggregates
       (analyze_committed_pay). GOSI workbook.
     empty_render: no_list_rows
+    examples:
+      - {ar: "اعرض تشغيلات الرواتب", en: "list October payroll runs"}
     description: >
       List payroll runs for the user's visible org units. Returns
       {count, results[]} with id, org_unit, period_start, period_end,
@@ -617,8 +619,10 @@ api_catalog:
     method: GET
     path: /carbon-api/people/payroll-runs/{id}/wps/filing/
     description: >
-      Read current WPS/SIF filing status for a payroll run (generated /
-      validated / submitted, receipt_id, reconciled). Path param {id} = run id.
+      Read current WPS/SIF filing status for ONE payroll run. Path param
+      {id} is that run id, taken from a prior list_payroll_runs. Not a GOSI
+      list. Do not call without a run id. For committed GOSI totals use
+      analyze_gosi_committed.
     requires_auth: true
     requires_confirmation: false
 

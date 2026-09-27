@@ -9,7 +9,10 @@ def test_core_and_pack_cases_hold():
     assert report["misses"] == [], report["misses"]
     assert report["gate_pass"] is True
     assert report["tier"] == "structural"
-    assert report["n"] >= 30
+    assert report["n"] >= 250
+    ids = [case["id"] for case in load_cases()]
+    assert len(ids) == len(set(ids))
+    assert sum(1 for case_id in ids if case_id.startswith("nibras.")) >= 160
 
 
 def test_core_bank_does_not_name_a_pack():
@@ -23,4 +26,6 @@ def test_core_bank_does_not_name_a_pack():
 def test_pack_cases_are_loaded_from_the_pack_dir():
     ids = [case["id"] for case in load_cases()]
     assert any(case_id.startswith("core.") for case_id in ids)
-    assert any(not case_id.startswith("core.") for case_id in ids)
+    assert any(case_id.startswith("nibras.") for case_id in ids)
+    assert any(case_id.startswith("eduos.") for case_id in ids)
+    assert any(case_id.startswith("carbon.") for case_id in ids)

@@ -1,0 +1,16 @@
+# Compact EduOS expand spec. Domain words stay in this pack.
+prefix: eduos
+
+mutations:
+  - {id: grade, tool: record_grade, undo: void_grade}
+  - {id: cohort-submit, tool: submit_cohort_review}
+  - {id: publish, tool: publish_rubric}
+
+reads:
+  - {id: submissions, tool: list_cohort_submissions}
+  - {id: rubric, tool: search_knowledge}
+  - {id: export, tool: export_document}
+
+citations:
+  - {id: reflective, tokens: [reflective, 3], hit: "reflective band 3 requires two cycles", miss: "osce station 9"}
+  - {id: osce, tokens: [osce, 9], hit: "osce station 9 is a live exam", miss: "reflective band 3"}

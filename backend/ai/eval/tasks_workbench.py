@@ -26,12 +26,13 @@ import yaml
 
 from ai.engine.workflow.graph import WorkflowGraph, validate_graph
 from ai.engine.workflow.guards import GuardError, eval_guard
+from ai.eval.tasks_workbench_expand import expand_core, expand_packs
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 CORE_BANK = Path(__file__).resolve().parent / "tasks_workbench_core.yaml"
 PACKS_ROOT = REPO_ROOT / "domain_packs"
 EVIDENCE = REPO_ROOT / "docs" / "pulse" / "evidence"
-OUT_FILE = EVIDENCE / "PV2-tasks-workbench-2026-09-26.json"
+OUT_FILE = EVIDENCE / "PV2-tasks-workbench-2026-09-27.json"
 
 
 def _load_yaml(path: Path) -> list[dict]:
@@ -50,11 +51,21 @@ def pack_banks(root: Path = PACKS_ROOT) -> list[Path]:
 
 def load_cases() -> list[dict]:
     cases = _load_yaml(CORE_BANK)
+    cases.extend(expand_core())
+    seen = {row.get("id") for row in cases}
     for path in pack_banks():
         for row in _load_yaml(path):
             row = dict(row)
             row.setdefault("pack", path.parent.parent.name)
+            if row.get("id") in seen:
+                continue
+            seen.add(row.get("id"))
             cases.append(row)
+    for row in expand_packs():
+        if row.get("id") in seen:
+            continue
+        seen.add(row.get("id"))
+        cases.append(row)
     return cases
 
 
@@ -126,9 +137,16 @@ def walk(graph: WorkflowGraph, ctx: dict) -> list[str]:
         if node is None or node.node_type in {"succeed", "fail"}:
             break
         if node.node_type == "parallel":
-            path.extend(edge.target for edge in edges if edge.target not in path)
+            branches = [edge.target for edge in edges if edge.target not in path]
+            path.extend(branches)
+            succs = [{e.target for e in out.get(branch) or []} for branch in branches]
+            shared = set.intersection(*succs) if succs else set()
+            if len(shared) == 1:
+                current = next(iter(shared))
+                continue
             break
-        taken = _take(edges, ctx) if node.node_type == "choice" else (edges[0] if edges else None)
+        use_guards = node.node_type == "choice" or any(edge.guard for edge in edges)
+        taken = _take(edges, ctx) if use_guards else (edges[0] if edges else None)
         current = taken.target if taken is not None else ""
     return path
 
@@ -174,6 +192,12 @@ def _check(case: dict) -> str:
         if "roles" in expect and roles != list(expect["roles"]):
             return f"roles={roles}"
         by_role = {row.get("role"): row for row in agents}
+        if expect.get("detects") == "mutation_on_readonly":
+            flagged = any(
+                (by_role.get(role) or {}).get("mutation_tools")
+                for role in expect.get("readonly_roles") or []
+            )
+            return "" if flagged else "trap not detected"
         for role in expect.get("readonly_roles") or []:
             if (by_role.get(role) or {}).get("mutation_tools"):
                 return f"{role} has mutation tools"
@@ -191,6 +215,9 @@ def _check(case: dict) -> str:
     if "valid" in expect and bool(errors) == bool(expect["valid"]):
         return "invalid" if errors else "expected invalid"
     if expect.get("valid") is False:
+        needle = str(expect.get("invalid_has") or "")
+        if needle and not any(needle in err for err in errors):
+            return f"errors={errors}"
         return ""
     path = walk(graph, ctx)
     if "path" in expect and path != list(expect["path"]):
@@ -212,6 +239,9 @@ def _check(case: dict) -> str:
     for node_id, collection in (expect.get("collection_path") or {}).items():
         if (by_id.get(node_id).collection_path if by_id.get(node_id) else None) != collection:
             return f"collection {node_id}"
+    for node_id, mode in (expect.get("join") or {}).items():
+        if (by_id.get(node_id).join if by_id.get(node_id) else None) != mode:
+            return f"join {node_id}"
     for node_id, target in (expect.get("compensation") or {}).items():
         if (by_id.get(node_id).compensation if by_id.get(node_id) else None) != target:
             return f"compensation {node_id}"
@@ -225,11 +255,16 @@ def _check(case: dict) -> str:
         for name in hidden:
             if str(name) in blob:
                 return f"hidden {name}"
-    differ = expect.get("roles_differ") or []
-    if len(differ) == 2:
-        left = (by_id.get(differ[0]).meta or {}).get("role") if by_id.get(differ[0]) else None
-        right = (by_id.get(differ[1]).meta or {}).get("role") if by_id.get(differ[1]) else None
-        if not left or not right or left == right:
+    humans = list(expect.get("roles_differ") or expect.get("humans") or [])
+    roles = []
+    for node_id in humans:
+        node = by_id.get(node_id)
+        roles.append((node.meta or {}).get("role") if node else None)
+    if expect.get("detects") == "same_role":
+        filled = [role for role in roles if role]
+        return "" if filled and len(set(filled)) < len(filled) else "trap not detected"
+    if len(humans) >= 2:
+        if any(not role for role in roles) or len(set(roles)) != len(roles):
             return "roles do not differ"
     return ""
 

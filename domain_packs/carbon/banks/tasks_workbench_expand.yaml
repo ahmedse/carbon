@@ -1,0 +1,14 @@
+# Compact Carbon data-trust expand spec. Domain words stay in this pack.
+prefix: carbon
+
+mutations:
+  - {id: attest, tool: attest_lineage, undo: revoke_attestation}
+  - {id: publish, tool: publish_trust_pack}
+
+reads:
+  - {id: lineage, tool: get_lineage}
+  - {id: sources, tool: list_trust_sources}
+  - {id: export, tool: export_document}
+
+citations:
+  - {id: lineage, tokens: [lineage, attested], hit: "lineage is attested before publish", miss: "export is a read"}

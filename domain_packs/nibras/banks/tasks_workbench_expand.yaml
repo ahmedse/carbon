@@ -1,0 +1,111 @@
+# Compact Nibras expand spec. Domain words stay in this pack.
+prefix: nibras
+
+mutations:
+  - id: leave
+    tool: submit_my_leave
+    undo: cancel_my_leave
+    sod: [employee, manager, hr]
+    after: [get_my_leave_balance, get_my_profile]
+  - id: loan
+    tool: submit_my_loan
+    undo: cancel_my_loan
+    sod: [employee, manager]
+    after: [list_my_loans, get_my_profile]
+  - id: attendance
+    tool: submit_my_attendance
+    sod: [employee, manager]
+    after: [list_my_attendance, get_my_leave_balance]
+  - id: gosi
+    tool: submit_gosi_filing
+    sod: [specialist, manager, hr]
+    after: [list_gosi_filings, list_payroll_runs]
+  - id: onboard
+    tool: create_employee
+    sod: [requester, reviewer, hr]
+    after: [get_my_profile, list_gosi_filings]
+  - id: clock-out
+    tool: submit_my_attendance_out
+    after: [list_my_attendance, get_my_profile]
+
+reads:
+  - {id: profile, tool: get_my_profile, hidden: [basic_salary, net_pay], args: {fields: [full_name, org_unit]}}
+  - {id: payslip, tool: list_my_payslips, hidden: [net_pay, basic_salary], args: {fields: [period, status]}}
+  - {id: balance, tool: get_my_leave_balance}
+  - {id: payroll, tool: list_payroll_runs}
+  - {id: attendance, tool: list_my_attendance}
+  - {id: gosi, tool: list_gosi_filings}
+  - {id: loans, tool: list_my_loans}
+
+citations:
+  - {id: sick, tokens: [sick, 15], hit: "sick remaining 15 entitled 15", miss: "annual entitled 30 remaining 30"}
+  - {id: gosi, tokens: [GOSI, monthly], hit: "GOSI filing is monthly and does not write payroll", miss: "payroll is weekly"}
+  - {id: loan, tokens: [principal, 500], hit: "loan principal cap 500", miss: "leave days 30"}
+  - {id: annual, tokens: [annual, 30], hit: "annual entitled 30 remaining 30", miss: "sick remaining 15"}
+  - {id: sick-ar, tokens: [مرض, 15], hit: "رصيد الإجازة المرضية 15 يوما", miss: "رصيد الإجازة السنوية 30 يوما"}
+  - {id: annual-ar, tokens: [سنوية, 30], hit: "رصيد الإجازة السنوية 30 يوما", miss: "رصيد الإجازة المرضية 15 يوما"}
+  - {id: gosi-ar, tokens: [التأمينات, شهري], hit: "تقديم التأمينات شهري ولا يكتب الرواتب", miss: "الراتب أسبوعي"}
+
+binds:
+  - id: gosi-wps
+    list: list_payroll_runs
+    detail: get_gosi_wps_sif
+    key: run_id
+  - id: gosi-file
+    list: list_gosi_filings
+    detail: get_gosi_wps_sif
+    key: run_id
+
+observes:
+  - {id: attendance, tool: list_my_attendance}
+  - {id: payroll, tool: list_payroll_runs}
+  - {id: gosi, tool: list_gosi_filings}
+  - {id: loans, tool: list_my_loans}
+
+stacks:
+  - id: leave
+    read: get_my_leave_balance
+    write: submit_my_leave
+    gate1: "remaining >= days"
+    gate2: "days == span"
+    variants:
+      - {id: ok, remaining: 30, days: 1, span: 1, expect: write}
+      - {id: over, remaining: 30, days: 40, span: 40, expect: short}
+      - {id: span, remaining: 30, days: 30, span: 1, expect: mismatch}
+  - id: sick
+    read: get_my_leave_balance
+    write: submit_my_leave
+    gate1: "kind == 1"
+    gate2: "days <= sick_cap"
+    variants:
+      - {id: ok, kind: 1, days: 3, sick_cap: 15, expect: write}
+      - {id: wrong-kind, kind: 0, days: 3, sick_cap: 15, expect: short}
+      - {id: over, kind: 1, days: 20, sick_cap: 15, expect: mismatch}
+  - id: loan
+    read: list_my_loans
+    write: submit_my_loan
+    gate1: "principal <= cap"
+    gate2: "tenure <= max_tenure"
+    variants:
+      - {id: ok, principal: 400, cap: 500, tenure: 6, max_tenure: 12, expect: write}
+      - {id: over, principal: 900, cap: 500, tenure: 6, max_tenure: 12, expect: short}
+      - {id: tenure, principal: 400, cap: 500, tenure: 24, max_tenure: 12, expect: mismatch}
+  - id: payroll
+    read: list_payroll_runs
+    write: export_document
+    mutation: false
+    gate1: "hits >= 1"
+    gate2: "variance <= band"
+    variants:
+      - {id: ok, hits: 2, variance: 4, band: 10, expect: write}
+      - {id: empty, hits: 0, variance: 0, band: 10, expect: short}
+      - {id: over, hits: 2, variance: 18, band: 10, expect: mismatch}
+  - id: gosi
+    read: list_gosi_filings
+    write: submit_gosi_filing
+    gate1: "period == 1"
+    gate2: "ready == 1"
+    variants:
+      - {id: ok, period: 1, ready: 1, expect: write}
+      - {id: wrong-period, period: 0, ready: 1, expect: short}
+      - {id: not-ready, period: 1, ready: 0, expect: mismatch}

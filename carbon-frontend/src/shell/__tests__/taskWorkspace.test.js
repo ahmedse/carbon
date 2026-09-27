@@ -51,6 +51,21 @@ describe('taskCoworkerLine', () => {
     expect(taskCoworkerLine({ t, awaiting: true })).toBe('coworkerWaiting');
   });
 
+  it('does not claim a host change on a read-only finish', () => {
+    expect(taskCoworkerLine({
+      t,
+      phase: 'finished',
+      effective: 'completed',
+      readOnly: true,
+    })).toBe('coworkerFound');
+    expect(taskCoworkerLine({
+      t,
+      phase: 'finished',
+      effective: 'completed',
+      readOnly: false,
+    })).toBe('coworkerDone');
+  });
+
   it('keeps the paused count line', () => {
     expect(taskCoworkerLine({
       t,

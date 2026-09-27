@@ -3857,6 +3857,24 @@ class ReActLoop:
         body = "\n".join(lines[:12])
         return f"{head}\n\n{body}".strip()[:2000]
 
+    @staticmethod
+    def _bind_donor_ids(plan: Plan) -> set[int]:
+        """Listing steps later reads bind from. They are not the Answer."""
+        donors: set[int] = set()
+        for step in getattr(plan, "steps", None) or []:
+            args = getattr(step, "tool_args", None) or {}
+            bind = args.get("bind") if isinstance(args, dict) else None
+            if not isinstance(bind, dict):
+                continue
+            for spec in bind.values():
+                if not isinstance(spec, dict) or spec.get("step") is None:
+                    continue
+                try:
+                    donors.add(int(spec["step"]))
+                except (TypeError, ValueError):
+                    continue
+        return donors
+
     async def _synthesise(
         self,
         plan: Plan,
@@ -3873,6 +3891,14 @@ class ReActLoop:
         if len(step_results) == 1 and plan.source == "single_step" and not gap_step_ids:
             return step_results[0].draft_text or ""
 
+        donors = self._bind_donor_ids(plan)
+        cover_texts = [
+            r.draft_text for r in step_results
+            if r.draft_text and r.step_id not in donors
+        ]
+        all_texts = [r.draft_text for r in step_results if r.draft_text]
+        texts = cover_texts or all_texts
+
         # Build a synthesis prompt
         parts = [f"User asked: {user_message}"]
         parts.append(f"Plan: {plan.pattern} — {plan.synthesis_instruction}")
@@ -3886,8 +3912,11 @@ class ReActLoop:
             else:
                 status = "✗"
             parts.append(f"  [{status}] Step {r.step_id}: {r.intent}")
-            if r.draft_text:
-                parts.append(f"    Output: {r.draft_text[:500]}")
+            shown = r.draft_text if r.draft_text else ""
+            if shown and r.step_id in donors and cover_texts:
+                shown = ""
+            if shown:
+                parts.append(f"    Output: {shown[:500]}")
             if r.error:
                 parts.append(f"    Error: {r.error}")
 
@@ -3908,7 +3937,6 @@ class ReActLoop:
             )
         else:
             # Simple concatenation fallback
-            texts = [r.draft_text for r in step_results if r.draft_text]
             gap_note = ""
             if gap_step_ids:
                 gap_note = (

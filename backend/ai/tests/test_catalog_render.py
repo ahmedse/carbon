@@ -461,3 +461,42 @@ def test_metric_restate_speaks_arabic_to_an_arabic_ask():
     rendered = render_catalog_read({"result": payload}, "aggregate_entity", "ar")
     assert rendered.startswith("العدد: 89")
     assert ungrounded_numbers(rendered, [payload]) == []
+
+
+_GOSI_ENTRY = {
+    "name": "analyze_gosi_committed",
+    "kind": "read",
+    "empty_render": "no_committed_gosi",
+    "label": "Committed GOSI",
+    "returns": ["label", "headcount", "average", "median", "min", "max", "total",
+                "period_end", "dimension"],
+}
+
+_GOSI_PAYLOAD = {
+    "period_end": "2026-08-31",
+    "dimension": "nationality",
+    "breakdown": [
+        {"label": "KWT", "headcount": 55, "total": "9863.126"},
+        {"label": "PHL", "headcount": 1, "total": "1200.000"},
+    ],
+}
+
+
+def test_chat_leaves_a_breakdown_to_the_writer():
+    assert render_catalog_read(
+        {"result": _GOSI_PAYLOAD}, "analyze_gosi_committed", "en",
+        catalog_entry=_GOSI_ENTRY,
+    ) is None
+
+
+def test_agent_bound_read_restates_breakdown_totals():
+    rendered = render_bound_catalog_read(
+        {"result": _GOSI_PAYLOAD},
+        "analyze_gosi_committed",
+        "en",
+        catalog_entry=_GOSI_ENTRY,
+    )
+    assert rendered
+    assert "9863.126" in rendered
+    assert "1200.000" in rendered
+    assert "KWT" in rendered

@@ -1,0 +1,236 @@
+{
+  "tier": "production_readiness",
+  "run_at": "2026-09-27T08:53:20.630847+00:00",
+  "surface": "tasks",
+  "user": "emp_2378",
+  "verdict": "not_ready",
+  "reached": 6,
+  "failed": 3,
+  "partial": 1,
+  "missing": 2,
+  "n": 12,
+  "rule": "Production READY only when R1–R11 are reached. Lab T1–T10 and structural 417/417 never close R12. Night 2026-09-23 FAIL stays. L6/L7 not scored.",
+  "kpis": [
+    {
+      "id": "R1",
+      "name": "Host-grounded figures",
+      "honest": "reached",
+      "note": "Profile, payroll count, attendance empty-state, and GOSI totals all matched the host."
+    },
+    {
+      "id": "R2",
+      "name": "Latest-period bind",
+      "honest": "reached",
+      "note": "analyze_gosi_committed used the latest committed period_end from list_payroll_runs."
+    },
+    {
+      "id": "R3",
+      "name": "First-turn Create",
+      "honest": "fail",
+      "note": "Plan dial did not persist a task. ['first turn did not create a plan'] reply='| Name | Employee number | Job title | Department | Manager | Active |\\n| --- | --- | --- | --- | --- | --- |\\n| Ali Mohamed Saad AlAjmi | 2378 | Director of Shared Services | CEO Office | Ashraf Ahmed Oshi | True | Your leave balance - annua'"
+    },
+    {
+      "id": "R4",
+      "name": "Cockpit honesty",
+      "honest": "partial",
+      "note": "API final_response is read-shaped. Browser Result banner (coworkerFound) not re-checked this run. Dated wave still dishonest."
+    },
+    {
+      "id": "R5",
+      "name": "Planner stability",
+      "honest": "reached",
+      "note": "3/3 human payroll briefs bound list_payroll_runs only."
+    },
+    {
+      "id": "R6",
+      "name": "Persona coverage",
+      "honest": "missing",
+      "note": "Only emp_2378 this wave. emp_1067 My and emp_1712 Team not driven."
+    },
+    {
+      "id": "R7",
+      "name": "Write consent live",
+      "honest": "missing",
+      "note": "Leave/loan/attendance write needs STACK-HOLD + emp_1067. Not run."
+    },
+    {
+      "id": "R8",
+      "name": "Night cleanliness",
+      "honest": "fail",
+      "note": "Night 2026-09-23 FAIL stays. Dry-run / SKIP do not clear it."
+    },
+    {
+      "id": "R9",
+      "name": "Arabic Tasks",
+      "honest": "reached",
+      "note": "Arabic brief bound ['get_my_leave_balance'] status=completed."
+    },
+    {
+      "id": "R10",
+      "name": "Production latency",
+      "honest": "reached",
+      "note": "Observe+chat p50 3450 ms. Bar ≤ 8000 ms and no case > 30 s. over30=0."
+    },
+    {
+      "id": "R11",
+      "name": "Chat never writes",
+      "honest": "reached",
+      "note": "Ungated leave did not change host leave count."
+    },
+    {
+      "id": "R12",
+      "name": "Enterprise go-live",
+      "honest": "fail",
+      "note": "READY only when R1–R11 are reached. Lab T1–T10 never closes R12."
+    }
+  ],
+  "cases": {
+    "profile": {
+      "pass": true,
+      "plan_id": "397390e0-866b-4b4f-ad9e-9956a4191f4a",
+      "status": "completed",
+      "tools": [
+        "get_my_profile",
+        "get_my_leave_balance"
+      ],
+      "host_misses": [],
+      "seconds": 3.73
+    },
+    "payroll": {
+      "pass": true,
+      "plan_id": "8a441a4f-bb8c-4c6b-92f4-2443440d93fc",
+      "status": "completed",
+      "tools": [
+        "list_payroll_runs"
+      ],
+      "host_misses": [],
+      "seconds": 0.55
+    },
+    "attendance": {
+      "pass": true,
+      "plan_id": "36a34dcb-84be-477b-8feb-768d0e83d779",
+      "status": "completed",
+      "tools": [
+        "list_my_attendance"
+      ],
+      "host_misses": [],
+      "seconds": 5.59
+    },
+    "gosi": {
+      "pass": true,
+      "plan_id": "c96ca326-129d-4491-9e02-a5739653ff61",
+      "status": "completed",
+      "tools": [
+        "list_payroll_runs",
+        "analyze_gosi_committed"
+      ],
+      "host_misses": [],
+      "used_args": [
+        {
+          "api_name": "list_payroll_runs",
+          "query_params": {
+            "status": "committed"
+          }
+        },
+        {
+          "bind": {
+            "period_end": {
+              "step": 0,
+              "field": "period_end",
+              "select": "latest"
+            }
+          },
+          "api_name": "analyze_gosi_committed",
+          "query_params": {
+            "dimension": "nationality",
+            "period_end": "2026-08-31"
+          }
+        }
+      ],
+      "seconds": 0.67
+    },
+    "arabic": {
+      "pass": true,
+      "plan_id": "9e2d9119-6a35-49ae-8cb0-2fa09d466e77",
+      "status": "completed",
+      "tools": [
+        "get_my_leave_balance"
+      ],
+      "misses": [],
+      "seconds": 5.92
+    },
+    "chat": {
+      "pass": true,
+      "conversation_id": "b503b588-21c4-44f8-bf69-8767fa5da0f8",
+      "host_write": false,
+      "misses": [],
+      "seconds": 3.17
+    },
+    "first_turn": {
+      "pass": false,
+      "conversation_id": "c2397564-848d-4c3d-9eaa-b4f8e286638e",
+      "plan_id": null,
+      "reply": "| Name | Employee number | Job title | Department | Manager | Active |\n| --- | --- | --- | --- | --- | --- |\n| Ali Mohamed Saad AlAjmi | 2378 | Director of Shared Services | CEO Office | Ashraf Ahmed Oshi | True | Your leave balance - annua",
+      "misses": [
+        "first turn did not create a plan"
+      ],
+      "seconds": 3.17,
+      "http": 200
+    },
+    "stability": {
+      "pass": true,
+      "tries": [
+        {
+          "http": 201,
+          "tools": [
+            "list_payroll_runs"
+          ],
+          "ok": true
+        },
+        {
+          "http": 201,
+          "tools": [
+            "list_payroll_runs"
+          ],
+          "ok": true
+        },
+        {
+          "http": 201,
+          "tools": [
+            "list_payroll_runs"
+          ],
+          "ok": true
+        }
+      ],
+      "misses": []
+    }
+  },
+  "oracles": {
+    "payroll": {
+      "ok": true,
+      "count": 13,
+      "latest_period": "2026-08-31",
+      "latest_id": 56
+    },
+    "attendance": {
+      "ok": true,
+      "count": 0
+    },
+    "gosi_latest": {
+      "ok": true,
+      "totals": [
+        "9863",
+        "1200"
+      ],
+      "period_end": "2026-08-31",
+      "run_ids": [
+        56,
+        68
+      ],
+      "empty": false
+    }
+  },
+  "l6_l7": "not scored",
+  "night_2026_09_23": "FAIL stays",
+  "lab_meter": "T1–T10 is a different score. Do not merge."
+}

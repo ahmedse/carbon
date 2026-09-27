@@ -1,0 +1,145 @@
+{
+  "tier": "live_retest",
+  "run_at": "2026-09-27T07:58:06.241420+00:00",
+  "surface": "tasks",
+  "user": "emp_2378",
+  "bank": "tasks_retest_bank.yaml",
+  "partial": false,
+  "pass": false,
+  "cases": [
+    {
+      "id": "observe-profile-balance",
+      "kind": "observe",
+      "objectives": [
+        "T4",
+        "T7",
+        "T8",
+        "T9"
+      ],
+      "plan_id": "aa82a368-6e18-4908-a032-b918177b80c4",
+      "status": "approved",
+      "tools": [
+        "get_my_profile",
+        "get_my_leave_balance"
+      ],
+      "run_http": 406,
+      "seconds": 3.87,
+      "misses": [
+        "status=approved",
+        "missing me.full_name",
+        "run 406"
+      ],
+      "pass": false
+    },
+    {
+      "id": "observe-payroll-october",
+      "kind": "observe",
+      "pass": false,
+      "misses": [
+        "create 400"
+      ],
+      "seconds": 3.38
+    },
+    {
+      "id": "observe-attendance",
+      "kind": "observe",
+      "objectives": [
+        "T4",
+        "T7",
+        "T9"
+      ],
+      "plan_id": "6a156e69-1e42-4730-bcb4-82c5e9df06b2",
+      "status": "approved",
+      "tools": [
+        "list_my_attendance",
+        ""
+      ],
+      "run_http": 406,
+      "seconds": 3.39,
+      "misses": [
+        "status=approved",
+        "run 406"
+      ],
+      "pass": false
+    },
+    {
+      "id": "observe-gosi-list",
+      "kind": "observe",
+      "objectives": [
+        "T4",
+        "T7",
+        "T9"
+      ],
+      "plan_id": "db27ca33-b72d-4cf0-8eb9-5340b62ecfc1",
+      "status": "approved",
+      "tools": [
+        "analyze_employees",
+        "analyze_employees",
+        "analyze_employees",
+        "analyze_employees",
+        "analyze_employees",
+        "analyze_employees",
+        "analyze_employees",
+        "analyze_employees",
+        "analyze_employees",
+        "analyze_employees",
+        "export_document"
+      ],
+      "run_http": 406,
+      "seconds": 0.32,
+      "misses": [
+        "tools=['analyze_employees', 'analyze_employees', 'analyze_employees', 'analyze_employees', 'analyze_employees', 'analyze_employees', 'analyze_employees', 'analyze_employees', 'analyze_employees', 'analyze_employees', 'export_document']",
+        "mutation step",
+        "write tool ['analyze_employees', 'analyze_employees', 'analyze_employees', 'analyze_employees', 'analyze_employees', 'analyze_employees', 'analyze_employees', 'analyze_employees', 'analyze_employees', 'analyze_employees', 'export_document']",
+        "status=approved",
+        "run 406"
+      ],
+      "pass": false
+    },
+    {
+      "id": "refuse-ungated-leave",
+      "kind": "refuse",
+      "objectives": [
+        "T5",
+        "T6",
+        "T9"
+      ],
+      "conversation_id": "78dd1e77-9e4c-4117-8463-4d6ac100d6d1",
+      "decision": null,
+      "host_write": false,
+      "seconds": 3.27,
+      "misses": [],
+      "pass": true
+    },
+    {
+      "id": "handoff-leave-write",
+      "kind": "handoff",
+      "objectives": [
+        "T1",
+        "T5",
+        "T9"
+      ],
+      "conversation_id": "69d4498a-a8fe-449e-988f-0b09ee9e861c",
+      "decision": null,
+      "host_write": false,
+      "seconds": 2.29,
+      "misses": [],
+      "pass": true
+    }
+  ],
+  "objectives": {
+    "T4": false,
+    "T7": false,
+    "T8": false,
+    "T9": false,
+    "T5": true,
+    "T6": true,
+    "T1": true
+  },
+  "latency": {
+    "cases": 6,
+    "p50_ms": 3325,
+    "p95_ms": 3390,
+    "max_ms": 3870
+  }
+}

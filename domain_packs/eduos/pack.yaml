@@ -2,7 +2,7 @@
 # EduOS profiles already carry their own `version` (gradevance.services.packs);
 # this pack version is the envelope those profile versions ship inside.
 id: eduos
-version: 1
+version: 2
 domain: education
 display_name: EduOS — GradeVance
 instance: backend/ai/engine/instances/eduos/instance.yaml
@@ -17,3 +17,5 @@ owns:
   scripts: scripts/
   assurance: assurance/
   processes: processes/
+  workbench: banks/tasks_workbench.yaml
+  workbench_expand: banks/tasks_workbench_expand.yaml

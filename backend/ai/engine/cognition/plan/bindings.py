@@ -76,29 +76,50 @@ def _label(row: dict, key_field: str) -> str:
     return " · ".join(parts)
 
 
-def _select(rows: list[dict], key_field: str, select: str, order_by: str) -> dict | None:
-    if len(rows) == 1:
-        return rows[0]
-    if select == "latest" and order_by:
-        ordered = [r for r in rows if r.get(order_by) not in (None, "")]
-        if ordered:
-            return max(ordered, key=lambda r: str(r.get(order_by)))
-    return None
+def _unfilled(value: Any) -> bool:
+    """True when a slot is empty or an LLM placeholder, not a host value."""
+    if value is None:
+        return True
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return True
+        from ai.engine.cognition.plan.export_bind import content_is_placeholder
+
+        return content_is_placeholder(text)
+    return False
 
 
-def declare_bindings(step: Any, steps_by_id: dict, surface: Any) -> None:
-    """Plan time: point each unfilled path key at the one listing read it depends on.
+def _query_map(args: dict) -> dict:
+    raw = args.get("query_params")
+    return dict(raw) if isinstance(raw, dict) else {}
 
-    A key the planner already bound keeps its declaration (and ``select``).
-    """
-    args = getattr(step, "tool_args", None)
-    if getattr(step, "tool_name", None) != "call_host_api" or not isinstance(args, dict):
-        return
-    name = str(args.get("api_name") or "")
-    missing = surface.missing_path_keys(name, args)
-    if not missing:
-        return
-    declared = dict(args.get("bind") or {}) if isinstance(args.get("bind"), dict) else {}
+
+def _required_query_keys(surface: Any, name: str) -> list[str]:
+    schema = surface.schema(name) if name else None
+    if not isinstance(schema, dict):
+        return []
+    path_keys = set(surface.path_keys(name)) if name else set()
+    return [
+        str(key)
+        for key in (schema.get("required") or [])
+        if str(key) and str(key) not in path_keys
+    ]
+
+
+def _missing_query_keys(surface: Any, name: str, args: dict) -> list[str]:
+    query = _query_map(args)
+    missing = []
+    for key in _required_query_keys(surface, name):
+        value = query.get(key)
+        if value is None:
+            value = args.get(key)
+        if _unfilled(value):
+            missing.append(key)
+    return missing
+
+
+def _listing_ids(step: Any, steps_by_id: dict, surface: Any) -> list:
     listings = []
     for dep_id in getattr(step, "depends_on", None) or []:
         dep = steps_by_id.get(dep_id)
@@ -111,13 +132,67 @@ def declare_bindings(step: Any, steps_by_id: dict, surface: Any) -> None:
             and not surface.path_keys(dep_name)
         ):
             listings.append(dep_id)
-    for key in missing:
+    return listings
+
+
+def _supplied(surface: Any, name: str) -> set[str]:
+    if hasattr(surface, "supplied_by"):
+        return set(surface.supplied_by(name) or [])
+    entry = surface.entry(name) or {}
+    keys = {str(item) for item in (entry.get("returns") or []) if item}
+    latest = str(entry.get("latest_by") or "").strip()
+    if latest:
+        keys.add(latest)
+    return keys
+
+
+def _select(rows: list[dict], key_field: str, select: str, order_by: str) -> dict | None:
+    if len(rows) == 1:
+        return rows[0]
+    if select == "latest" and order_by:
+        ordered = [r for r in rows if r.get(order_by) not in (None, "")]
+        if ordered:
+            return max(ordered, key=lambda r: str(r.get(order_by)))
+    return None
+
+
+def declare_bindings(step: Any, steps_by_id: dict, surface: Any) -> None:
+    """Plan time: point unfilled path or query keys at the listing they depend on.
+
+    A key the planner already bound keeps its declaration (and ``select``).
+    Required query keys use the same ``bind`` shape as path ids. A listing
+    that ``supplied_by`` / ``returns`` the field, with ``latest_by``, gets
+    ``select: latest``. Placeholder query values count as unfilled.
+    """
+    args = getattr(step, "tool_args", None)
+    if getattr(step, "tool_name", None) != "call_host_api" or not isinstance(args, dict):
+        return
+    name = str(args.get("api_name") or "")
+    missing_path = surface.missing_path_keys(name, args)
+    missing_query = _missing_query_keys(surface, name, args)
+    if not missing_path and not missing_query:
+        return
+    declared = dict(args.get("bind") or {}) if isinstance(args.get("bind"), dict) else {}
+    listings = _listing_ids(step, steps_by_id, surface)
+    for key in list(missing_path) + list(missing_query):
         spec = declared.get(key) if isinstance(declared.get(key), dict) else {}
         if spec.get("step") is None and len(listings) == 1:
+            dep = steps_by_id.get(listings[0])
+            dep_args = getattr(dep, "tool_args", None) or {}
+            dep_name = str(dep_args.get("api_name") or "") if isinstance(dep_args, dict) else ""
+            if key in missing_query and dep_name and key not in _supplied(surface, dep_name):
+                continue
             spec = {**spec, "step": listings[0]}
-        if spec.get("step") is not None:
-            spec.setdefault("field", key)
-            declared[key] = spec
+        if spec.get("step") is None:
+            continue
+        spec.setdefault("field", key)
+        dep = steps_by_id.get(spec.get("step"))
+        dep_args = getattr(dep, "tool_args", None) or {}
+        dep_name = str(dep_args.get("api_name") or "") if isinstance(dep_args, dict) else ""
+        order_by = str((surface.entry(dep_name) or {}).get("latest_by") or "")
+        if order_by == key:
+            spec.setdefault("select", "latest")
+        declared[key] = spec
     if declared:
         step.tool_args = {**args, "bind": declared}
 
@@ -168,7 +243,7 @@ def resolve_bindings(
     for key, spec in declared.items():
         if key in path_keys or not isinstance(spec, dict) or spec.get("step") is None:
             continue
-        if query.get(key) not in (None, ""):
+        if not _unfilled(query.get(key)):
             continue
         key_field = str(spec.get("field") or key)
         rows = [r for r in output_rows(outputs_by_step.get(spec.get("step"))) if r.get(key_field) not in (None, "")]

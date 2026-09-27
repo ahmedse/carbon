@@ -11,6 +11,9 @@ CATALOG = [
         "name": "list_payroll_runs",
         "method": "GET",
         "path": "/payroll-runs/",
+        "kind": "list",
+        "label": "Payroll runs",
+        "description": "List payroll runs for the user's visible org units.",
         "returns": ["id", "org_unit", "period_start", "period_end", "status"],
         "latest_by": "period_end",
         "parameters": {
@@ -203,6 +206,46 @@ def test_compile_refuses_when_no_measure_is_named():
     assert compile_catalog_plan("export a board pack of p90", CATALOG) is None
 
 
+GOSI_OBSERVE = (
+    "Create a 2-step task that lists payroll runs then analyzes committed "
+    "GOSI by nationality. Do not write."
+)
+OCTOBER_LIST = "List October 2026 payroll runs. Stop after listing. Do not write."
+
+
+def test_compile_gosi_observe_binds_latest_period_without_export():
+    plan = compile_catalog_plan(GOSI_OBSERVE, CATALOG)
+    assert plan is not None
+    assert plan.source == "catalog_compile"
+    assert plan.needs_confirmation is False
+    apis = _apis(plan)
+    assert "list_payroll_runs" in apis
+    assert "analyze_gosi_committed" in apis
+    assert "analyze_committed_pay" not in apis
+    assert all(s.tool_name != "export_document" for s in plan.steps)
+    gosi = next(
+        s for s in plan.steps
+        if (s.tool_args or {}).get("api_name") == "analyze_gosi_committed"
+    )
+    bind = (gosi.tool_args or {}).get("bind") or {}
+    assert bind["period_end"]["field"] == "period_end"
+    assert bind["period_end"]["select"] == "latest"
+    listing = next(
+        s for s in plan.steps
+        if (s.tool_args or {}).get("api_name") == "list_payroll_runs"
+    )
+    assert bind["period_end"]["step"] == listing.step_id
+
+
+def test_compile_october_list_is_one_listing_observe():
+    plan = compile_catalog_plan(OCTOBER_LIST, CATALOG)
+    assert plan is not None
+    assert plan.source == "catalog_compile"
+    assert plan.needs_confirmation is False
+    assert _apis(plan) == ["list_payroll_runs"]
+    assert all(s.tool_name != "export_document" for s in plan.steps)
+
+
 def test_compile_widens_format_when_the_brief_names_two_files():
     plan = compile_catalog_plan(BRIEF + " Also a PDF executive report.", CATALOG)
     export = next(s for s in plan.steps if s.tool_name == "export_document")
@@ -232,3 +275,30 @@ def test_compile_uses_the_nibras_catalog_on_the_live_brief():
         utterance=BRIEF,
     )
     assert not any(f.blocks for f in findings)
+
+
+def test_nibras_catalog_authors_gosi_observe_and_october_list():
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "engine" / "instances" / "nibras" / "instance.yaml"
+    )
+    catalog = list(yaml.safe_load(path.read_text(encoding="utf-8")).get("api_catalog") or [])
+    gosi = compile_catalog_plan(GOSI_OBSERVE, catalog)
+    assert gosi is not None
+    assert "analyze_gosi_committed" in _apis(gosi)
+    assert "list_payroll_runs" in _apis(gosi)
+    assert all(s.tool_name != "export_document" for s in gosi.steps)
+    october = compile_catalog_plan(OCTOBER_LIST, catalog)
+    assert october is not None
+    assert _apis(october) == ["list_payroll_runs"]
+    assert all(s.tool_name != "export_document" for s in october.steps)
+
+
+def test_nibras_catalog_does_not_author_a_profile_leave_brief():
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "engine" / "instances" / "nibras" / "instance.yaml"
+    )
+    catalog = list(yaml.safe_load(path.read_text(encoding="utf-8")).get("api_catalog") or [])
+    brief = "Create a 2-step task that reads my profile then my leave balance. Do not write."
+    assert compile_catalog_plan(brief, catalog) is None

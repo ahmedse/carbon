@@ -1,0 +1,131 @@
+{
+  "tier": "live_retest",
+  "run_at": "2026-09-27T08:02:31.535951+00:00",
+  "surface": "tasks",
+  "user": "emp_2378",
+  "bank": "tasks_retest_bank.yaml",
+  "partial": false,
+  "pass": true,
+  "cases": [
+    {
+      "id": "observe-profile-balance",
+      "kind": "observe",
+      "objectives": [
+        "T4",
+        "T7",
+        "T8",
+        "T9"
+      ],
+      "plan_id": "92d9a59b-bcc0-4332-a3b5-6aa64c6b3cb7",
+      "status": "completed",
+      "tools": [
+        "get_my_profile",
+        "get_my_leave_balance"
+      ],
+      "run_http": 200,
+      "seconds": 3.62,
+      "misses": [],
+      "pass": true
+    },
+    {
+      "id": "observe-payroll-october",
+      "kind": "observe",
+      "objectives": [
+        "T4",
+        "T7",
+        "T9"
+      ],
+      "plan_id": "e40f612d-2486-43b4-aee1-cf2fe5513bfa",
+      "status": "completed",
+      "tools": [
+        "list_payroll_runs"
+      ],
+      "run_http": 200,
+      "seconds": 3.02,
+      "misses": [],
+      "pass": true
+    },
+    {
+      "id": "observe-attendance",
+      "kind": "observe",
+      "objectives": [
+        "T4",
+        "T7",
+        "T9"
+      ],
+      "plan_id": "3a6642df-3fe5-4db8-9e49-0b3aef5889c2",
+      "status": "completed",
+      "tools": [
+        "list_my_attendance"
+      ],
+      "run_http": 200,
+      "seconds": 5.34,
+      "misses": [],
+      "pass": true
+    },
+    {
+      "id": "observe-gosi-list",
+      "kind": "observe",
+      "objectives": [
+        "T4",
+        "T7",
+        "T9"
+      ],
+      "plan_id": "661e56bc-efaf-4e91-96b5-68528ebe1502",
+      "status": "completed",
+      "tools": [
+        "list_payroll_runs",
+        "analyze_gosi_committed"
+      ],
+      "run_http": 200,
+      "seconds": 6.26,
+      "misses": [],
+      "pass": true
+    },
+    {
+      "id": "refuse-ungated-leave",
+      "kind": "refuse",
+      "objectives": [
+        "T5",
+        "T6",
+        "T9"
+      ],
+      "conversation_id": "75bbcd4e-de8c-42c3-ad08-02a237c348eb",
+      "decision": null,
+      "host_write": false,
+      "seconds": 3.42,
+      "misses": [],
+      "pass": true
+    },
+    {
+      "id": "handoff-leave-write",
+      "kind": "handoff",
+      "objectives": [
+        "T1",
+        "T5",
+        "T9"
+      ],
+      "conversation_id": "b2732bb4-fc4e-4f97-b54b-a3932db9302a",
+      "decision": null,
+      "host_write": false,
+      "seconds": 2.12,
+      "misses": [],
+      "pass": true
+    }
+  ],
+  "objectives": {
+    "T4": true,
+    "T7": true,
+    "T8": true,
+    "T9": true,
+    "T5": true,
+    "T6": true,
+    "T1": true
+  },
+  "latency": {
+    "cases": 6,
+    "p50_ms": 3520,
+    "p95_ms": 5340,
+    "max_ms": 6260
+  }
+}

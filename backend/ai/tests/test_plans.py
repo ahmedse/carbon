@@ -1376,8 +1376,35 @@ def test_ledger_aggregates_usage_confirmations_provenance(
     assert ledger["usage"]["total_llm_calls"] == 4
     assert ledger["usage"]["total_tokens"] == 1200
     assert ledger["actor"]["user_id"] == str(user.pk)
+    assert ledger["actor"]["display_name"]
+    assert ledger["provenance"]["created_at"]
+    assert ledger["provenance"]["completed_at"]
     assert len(ledger["steps"]) == 2
     assert any(c["step_id"] == 1 for c in ledger["confirmations"])
+
+
+@pytest.mark.django_db
+def test_get_plan_includes_who_and_when(user, run_ids_cleanup):
+    user.first_name = "Plan"
+    user.last_name = "Worker"
+    user.save(update_fields=["first_name", "last_name"])
+    plan = _make_plan(user)
+    run_ids_cleanup.append(plan.id)
+
+    payload = PlansService().get_plan(user, plan.id)
+
+    assert payload["created_at"]
+    assert payload["created_by"]["user_id"] == str(user.pk)
+    assert payload["created_by"]["display_name"] == "Plan Worker (plan-worker)"
+
+
+@pytest.mark.django_db
+def test_owner_display_resolves_username():
+    User.objects.create_user(
+        username="emp_2378", password="secret123",
+        first_name="Ali", last_name="AlAjmi",
+    )
+    assert PlansService._owner_display("emp_2378") == "Ali AlAjmi (emp_2378)"
 
 
 # ── REST API ─────────────────────────────────────────────────────────────

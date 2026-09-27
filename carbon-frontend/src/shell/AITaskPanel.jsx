@@ -123,6 +123,7 @@ import AgentPlanToolbar from './AgentPlanToolbar';
 import AgentRunToolbar from './AgentRunToolbar';
 import AgentResultToolbar from './AgentResultToolbar';
 import TaskJourney from './TaskJourney';
+import TaskMetaBar from './TaskMetaBar';
 import AITaskAuditCard from './AITaskAuditCard';
 import OutcomeReceipt from './OutcomeReceipt';
 import ResultProofFold from './ResultProofFold';
@@ -2756,6 +2757,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
           pausedCounts: (phase === 'paused' || selectedEffective === 'paused')
             ? { done: doneNow, pending: pendingNow }
             : null,
+          readOnly: liveSteps.length > 0 && liveSteps.every((s) => !s.is_mutation),
         }),
         phase === 'error' && errorMessage ? errorMessage : '',
       ].filter(Boolean).join(' ')
@@ -3009,6 +3011,7 @@ function AITaskPanel({ conversationId, focusPlanId = null, onFocusPlanConsumed, 
             {coworkerText}
           </Typography>
         ) : null}
+        <TaskMetaBar plan={selectedPlan} ledger={ledger} />
 
         {showComposer && (
           <Box sx={{ px: 1, pt: 1, borderBottom: 1, borderColor: 'divider' }}>

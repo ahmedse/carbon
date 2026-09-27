@@ -338,3 +338,586 @@ cases:
       roles: [orchestrator, researcher, planner, critic, domain_specialist]
       readonly_roles: [researcher, critic]
       critic_tools: []
+
+  - id: core.parallel.join-any
+    lane: graph
+    brief: A parallel join may be any. Both branches are still walked.
+    graph:
+      entry: fan
+      nodes:
+        - {id: fan, node_type: parallel, join: any}
+        - {id: left, node_type: task, tool_name: read_record, tool_args: {ref: left}}
+        - {id: right, node_type: task, tool_name: read_record, tool_args: {ref: right}}
+        - {id: join, node_type: task, tool_name: merge_records}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: fan, target: left}
+        - {source: fan, target: right}
+        - {source: left, target: join}
+        - {source: right, target: join}
+        - {source: join, target: done}
+    expect:
+      valid: true
+      join: {fan: any}
+      path_has: [left, right, join]
+
+  - id: core.parallel.join-quorum
+    lane: graph
+    brief: Quorum join still fans both reads and meets at one node.
+    graph:
+      entry: fan
+      nodes:
+        - {id: fan, node_type: parallel, join: quorum}
+        - {id: left, node_type: task, tool_name: read_record}
+        - {id: right, node_type: task, tool_name: read_record}
+        - {id: join, node_type: task, tool_name: merge_records}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: fan, target: left}
+        - {source: fan, target: right}
+        - {source: left, target: join}
+        - {source: right, target: join}
+        - {source: join, target: done}
+    expect:
+      valid: true
+      join: {fan: quorum}
+      path_has: [join, done]
+
+  - id: core.parallel.then-gated-write
+    lane: graph
+    brief: After both reads join, a write still sits behind a human.
+    graph:
+      entry: fan
+      nodes:
+        - {id: fan, node_type: parallel, join: all}
+        - {id: left, node_type: task, tool_name: read_record}
+        - {id: right, node_type: task, tool_name: read_record}
+        - {id: join, node_type: task, tool_name: merge_records}
+        - {id: ask, node_type: human}
+        - {id: write, node_type: task, tool_name: write_record, is_mutation: true}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: fan, target: left}
+        - {source: fan, target: right}
+        - {source: left, target: join}
+        - {source: right, target: join}
+        - {source: join, target: ask}
+        - {source: ask, target: write}
+        - {source: write, target: done}
+    expect:
+      valid: true
+      path_has: [left, right, ask, write]
+      mutations_gated: true
+
+  - id: core.parallel.then-ungated-write
+    lane: graph
+    brief: A write after the join with no human is a trap.
+    graph:
+      entry: fan
+      nodes:
+        - {id: fan, node_type: parallel, join: all}
+        - {id: left, node_type: task, tool_name: read_record}
+        - {id: right, node_type: task, tool_name: read_record}
+        - {id: join, node_type: task, tool_name: merge_records}
+        - {id: write, node_type: task, tool_name: write_record, is_mutation: true}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: fan, target: left}
+        - {source: fan, target: right}
+        - {source: left, target: join}
+        - {source: right, target: join}
+        - {source: join, target: write}
+        - {source: write, target: done}
+    expect:
+      valid: true
+      detects: ungated_mutation
+
+  - id: core.observe.no-write
+    lane: graph
+    brief: Observe and stop. No mutation on the path.
+    graph:
+      entry: look
+      nodes:
+        - {id: look, node_type: observe}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: look, target: done}
+    expect:
+      valid: true
+      path: [look, done]
+      mutations_gated: true
+
+  - id: core.sod.two-humans
+    lane: graph
+    brief: The writer and the reviewer are different humans. Record is observe.
+    graph:
+      entry: ask
+      nodes:
+        - {id: ask, node_type: human, meta: {role: requester}}
+        - {id: review, node_type: human, meta: {role: approver}}
+        - {id: write, node_type: task, tool_name: write_record, is_mutation: true}
+        - {id: look, node_type: observe}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: ask, target: review}
+        - {source: review, target: write}
+        - {source: write, target: look}
+        - {source: look, target: done}
+    expect:
+      valid: true
+      path: [ask, review, write, look, done]
+      roles_differ: [ask, review]
+      mutations_gated: true
+
+  - id: core.fail.early
+    lane: graph
+    brief: A failed gate never reaches the write.
+    context: {ok: false}
+    graph:
+      entry: gate
+      nodes:
+        - {id: gate, node_type: choice}
+        - {id: ask, node_type: human}
+        - {id: write, node_type: task, tool_name: write_record, is_mutation: true}
+        - {id: stop, node_type: fail}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: gate, target: ask, guard: "ok == true"}
+        - {source: gate, target: stop, is_default: true}
+        - {source: ask, target: write}
+        - {source: write, target: done}
+    expect:
+      valid: true
+      path: [gate, stop]
+      path_excludes: [write]
+
+  - id: core.edit.drop-export-branch
+    lane: graph
+    brief: Dropping the export edge leaves only the human branch.
+    context: {band: 4}
+    edits:
+      - {op: drop_edge, source: gate, target: pack}
+    graph:
+      entry: read
+      nodes:
+        - {id: read, node_type: task, tool_name: read_record}
+        - {id: gate, node_type: choice}
+        - {id: pack, node_type: task, tool_name: export_document}
+        - {id: ask, node_type: human}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: read, target: gate}
+        - {source: read, target: pack}
+        - {source: gate, target: pack, guard: "band <= 10"}
+        - {source: gate, target: ask, is_default: true}
+        - {source: pack, target: done}
+        - {source: ask, target: done}
+    expect:
+      valid: true
+      path_has: [ask]
+      path_excludes: [pack]
+
+  - id: core.trap.loop-unbounded
+    lane: graph
+    brief: A loop without a finite max is invalid.
+    graph:
+      entry: retry
+      nodes:
+        - {id: retry, node_type: loop, tool_name: read_record}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: retry, target: done}
+    expect:
+      valid: false
+      invalid_has: max_iterations
+
+  - id: core.trap.map-no-collection
+    lane: graph
+    brief: A map that names no collection is invalid.
+    graph:
+      entry: each
+      nodes:
+        - {id: each, node_type: map, tool_name: read_record}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: each, target: done}
+    expect:
+      valid: false
+      invalid_has: collection_path
+
+  - id: core.trap.unknown-node
+    lane: graph
+    brief: An unknown node type is invalid.
+    graph:
+      entry: weird
+      nodes:
+        - {id: weird, node_type: magic}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: weird, target: done}
+    expect:
+      valid: false
+      invalid_has: unknown node_type
+
+  - id: core.trap.unreachable
+    lane: graph
+    brief: A node the entry cannot reach is invalid.
+    graph:
+      entry: read
+      nodes:
+        - {id: read, node_type: task, tool_name: read_record}
+        - {id: stray, node_type: observe}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: read, target: done}
+    expect:
+      valid: false
+      invalid_has: unreachable
+
+  - id: core.loop.then-gated-write
+    lane: graph
+    brief: After a bounded loop, a write still waits for a human.
+    graph:
+      entry: retry
+      nodes:
+        - {id: retry, node_type: loop, max_iterations: 2, tool_name: read_record}
+        - {id: ask, node_type: human}
+        - {id: write, node_type: task, tool_name: write_record, is_mutation: true}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: retry, target: ask}
+        - {source: ask, target: write}
+        - {source: write, target: done}
+    expect:
+      valid: true
+      max_iterations: {retry: 2}
+      path_has: [ask, write]
+      mutations_gated: true
+
+  - id: core.map.then-gated-write
+    lane: graph
+    brief: After walking a named collection, a write still waits for a human.
+    graph:
+      entry: each
+      nodes:
+        - {id: each, node_type: map, collection_path: rows, tool_name: read_record}
+        - {id: ask, node_type: human}
+        - {id: write, node_type: task, tool_name: write_record, is_mutation: true}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: each, target: ask}
+        - {source: ask, target: write}
+        - {source: write, target: done}
+    expect:
+      valid: true
+      collection_path: {each: rows}
+      path_has: [ask, write]
+      mutations_gated: true
+
+  - id: core.wait.then-observe
+    lane: graph
+    brief: A wait may end in observe. No write.
+    graph:
+      entry: hold
+      nodes:
+        - {id: hold, node_type: wait}
+        - {id: look, node_type: observe}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: hold, target: look}
+        - {source: look, target: done}
+    expect:
+      valid: true
+      path: [hold, look, done]
+      mutations_gated: true
+
+  - id: core.choice.numeric-eq
+    lane: graph
+    brief: An equality guard picks the export. The default is a human.
+    context: {band: 10}
+    graph:
+      entry: read
+      nodes:
+        - {id: read, node_type: task, tool_name: read_record}
+        - {id: gate, node_type: choice}
+        - {id: pack, node_type: task, tool_name: export_document}
+        - {id: ask, node_type: human}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: read, target: gate}
+        - {source: gate, target: pack, guard: "band == 10"}
+        - {source: gate, target: ask, is_default: true}
+        - {source: pack, target: done}
+    expect:
+      valid: true
+      path_has: [pack]
+      path_excludes: [ask]
+
+  - id: core.edit.hidden-stays-hidden
+    lane: graph
+    brief: An args edit does not add a hidden field.
+    edits:
+      - {op: set_args, node: read, args: {ref: b2}}
+    graph:
+      entry: read
+      nodes:
+        - {id: read, node_type: task, tool_name: read_record, tool_args: {ref: a1}}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: read, target: done}
+    expect:
+      valid: true
+      args: {read: {ref: b2}}
+      hidden_on: {read: [secret]}
+
+  - id: core.retrieval.split-tokens-refuse
+    lane: retrieval
+    brief: Tokens split across two passages do not cite. That is a refuse, not a stitch.
+    passages:
+      - {id: p1, text: "Code ALPHA is listed."}
+      - {id: p2, text: "The ceiling is 15."}
+    tokens: ["ALPHA", "15"]
+    expect:
+      cited: []
+      refuses_when_empty: true
+
+  - id: core.retrieval.two-passages-one-hit
+    lane: retrieval
+    brief: Only the passage that holds every token is cited.
+    passages:
+      - {id: miss, text: "Code BETA ceiling is 9."}
+      - {id: hit, text: "Code ALPHA ceiling is 15."}
+    tokens: ["ALPHA", "15"]
+    expect:
+      cited: [hit]
+      refuses_when_empty: true
+
+  - id: core.retrieval.empty-corpus
+    lane: retrieval
+    brief: No passages is a refuse, not an invented cite.
+    passages: []
+    tokens: ["ALPHA"]
+    expect:
+      cited: []
+      refuses_when_empty: true
+
+  - id: core.agents.researcher-write-trap
+    lane: agents
+    brief: A researcher that carries a write tool is a trap.
+    agents:
+      - {role: orchestrator, tools: [search_knowledge], mutation_tools: []}
+      - {role: researcher, tools: [write_record], mutation_tools: [write_record]}
+      - {role: critic, tools: [], mutation_tools: []}
+    expect:
+      detects: mutation_on_readonly
+      readonly_roles: [researcher]
+
+  - id: core.agents.critic-stays-empty
+    lane: agents
+    brief: The critic still has no tools when the fan-out grows.
+    agents:
+      - {role: orchestrator, tools: [search_knowledge, read_record], mutation_tools: []}
+      - {role: researcher, tools: [search_knowledge], mutation_tools: []}
+      - {role: critic, tools: [], mutation_tools: []}
+    expect:
+      roles: [orchestrator, researcher, critic]
+      readonly_roles: [researcher, critic]
+      critic_tools: []
+
+  - id: core.compensate.ungated-trap
+    lane: graph
+    brief: A reversal that skips the human is a trap.
+    graph:
+      entry: write
+      nodes:
+        - {id: write, node_type: task, tool_name: write_record, is_mutation: true, compensation: undo}
+        - {id: undo, node_type: task, tool_name: undo_record, is_mutation: true}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: write, target: done}
+        - {source: write, target: undo, guard: "undo == true"}
+    expect:
+      valid: true
+      compensation: {write: undo}
+      detects: ungated_mutation
+
+  - id: core.subflow.then-human
+    lane: graph
+    brief: A subflow returns to a human before any write.
+    graph:
+      entry: child
+      nodes:
+        - {id: child, node_type: subflow, meta: {ref: child.flow}}
+        - {id: ask, node_type: human}
+        - {id: write, node_type: task, tool_name: write_record, is_mutation: true}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: child, target: ask}
+        - {source: ask, target: write}
+        - {source: write, target: done}
+    expect:
+      valid: true
+      path: [child, ask, write, done]
+      mutations_gated: true
+
+  - id: core.wait.then-human-write
+    lane: graph
+    brief: After a wait, a write still waits for a human.
+    graph:
+      entry: hold
+      nodes:
+        - {id: hold, node_type: wait}
+        - {id: ask, node_type: human}
+        - {id: write, node_type: task, tool_name: write_record, is_mutation: true}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: hold, target: ask}
+        - {source: ask, target: write}
+        - {source: write, target: done}
+    expect:
+      valid: true
+      path: [hold, ask, write, done]
+      mutations_gated: true
+
+  - id: core.map.then-ungated-write
+    lane: graph
+    brief: A map that writes with no human is a trap.
+    graph:
+      entry: each
+      nodes:
+        - {id: each, node_type: map, collection_path: rows, tool_name: read_record}
+        - {id: write, node_type: task, tool_name: write_record, is_mutation: true}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: each, target: write}
+        - {source: write, target: done}
+    expect:
+      valid: true
+      collection_path: {each: rows}
+      detects: ungated_mutation
+
+  - id: core.loop.then-ungated-write
+    lane: graph
+    brief: A bounded loop that writes with no human is a trap.
+    graph:
+      entry: retry
+      nodes:
+        - {id: retry, node_type: loop, max_iterations: 2, tool_name: read_record}
+        - {id: write, node_type: task, tool_name: write_record, is_mutation: true}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: retry, target: write}
+        - {source: write, target: done}
+    expect:
+      valid: true
+      max_iterations: {retry: 2}
+      detects: ungated_mutation
+
+  - id: core.parallel.three-way
+    lane: graph
+    brief: Three readonly branches still meet at one join.
+    graph:
+      entry: fan
+      nodes:
+        - {id: fan, node_type: parallel, join: all}
+        - {id: a, node_type: task, tool_name: read_record}
+        - {id: b, node_type: task, tool_name: read_record}
+        - {id: c, node_type: task, tool_name: read_record}
+        - {id: join, node_type: task, tool_name: merge_records}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: fan, target: a}
+        - {source: fan, target: b}
+        - {source: fan, target: c}
+        - {source: a, target: join}
+        - {source: b, target: join}
+        - {source: c, target: join}
+        - {source: join, target: done}
+    expect:
+      valid: true
+      path_has: [a, b, c, join, done]
+      mutations_gated: true
+
+  - id: core.trap.choice-no-default
+    lane: graph
+    brief: A choice with only guarded edges is invalid.
+    graph:
+      entry: gate
+      nodes:
+        - {id: gate, node_type: choice}
+        - {id: yes, node_type: succeed}
+        - {id: no, node_type: fail}
+      edges:
+        - {source: gate, target: yes, guard: "ok == true"}
+        - {source: gate, target: no, guard: "ok == false"}
+    expect:
+      valid: false
+      invalid_has: default
+
+  - id: core.trap.choice-no-edges
+    lane: graph
+    brief: A choice with no outgoing edges is invalid.
+    graph:
+      entry: gate
+      nodes:
+        - {id: gate, node_type: choice}
+        - {id: done, node_type: succeed}
+    expect:
+      valid: false
+      invalid_has: no outgoing
+
+  - id: core.trap.terminal-outgoing
+    lane: graph
+    brief: A succeed node may not have an outgoing edge.
+    graph:
+      entry: done
+      nodes:
+        - {id: done, node_type: succeed}
+        - {id: extra, node_type: observe}
+      edges:
+        - {source: done, target: extra}
+    expect:
+      valid: false
+      invalid_has: outgoing
+
+  - id: core.retrieval.three-tokens
+    lane: retrieval
+    brief: All three tokens must sit in the same passage.
+    passages:
+      - {id: miss, text: "Code ALPHA ceiling is 15."}
+      - {id: hit, text: "Code ALPHA ceiling is 15 units."}
+    tokens: ["ALPHA", "15", "units"]
+    expect:
+      cited: [hit]
+      refuses_when_empty: true
+
+  - id: core.retrieval.case-fold
+    lane: retrieval
+    brief: Token match is case-insensitive. The passage still has to hold every token.
+    passages:
+      - {id: hit, text: "Code alpha ceiling is 15."}
+    tokens: ["ALPHA", "15"]
+    expect:
+      cited: [hit]
+      refuses_when_empty: true
+
+  - id: core.agents.critic-mutation-trap
+    lane: agents
+    brief: A critic that carries a write tool is a trap.
+    agents:
+      - {role: orchestrator, tools: [search_knowledge], mutation_tools: []}
+      - {role: researcher, tools: [search_knowledge], mutation_tools: []}
+      - {role: critic, tools: [write_record], mutation_tools: [write_record]}
+    expect:
+      detects: mutation_on_readonly
+      readonly_roles: [critic]
+
+  - id: core.agents.planner-write-trap
+    lane: agents
+    brief: A planner that carries a write tool is a trap.
+    agents:
+      - {role: planner, tools: [write_record], mutation_tools: [write_record]}
+      - {role: critic, tools: [], mutation_tools: []}
+    expect:
+      detects: mutation_on_readonly
+      readonly_roles: [planner]

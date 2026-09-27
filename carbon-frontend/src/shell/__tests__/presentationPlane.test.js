@@ -31,6 +31,24 @@ describe('presentationPlane', () => {
         apiName: 'submit_my_leave',
       }),
     ).not.toMatch(/system check|leave records/i);
+    expect(
+      presentToolLabel('call_host_api', {
+        audience: 'operator',
+        apiName: 'list_payroll_runs',
+      }),
+    ).toBe('Payroll runs');
+    expect(
+      presentToolLabel('call_host_api', {
+        audience: 'operator',
+        apiName: 'analyze_gosi_committed',
+      }),
+    ).toBe('Committed GOSI');
+    expect(
+      presentToolLabel('call_host_api', {
+        audience: 'operator',
+        apiName: 'get_my_profile',
+      }),
+    ).toBe('My profile');
     expect(hasEngineLeakage(presentToolLabel('call_host_api', { audience: 'operator' }))).toBe(false);
   });
 

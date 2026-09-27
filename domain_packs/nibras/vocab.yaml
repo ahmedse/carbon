@@ -901,41 +901,42 @@ t_task_plan_decompose_decompose_the_user: 'TASK — Plan decompose:
   leave types, api_name) — never invent free-form identity text for the user or org.
 
   Mutations stage with consent (RULE_21); never claim a host write already committed.'
-t_task_plan_decompose_tool_catalog_rules: "TASK — Plan decompose (tool catalog + rules):\n\
-  The user asked a task that may need multiple tool calls. Decompose it into\nphases\
-  \ (workflow stages) and steps.\n\nAvailable tools:\n{tools_list}\n\nHost API catalog\
-  \ (live data — use call_host_api with api_name=…):\n{host_api_list}\n\nRegistered\
-  \ skills (for invoke_skill only — exact names):\n{skills_list}\n\nReturn ONLY valid\
-  \ JSON (no markdown, no fences):\n{{\n  \"pattern\": \"<root_cause|comparative|custom>\"\
-  ,\n  \"phases\": [\n    {{\n      \"phase_id\": 0,\n      \"name\": \"<short stage\
-  \ name, e.g. Research>\",\n      \"goal\": \"<what this stage accomplishes>\",\n\
-  \      \"strategy\": \"<sequential|parallel>\",\n      \"step_ids\": [0, 1]\n  \
-  \  }}\n  ],\n  \"steps\": [\n    {{\n      \"step_id\": 0,\n      \"intent\": \"\
-  <natural-language description>\",\n      \"tool_name\": \"<one of the available\
-  \ tools>\",\n      \"tool_args\": {{}},\n      \"depends_on\": [],\n      \"is_mutation\"\
-  : false,\n      \"agent_role\": \"<orchestrator|researcher|planner|critic|domain_specialist>\"\
+t_task_plan_decompose_tool_catalog_rules: "TASK — Plan decompose (tool catalog +\
+  \ rules):\nThe user asked a task that may need multiple tool calls. Decompose it\
+  \ into\nphases (workflow stages) and steps.\n\nAvailable tools:\n{tools_list}\n\n\
+  Host API catalog (live data — use call_host_api with api_name=…):\n{host_api_list}\n\
+  \nRegistered skills (for invoke_skill only — exact names):\n{skills_list}\n\nUser\
+  \ task: {task}\n\nReturn ONLY valid JSON (no markdown, no fences):\n{{\n  \"pattern\"\
+  : \"<root_cause|comparative|custom>\",\n  \"phases\": [\n    {{\n      \"phase_id\"\
+  : 0,\n      \"name\": \"<short stage name, e.g. Research>\",\n      \"goal\": \"\
+  <what this stage accomplishes>\",\n      \"strategy\": \"<sequential|parallel>\"\
+  ,\n      \"step_ids\": [0, 1]\n    }}\n  ],\n  \"steps\": [\n    {{\n      \"step_id\"\
+  : 0,\n      \"intent\": \"<natural-language description>\",\n      \"tool_name\"\
+  : \"<one of the available tools>\",\n      \"tool_args\": {{}},\n      \"depends_on\"\
+  : [],\n      \"is_mutation\": false,\n      \"agent_role\": \"<orchestrator|researcher|planner|critic|domain_specialist>\"\
   \n    }}\n  ],\n  \"synthesis_instruction\": \"<how to combine steps into final\
-  \ answer>\"\n}}\n  \nRules:\n- Each step must use one of the available tools listed\
+  \ answer>\"\n}}\n  \n\nRules:\n- Each step must use one of the available tools listed\
   \ above.\n- A step that needs an answer from the operator before later steps can\
   \ run MUST set tool_name \"ask_clarification\" and \"await_user\": true. Do not\
-  \ write the question as a finished reasoning step.\n- Live host data / self-service reads and writes (leave balance, leave\n\
-  \  records, payslips, profile, employees, payroll, …) MUST use\n  tool_name \"call_host_api\"\
-  \ with tool_args.api_name set to an exact name\n  from the Host API catalog. NEVER\
-  \ put a catalog name in\n  get_entity_details.entity_name — that tool is knowledge-schema\
-  \ only.\n- First-person leave submit (\"I want leave\", Arabic إجازة / عارضة) MUST\
-  \ use\n  submit_my_leave when that catalog name exists — never create_leave_record\n\
-  \  (admin path; needs employee id and skips the /me/leave/ workflow).\n- Loan process\
-  \ / first-person loan submit MUST use submit_my_loan (or list_my_loans\n  for reads)\
-  \ — NEVER submit_my_leave. Leave APIs are leave-only.\n- Employee onboarding MUST\
-  \ use create_employee / list_employees / update_employee\n  — NEVER submit_my_leave.\n\
-  - Person / org identity lookups by name or employee number use\n  resolve_entity\
-  \ (ECF), not get_entity_details and not a catalog name as\n  an entity.\n- invoke_skill\
-  \ may ONLY reference an exact name from the Registered skills\n  list. NEVER invent\
-  \ a skill name — if no skill matches, do not use\n  invoke_skill at all.\n- Analysis,\
-  \ comparison, synthesis and other REASONING steps are NOT skills:\n  they are done\
-  \ by the LLM itself. For such a step use a real tool to gather\n  the raw inputs\
-  \ it needs, then set \"tool_name\": null and\n  \"agent_role\": \"domain_specialist\"\
-  \ so the model reasons directly from the\n  prior step results (available via depends_on).\n\
+  \ write the question as a finished reasoning step.\n- Live host data / self-service\
+  \ reads and writes (leave balance, leave\n  records, payslips, profile, employees,\
+  \ payroll, …) MUST use\n  tool_name \"call_host_api\" with tool_args.api_name set\
+  \ to an exact name\n  from the Host API catalog. NEVER put a catalog name in\n \
+  \ get_entity_details.entity_name — that tool is knowledge-schema only.\n- First-person\
+  \ leave submit (\"I want leave\", Arabic إجازة / عارضة) MUST use\n  submit_my_leave\
+  \ when that catalog name exists — never create_leave_record\n  (admin path; needs\
+  \ employee id and skips the /me/leave/ workflow).\n- Loan process / first-person\
+  \ loan submit MUST use submit_my_loan (or list_my_loans\n  for reads) — NEVER submit_my_leave.\
+  \ Leave APIs are leave-only.\n- Employee onboarding MUST use create_employee / list_employees\
+  \ / update_employee\n  — NEVER submit_my_leave.\n- Person / org identity lookups\
+  \ by name or employee number use\n  resolve_entity (ECF), not get_entity_details\
+  \ and not a catalog name as\n  an entity.\n- invoke_skill may ONLY reference an\
+  \ exact name from the Registered skills\n  list. NEVER invent a skill name — if\
+  \ no skill matches, do not use\n  invoke_skill at all.\n- Analysis, comparison,\
+  \ synthesis and other REASONING steps are NOT skills:\n  they are done by the LLM\
+  \ itself. For such a step use a real tool to gather\n  the raw inputs it needs,\
+  \ then set \"tool_name\": null and\n  \"agent_role\": \"domain_specialist\" so the\
+  \ model reasons directly from the\n  prior step results (available via depends_on).\n\
   - depends_on lists step_id values whose results are needed before this step.\n-\
   \ Steps with no dependencies can run in parallel.\n- Group steps into 2-4 phases\
   \ that tell a workflow story: research/collect\n  first, then analyze, then produce\
@@ -945,35 +946,35 @@ t_task_plan_decompose_tool_catalog_rules: "TASK — Plan decompose (tool catalog
   \  primary keys. Always list first (list_payroll_runs / list_employees /\n  resolve_entity),\
   \ then call detail/compute/validate with the REAL id from\n  that prior step via\
   \ depends_on — or omit path_params and let the host\n  resolve the period alias.\
-  \ Putting a fake string into path_params.id\n  will fail.\n- The id comes from\
-  \ the listing step through tool_args.bind, never typed in:\n  \"bind\": {{\"id\":\
-  \ {{\"step\": <listing step_id>, \"field\": \"id\", \"select\": \"latest\"}}}}.\n\
-  \  Use select \"latest\" only when the brief asks for the latest / current one;\n\
-  \  omit select and the operator picks one.\n- call_host_api tool_args carry values\
-  \ only under path_params (path ids),\n  query_params (read filters such as dimension)\
-  \ or body (write fields).\n  A top-level value is never sent to the host.\n- NEVER collapse a multi-action\
-  \ brief (compute + validate + report, compare\n  to rates, generate a document,\
-  \ do-not-commit) into ONE invoke_skill step.\n  Emit a separate step for each distinct\
-  \ action. Prefer call_host_api for\n  live payroll/host reads and writes; use null-tool\
-  \ reasoning for analysis;\n  use export_document when the brief asks for a document/file\
-  \ report.\n- strategy \"parallel\" only when the phase's steps are truly independent;\n\
-  \  otherwise \"sequential\".\n- agent_role selects who executes the step:\n  \"\
-  researcher\" for read-only internet/knowledge research,\n  \"planner\" for sequencing\
-  \ / decomposition-only thinking,\n  \"critic\" for review / quality gates before\
-  \ export or mutation,\n  \"domain_specialist\" for deep domain analysis (payroll,\
-  \ HR, finance),\n  \"orchestrator\" for host coordination and everything else (the\
-  \ main agent).\n  Multi-agent tasks MUST assign distinct roles across research /\
-  \ analyze /\n  critique / act phases — do not stamp every step orchestrator when\
-  \ the\n  brief clearly spans research + specialist judgment + review.\n- Set is_mutation:\
-  \ true only for steps that modify host state.\n- create_dq_rule needs a REAL target:\
-  \ deterministic rule types (not_null,\n  unique, allowed_values, range, regex) REQUIRE\
-  \ data_table AND data_field ids.\n  If the field/table is unknown, first call get_entity_details\
-  \ (or another\n  lookup tool) to resolve it, OR emit a reasoning step whose instructions\
-  \ ask\n  the user for the specific field/table before any create_dq_rule step.\n\
-  \  NEVER emit a create_dq_rule step for a deterministic rule without its\n  data_table\
-  \ and data_field.\n- Step intents and pre-consent wording must use bound values\
-  \ only — never\n  invent free-form identity text for the user or organisation.\n\
-  \nUser task: {task}\n"
+  \ Putting a fake string into path_params.id\n  will fail.\n- The id comes from the\
+  \ listing step through tool_args.bind, never typed in:\n  \"bind\": {{\"id\": {{\"\
+  step\": <listing step_id>, \"field\": \"id\", \"select\": \"latest\"}}}}.\n  Use\
+  \ select \"latest\" only when the brief asks for the latest / current one;\n  omit\
+  \ select and the operator picks one.\n- call_host_api tool_args carry values only\
+  \ under path_params (path ids),\n  query_params (read filters such as dimension)\
+  \ or body (write fields).\n  A top-level value is never sent to the host.\n- NEVER\
+  \ collapse a multi-action brief (compute + validate + report, compare\n  to rates,\
+  \ generate a document, do-not-commit) into ONE invoke_skill step.\n  Emit a separate\
+  \ step for each distinct action. Prefer call_host_api for\n  live payroll/host reads\
+  \ and writes; use null-tool reasoning for analysis;\n  use export_document when\
+  \ the brief asks for a document/file report.\n- strategy \"parallel\" only when\
+  \ the phase's steps are truly independent;\n  otherwise \"sequential\".\n- agent_role\
+  \ selects who executes the step:\n  \"researcher\" for read-only internet/knowledge\
+  \ research,\n  \"planner\" for sequencing / decomposition-only thinking,\n  \"critic\"\
+  \ for review / quality gates before export or mutation,\n  \"domain_specialist\"\
+  \ for deep domain analysis (payroll, HR, finance),\n  \"orchestrator\" for host\
+  \ coordination and everything else (the main agent).\n  Multi-agent tasks MUST assign\
+  \ distinct roles across research / analyze /\n  critique / act phases — do not stamp\
+  \ every step orchestrator when the\n  brief clearly spans research + specialist\
+  \ judgment + review.\n- Set is_mutation: true only for steps that modify host state.\n\
+  - create_dq_rule needs a REAL target: deterministic rule types (not_null,\n  unique,\
+  \ allowed_values, range, regex) REQUIRE data_table AND data_field ids.\n  If the\
+  \ field/table is unknown, first call get_entity_details (or another\n  lookup tool)\
+  \ to resolve it, OR emit a reasoning step whose instructions ask\n  the user for\
+  \ the specific field/table before any create_dq_rule step.\n  NEVER emit a create_dq_rule\
+  \ step for a deterministic rule without its\n  data_table and data_field.\n- Step\
+  \ intents and pre-consent wording must use bound values only — never\n  invent free-form\
+  \ identity text for the user or organisation."
 t_task_tool_failure_recovery_explain_the: 'TASK — Tool-failure recovery:
 
   Explain the failure in plain business language using ONLY the tool failure payload

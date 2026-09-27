@@ -1,0 +1,23 @@
+{
+  "tier": "browser_cockpit",
+  "run_at": "2026-09-27T12:37:00+00:00",
+  "surface": "tasks",
+  "user": "emp_2378",
+  "live": "Taskso in the browser at http://127.0.0.1:5179/. Not a tasks_prod_bench run.",
+  "banner": {
+    "profile_leave": "Finished. Here’s what I found.",
+    "gosi": "Finished. Here’s what I found.",
+    "honest": "reached"
+  },
+  "now_labels": {
+    "before": {
+      "profile_leave": ["System check", "Leave balance"],
+      "gosi": ["Payroll records", "Payroll records"]
+    },
+    "after": {
+      "profile_leave": ["My profile", "Leave balance"],
+      "gosi": ["Payroll runs", "Committed GOSI"]
+    }
+  },
+  "note": "API file PV2-tasks-prod-2026-09-27-122709.json still scores R4 partial because that bench does not open Taskso."
+}

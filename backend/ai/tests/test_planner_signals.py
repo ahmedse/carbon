@@ -252,6 +252,18 @@ def test_existing_tool_step_untouched():
     assert s.tool_name == "call_host_api"
 
 
+def test_ensure_export_skipped_when_brief_forbids_it():
+    steps = [
+        PlanStep(step_id=0, intent="List payroll runs", tool_name="list_payroll_runs"),
+        PlanStep(step_id=1, intent="Stop", tool_name=None),
+    ]
+    _ensure_export_deliverable(
+        "List payroll runs. If none exist, stop after listing. Do not export.",
+        steps,
+    )
+    assert [s.tool_name for s in steps] == ["list_payroll_runs", None]
+
+
 def test_ensure_export_appended_when_brief_asks_for_docx():
     steps = [
         PlanStep(step_id=0, intent="Count employees", tool_name="get_entity_details"),

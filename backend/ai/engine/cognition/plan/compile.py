@@ -22,8 +22,19 @@ from ai.engine.cognition.plan.planner import (
     Plan,
     PlanPhase,
     PlanStep,
+    _EXPORT_UTTERANCE,
     _infer_export_format,
+    _refuses_export,
 )
+
+
+def _is_list_entry(entry: dict) -> bool:
+    """A listing GET: declared ``kind: list``, or ``latest_by`` and no path id."""
+    if str(entry.get("kind") or "") == "list":
+        return True
+    if not str(entry.get("latest_by") or "").strip():
+        return False
+    return "{" not in str(entry.get("path") or "")
 
 
 def _is_read(entry: dict) -> bool:
@@ -63,6 +74,39 @@ def _desc_tokens(entry: dict) -> set[str]:
             _examples_text(entry),
         ))
     )
+
+
+def _title_tokens(entry: dict) -> set[str]:
+    """Name, label, and examples — the brief naming the list, not its essay."""
+    return _tokens(
+        " ".join((
+            str(entry.get("name") or ""),
+            str(entry.get("label") or ""),
+            _examples_text(entry),
+        ))
+    )
+
+
+def _claim_from_description(brief: str, catalog: list, claimed: set[str]) -> set[str]:
+    """Claim a closed-aggregate family's measures from description overlap.
+
+    The brief must share two tokens with the entry's name/label/description/
+    examples and name a ``dimension`` enum the schema already has. No new
+    phrase table: tokens come from the catalog entry.
+    """
+    tokens = _tokens(brief)
+    hay = f" {(brief or '').lower().replace('_', ' ')} "
+    extra: set[str] = set()
+    for entry in catalog:
+        if not isinstance(entry, dict) or not _is_closed_aggregate(entry):
+            continue
+        if len(_desc_tokens(entry) & tokens) < 2:
+            continue
+        enum = _enum_for(entry, "dimension")
+        if enum and not any(_enum_named(item, hay, tokens) for item in enum):
+            continue
+        extra |= {name for name in _returns(entry) if _is_measure(name)}
+    return claimed | extra
 
 
 def claimed_fields(brief: str, catalog: list | None) -> set[str]:
@@ -207,15 +251,101 @@ def _required_unfilled(entry: dict, filled: set[str]) -> list[str]:
     return [k for k in required if k not in filled]
 
 
+def _wants_export(brief: str) -> bool:
+    if _refuses_export(brief):
+        return False
+    return bool(_EXPORT_UTTERANCE.search(brief or ""))
+
+
+def _compile_list_observe(brief: str, catalog: list) -> Plan | None:
+    """One listing GET when the brief names that list and does not ask for a file."""
+    if _wants_export(brief):
+        return None
+    tokens = _tokens(brief)
+    ranked: list[tuple[int, int, dict]] = []
+    for entry in catalog:
+        if not isinstance(entry, dict) or not _is_read(entry) or not _is_list_entry(entry):
+            continue
+        title = len(_title_tokens(entry) & tokens)
+        desc = len(_desc_tokens(entry) & tokens)
+        if title < 2 or desc < 2:
+            continue
+        ranked.append((title, desc, entry))
+    if not ranked:
+        return None
+    ranked.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    if len(ranked) > 1 and ranked[0][0] == ranked[1][0] and ranked[0][1] == ranked[1][1]:
+        return None
+    entry = ranked[0][2]
+    name = str(entry.get("name") or "")
+    if not name:
+        return None
+    step = PlanStep(
+        0,
+        str(entry.get("label") or name).replace("_", " "),
+        "call_host_api",
+        {"api_name": name},
+    )
+    return Plan(
+        pattern="custom",
+        steps=[step],
+        synthesis_instruction="",
+        source="catalog_compile",
+        needs_confirmation=False,
+        phases=[PlanPhase(
+            phase_id=0, name="All steps", goal="",
+            strategy="sequential",
+            step_ids=[0],
+        )],
+    )
+
+
+def _finish_plan(
+    brief: str,
+    families: list[dict],
+    steps: list[PlanStep],
+    export_deps: list[int],
+    columns: list[str],
+) -> Plan | None:
+    wants = _wants_export(brief)
+    if wants:
+        if not any(_is_measure(n) for n in columns):
+            return None
+        fmt = _infer_export_format(brief)
+        title = str(families[0].get("label") or "Report")
+        steps.append(PlanStep(
+            len(steps),
+            title,
+            "export_document",
+            {"format": fmt, "title": title, "columns": columns},
+            depends_on=list(export_deps),
+            is_mutation=True,
+        ))
+    elif not steps:
+        return None
+    return Plan(
+        pattern="custom",
+        steps=steps,
+        synthesis_instruction="",
+        source="catalog_compile",
+        needs_confirmation=wants,
+        phases=[PlanPhase(
+            phase_id=0, name="All steps", goal="",
+            strategy="sequential",
+            step_ids=[s.step_id for s in steps],
+        )],
+    )
+
+
 def compile_catalog_plan(brief: str, catalog: list | None) -> Plan | None:
     """A plan the catalog can author. ``None`` when it cannot — caller may LLM."""
     rows = [e for e in (catalog or []) if isinstance(e, dict) and e.get("name")]
-    claimed = claimed_fields(brief, rows)
+    claimed = _claim_from_description(brief, rows, claimed_fields(brief, rows))
     if not any(_is_measure(n) for n in claimed):
-        return None
+        return _compile_list_observe(brief, rows)
     families = _covering_families(rows, claimed, brief)
     if not families:
-        return None
+        return _compile_list_observe(brief, rows)
 
     steps: list[PlanStep] = []
     donors: dict[str, int] = {}
@@ -284,29 +414,4 @@ def compile_catalog_plan(brief: str, catalog: list | None) -> Plan | None:
     for name in sorted((claimed & covered) | _hits(covered, claimed)):
         if name not in columns and _is_measure(name):
             columns.append(name)
-    if not any(_is_measure(n) for n in columns):
-        return None
-
-    fmt = _infer_export_format(brief)
-    title = str(families[0].get("label") or "Report")
-    export_id = len(steps)
-    steps.append(PlanStep(
-        export_id,
-        title,
-        "export_document",
-        {"format": fmt, "title": title, "columns": columns},
-        depends_on=list(export_deps),
-        is_mutation=True,
-    ))
-    return Plan(
-        pattern="custom",
-        steps=steps,
-        synthesis_instruction="",
-        source="catalog_compile",
-        needs_confirmation=True,
-        phases=[PlanPhase(
-            phase_id=0, name="All steps", goal="",
-            strategy="sequential",
-            step_ids=[s.step_id for s in steps],
-        )],
-    )
+    return _finish_plan(brief, families, steps, export_deps, columns)

@@ -678,11 +678,14 @@ def render_catalog_read(
     *,
     catalog_entry: dict | None = None,
     fields: list[str] | None = None,
+    restate_breakdown: bool = False,
 ) -> str | None:
     """0-LLM restatement resolved by catalog ``kind``. Invents no numbers.
 
     ``fields`` are the returned fields the user asked about; a declared-row
-    restatement shows only those.
+    restatement shows only those. Chat keeps a ``breakdown`` payload for the
+    writer (ADR-0056). Agent bound GETs pass ``restate_breakdown`` so the
+    host measures appear in the answer (ADR-0047).
     """
     api = str(api_name or "").strip()
     payload = _unwrap_tool_payload(tool_output)
@@ -768,7 +771,8 @@ def render_catalog_read(
                 return _empty_declared(
                     empty_key or "no_list_rows", language, ar=_lang_code(language) == "ar",
                 )
-            return None
+            if not restate_breakdown:
+                return None
         return render_declared_rows(
             rows,
             language,

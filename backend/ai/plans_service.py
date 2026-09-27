@@ -3435,7 +3435,12 @@ class PlansService:
         from ai.models.core import RunStep
 
         steps = list(RunStep.objects.filter(run_id=run.id).order_by("step_index"))
-        return self._serialize_run(run, steps=steps)
+        payload = self._serialize_run(run, steps=steps)
+        payload["created_by"] = {
+            "user_id": run.host_user_id,
+            "display_name": self._owner_display(run.host_user_id),
+        }
+        return payload
 
     def list_plans(self, user, limit: int = 50) -> dict:
         """List the requesting user's plans, newest first."""
@@ -4162,25 +4167,50 @@ class PlansService:
         return f"On a recurring schedule at {time_str}"
 
     @staticmethod
-    def _schedule_owner(schedule) -> str:
-        """Resolve a schedule's owner to a display name (best-effort).
+    def _resolve_owner(host_user_id):
+        """User for a host id — pk first, then username. None when unknown."""
+        if not host_user_id:
+            return None
+        from django.contrib.auth import get_user_model
 
-        Returns ``display_name`` → ``full name`` → ``username``, or ``""`` when
-        the owner is unresolvable (deleted user). Never leaks a raw PK.
-        """
-        if not schedule.host_user_id:
-            return ""
+        User = get_user_model()
+        key = str(host_user_id)
         try:
-            from django.contrib.auth import get_user_model
+            return User.objects.get(pk=key)
+        except Exception:  # noqa: BLE001 — pk may be a username
+            try:
+                return User.objects.get(username=key)
+            except Exception:  # noqa: BLE001
+                return None
 
-            owner = get_user_model().objects.get(pk=schedule.host_user_id)
-            return (
-                getattr(owner, "display_name", "")
-                or owner.get_full_name()
-                or owner.username
-            )
-        except Exception:  # noqa: BLE001 - best-effort owner resolution
+    @staticmethod
+    def _owner_display(host_user_id) -> str:
+        """Person name for a run owner. Never a raw PK.
+
+        Linked employee full name, then Django full name, then username.
+        When a person name differs from the login id: ``Name (username)``.
+        """
+        owner = PlansService._resolve_owner(host_user_id)
+        if owner is None:
             return ""
+        person = ""
+        try:
+            emp = owner.employee_profile
+        except Exception:  # noqa: BLE001 — OneToOne missing
+            emp = None
+        if emp is not None:
+            person = (getattr(emp, "full_name", None) or "").strip()
+        if not person:
+            person = (owner.get_full_name() or "").strip()
+        username = owner.username or ""
+        if person and username and person != username:
+            return f"{person} ({username})"
+        return person or username
+
+    @staticmethod
+    def _schedule_owner(schedule) -> str:
+        """Resolve a schedule's owner to a display name (best-effort)."""
+        return PlansService._owner_display(getattr(schedule, "host_user_id", None))
 
     @staticmethod
     def _serialize_schedule(schedule) -> dict:
@@ -6143,16 +6173,7 @@ class PlansService:
         steps = list(RunStep.objects.filter(run_id=run.id).order_by("step_index"))
         plan_json = _coerce_plan_json(run.plan_json)
 
-        actor_name = str(user)
-        try:
-            from django.contrib.auth import get_user_model
-
-            owner = get_user_model().objects.get(pk=run.host_user_id)
-            actor_name = getattr(owner, "display_name", "") or (
-                owner.get_full_name() or owner.username
-            )
-        except Exception:  # noqa: BLE001 - best-effort actor resolution
-            pass
+        actor_name = self._owner_display(run.host_user_id) or str(user)
 
         confirmations = [
             {

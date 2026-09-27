@@ -1,0 +1,236 @@
+{
+  "tier": "production_readiness",
+  "run_at": "2026-09-27T12:24:00.439573+00:00",
+  "surface": "tasks",
+  "user": "emp_2378",
+  "verdict": "not_ready",
+  "reached": 6,
+  "failed": 3,
+  "partial": 1,
+  "missing": 2,
+  "n": 12,
+  "rule": "Production READY only when R1–R11 are reached. Lab T1–T10 and structural 417/417 never close R12. Night 2026-09-23 FAIL stays. L6/L7 not scored.",
+  "kpis": [
+    {
+      "id": "R1",
+      "name": "Host-grounded figures",
+      "honest": "reached",
+      "note": "Profile, payroll count, attendance empty-state, and GOSI totals all matched the host."
+    },
+    {
+      "id": "R2",
+      "name": "Latest-period bind",
+      "honest": "reached",
+      "note": "analyze_gosi_committed used the latest committed period_end from list_payroll_runs."
+    },
+    {
+      "id": "R3",
+      "name": "First-turn Create",
+      "honest": "fail",
+      "note": "Plan dial did not persist a task. ['first turn did not create a plan'] reply='Here is a draft for you to review. No task exists until you choose Create task — or tell me what to change.'"
+    },
+    {
+      "id": "R4",
+      "name": "Cockpit honesty",
+      "honest": "partial",
+      "note": "API final_response is read-shaped. Browser Result banner (coworkerFound) not re-checked this run. Dated wave still dishonest."
+    },
+    {
+      "id": "R5",
+      "name": "Planner stability",
+      "honest": "reached",
+      "note": "3/3 human payroll briefs bound list_payroll_runs only."
+    },
+    {
+      "id": "R6",
+      "name": "Persona coverage",
+      "honest": "missing",
+      "note": "Only emp_2378 this wave. emp_1067 My and emp_1712 Team not driven."
+    },
+    {
+      "id": "R7",
+      "name": "Write consent live",
+      "honest": "missing",
+      "note": "Leave/loan/attendance write needs STACK-HOLD + emp_1067. Not run."
+    },
+    {
+      "id": "R8",
+      "name": "Night cleanliness",
+      "honest": "fail",
+      "note": "Night 2026-09-23 FAIL stays. Dry-run / SKIP do not clear it."
+    },
+    {
+      "id": "R9",
+      "name": "Arabic Tasks",
+      "honest": "reached",
+      "note": "Arabic brief bound ['get_my_leave_balance'] status=completed."
+    },
+    {
+      "id": "R10",
+      "name": "Production latency",
+      "honest": "reached",
+      "note": "Observe+chat p50 4245 ms. Bar ≤ 8000 ms and no case > 30 s. over30=0."
+    },
+    {
+      "id": "R11",
+      "name": "Chat never writes",
+      "honest": "reached",
+      "note": "Ungated leave did not change host leave count."
+    },
+    {
+      "id": "R12",
+      "name": "Enterprise go-live",
+      "honest": "fail",
+      "note": "READY only when R1–R11 are reached. Lab T1–T10 never closes R12."
+    }
+  ],
+  "cases": {
+    "profile": {
+      "pass": true,
+      "plan_id": "c90196ae-1d30-4300-9105-923f4203978e",
+      "status": "completed",
+      "tools": [
+        "get_my_profile",
+        "get_my_leave_balance"
+      ],
+      "host_misses": [],
+      "seconds": 4.16
+    },
+    "payroll": {
+      "pass": true,
+      "plan_id": "717c5c2a-ffb2-4b24-b9b1-99a956507d26",
+      "status": "completed",
+      "tools": [
+        "list_payroll_runs"
+      ],
+      "host_misses": [],
+      "seconds": 0.54
+    },
+    "attendance": {
+      "pass": true,
+      "plan_id": "3cf38251-5506-4d74-baa6-3958bafc570c",
+      "status": "completed",
+      "tools": [
+        "list_my_attendance"
+      ],
+      "host_misses": [],
+      "seconds": 6.08
+    },
+    "gosi": {
+      "pass": true,
+      "plan_id": "c000779b-7077-413f-8462-e275b3f9ced3",
+      "status": "completed",
+      "tools": [
+        "list_payroll_runs",
+        "analyze_gosi_committed"
+      ],
+      "host_misses": [],
+      "used_args": [
+        {
+          "api_name": "list_payroll_runs",
+          "query_params": {
+            "status": "committed"
+          }
+        },
+        {
+          "bind": {
+            "period_end": {
+              "step": 0,
+              "field": "period_end",
+              "select": "latest"
+            }
+          },
+          "api_name": "analyze_gosi_committed",
+          "query_params": {
+            "dimension": "nationality",
+            "period_end": "2026-08-31"
+          }
+        }
+      ],
+      "seconds": 0.59
+    },
+    "arabic": {
+      "pass": true,
+      "plan_id": "04881e28-c80c-485a-8c91-559302d0bf0f",
+      "status": "completed",
+      "tools": [
+        "get_my_leave_balance"
+      ],
+      "misses": [],
+      "seconds": 5.6
+    },
+    "chat": {
+      "pass": true,
+      "conversation_id": "f7fc3ae2-d61a-4251-9db7-f284528fdca8",
+      "host_write": false,
+      "misses": [],
+      "seconds": 4.33
+    },
+    "first_turn": {
+      "pass": false,
+      "conversation_id": "9da8770a-8092-4bc2-8f80-66927e09f36a",
+      "plan_id": null,
+      "reply": "Here is a draft for you to review. No task exists until you choose Create task — or tell me what to change.",
+      "misses": [
+        "first turn did not create a plan"
+      ],
+      "seconds": 3.97,
+      "http": 200
+    },
+    "stability": {
+      "pass": true,
+      "tries": [
+        {
+          "http": 201,
+          "tools": [
+            "list_payroll_runs"
+          ],
+          "ok": true
+        },
+        {
+          "http": 201,
+          "tools": [
+            "list_payroll_runs"
+          ],
+          "ok": true
+        },
+        {
+          "http": 201,
+          "tools": [
+            "list_payroll_runs"
+          ],
+          "ok": true
+        }
+      ],
+      "misses": []
+    }
+  },
+  "oracles": {
+    "payroll": {
+      "ok": true,
+      "count": 13,
+      "latest_period": "2026-08-31",
+      "latest_id": 56
+    },
+    "attendance": {
+      "ok": true,
+      "count": 0
+    },
+    "gosi_latest": {
+      "ok": true,
+      "totals": [
+        "9863",
+        "1200"
+      ],
+      "period_end": "2026-08-31",
+      "run_ids": [
+        56,
+        68
+      ],
+      "empty": false
+    }
+  },
+  "l6_l7": "not scored",
+  "night_2026_09_23": "FAIL stays",
+  "lab_meter": "T1–T10 is a different score. Do not merge."
+}

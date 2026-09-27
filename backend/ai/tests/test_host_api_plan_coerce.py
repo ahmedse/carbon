@@ -18,6 +18,46 @@ def test_decompose_prompt_lists_host_api_catalog():
     assert "NEVER put a catalog name in" in _DECOMPOSE_AGENT_PROMPT
 
 
+def test_decompose_prompt_task_and_schema_survive_clip_on_a_large_catalog():
+    """Wave 2 (R3, part 2): a catalog-heavy instance (nibras, 48 host APIs)
+    pushes the filled decompose prompt past ``TASK_BLOCK_MAX_CHARS``.
+
+    ``_clip`` truncates the *tail*. If the JSON-output schema or the literal
+    ``User task:`` line sit at the tail, the model never sees them and
+    answers in prose instead of JSON (reproduced live: 3/3 refusals with
+    the tail cut, 3/3 correct JSON plans with the same prompt unclipped).
+    The template must put schema + task early enough to survive the clip
+    regardless of how large a brand's host API catalog grows.
+    """
+    from ai.engine.cognition.context_pack import TASK_BLOCK_MAX_CHARS, _clip
+    from ai.engine.cognition.plan.planner import _DECOMPOSE_AGENT_PROMPT
+
+    # Reproduce nibras-scale catalog pressure without depending on any
+    # specific brand's instance.yaml (domain-free — synthetic names only).
+    host_api_list = "\n".join(
+        f"- synthetic_host_api_{i:02d} (GET) "
+        f"params={{\"dimension\":\"nationality\",\"period_end\":\"2026-08-31\","
+        f"\"status\":\"committed\",\"page_size\":50,\"ordering\":\"-created_at\"}}"
+        for i in range(48)
+    )
+    tools_list = "\n".join(f"- synthetic_tool_{i}" for i in range(26))
+    task = "Read my profile then my leave balance. Do not write."
+
+    prompt = _DECOMPOSE_AGENT_PROMPT.format(
+        tools_list=tools_list,
+        host_api_list=host_api_list,
+        skills_list="- (none registered — do NOT use invoke_skill)",
+        task=task,
+    )
+    assert len(prompt) > TASK_BLOCK_MAX_CHARS, (
+        "fixture no longer reproduces the over-budget prompt; adjust the "
+        "synthetic catalog size"
+    )
+    clipped = _clip(prompt, TASK_BLOCK_MAX_CHARS)
+    assert f"User task: {task}" in clipped
+    assert "Return ONLY valid" in clipped
+
+
 def test_coerce_get_entity_details_leave_balance_to_call_host_api():
     from ai.engine.cognition.plan.planner import PlanStep, _coerce_host_api_steps
 

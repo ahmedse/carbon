@@ -59,6 +59,7 @@ export function taskCoworkerLine({
   effective = '',
   awaiting = false,
   pausedCounts = null,
+  readOnly = false,
 }) {
   if (awaiting) return t('coworkerWaiting');
   if (phase === 'paused' || effective === 'paused') {
@@ -73,7 +74,9 @@ export function taskCoworkerLine({
   if (phase === 'error' || effective === 'failed') return t('coworkerFailed');
   if (phase === 'stopped') return t('coworkerStopped');
   if (effective === 'cancelled') return t('coworkerCancelled');
-  if (OUTCOME_STATUS.has(effective) || phase === 'finished') return t('coworkerDone');
+  if (OUTCOME_STATUS.has(effective) || phase === 'finished') {
+    return readOnly ? t('coworkerFound') : t('coworkerDone');
+  }
   if (effective === 'pending_approval') return t('coworkerReview');
   return t('coworkerReady');
 }

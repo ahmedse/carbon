@@ -396,6 +396,7 @@ class CarbonIntelligence:
         conversation_id: str,
         content: str,
         model: str | None = None,
+        pulse_mode: str | None = None,
     ) -> dict[str, Any]:
         """Send a user message and get AI response.
 
@@ -405,6 +406,11 @@ class CarbonIntelligence:
         4. Route to provider based on conversation_type
         5. Save both user message and AI response
         6. Detect needs_input state
+
+        ``pulse_mode`` is the Ask/Plan/Agent dial. It must land in
+        ``task_payload_json`` *before* routing — the same persist
+        ``send_message_stream`` already does — or a first-turn Plan-dial
+        brief silently falls back to Ask (Wave 2 / R3).
         """
         from ai.models import AIConversation, AIMessage
 
@@ -414,6 +420,12 @@ class CarbonIntelligence:
             )
         except AIConversation.DoesNotExist:
             raise ValueError(f"Conversation {conversation_id} not found.")
+
+        if pulse_mode in PULSE_DIAL_MODES:
+            payload = dict(conversation.task_payload_json or {})
+            payload["pulse_mode"] = pulse_mode
+            conversation.task_payload_json = payload
+            conversation.save(update_fields=["task_payload_json"])
 
         # Normalize a blank/whitespace message to a greeting so the assistant
         # still responds helpfully (the serializer allows blank; a raw API caller

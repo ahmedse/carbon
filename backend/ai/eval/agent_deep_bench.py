@@ -22,6 +22,7 @@ EVIDENCE = REPO_ROOT / "docs" / "pulse" / "evidence"
 OUT_FILE = EVIDENCE / "PV2-agent-deep-2026-09-26.json"
 TASKS_RETEST_GLOB = "PV2-tasks-retest-*.json"
 CLOSE_RUNS = 3
+AGENT_P50_BUDGET_MS = 180_000
 
 
 @dataclass
@@ -66,6 +67,30 @@ def score_agent_objectives(
     live_tasks = "reached" if len(runs) >= CLOSE_RUNS and all(
         r.get("pass") for r in runs[-CLOSE_RUNS:]
     ) else ("partial" if runs else "missing")
+    last = runs[-CLOSE_RUNS:] if runs else []
+
+    def from_retest(oid: str, dated: str) -> str:
+        if live_tasks == "missing":
+            return dated
+        if len(last) < CLOSE_RUNS:
+            return "partial"
+        if all((r.get("objectives") or {}).get(oid) for r in last):
+            return "reached"
+        return "partial"
+
+    t10 = "missing"
+    if len(last) >= CLOSE_RUNS:
+        p50s = [
+            (r.get("latency") or {}).get("p50_ms")
+            for r in last
+            if isinstance(r.get("latency"), dict)
+        ]
+        if len(p50s) == CLOSE_RUNS and all(isinstance(v, (int, float)) for v in p50s):
+            t10 = (
+                "reached"
+                if all(int(v) <= AGENT_P50_BUDGET_MS for v in p50s)
+                else "fail"
+            )
 
     rows = [
         Row(
@@ -88,15 +113,15 @@ def score_agent_objectives(
         ),
         Row(
             "T4", "Process bind",
-            "partial",
-            "Nibras process SIM 2026-09-21 PASS (leave, loan, payroll, GOSI, attendance). Not re-run in a 2026-09-26 Tasks bank.",
-            ("docs/ops/SIM-QA-CHAT-AGENT/SCOREBOARD.md",),
+            from_retest("T4", "partial"),
+            "Nibras process SIM 2026-09-21 PASS. Live Tasks bank must re-bind payroll / GOSI / attendance reads.",
+            ("docs/ops/SIM-QA-CHAT-AGENT/SCOREBOARD.md", TASKS_RETEST_GLOB),
         ),
         Row(
             "T5", "SoD / host gate",
-            "partial",
-            "ADR-0045 unit gates hold. Last live NPS wave is 2026-09-21.",
-            ("ADR-0045", "test_host_sod.py"),
+            from_retest("T5", "partial"),
+            "ADR-0045 unit gates hold. Live Tasks bank must refuse an ungated write and keep Chat off the host.",
+            ("ADR-0045", "test_host_sod.py", TASKS_RETEST_GLOB),
         ),
         Row(
             "T6", "Chat → Agent ESS",
@@ -106,34 +131,35 @@ def score_agent_objectives(
         ),
         Row(
             "T7", "Output honesty",
-            "partial",
-            "Phantom-success unit exists. No live Tasks output bank that the host row matched the plan.",
-            ("test_phantom_success_guard.py",),
+            from_retest("T7", "partial"),
+            "Phantom-success unit exists. Live Tasks bank must match host fields and hide unasked pay.",
+            ("test_phantom_success_guard.py", TASKS_RETEST_GLOB),
         ),
         Row(
             "T8", "Cockpit honesty",
-            "partial",
-            "ADR-0043 four-view cockpit. SIM Wave A (2026-09-21) closed with findings open (1 FAIL).",
-            ("ADR-0043", "docs/ops/SIM-QA-CHAT-AGENT/SCOREBOARD.md"),
+            from_retest("T8", "partial"),
+            "ADR-0043 four-view cockpit. Live observe results must not claim a host write.",
+            ("ADR-0043", TASKS_RETEST_GLOB),
         ),
         Row(
             "T9", "Live Tasks retest",
             live_tasks,
-            "No PV2-tasks-retest-*.json. A 3-run live bank is what closed Chat. Tasks does not have one.",
+            "Three full PV2-tasks-retest-*.json passes. A partial or browser note does not close T9.",
             (TASKS_RETEST_GLOB,),
         ),
         Row(
             "T10", "Run latency",
-            "missing",
-            "No Agent run p50 / over-budget bar. Do not borrow Chat C8 numbers.",
-            (),
+            t10,
+            f"Agent case p50 ≤ {AGENT_P50_BUDGET_MS} ms on the last {CLOSE_RUNS} full Tasks retests. Not Chat C8.",
+            (TASKS_RETEST_GLOB,),
         ),
     ]
     if live_tasks == "missing":
-        # A missing live bank cannot raise T4/T5/T7/T8 to reached.
         for row in rows:
             if row.tid in {"T4", "T5", "T7", "T8"} and row.honest == "reached":
                 row.honest = "partial"
+            if row.tid == "T10" and row.honest == "reached":
+                row.honest = "missing"
     return rows
 
 

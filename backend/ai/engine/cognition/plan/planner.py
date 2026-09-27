@@ -869,6 +869,17 @@ def _canonicalize_host_steps(
         declare_bindings(step, by_id, surface)
 
 
+def _refuses_export(utterance: str) -> bool:
+    """True when the brief names export only to forbid it."""
+    low = (utterance or "").lower()
+    return (
+        "do not export" in low
+        or "don't export" in low
+        or "dont export" in low
+        or "no export" in low
+    )
+
+
 def _ensure_export_deliverable(utterance: str, steps: list[PlanStep]) -> None:
     """Append an export_document step when the brief asks for a file deliverable.
 
@@ -876,6 +887,8 @@ def _ensure_export_deliverable(utterance: str, steps: list[PlanStep]) -> None:
     because every step stayed tool-less reasoning. Coercion only rewrites
     existing intents; this adds a terminal deliverable when none exists.
     """
+    if _refuses_export(utterance):
+        return
     if not _EXPORT_UTTERANCE.search(utterance or ""):
         return
     wanted = _infer_export_format(utterance or "")

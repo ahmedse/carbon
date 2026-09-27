@@ -87,6 +87,15 @@ function TaskRow({ plan, onSelect, onDelete, deletingId, t }) {
         >
           {title}
         </Typography>
+        {plan.created_at ? (
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ display: 'block', fontSize: '0.625rem', mt: 0.125 }}
+          >
+            {new Date(plan.created_at).toLocaleString()}
+          </Typography>
+        ) : null}
       </Box>
       <Chip
         size="small"

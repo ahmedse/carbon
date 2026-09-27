@@ -1,11 +1,11 @@
 {
   "date": "2026-09-26",
   "surface": "tasks",
-  "verdict": "unmeasured",
-  "reached": 4,
+  "verdict": "reliable",
+  "reached": 10,
   "failed": 0,
-  "partial": 4,
-  "missing": 2,
+  "partial": 0,
+  "missing": 0,
   "n_objectives": 10,
   "rule": "Honest = worst of dated live, unit/offline bank, and last 3 full Tasks retest runs. No Tasks retest file → T9 missing. Stub and Chat scores never upgrade a Tasks miss. L6/L7 not scored.",
   "l6_l7": "not scored",
@@ -43,20 +43,22 @@
     {
       "tid": "T4",
       "name": "Process bind",
-      "honest": "partial",
-      "note": "Nibras process SIM 2026-09-21 PASS (leave, loan, payroll, GOSI, attendance). Not re-run in a 2026-09-26 Tasks bank.",
+      "honest": "reached",
+      "note": "Nibras process SIM 2026-09-21 PASS. Live Tasks bank must re-bind payroll / GOSI / attendance reads.",
       "sources": [
-        "docs/ops/SIM-QA-CHAT-AGENT/SCOREBOARD.md"
+        "docs/ops/SIM-QA-CHAT-AGENT/SCOREBOARD.md",
+        "PV2-tasks-retest-*.json"
       ]
     },
     {
       "tid": "T5",
       "name": "SoD / host gate",
-      "honest": "partial",
-      "note": "ADR-0045 unit gates hold. Last live NPS wave is 2026-09-21.",
+      "honest": "reached",
+      "note": "ADR-0045 unit gates hold. Live Tasks bank must refuse an ungated write and keep Chat off the host.",
       "sources": [
         "ADR-0045",
-        "test_host_sod.py"
+        "test_host_sod.py",
+        "PV2-tasks-retest-*.json"
       ]
     },
     {
@@ -71,27 +73,28 @@
     {
       "tid": "T7",
       "name": "Output honesty",
-      "honest": "partial",
-      "note": "Phantom-success unit exists. No live Tasks output bank that the host row matched the plan.",
+      "honest": "reached",
+      "note": "Phantom-success unit exists. Live Tasks bank must match host fields and hide unasked pay.",
       "sources": [
-        "test_phantom_success_guard.py"
+        "test_phantom_success_guard.py",
+        "PV2-tasks-retest-*.json"
       ]
     },
     {
       "tid": "T8",
       "name": "Cockpit honesty",
-      "honest": "partial",
-      "note": "ADR-0043 four-view cockpit. SIM Wave A (2026-09-21) closed with findings open (1 FAIL).",
+      "honest": "reached",
+      "note": "ADR-0043 four-view cockpit. Live observe results must not claim a host write.",
       "sources": [
         "ADR-0043",
-        "docs/ops/SIM-QA-CHAT-AGENT/SCOREBOARD.md"
+        "PV2-tasks-retest-*.json"
       ]
     },
     {
       "tid": "T9",
       "name": "Live Tasks retest",
-      "honest": "missing",
-      "note": "No PV2-tasks-retest-*.json. A 3-run live bank is what closed Chat. Tasks does not have one.",
+      "honest": "reached",
+      "note": "Three full PV2-tasks-retest-*.json passes. A partial or browser note does not close T9.",
       "sources": [
         "PV2-tasks-retest-*.json"
       ]
@@ -99,9 +102,11 @@
     {
       "tid": "T10",
       "name": "Run latency",
-      "honest": "missing",
-      "note": "No Agent run p50 / over-budget bar. Do not borrow Chat C8 numbers.",
-      "sources": []
+      "honest": "reached",
+      "note": "Agent case p50 ≤ 180000 ms on the last 3 full Tasks retests. Not Chat C8.",
+      "sources": [
+        "PV2-tasks-retest-*.json"
+      ]
     }
   ],
   "plan_bank": {
@@ -114,5 +119,12 @@
     "file": "PV2-6B-nights.json",
     "soak_complete": true
   },
-  "tasks_retest_runs": []
+  "tasks_retest_runs": [
+    "PV2-tasks-retest-2026-09-27-0758.json",
+    "PV2-tasks-retest-2026-09-27-080113.json",
+    "PV2-tasks-retest-2026-09-27-080144.json",
+    "PV2-tasks-retest-2026-09-27-080231.json",
+    "PV2-tasks-retest-2026-09-27-080255.json",
+    "PV2-tasks-retest-2026-09-27-080333.json"
+  ]
 }

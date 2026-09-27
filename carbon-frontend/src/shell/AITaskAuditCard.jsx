@@ -23,6 +23,14 @@ import { PLAN_STATUS, STEP_STATUS, stepStatusMeta } from './aiTaskStatus';
 import { FONT } from '../theme/themeTokens';
 
 /** Human-readable duration — never dump raw float ms. */
+function formatWhen(value) {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleString();
+}
+
+/** Human-readable duration — never dump raw float ms. */
 function formatLatency(ms) {
   if (ms == null || !Number.isFinite(Number(ms))) return '—';
   const n = Number(ms);
@@ -88,6 +96,13 @@ function AITaskAuditCard({ ledger }) {
           <Typography variant="body2" sx={{ fontSize: '0.75rem' }}>
             {actor.display_name || actor.user_id || 'Unknown'}
           </Typography>
+          {(provenance.created_at || provenance.completed_at) && (
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6875rem' }}>
+              {provenance.created_at ? `Created ${formatWhen(provenance.created_at)}` : ''}
+              {provenance.created_at && provenance.completed_at ? ' · ' : ''}
+              {provenance.completed_at ? `Ran ${formatWhen(provenance.completed_at)}` : ''}
+            </Typography>
+          )}
           <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', gap: 0.5 }}>
             {provenance.pattern && <Chip size="small" variant="outlined" label={`Pattern · ${provenance.pattern}`} sx={{ height: 18, fontSize: '0.625rem' }} />}
             {provenance.source && <Chip size="small" variant="outlined" label={`Source · ${provenance.source}`} sx={{ height: 18, fontSize: '0.625rem' }} />}

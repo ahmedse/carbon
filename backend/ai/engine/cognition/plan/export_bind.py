@@ -646,6 +646,7 @@ def render_bound_catalog_read(
         language,
         catalog_entry=catalog_entry,
         fields=fields,
+        restate_breakdown=True,
     )
     return rendered or None
 

@@ -1,0 +1,228 @@
+# EduOS Tasks workbench. Domain words live here, not in the engine.
+# Structural. Not a live Tasks retest. Not a Chat score.
+
+cases:
+  - id: eduos.cohort.two-humans
+    lane: graph
+    brief: Cohort review is consented by submitter then reviewer.
+    graph:
+      entry: ask
+      nodes:
+        - {id: ask, node_type: human, meta: {role: submitter, process: cohort.review.lifecycle}}
+        - {id: review, node_type: human, meta: {role: reviewer}}
+        - {id: record, node_type: observe}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: ask, target: review}
+        - {source: review, target: record}
+        - {source: record, target: done}
+    expect:
+      valid: true
+      path: [ask, review, record, done]
+      roles_differ: [ask, review]
+      mutations_gated: true
+
+  - id: eduos.grade.write-is-human
+    lane: graph
+    brief: Recording a grade is a mutation and waits for a human.
+    graph:
+      entry: read
+      nodes:
+        - {id: read, node_type: task, tool_name: list_cohort_submissions}
+        - {id: ask, node_type: human}
+        - {id: write, node_type: task, tool_name: record_grade, is_mutation: true}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: read, target: ask}
+        - {source: ask, target: write}
+        - {source: write, target: done}
+    expect:
+      valid: true
+      path_has: [ask, write]
+      mutations_gated: true
+
+  - id: eduos.grade.trap-no-consent
+    lane: graph
+    brief: Recording a grade with no human is a trap.
+    graph:
+      entry: write
+      nodes:
+        - {id: write, node_type: task, tool_name: record_grade, is_mutation: true}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: write, target: done}
+    expect:
+      valid: true
+      detects: ungated_mutation
+
+  - id: eduos.rubric.cite-or-refuse
+    lane: retrieval
+    brief: Cite the rubric band that holds every token. Miss refuses.
+    passages:
+      - {id: band, text: "reflective band 3 requires two cycles"}
+    tokens: ["reflective", "3"]
+    expect:
+      cited: [band]
+      refuses_when_empty: true
+
+  - id: eduos.rubric.miss-refuses
+    lane: retrieval
+    brief: A band the passages do not carry is a refuse.
+    passages:
+      - {id: band, text: "reflective band 3 requires two cycles"}
+    tokens: ["osce", "9"]
+    expect:
+      cited: []
+      refuses_when_empty: true
+
+  - id: eduos.export.after-review
+    lane: graph
+    brief: Export of the cohort pack waits until a human has reviewed.
+    graph:
+      entry: ask
+      nodes:
+        - {id: ask, node_type: human}
+        - {id: pack, node_type: task, tool_name: export_document}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: ask, target: pack}
+        - {source: pack, target: done}
+    expect:
+      valid: true
+      path: [ask, pack, done]
+      mutations_gated: true
+
+  - id: eduos.parallel.readonly
+    lane: graph
+    brief: Cohort list and rubric read in parallel. No write.
+    graph:
+      entry: fan
+      nodes:
+        - {id: fan, node_type: parallel, join: all}
+        - {id: cohort, node_type: task, tool_name: list_cohort_submissions}
+        - {id: rubric, node_type: task, tool_name: search_knowledge}
+        - {id: join, node_type: task, tool_name: merge_records}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: fan, target: cohort}
+        - {source: fan, target: rubric}
+        - {source: cohort, target: join}
+        - {source: rubric, target: join}
+        - {source: join, target: done}
+    expect:
+      valid: true
+      path_has: [cohort, rubric, join]
+      mutations_gated: true
+
+  - id: eduos.map.each-submission
+    lane: graph
+    brief: One read per submission. The collection is named.
+    graph:
+      entry: each
+      nodes:
+        - {id: each, node_type: map, collection_path: submissions, tool_name: get_submission}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: each, target: done}
+    expect:
+      valid: true
+      collection_path: {each: submissions}
+
+  - id: eduos.band.escalate
+    lane: graph
+    brief: A score under the band escalates to a human. Export is not taken.
+    context: {score: 2, band: 3}
+    graph:
+      entry: read
+      nodes:
+        - {id: read, node_type: task, tool_name: list_cohort_submissions}
+        - {id: gate, node_type: choice}
+        - {id: pack, node_type: task, tool_name: export_document}
+        - {id: ask, node_type: human}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: read, target: gate}
+        - {source: gate, target: pack, guard: "score >= band"}
+        - {source: gate, target: ask, is_default: true}
+        - {source: pack, target: done}
+        - {source: ask, target: done}
+    expect:
+      valid: true
+      path_has: [ask]
+      path_excludes: [pack]
+
+  - id: eduos.agents.researcher-cannot-grade
+    lane: agents
+    brief: Researcher and critic do not carry grade writes.
+    agents:
+      - {role: orchestrator, tools: [search_knowledge], mutation_tools: []}
+      - {role: researcher, tools: [search_knowledge, list_cohort_submissions], mutation_tools: []}
+      - {role: critic, tools: [], mutation_tools: []}
+    expect:
+      roles: [orchestrator, researcher, critic]
+      readonly_roles: [researcher, critic]
+      critic_tools: []
+
+  - id: eduos.agents.researcher-grade-trap
+    lane: agents
+    brief: A researcher that can record a grade is a trap.
+    agents:
+      - {role: researcher, tools: [record_grade], mutation_tools: [record_grade]}
+      - {role: critic, tools: [], mutation_tools: []}
+    expect:
+      detects: mutation_on_readonly
+      readonly_roles: [researcher]
+
+  - id: eduos.subflow.then-review
+    lane: graph
+    brief: A child review flow returns to a human before any grade write.
+    graph:
+      entry: child
+      nodes:
+        - {id: child, node_type: subflow, meta: {ref: cohort.review.lifecycle}}
+        - {id: ask, node_type: human}
+        - {id: write, node_type: task, tool_name: record_grade, is_mutation: true}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: child, target: ask}
+        - {source: ask, target: write}
+        - {source: write, target: done}
+    expect:
+      valid: true
+      path: [child, ask, write, done]
+      mutations_gated: true
+
+  - id: eduos.wait.then-export
+    lane: graph
+    brief: After a wait, export still sits behind a human.
+    graph:
+      entry: hold
+      nodes:
+        - {id: hold, node_type: wait}
+        - {id: ask, node_type: human}
+        - {id: pack, node_type: task, tool_name: export_document}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: hold, target: ask}
+        - {source: ask, target: pack}
+        - {source: pack, target: done}
+    expect:
+      valid: true
+      path: [hold, ask, pack, done]
+      mutations_gated: true
+
+  - id: eduos.trap.export-then-grade
+    lane: graph
+    brief: A grade write after an export with no human is a trap.
+    graph:
+      entry: pack
+      nodes:
+        - {id: pack, node_type: task, tool_name: export_document}
+        - {id: write, node_type: task, tool_name: record_grade, is_mutation: true}
+        - {id: done, node_type: succeed}
+      edges:
+        - {source: pack, target: write}
+        - {source: write, target: done}
+    expect:
+      valid: true
+      detects: ungated_mutation
