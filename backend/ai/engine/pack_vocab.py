@@ -208,6 +208,20 @@ def LV(key: str) -> _LiveStr:
     return _LiveStr(key)
 
 
+def contained(needle: Any, haystack: Any) -> bool:
+    """True when a live sentence occurs in text.
+
+    ``str.__contains__`` rejects a live sentence as the needle. Lists and
+    sets keep equality, which a live sentence already implements.
+    """
+    if isinstance(haystack, str):
+        return str(needle or "") in haystack
+    try:
+        return needle in haystack
+    except TypeError:
+        return False
+
+
 def _resolved_part(part: Any) -> str:
     return part._s() if isinstance(part, _LiveText) else str(part)
 

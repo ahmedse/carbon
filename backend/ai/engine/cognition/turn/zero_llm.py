@@ -13,7 +13,7 @@ from ai.engine.host_ids import (
     ID_LIST_MY_PAYSLIPS,
 )
 from ai.engine.cognition.phrase_tables import T
-from ai.engine.pack_vocab import LV, V, copy_text, live_pattern
+from ai.engine.pack_vocab import LV, V, contained, copy_text, live_pattern
 
 
 import calendar
@@ -267,7 +267,7 @@ def _empty_payslip_digest(text: str) -> bool:
         or "results=[]" in blob
         or 'results":[]' in blob
         or "results = []" in blob
-        or V("t_no_payslips") in blob
+        or contained(V("t_no_payslips"), blob)
         or "0 rows" in blob
         or "0 row" in blob
     )
@@ -329,7 +329,7 @@ def last_payslip_was_empty(
             continue
         api = str(row.get("api") or "")
         digest = str(row.get("digest") or "")
-        if ID_LIST_MY_PAYSLIPS not in api and ID_LIST_MY_PAYSLIPS not in digest:
+        if not contained(ID_LIST_MY_PAYSLIPS, api) and not contained(ID_LIST_MY_PAYSLIPS, digest):
             continue
         if _empty_payslip_digest(digest):
             return True
@@ -362,9 +362,9 @@ def is_empty_payslip_tool_result(completed_tools: list | None) -> bool:
         )
         blob = f"{args} {api} {item.get('tool_name') or ''} {item.get('result') or ''}"
         looks_payslip = (
-            V("t_payslip_2") in blob.lower()
+            contained(V("t_payslip_2"), blob.lower())
             or "قسيمة" in blob
-            or ID_LIST_MY_PAYSLIPS in api
+            or contained(ID_LIST_MY_PAYSLIPS, api)
         )
         if not looks_payslip:
             continue
@@ -435,9 +435,9 @@ def payslip_lines_from_tools(completed_tools: list | None) -> dict[str, str]:
         api = str(args.get("api_name") or args.get("name") or args.get("api") or "")
         blob = f"{args} {api} {item.get('tool_name') or ''} {item.get('result') or ''}"
         if (
-            V("t_payslip_2") not in blob.lower()
+            not contained(V("t_payslip_2"), blob.lower())
             and "قسيمة" not in blob
-            and ID_LIST_MY_PAYSLIPS not in api
+            and not contained(ID_LIST_MY_PAYSLIPS, api)
         ):
             continue
         out.update(payslip_lines_from_payload(_unwrap_tool_json(item.get("result"))))
@@ -458,8 +458,8 @@ def payslip_lines_from_state(
             continue
         blob = f"{row.get('api') or ''} {row.get('digest') or ''}"
         looks_payslip = (
-            ID_LIST_MY_PAYSLIPS in blob
-            or V("t_payslip_2") in blob.lower()
+            contained(ID_LIST_MY_PAYSLIPS, blob)
+            or contained(V("t_payslip_2"), blob.lower())
             or bool(_DIGEST_AMOUNT_RE.search(str(row.get("digest") or "")))
         )
         if not looks_payslip:
@@ -622,7 +622,7 @@ def profile_from_tools(completed_tools: list | None) -> dict[str, str]:
         args = item.get("tool_args") if isinstance(item.get("tool_args"), dict) else {}
         api = str(args.get("api_name") or args.get("name") or args.get("api") or "")
         blob = f"{args} {api} {item.get('tool_name') or ''}"
-        if ID_GET_MY_PROFILE not in blob and "profile" not in blob.lower():
+        if not contained(ID_GET_MY_PROFILE, blob) and "profile" not in blob.lower():
             data = _unwrap_tool_json(item.get("result"))
             parsed = profile_from_payload(data)
             if "employee_no" not in parsed:
@@ -645,7 +645,7 @@ def profile_from_state(
         if not isinstance(row, dict):
             continue
         digest = str(row.get("digest") or "")
-        if "employee_no=" not in digest and ID_GET_MY_PROFILE not in digest:
+        if "employee_no=" not in digest and not contained(ID_GET_MY_PROFILE, digest):
             continue
         for match in _PROFILE_DIGEST_RE.finditer(digest):
             out[match.group(1).lower()] = match.group(2).strip()

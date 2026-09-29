@@ -207,7 +207,7 @@ async def build_chat_prompt(
 
     # Compact rendering summary when fallback did not already include it.
     # Filesystem domain-pack skill injection REMOVED(F1a) — do not re-wire.
-    if RENDERING_CAPABILITIES_SUMMARY not in (result or ""):
+    if str(RENDERING_CAPABILITIES_SUMMARY) not in (result or ""):
         result = (
             f"{result}\n\n{RENDERING_CAPABILITIES_SUMMARY}"
             if result
