@@ -1,11 +1,20 @@
 id: CR-INV-01
-journey: Organizational inventory
-meaning: The emissions app accounts an organizational inventory with scopes 1, 2, and 3.
-source: backend/emissions/models.py; emissions/services.py SCOPE_NAMES
-owner: unconfirmed
-failure: Tests mix inventory, product LCA, and project accounting.
-validation: Model inspection. Methodology is not frozen.
-implementation: emissions.ReportingPeriod, Calculation, OrganizationalBoundary
+journey: INV
+meaning: >
+  The emissions app can store an organizational inventory with scopes 1, 2,
+  and 3 (InventorySource.SCOPE_CHOICES and services.SCOPE_NAMES). That is the
+  module contract. It is not a statement that AASTMT has a populated period.
+source: backend/emissions/models.py InventorySource.SCOPE_CHOICES; emissions/services.py SCOPE_NAMES
+owner: carbon-inventory-lead
+failure: Tests treat product LCA or project accounting as the organizational inventory, or a release is blocked on a method that is not frozen.
+validation: >
+  Model inspection of scope choices 1, 2, and 3. Methodology is not frozen.
+  catalogue stays planned. blocks_release stays empty.
+implementation: >
+  emissions.ReportingPeriod, Calculation, OrganizationalBoundary, InventorySource.
+  Onboarding leaf O1 uses scopes 1 and 2 only.
 confidence: medium
 catalogue: planned
-residual: GHG Protocol Corporate Standard version 3 is a draft. Do not treat it as binding.
+residual: >
+  GHG Protocol Corporate Standard version 3 is a draft. Do not treat it as
+  the binding method. Do not add CR-INV-01 to blocks_release.

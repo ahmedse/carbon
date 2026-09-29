@@ -1,0 +1,33 @@
+# Fixed how-to answers for MedMentor page steps. Matched like refusals.
+# A group matches only when every term in it occurs in the message.
+version: 1
+asks:
+  - id: open_goal
+    answer: On Goals, a click on the row only highlights it. The eye opens the record.
+    all_of_any:
+      - [how, open, goal]
+      - [how, eye, goal]
+  - id: publish_slot
+    answer: Open Office Hours on this activity and create a slot. Students can book it only when they have an active pairing here.
+    all_of_any:
+      - [how, publish, office hour]
+      - [how, create, office hour]
+  - id: book_slot
+    answer: The student opens Office Hours, chooses a published slot, and books it. Booking fails without an active pairing on this activity.
+    all_of_any:
+      - [how, student, book]
+      - [how, book, office hour]
+  - id: write_reflection
+    answer: Open Reflections. A student submits only against a prompt on this activity. The eye opens the reflection. Pulse will not write it.
+    all_of_any:
+      - [how, write, reflection]
+      - [how, submit, reflection]
+  - id: give_feedback
+    answer: A mentor opens the reflection with the eye and writes feedback there. The mentor must be paired with that student on this activity.
+    all_of_any:
+      - [how, feedback, reflection]
+  - id: open_portfolio
+    answer: Portfolio is in the MedMentor bar. It shows your own goals and flags. A student cannot open another student's portfolio.
+    all_of_any:
+      - [where, portfolio]
+      - [how, open, portfolio]

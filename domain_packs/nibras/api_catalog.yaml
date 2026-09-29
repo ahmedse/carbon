@@ -72,6 +72,16 @@ tools:
     requires_confirmation: false
     source_type: carbon_api
 
+  - name: list_leave_policies
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+  - name: list_my_attendance
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
   - name: list_team_leave
     kind: read
     requires_confirmation: false

@@ -1,0 +1,25 @@
+id: CR-SRC-01
+journey: INV
+meaning: >
+  O1 requires two InventorySource rows. "Smart Village electricity" with
+  scope 2 and scope3_category null. "Smart Village diesel" with scope 1,
+  scope3_category null, and description containing exactly one of the words
+  generators or fleet (both, or neither, fails). South Valley, Abu Qir, and Alamein each have either
+  an InventorySource or an InventorySourceStatus of excluded or declared for
+  the open period. Missing means absent, not covered, and not zero.
+source: backend/emissions/models.py InventorySource; domain_packs/carbon/assurance/benchmarks/O1-smart-village.yaml
+owner: carbon-inventory-lead
+failure: O1 is treated as done with only one of the two sources, or another campus is marked covered to finish onboarding.
+validation: >
+  For the single open period, look up sources by exact source_name and scope.
+  Fail O1 when either name is missing. Do not fail O1 when the other three
+  campuses are declared or excluded with a reason from CR-EXC-01.
+implementation: >
+  Host screen /carbon/admin/inventory-coverage. Process step declare_sources
+  is human_only. Source names are fixed by the benchmark file.
+confidence: high-code
+catalogue: planned
+residual: >
+  OrgUnit for Smart Village may not exist yet. The source cannot be saved
+  without org_unit. Until that row exists, O1 stays open and the page says
+  the campus org unit is missing. Do not invent an org id.

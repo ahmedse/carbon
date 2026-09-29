@@ -1,0 +1,21 @@
+id: CR-PER-01
+journey: INV
+meaning: >
+  Onboarding has exactly one ReportingPeriod with status open. start_date is
+  strictly before end_date. period_type is annual for O1. Status open means
+  the model choice "Open for Data Entry", not draft, locked, submitted,
+  verified, rejected, or closed.
+source: backend/emissions/models.py ReportingPeriod.STATUS_CHOICES
+owner: carbon-inventory-lead
+failure: Two open periods, a zero-length period, or activity posted against a period that is not open.
+validation: >
+  Filter ReportingPeriod.status == open. Fail when the count is not 1.
+  Fail when start_date >= end_date. O1 fails when period_type is not annual.
+implementation: >
+  Host screen for periods. Process step open_period is human_only and depends
+  on name_boundary. This rule does not insert a period.
+confidence: high-code
+catalogue: planned
+residual: >
+  The period's display name is chosen by the inventory lead. The rule does not
+  prescribe a calendar year. It does not treat draft as open.

@@ -1,11 +1,20 @@
 """Arabic needles for ``chat_surface`` (ADR-0049 L7). No compiled regex."""
 from __future__ import annotations
-from ai.engine.pack_vocab import V
+
+from ai.engine.host_ids import (
+    ID_LEAVE_TYPE,
+    ID_LOAN_TYPE,
+    ID_PERMISSION_TYPE,
+)
+from ai.engine.pack_vocab import LV, V
 
 
-LEAVE_INTENT_AR = ("إجاز", "اجاز", "عارضة", "عارده", "سنوي")
-LOAN_INTENT_AR = (V("t_قرض"),)
-ATTENDANCE_INTENT_AR = ("استئذان", V("t_حضور"))
+LEAVE_INTENT_AR = (
+    LV("t_rx_n_leave_stem"), LV("t_rx_n_leave_stem_2"),
+    LV("t_rx_n_casual"), LV("t_rx_n_casual_2"), LV("t_rx_n_annual_ar"),
+)
+LOAN_INTENT_AR = (LV("t_قرض"),)
+ATTENDANCE_INTENT_AR = (LV("t_rx_n_excuse_ar"), LV("t_حضور"))
 MANAGER_REVIEW_AR = (
     "موافق على",
     "اعتماد",
@@ -22,24 +31,28 @@ PROFILE_CHANGE_AR = (
     "آيبان",
     "ايبان",
 )
-ESS_TOPIC_AR = ("إجاز", "اجاز", V("t_قرض"), "استئذان", "تقديم")
+ESS_TOPIC_AR = (
+    LV("t_rx_n_leave_stem"), LV("t_rx_n_leave_stem_2"), LV("t_قرض"),
+    LV("t_rx_n_excuse_ar"), LV("t_rx_n_submit_ar"),
+)
 ESS_WRITE_VERB_AR = ("أريد", "اريد", "أبغى", "ابغى", "اطلب", "أطلب", "تقديم", "قدّم", "قدm")
 
 FIELD_LABELS = {
-    "leave_type": (V("t_leave_type_2"), "نوع الإجازة"),
+    ID_LEAVE_TYPE: (LV("t_leave_type_2"), LV("t_rx_copy_field_leave_ar")),
     "start_date": ("Start date", "تاريخ البداية"),
     "end_date": ("End date", "تاريخ النهاية"),
     "days": ("Days", "الأيام"),
     "reason": ("Reason", "السبب"),
-    "loan_type": (V("t_loan_type"), "نوع القرض"),
+    ID_LOAN_TYPE: (LV("t_loan_type"), LV("t_rx_copy_field_loan_ar")),
     "principal": ("Principal", "المبلغ"),
     "term_months": ("Term (months)", "المدة (أشهر)"),
     "interest_rate": ("Interest rate", "الفائدة"),
-    "permission_type": ("Permission type", "نوع الاستئذان"),
+    ID_PERMISSION_TYPE: (LV("t_rx_copy_field_perm_en"), LV("t_rx_copy_field_perm_ar")),
     "hours": ("Hours", "الساعات"),
 }
 
 
 def any_needle(text: str, needles: tuple[str, ...]) -> bool:
     raw = text or ""
-    return any(n in raw for n in needles)
+    # Empty is not a match. A pack that lacks the needle must not hit every utterance.
+    return any(n and str(n) in raw for n in needles)

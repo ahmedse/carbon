@@ -86,3 +86,19 @@ export function processCreatePayload(process, title) {
     task_payload: { pulse_process: dial },
   };
 }
+
+/** Moodle host: same pane, medicine app, Ask locked, course on the thread. */
+export function withHostPayload(payload, host) {
+  if (!host) return payload;
+  const task = { ...(payload.task_payload || {}) };
+  if (host.dialLock) {
+    task.pulse_process = host.dialLock;
+    task.pulse_mode = host.dialLock;
+  }
+  if (host.pageContext) task.page_context = host.pageContext;
+  return {
+    ...payload,
+    ...(host.appIdentifier ? { app_identifier: host.appIdentifier } : {}),
+    task_payload: task,
+  };
+}

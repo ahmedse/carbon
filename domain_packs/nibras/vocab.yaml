@@ -1232,3 +1232,204 @@ t_من_هو_x_ابحث_عن_x: '''من هو X'', ''ابحث عن X'', leave look
   etc. '
 t_هذا_شرح_مفاهيمي_للعملية_وليس_طلب: هذا شرح مفاهيمي للعملية — وليس طلبًا لفتح شاشة
   People & Payroll.
+t_rx_leave_topic_en: '\bleav\w*\b|\bleaves?\b|\bvacation|\bpto\b|\btime[\s-]?off\b'
+t_rx_leave_history_en: '\bleave\s+(?:requests?|history|records?|applications?)\b'
+t_rx_payslip_topic_en: '\bpayslips?\b|\bnet\s+pay\b|\btake[\s-]?home\b'
+t_rx_emp_id: '\bemp[_\s-]?\d+\b|\bemployee\s*(?:no\.?|number|#|:)?\s*\d+'
+t_rx_leave_zero_en: '(?:used|pending)\s*[:=]?\s*0\s*day'
+t_rx_payslip_specific_en: 'net\s*pay|take[\s_-]*home|takehome|last\s+month(?:''s)?\s+(?:net\s+)?pay|deductions?\s+(?:were|applied|on)'
+t_rx_leave_word: '\bleave\b'
+t_rx_loan_word: '\bloan\b'
+t_rx_loan_submit: '\b(?:i\s+(?:want|need)|i''?d\s+like|apply|submit|request|file|raise)\b.{0,64}\bloan\b'
+t_rx_permission_word: '\bpermission\b'
+t_rx_deductions_ask: 'deductions? were|what deductions|applied|خصم|استقطاع'
+t_rx_net_pay_ask: 'net\s*pay|last month|صافي|راتبي|الراتب'
+t_rx_total_deductions: 'total deductions|إجمالي.{0,8}خصم|اجمالي.{0,8}خصم'
+t_rx_profile_digest: '\b(employee_no|department|manager|job_title|full_name)\s*=\s*([^,]+)'
+t_rx_w_installment: installment
+t_rx_w_installments: installments
+t_rx_w_advance: advance
+t_rx_w_advances: advances
+t_rx_w_my_advance: my advance
+t_rx_w_my_advances: my advances
+t_rx_w_my_installment: my installment
+t_rx_w_my_installments: my installments
+t_rx_w_annual: annual
+t_rx_w_sick: sick
+t_rx_w_balance: balance
+t_rx_w_clock_in: clock in
+t_rx_w_clock_in_h: clock-in
+t_rx_w_check_in: check in
+t_rx_w_check_in_h: check-in
+t_rx_w_hour: hour
+t_rx_w_month: month
+t_rx_w_compensation: compensation
+t_rx_w_pay: pay
+t_rx_w_wage: wage
+t_rx_w_basic_pay: basic pay
+t_rx_w_permission: permission
+t_rx_w_excuse: excuse
+t_rx_w_short_hours: short hours
+t_rx_w_absence: absence
+t_rx_w_time_off: time off
+t_rx_w_time_off_h: time-off
+t_rx_w_wps: wps
+t_rx_w_sif: sif
+t_rx_w_onboard: onboard
+t_rx_w_onboarding: onboarding
+t_rx_w_pay_distribution: pay distribution
+t_rx_w_annual_cap: Annual
+t_rx_w_sick_cap: Sick
+t_rx_w_submit_leave: submit_my_leave
+t_rx_w_submit_loan: submit_my_loan
+t_rx_w_submit_attendance: submit_my_attendance
+t_rx_w_gosi_lifecycle: gosi_wps.sif.lifecycle
+t_rx_w_ins_ar: تأمينات
+t_rx_w_hire_ar: توظيف
+t_rx_w_appoint_ar: تعيين
+t_rx_w_salary_report_ar: تقرير الرواتب
+t_rx_copy_identity_ar: 'or the Arabic اجازاتي / راتبي / بياناتي / قروضي — '
+t_rx_copy_self_service_eps: 'self-service endpoints (get_my_profile, list_my_leave, get_my_leave_balance, list_my_loans). '
+t_rx_copy_no_submit_leave: 'emergency) do NOT call submit_my_leave or any call_host_api mutation — explain that Chat is advisory and direct them to '
+t_rx_copy_basic_pay_route: '/ basic pay / راتبي call get_my_profile (or resolve_entity / get_employee for a named coworker) — NEVER list_my_payslips for '
+t_rx_copy_comp_deny_rule: 'data", and a CBAC deny (people:view_compensation) must be stated plainly. Use list_my_payslips for net pay, take-home, '
+t_rx_copy_no_org_lists: 'Do NOT use the organisation-wide list endpoints (list_employees, list_leave_records, …) for a first-person request — they return the whole population and would expose '
+t_rx_copy_analyze_employees: '(e.g. `analyze_employees`) '
+t_rx_copy_understand_self_read: '→ call_tool (get_my_leave_balance / list_my_payslips), never navigate. '
+t_rx_copy_understand_named: "list_leave_entitlements only — never clarify against get_my_leave_balance and never refuse. Host RBAC may 403; still emit the call.\n"
+t_rx_copy_intent_profile: '  `get_employee` (named coworker) or `get_my_profile` (first-person '
+t_rx_copy_intent_payslip: '  data". DO match `list_my_payslips` for net pay / take-home / '
+t_rx_copy_intent_net_ar: '  صافي الراتب.'
+t_rx_copy_comp_lookup: compensation lookup
+t_rx_copy_ess_guidance: '- {slot_a} balance / «عن الإجازات» / رصيد → `{balance_api}` (entitled/used/pending/remaining by type). `{history_api}` is {slot_b} REQUESTS only — empty requests ≠ zero balance.\n- {slot_c} list / قروضي → `{loan_api}`; never invent installments.\n- {slot_d} / net pay / قسيمة → `{payslip_api}`; empty → say empty, never invent.\n'
+t_rx_copy_comp_deny: 'Not authorized to view compensation ({cap} required).'
+t_rx_copy_comp_deny_header: '**Not authorized to view compensation.**'
+t_rx_copy_comp_deny_bullet: '- Access requires the `people:view_compensation` capability.\n'
+t_rx_copy_comp_deny_ar: 'غير مصرح بعرض بيانات التعويض (مطلوب صلاحية people:view_compensation).'
+t_rx_copy_own_records_ar: 'يمكنني فقط قراءة سجلاتك الخاصة — مثل قسائم راتبك عبر list_my_payslips، أو إجازاتك وقروضك الذاتية. لا أملك صلاحية قوائم الموارد البشرية على مستوى المؤسسة.'
+t_rx_copy_org_hr_lists: 'I don''t have access to organisation-wide HR lists.'
+t_rx_copy_open_my_leave_ar: فتح إجازاتي
+t_rx_copy_open_my_attendance_ar: فتح الحضور
+t_rx_copy_leave_balances_ar: أرصدة الإجازات
+t_rx_copy_perm_official: Official permission
+t_rx_copy_perm_medical: Medical permission
+t_rx_copy_perm_emergency: Emergency permission
+t_rx_copy_perm_personal: Personal permission
+t_rx_copy_perm_official_ar: استئذان رسمي
+t_rx_copy_perm_medical_ar: استئذان طبي
+t_rx_copy_perm_emergency_ar: استئذان طارئ
+t_rx_copy_perm_personal_ar: استئذان شخصي
+t_rx_copy_perm_type_en: What type of permission do you need?
+t_rx_copy_perm_type_ar: أي نوع استئذان تحتاج؟
+t_rx_copy_perm_hours_en: How many hours do you need?
+t_rx_copy_perm_hours_ar: كم ساعة تحتاج؟
+t_rx_copy_leave_dates_ar: ما تواريخ الإجازة؟
+t_rx_copy_field_leave_ar: نوع الإجازة
+t_rx_copy_field_loan_ar: نوع القرض
+t_rx_copy_field_perm_en: Permission type
+t_rx_copy_field_perm_ar: نوع الاستئذان
+t_rx_copy_advance_bit_ar: 'قسط القرض {amount}'
+t_rx_copy_advance_bit_en: '{slot_c} installment {amount}'
+t_rx_copy_deductions_ar: 'الاستقطاعات المعتمدة: {parts}.'
+t_rx_copy_deductions_en: 'Committed deductions: {parts}.'
+t_rx_copy_after_gosi_ar: 'بعد خصم {slot_e} البالغ {deduction}، المتبقي قبل قسط القرض هو {after}.'
+t_rx_copy_after_gosi_en: 'After the {slot_e} deduction of {deduction}, take-home before the {slot_c} installment is {after}.'
+t_rx_copy_take_home_ar: 'صافي الراتب المعتمد هو {net}.'
+t_rx_copy_take_home_en: 'Committed take-home (net) is {net}.'
+t_rx_copy_gross_ar: 'الراتب الإجمالي المعتمد هو {gross}. الصافي {net}.'
+t_rx_copy_net_month_en: 'Last month''s committed net pay is {net}.'
+t_rx_copy_installment_ar: 'قسط القرض المعتمد هو {amount}.'
+t_rx_copy_installment_en: 'The committed {slot_c} installment is {amount}.'
+t_rx_copy_total_ded_ar: 'إجمالي الاستقطاعات المعتمدة {total} ({slot_e} {deduction} + {slot_c} {advance}).'
+t_rx_copy_total_ded_en: 'Committed total deductions are {total} ({slot_e} {deduction} + {slot_c} {advance}).'
+t_rx_copy_gosi_line_ar: 'بند {slot_e} المعتمد هو {deduction}. لن أخترع نسبة نظامية أبعد من هذا البند.'
+t_rx_copy_gosi_line_en: 'The committed {slot_e} line is {deduction}. I will not invent a statutory rate beyond that line.'
+t_rx_copy_net_pay_en: 'Committed net pay is {net}.'
+t_rx_copy_confirm_entitlement: Confirm entitlement
+t_rx_copy_read_permissions: Read current permissions before staging a new one.
+t_rx_copy_list_permissions: List existing permissions
+t_rx_gross_ar: 'شهري|إجمالي|اجمالي'
+t_rx_n_leave_stem: إجاز
+t_rx_n_leave_stem_2: اجاز
+t_rx_n_casual: عارضة
+t_rx_n_casual_2: عارده
+t_rx_n_annual_ar: سنوي
+t_rx_n_excuse_ar: استئذان
+t_rx_n_submit_ar: تقديم
+t_rx_n_wage_ar: أجر
+t_rx_n_salary_ar: مرتب
+t_rx_n_comp_ar: تعويض
+t_rx_n_slip: قسيمة
+t_rx_n_slip_typo: قسيمه
+t_rx_n_net: صافي
+t_rx_n_net_salary: صافي الراتب
+t_rx_n_deductions: الاستقطاعات
+t_rx_n_discounts: خصومات
+t_rx_n_my_salary: راتبي
+t_rx_n_my_wage: أجري
+t_rx_n_my_pay: مرتبي
+t_rx_n_my_comp: تعويضي
+t_rx_n_my_data: بياناتي
+t_rx_n_my_dept: قسمي
+t_rx_n_my_mgr: مديري
+t_rx_id_get_my_leave_balance: get_my_leave_balance
+t_rx_id_list_my_leave: list_my_leave
+t_rx_id_list_my_loans: list_my_loans
+t_rx_id_list_my_payslips: list_my_payslips
+t_rx_id_list_my_attendance: list_my_attendance
+t_rx_id_list_leave_entitlements: list_leave_entitlements
+t_rx_id_list_leave_records: list_leave_records
+t_rx_id_list_loans: list_loans
+t_rx_id_list_payslip_lines: list_payslip_lines
+t_rx_id_list_loan_installments: list_loan_installments
+t_rx_id_list_attendance_permissions: list_attendance_permissions
+t_rx_id_list_my_attendance_permissions: list_my_attendance_permissions
+t_rx_id_list_attendance: list_attendance
+t_rx_id_get_leave_balance: get_leave_balance
+t_rx_id_submit_my_leave: submit_my_leave
+t_rx_id_submit_my_loan: submit_my_loan
+t_rx_id_submit_my_attendance_permission: submit_my_attendance_permission
+t_rx_id_submit_my_profile_change: submit_my_profile_change
+t_rx_id_create_leave_record: create_leave_record
+t_rx_id_create_attendance_permission: create_attendance_permission
+t_rx_id_create_employee: create_employee
+t_rx_id_update_employee: update_employee
+t_rx_id_get_employee: get_employee
+t_rx_id_get_my_profile: get_my_profile
+t_rx_id_list_employees: list_employees
+t_rx_id_analyze_employees: analyze_employees
+t_rx_id_approve_attendance_permission: approve_attendance_permission
+t_rx_id_list_my_capabilities: list_my_capabilities
+t_rx_id_submit_my_prefix: submit_my_
+t_rx_id_leave_history: leave_history
+t_rx_id_loan_history: loan_history
+t_rx_id_no_balance_configured: no_balance_configured
+t_rx_id_no_leave_requests: no_leave_requests
+t_rx_id_no_loans: no_loans
+t_rx_id_no_payslips: no_payslips
+t_rx_id_no_attendance_rows: no_attendance_rows
+t_rx_id_no_attendance_permissions: no_attendance_permissions
+t_rx_id_ess_empty_leave_history: ess_empty_leave_history
+t_rx_id_ess_empty_loan_history: ess_empty_loan_history
+t_rx_id_ess_empty_payslip: ess_empty_payslip
+t_rx_id_leave_request: leave_request
+t_rx_id_loan_request: loan_request
+t_rx_id_attendance_permission: attendance_permission
+t_rx_id_leave_type: leave_type
+t_rx_id_loan_type: loan_type
+t_rx_id_permission_type: permission_type
+t_rx_id_principal: principal
+t_rx_id_scope_permissions: permissions
+t_rx_id_cap_compensation: people:view_compensation
+t_rx_id_cap_view_prefix: people:view
+t_rx_id_cap_view_comp: view_compensation
+t_rx_id_enum_annual: annual
+t_rx_id_enum_sick: sick
+t_rx_id_enum_emergency: emergency
+t_rx_id_enum_unpaid: unpaid
+t_rx_id_enum_maternity: maternity
+t_rx_id_enum_housing: housing
+t_rx_id_enum_car: car
+t_rx_id_enum_personal: personal
+t_rx_id_enum_official: official
+t_rx_id_enum_medical: medical

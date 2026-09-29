@@ -1,0 +1,25 @@
+# Domain pack manifest (ADR-0050 / med ADR-0004).
+# Engine addresses packs by id. Moodle and medicine words stay in this pack.
+id: aast-med
+version: 1
+domain: moodle-education
+display_name: AAST College of Medicine — Moodle
+instance: instance.yaml
+compat:
+  engine: ">=2.1"
+owns:
+  experiences: experiences.yaml
+  worlds: worlds.yaml
+  catalog: api_catalog.yaml
+  vocabulary: vocab.yaml
+  refusals: refusals.yaml
+  onboarding_asks: onboarding_asks.yaml
+  section_asks: section_asks.yaml
+  lecture_asks: lecture_asks.yaml
+  access_reasons: access_reasons.yaml
+  courses: courses.yaml
+  inventory: inventory.json
+  gold_l0: gold/l0.yaml
+  gold_l1: gold/l1.yaml
+  gold_l2: gold/l2.yaml
+  gold_l3: gold/l3.yaml

@@ -40,7 +40,7 @@ def test_process_briefing_would_nav_without_guard():
     from ai.engine.cognition.turn.navigation import resolve_navigation
 
     cfg = yaml.safe_load(
-        (Path(__file__).resolve().parents[1] / "engine/instances/nibras/instance.yaml")
+        (Path(__file__).resolve().parents[3] / "domain_packs" / "nibras" / "instance.yaml")
         .read_text(encoding="utf-8")
     )
     msg = (

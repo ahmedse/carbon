@@ -19,6 +19,29 @@ subjects:
     owner: owner
     paths: [carbon-frontend/src/apps/carbon]
     tests: [carbon-frontend/src/apps/carbon]
+  - id: carbon.pack
+    kind: ai_pack
+    title: Carbon Pulse pack (O1 onboarding contract)
+    owner: carbon-inventory-lead
+    paths:
+      - domain_packs/carbon/pack.yaml
+      - domain_packs/carbon/instance.yaml
+      - domain_packs/carbon/vocabulary.yaml
+      - domain_packs/carbon/assurance/principles.yaml
+      - domain_packs/carbon/processes/inventory.onboarding.lifecycle.yaml
+    adr: [.ai-toolkit/decisions/0050-pulse-core-domain-free-versioned-packs.md]
+  - id: carbon.journey.onboarding
+    kind: journey
+    title: AASTMT inventory onboarding leaf O1
+    owner: carbon-inventory-lead
+    paths:
+      - domain_packs/carbon/assurance/benchmarks/O1-smart-village.yaml
+      - domain_packs/carbon/assurance/principles.yaml
+      - domain_packs/carbon/processes/inventory.onboarding.lifecycle.yaml
+    spec:
+      - domain_packs/carbon/assurance/principles.yaml
+      - domain_packs/carbon/assurance/benchmarks/O1-smart-village.yaml
+    adr: [.ai-toolkit/decisions/0020-inventory-coverage.md]
 
 checks:
   - id: CARBON-SPC-01
@@ -66,3 +89,123 @@ checks:
     applies_to: [module, journey]
     solution: Declare paths that exist in the tree.
     source: ADR-0020
+
+  # O1 onboarding — subject-scoped. Do not inherit onto carbon.ui.
+  - id: CARBON-ONB-SPC-02
+    title: Twelve onboarding principles are declared
+    dimension: specified
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: domain_packs/carbon/assurance/principles.yaml
+      texts: [P-01, P-02, P-03, P-04, P-05, P-06, P-07, P-08, P-09, P-10, P-11, P-12]
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: Keep P-01 through P-12 in the principles file.
+    source: domain_packs/carbon/assurance/principles.yaml
+  - id: CARBON-ONB-SPC-03
+    title: O1 benchmark names electricity and diesel
+    dimension: specified
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: domain_packs/carbon/assurance/benchmarks/O1-smart-village.yaml
+      texts: ["id: O1", "status: open", Smart Village electricity, Smart Village diesel]
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: Keep the open leaf on Smart Village electricity and diesel.
+    source: O1-smart-village.yaml
+  - id: CARBON-ONB-SPC-05
+    title: O1 locks units, tier 4, and the diesel stream
+    dimension: specified
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: domain_packs/carbon/assurance/benchmarks/O1-smart-village.yaml
+      texts: ["activity_unit: kWh", "activity_unit: litre", "min_quality_tier: 4", "exactly_one_of: [generators, fleet]", evaluate_o1]
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: Keep kWh, litre, tier 4, and the generators-or-fleet stream on O1.
+    source: O1-smart-village.yaml
+  - id: CARBON-ONB-COR-03
+    title: O1 evaluator is the checklist
+    dimension: correct
+    rank: 3
+    collector: repo
+    probe:
+      type: file_contains
+      file: backend/emissions/onboarding_o1.py
+      texts: ["def evaluate_o1", diesel_stream_both, summary_kg, not_assured]
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: Keep evaluate_o1 as the only checklist. The page renders its codes.
+    source: emissions.onboarding_o1
+  - id: CARBON-ONB-GOV-02
+    title: Onboarding rules exist and stay planned
+    dimension: governed
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: domain_packs/carbon/assurance/pack.yaml
+      texts: ["blocks_release: []"]
+      subjects: [carbon.pack]
+    applies_to: [ai_pack]
+    solution: Do not add a planned rule to blocks_release.
+    source: CR-INV-01 residual
+  - id: CARBON-ONB-SPC-04
+    title: Pack process names the O1 steps
+    dimension: specified
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: domain_packs/carbon/processes/inventory.onboarding.lifecycle.yaml
+      texts: [name_boundary, open_period, declare_sources, bind_factors, enter_activity, calculate, cover_or_exclude, verify_quote]
+      subjects: [carbon.pack]
+    applies_to: [ai_pack]
+    solution: Keep the eight onboarding steps in the process file.
+    source: inventory.onboarding.lifecycle.yaml
+  - id: CARBON-ONB-USE-03
+    title: Onboarding screen exists in the Carbon app
+    dimension: usable
+    rank: 3
+    collector: repo
+    probe:
+      type: file_exists
+      file: carbon-frontend/src/pages/carbon/OnboardingPage.jsx
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: Ship /carbon/onboarding with the four data states. Do not mark O1 live from the file alone.
+    source: frontend-ready screen spec
+  - id: CARBON-ONB-COR-04
+    title: Contract test locks rule ids and the open leaf
+    dimension: correct
+    rank: 4
+    collector: repo
+    probe:
+      type: file_contains
+      file: backend/emissions/tests/test_onboarding_contract.py
+      texts: [CR-BND-01, CR-PULSE-01, "id: O1"]
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: Keep the contract test asserting the rule ids and O1.
+    source: test_onboarding_contract.py
+  - id: CARBON-ONB-OBS-05
+    title: O1 live period evidence is recorded
+    dimension: observed
+    rank: 5
+    collector: repo
+    probe:
+      type: file_exists
+      file: docs/carbon/evidence/O1-smart-village.json
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: >
+      After a real open period and a real get_calculation_summary payload,
+      store that payload with the period id and the date. Do not invent tonnes
+      to turn this check green.
+    source: P-12

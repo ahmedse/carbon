@@ -164,6 +164,7 @@
     "payslips": "قسائم الراتب",
     "people": "الموظفون",
     "policies": "السياسات",
+    "import": "استيراد",
     "positions": "الوظائف",
     "referenceData": "البيانات المرجعية",
     "rotation": "المناوبات",
@@ -198,6 +199,7 @@
     "engine": "المحرك",
     "expertise": "الخبرة",
     "chairmanOverview": "نظرة الرئيس",
+    "inventoryOnboarding": "تهيئة المخزون",
     "inventoryCoverage": "تغطية المخزون",
     "stems": "جذوع الأسئلة",
     "calibration": "المعايرة",
@@ -232,6 +234,7 @@
     "payrollBenefits": "الرواتب والمزايا",
     "workforce": "القوى العاملة",
     "executive": "الإدارة التنفيذية",
+    "onboarding": "التهيئة",
     "biAnalytics": "التحليلات وذكاء الأعمال"
   },
   "ui": {

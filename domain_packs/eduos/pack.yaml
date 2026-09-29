@@ -2,13 +2,15 @@
 # EduOS profiles already carry their own `version` (gradevance.services.packs);
 # this pack version is the envelope those profile versions ship inside.
 id: eduos
-version: 2
+version: 3
 domain: education
 display_name: EduOS — GradeVance
-instance: backend/ai/engine/instances/eduos/instance.yaml
+inventory: host_rbac
+instance: instance.yaml
 compat:
   engine: ">=2.1"
 owns:
+  catalog: api_catalog.yaml
   profiles: profiles/
   schemas: schemas/
   engines: engines/

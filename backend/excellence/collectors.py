@@ -12,6 +12,9 @@ repo (default)
     field_nonempty {field}        subject attribute is non-empty
     paths_exist {field}           every declared path in that field exists
     tests_present                 ≥1 test_*.py / *.test.* under subject paths/tests
+    file_contains {file, text|texts, skip_comments}
+    def_contains {file, def, text|texts}  needles must sit in that function body
+    forbidden_import {root, names} non-test modules under root import none of names
     process_yaml                  subject.process file exists and parses
 antipatterns
     verify_antipatterns           .ai-toolkit/scripts/verify.sh antipatterns (exit 0)
@@ -21,7 +24,7 @@ pulse_gauge
     packs_gate                    ai.eval.pack_contract has no violations
     soak_complete                 PV2-6B soak complete
 pytest
-    pytest_app {app}              runs one app's tests (only when explicitly requested)
+    pytest_app {app, nodes}       runs one app, or the listed node ids, when --run names app
 vitest
     vitest_file {file}            one frontend test file (only when --run vitest:<path>)
 observe
@@ -30,9 +33,19 @@ observe
     migrations_present            backend/<app>/migrations exists
     gauge_series_fresh {days}     evidence series file modified within N days
     evaluator_self_check          in-process Soundcheck/fault rules still hold (fault-demonstrated)
+inbound_operated
+    spec_same_merge               git diff of inbound code vs the studio contract
+    workflow_journey_green        scheduled gh run; local Playwright is rejected
+    ci_node_red                   green ci.yml run of full pytest, named nodes present
+    scheduled_run_green           one scheduled success
+    live_sample_cap               one smoked or committed batch, sample length ≤ 20
+    rtl_i18n_a11y                 i18n exit 0 and an Arabic RTL observation
+    ratchet_gate                  green ci.yml run whose step contains the gauge gate
+    smoke_series_fresh            series rows match InboundBatch.smoke
 """
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import time
@@ -95,6 +108,51 @@ def _has_tests(subject: Subject) -> bool:
     return False
 
 
+def _code_text(text: str, skip_comments: bool) -> str:
+    if not skip_comments:
+        return text
+    kept = []
+    for line in text.splitlines():
+        if line.strip().startswith("#"):
+            continue
+        kept.append(line)
+    return "\n".join(kept)
+
+
+def _function_body(text: str, name: str) -> str:
+    """Source of one top-level function, stopping before the next def, class, or decorator."""
+    marker = f"def {name}"
+    start = text.find(marker)
+    if start < 0:
+        return ""
+    lines = text[start:].splitlines()
+    body = [lines[0]]
+    for line in lines[1:]:
+        if line and not line[0].isspace() and (
+            line.startswith("def ") or line.startswith("class ") or line.startswith("@")
+        ):
+            break
+        body.append(line)
+    return "\n".join(body)
+
+
+def _forbidden_imports(root: Path, names: list[str], skip_tests: bool) -> list[str]:
+    """Non-comment import lines under root. Tests are skipped when asked."""
+    offenders: list[str] = []
+    for path in root.rglob("*.py"):
+        if skip_tests and "tests" in path.parts:
+            continue
+        text = path.read_text(encoding="utf-8")
+        for i, line in enumerate(text.splitlines(), start=1):
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            for name in names:
+                if f"import {name}" in stripped or stripped.startswith(f"from {name}"):
+                    offenders.append(f"{path.name}:{i}:{stripped}")
+    return offenders
+
+
 def collect_repo(cat: Catalogue, pairs: list[tuple[Check, Subject]], ctx: dict[str, Any]) -> list[EventDraft]:
     out: list[EventDraft] = []
     for check, subject in pairs:
@@ -118,6 +176,44 @@ def collect_repo(cat: Catalogue, pairs: list[tuple[Check, Subject]], ctx: dict[s
                               detail={"declared": list(paths), "missing": missing}))
         elif kind == "tests_present":
             out.append(_draft(check, subject, "passed" if _has_tests(subject) else "failed", source="repo:tests"))
+        elif kind in ("file_contains", "def_contains"):
+            rel = str(check.probe.get("file") or "")
+            needles = [str(n) for n in (check.probe.get("texts") or []) if str(n)]
+            single = str(check.probe.get("text") or "")
+            if single:
+                needles.append(single)
+            path = REPO_ROOT / rel if rel else None
+            raw = path.read_text(encoding="utf-8") if path is not None and path.is_file() else ""
+            if kind == "def_contains":
+                text = _function_body(raw, str(check.probe.get("def") or ""))
+            else:
+                text = _code_text(raw, bool(check.probe.get("skip_comments")))
+            missing = [n for n in needles if n not in text]
+            ok = bool(needles) and not missing and (kind != "def_contains" or bool(text))
+            if len(needles) <= 1:
+                detail = {"missing": missing[0] if missing else ""}
+            else:
+                detail = {"missing": missing}
+            out.append(_draft(
+                check, subject, "passed" if ok else "failed", source=rel or f"probe:{kind}",
+                detail=detail,
+            ))
+        elif kind == "forbidden_import":
+            root_rel = str(check.probe.get("root") or "")
+            names = [str(n) for n in (check.probe.get("names") or []) if str(n)]
+            skip_tests = bool(check.probe.get("skip_tests", True))
+            root = REPO_ROOT / root_rel if root_rel else None
+            if root is None or not root.is_dir() or not names:
+                out.append(_draft(
+                    check, subject, "failed", source=root_rel or "probe:forbidden_import",
+                    detail={"missing": "root or names"},
+                ))
+            else:
+                offenders = _forbidden_imports(root, names, skip_tests)
+                out.append(_draft(
+                    check, subject, "passed" if not offenders else "failed",
+                    source=root_rel, detail={"offenders": offenders[:20]},
+                ))
         elif kind == "process_yaml":
             path = REPO_ROOT / subject.process if subject.process else None
             if path is None or not path.is_file():
@@ -232,11 +328,22 @@ def collect_pulse_gauge(cat: Catalogue, pairs: list[tuple[Check, Subject]], ctx:
 # ── pytest (one app, explicit) ─────────────────────────────────────────────
 
 
+def _pytest_targets(token: str, nodes: list[str]) -> list[str]:
+    """App name, or node ids that stay inside the backend tree."""
+    if not nodes:
+        return [token]
+    bad = [n for n in nodes if n.startswith("/") or ".." in n.split("/")]
+    if bad:
+        raise ValueError("pytest nodes must be relative backend paths")
+    return nodes
+
+
 def collect_pytest(cat: Catalogue, pairs: list[tuple[Check, Subject]], ctx: dict[str, Any]) -> list[EventDraft]:
     wanted = set(ctx.get("run_apps") or ())
     out: list[EventDraft] = []
     for check, subject in pairs:
         app = str(check.probe.get("app") or subject.extra.get("app") or "")
+        nodes = [str(n) for n in (check.probe.get("nodes") or []) if str(n)]
         if not app:
             out.append(_unknown(check, subject, "pytest probe has no app"))
             continue
@@ -247,8 +354,13 @@ def collect_pytest(cat: Catalogue, pairs: list[tuple[Check, Subject]], ctx: dict
                 detail={"why": "not requested; pass --run pytest:<app>"},
             ))
             continue
+        try:
+            targets = _pytest_targets(app, nodes)
+        except ValueError as exc:
+            out.append(_draft(check, subject, "failed", source=f"pytest {app}", detail={"why": str(exc)}))
+            continue
         started = time.monotonic()
-        cmd = [sys.executable, "-m", "pytest", app, "-q", "--maxfail=5", "--disable-warnings", "-p", "no:cacheprovider"]
+        cmd = [sys.executable, "-m", "pytest", *targets, "-q", "--maxfail=5", "--disable-warnings", "-p", "no:cacheprovider"]
         try:
             proc = subprocess.run(cmd, cwd=REPO_ROOT / "backend", capture_output=True, text=True,
                                   timeout=int(ctx.get("timeout", 1800)), check=False)
@@ -493,10 +605,16 @@ def collect_playwright(cat: Catalogue, pairs: list[tuple[Check, Subject]], ctx: 
             out.append(_draft(check, subject, "failed", source=rel, detail={"why": "missing"}))
             continue
         started = time.monotonic()
+        spec = rel[len("carbon-frontend/"):] if rel.startswith("carbon-frontend/") else rel
+        # CI skips the e2e webServer so this never starts or kills the dev stack.
+        env = os.environ.copy()
+        env["CI"] = "1"
         try:
             proc = subprocess.run(
-                ["npx", "playwright", "test", rel], cwd=REPO_ROOT / "carbon-frontend",
+                ["npx", "playwright", "test", spec, "--config", "e2e/playwright.config.ts"],
+                cwd=REPO_ROOT / "carbon-frontend",
                 capture_output=True, text=True, timeout=int(ctx.get("timeout", 600)), check=False,
+                env=env,
             )
         except subprocess.TimeoutExpired:
             out.append(_unknown(check, subject, f"playwright {rel} timed out"))
@@ -601,8 +719,15 @@ def _http_fetch(url: str) -> tuple[int, str]:
         return int(exc.code), ""
 
 
+def collect_inbound_operated(cat: Catalogue, pairs: list[tuple[Check, Subject]], ctx: dict[str, Any]) -> list[EventDraft]:
+    from .inbound_operated import collect_inbound_operated as _run
+
+    return _run(cat, pairs, ctx)
+
+
 REGISTRY: dict[str, Collector] = {
     "repo": collect_repo,
+    "inbound_operated": collect_inbound_operated,
     "antipatterns": collect_antipatterns,
     "pulse_gauge": collect_pulse_gauge,
     "pytest": collect_pytest,

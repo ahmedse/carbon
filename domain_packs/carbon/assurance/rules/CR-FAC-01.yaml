@@ -1,0 +1,24 @@
+id: CR-FAC-01
+journey: INV
+meaning: >
+  O1 electricity uses an EmissionFactor with scope 2, activity_unit kWh, and
+  a non-empty source. O1 diesel uses an EmissionFactor with scope 1,
+  activity_unit litre, and a non-empty source. factor_value and factor_unit
+  come from that row. Country is EG or the factor's global row. Chat does
+  not type a factor.
+source: backend/emissions/models.py EmissionFactor; instance tool list_emission_factors
+owner: carbon-factor-steward
+failure: Activity is multiplied by a number that is not on an EmissionFactor row, or the activity unit does not match the factor.
+validation: >
+  The calculation for each O1 source references a factor whose scope and
+  activity_unit match the benchmark. Fail when source is blank or factor_value
+  is null.
+implementation: >
+  Host screen /carbon/admin/factors. Process step bind_factors is human_only.
+  list_emission_factors is the read Pulse may call.
+confidence: high-code
+catalogue: planned
+residual: >
+  This rule does not choose the numeric factor. If no kWh or litre factor
+  exists, O1 stays open. Do not copy a factor from the July 2026 deployment
+  sketch.

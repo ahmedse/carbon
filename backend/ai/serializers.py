@@ -116,6 +116,12 @@ class SendMessageSerializer(serializers.Serializer):
     )
     # Opt-in denser Thought panel (everyone). Default off — no extra thinking cost.
     dense_thinking = serializers.BooleanField(required=False, default=False)
+    # Set by the Plan draft's Change control. A composer message is not a revision.
+    plan_change = serializers.BooleanField(required=False, default=False)
+    # Set by the Plan draft's Cancel control.
+    plan_cancel = serializers.BooleanField(required=False, default=False)
+    # Moodle embed sends the open course here. Carbon's own pane leaves it blank.
+    page_context = serializers.CharField(required=False, allow_blank=True, default="")
 
 
 class EditMessageSerializer(serializers.Serializer):

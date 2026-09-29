@@ -1,0 +1,128 @@
+# AASTMT Carbon onboarding principles. Locked 2026-09-29.
+# Target O1. Product: Carbon on AASTMT. These are not a completed inventory.
+id: carbon-onboarding-principles
+version: 1
+owner: carbon-inventory-lead
+target: O1
+product: Carbon on AASTMT
+locked: 2026-09-29
+limit: >
+  Governs the onboarding leaf only. Does not close South Valley, Abu Qir,
+  Alamein, Scope 3, or external assurance. GHG Protocol Corporate Standard
+  version 3 is a draft (CR-INV-01).
+
+principles:
+  - id: P-01
+    name: Boundary before tonnes
+    statement: >
+      No kilogram or tonne figure is repeatable by staff until the open
+      ReportingPeriod points at an OrganizationalBoundary whose
+      consolidation_approach is equity_share, financial_control, or
+      operational_control.
+    binds: [CR-BND-01, CR-PER-01]
+    violation: A footprint number is shown or spoken with no boundary on the open period.
+
+  - id: P-02
+    name: One open period
+    statement: >
+      Onboarding has exactly one ReportingPeriod with status open.
+      start_date is strictly before end_date. A second open period fails CR-PER-01.
+    binds: [CR-PER-01]
+    violation: Two periods are open, or the open period has start_date >= end_date.
+
+  - id: P-03
+    name: Declared denominator
+    statement: >
+      Coverage uses InventorySource rows. A campus with no source row is
+      absent. It is not zero percent and it is not covered.
+    binds: [CR-SRC-01, CR-COV-01]
+    violation: A coverage percent is published when the source list for that period is empty.
+
+  - id: P-04
+    name: Same-period coverage
+    statement: >
+      InventorySourceStatus may be covered only on the open period, only when
+      that status row's linked_tables is non-empty, and only when a Calculation
+      exists for that same reporting_period. A link stored on another period
+      does not carry forward.
+    binds: [CR-COV-01]
+    violation: Status covered with an empty linked_tables, or covered because last year's link still exists.
+
+  - id: P-05
+    name: Quality is not completeness
+    statement: >
+      data_quality_tier is the model scale, where 1 is better:
+      1 Audited, 2 Verified, 3 Calculated, 4 Estimated, 5 Proxy.
+      Onboarding accepts tier 4 Estimated. A figure that leaves the
+      organisation (chairman share beyond the project, or an external report)
+      needs tier 3 or better (a smaller number). Tier 5 may be stored and
+      must be labeled Proxy. It is not the academy footprint.
+    binds: [CR-COV-01, CR-FAC-01]
+    violation: A proxy-only total is repeated as the AASTMT footprint, or tier is mixed into the coverage percent.
+
+  - id: P-06
+    name: Exclusion is a record
+    statement: >
+      An unmeasured campus stays declared, or becomes excluded with
+      exclusion_reason insufficient_data, not_material, out_of_boundary, or
+      other. Reason other requires notes. Silence is neither covered nor excluded.
+    binds: [CR-EXC-01]
+    violation: A campus disappears from the source list with no status row.
+
+  - id: P-07
+    name: Leaf before the academy
+    statement: >
+      The open benchmark is O1: campus Smart Village, source
+      "Smart Village electricity" (scope 2, location-based, activity unit kWh),
+      and source "Smart Village diesel" (scope 1, activity unit litre, one
+      stream: generators or fleet). South Valley, Abu Qir, Alamein, and
+      Scope 3 are not in O1.
+    binds: [CR-SRC-01]
+    violation: O1 is marked passed because another campus or a Scope 3 category was entered.
+
+  - id: P-08
+    name: Factors are records
+    statement: >
+      The factor used for O1 is an EmissionFactor row with factor_value,
+      factor_unit, activity_unit, scope, and source. The activity unit on the
+      data row matches the factor. Chat does not invent a factor.
+    binds: [CR-FAC-01, CR-DQ-01]
+    violation: A factor number appears in chat or in a note with no EmissionFactor row.
+
+  - id: P-09
+    name: Pulse quotes the tool
+    statement: >
+      A kilogram or tonne figure in Pulse is legal only when that same number
+      is in the get_calculation_summary or get_chairman_overview payload for
+      the named reporting_period_id. Otherwise the answer is that the period
+      is opening.
+    binds: [CR-PULSE-01]
+    violation: Pulse states a tonne figure that is not in the tool payload.
+
+  - id: P-10
+    name: Chat does not write the inventory
+    statement: >
+      Chat may read boundaries, periods, sources, factors, and the calculation
+      summary. Creating or changing a boundary, period, source, factor, activity
+      row, calculation, or coverage status is an Agent action after a person
+      approves, or a host screen. ADR-0046.
+    binds: [CR-WRITE-01, CR-PULSE-01]
+    violation: Chat calls a host write, or Agent runs a write without approval.
+
+  - id: P-11
+    name: Methodology stays provisional
+    statement: >
+      CR-INV-01 records that the emissions app has scopes 1, 2, and 3.
+      Its catalogue stays planned. It does not block release. Corporate
+      Standard version 3 is a draft and is not the binding method.
+    binds: [CR-INV-01]
+    violation: A release is blocked on CR-INV-01, or v3 is cited as the method in force.
+
+  - id: P-12
+    name: Ready is a sentence
+    statement: >
+      A principle, rule, benchmark, or ladder cell is ready only when it names
+      the target (O1), the product (Carbon on AASTMT), the evidence (file, API
+      payload, or test), the date, and the limit (what it does not close).
+    binds: [CR-PULSE-01]
+    violation: A status of ready with no target, no evidence, no date, or no limit.

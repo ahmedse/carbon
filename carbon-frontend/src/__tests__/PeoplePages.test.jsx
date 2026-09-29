@@ -24,6 +24,8 @@ import CertificationsPage from '../apps/people/CertificationsPage';
 import RotationSchedulesPage from '../apps/people/RotationSchedulesPage';
 import PoliciesPage from '../apps/people/PoliciesPage';
 import PolicyDetailPage from '../apps/people/PolicyDetailPage';
+import ImportListPage from '../apps/people/ImportListPage';
+import ImportStudioPage from '../apps/people/ImportStudioPage';
 import { NAV_LABEL_KEYS } from '../i18n/shellLabels';
 
 const PEOPLE_PATHS = [
@@ -38,6 +40,7 @@ const PEOPLE_PATHS = [
   '/people/policies',
   '/people/loans',
   '/people/certifications',
+  '/people/import',
 ];
 
 // NSR-6A Path H: Attendance + Rotation hidden from go-live nav (routes may still exist).
@@ -62,7 +65,7 @@ describe('People & Payroll pages (NIR-4A)', () => {
   });
 
   it('each page module default-exports a function', () => {
-    const pages = [EmployeesPage, PeopleRequestsPage, LeavePage, PayrollRunsPage, PayslipPage, AttendancePage, PeopleConfigPage, PositionsPage, LoansPage, CertificationsPage, RotationSchedulesPage, PoliciesPage, PolicyDetailPage];
+    const pages = [EmployeesPage, PeopleRequestsPage, LeavePage, PayrollRunsPage, PayslipPage, AttendancePage, PeopleConfigPage, PositionsPage, LoansPage, CertificationsPage, RotationSchedulesPage, PoliciesPage, PolicyDetailPage, ImportListPage, ImportStudioPage];
     for (const Page of pages) {
       expect(typeof Page).toBe('function');
     }
@@ -73,6 +76,7 @@ describe('People & Payroll pages (NIR-4A)', () => {
     expect(NAV_LABEL_KEYS.Loans).toBe('nav.loans');
     expect(NAV_LABEL_KEYS.Certifications).toBe('nav.certifications');
     expect(NAV_LABEL_KEYS.Rotation).toBe('nav.rotation');
+    expect(NAV_LABEL_KEYS.Import).toBe('nav.import');
   });
 
   it('places Loans under Payroll & Benefits and Certifications under Workforce (Rotation nav hidden)', () => {
@@ -90,6 +94,7 @@ describe('People & Payroll pages (NIR-4A)', () => {
     };
     expect(groupOf('Loans')).toBe('Payroll & Benefits');
     expect(groupOf('Certifications')).toBe('Workforce');
+    expect(groupOf('Import')).toBe('Configuration');
     expect(groupOf('Rotation')).toBeNull();
     expect(groupOf('Attendance')).toBeNull();
   });

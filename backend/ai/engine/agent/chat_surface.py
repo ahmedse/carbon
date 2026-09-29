@@ -9,7 +9,14 @@ User-facing strings never mention ADR/G2/host-mutation jargon (RULE_23).
 """
 from __future__ import annotations
 
-from ai.engine.pack_vocab import V
+from ai.engine.host_ids import (
+    ID_SUBMIT_MY_ATTENDANCE_PERMISSION,
+    ID_SUBMIT_MY_LEAVE,
+    ID_SUBMIT_MY_LOAN,
+    ID_SUBMIT_MY_PROFILE_CHANGE,
+)
+
+from ai.engine.pack_vocab import LV, V, row_for
 
 import re
 from typing import Any
@@ -52,38 +59,38 @@ CHAT_WRITE_ALLOWLIST = frozenset({
 CHAT_DRAFT_TOOLS = frozenset({"plan_task"})
 
 #: Maps host api_name → My route + Agent process dial + labels.
-_API_HANDOFF: dict[str, dict[str, str]] = {
-    "submit_my_leave": {
-        "my_route": V("t_my_leave"),
-        "my_label_en": V("t_open_my_leave"),
-        "my_label_ar": "فتح إجازاتي",
-        "process": V("t_leave_request_lifecycle"),
+_API_HANDOFF_ROWS = (
+    (ID_SUBMIT_MY_LEAVE, {
+        "my_route": LV("t_my_leave"),
+        "my_label_en": LV("t_open_my_leave"),
+        "my_label_ar": LV("t_rx_copy_open_my_leave_ar"),
+        "process": LV("t_leave_request_lifecycle"),
         "agent_label_en": "Open in Agent",
         "agent_label_ar": "فتح الوكيل",
-        "topic_en": V("t_leave_request_2"),
-        "topic_ar": V("t_طلب_إجازة"),
-    },
-    "submit_my_loan": {
+        "topic_en": LV("t_leave_request_2"),
+        "topic_ar": LV("t_طلب_إجازة"),
+    }),
+    (ID_SUBMIT_MY_LOAN, {
         "my_route": "/my/requests",
         "my_label_en": "Open My Requests",
         "my_label_ar": "فتح طلباتي",
-        "process": V("t_loan_request_lifecycle"),
+        "process": LV("t_loan_request_lifecycle"),
         "agent_label_en": "Open in Agent",
         "agent_label_ar": "فتح الوكيل",
-        "topic_en": V("t_loan_request_2"),
-        "topic_ar": V("t_طلب_قرض"),
-    },
-    "submit_my_attendance_permission": {
-        "my_route": V("t_my_attendance"),
-        "my_label_en": V("t_open_my_attendance"),
-        "my_label_ar": "فتح الحضور",
-        "process": V("t_attendance_permission_lifecycle"),
+        "topic_en": LV("t_loan_request_2"),
+        "topic_ar": LV("t_طلب_قرض"),
+    }),
+    (ID_SUBMIT_MY_ATTENDANCE_PERMISSION, {
+        "my_route": LV("t_my_attendance"),
+        "my_label_en": LV("t_open_my_attendance"),
+        "my_label_ar": LV("t_rx_copy_open_my_attendance_ar"),
+        "process": LV("t_attendance_permission_lifecycle"),
         "agent_label_en": "Open in Agent",
         "agent_label_ar": "فتح الوكيل",
-        "topic_en": V("t_attendance_permission"),
-        "topic_ar": V("t_استئذان_حضور"),
-    },
-    "submit_my_profile_change": {
+        "topic_en": LV("t_attendance_permission"),
+        "topic_ar": LV("t_استئذان_حضور"),
+    }),
+    (ID_SUBMIT_MY_PROFILE_CHANGE, {
         "my_route": "/my/requests",
         "my_label_en": "Open My Requests",
         "my_label_ar": "فتح طلباتي",
@@ -93,12 +100,12 @@ _API_HANDOFF: dict[str, dict[str, str]] = {
         "topic_en": "profile change",
         "topic_ar": "تغيير البيانات",
         "my_only": "1",
-    },
-}
+    }),
+)
 
 #: Manager wants to act on Team inbox (approve //) — host /team.
 _REVIEW_VERBS = ("approve", "reject", "review")
-_REVIEW_OBJECTS = (V("t_leave"), V("t_loan_2"), "request", "inbox", V("t_attendance"), "permission")
+_REVIEW_OBJECTS = (LV("t_leave"), LV("t_loan_2"), "request", "inbox", LV("t_attendance"), LV("t_rx_w_permission"))
 _REVIEW_PHRASES = ("team inbox", "approvals inbox", "approval inbox")
 
 
@@ -113,7 +120,7 @@ def _leave_intent(text: str) -> bool:
     raw = text or ""
     return bool(
         has_any_word(raw, (V("t_leave"), V("t_vacation")))
-        or contains_any_phrase(raw, (V("t_annual_leave"), "time off"))
+        or contains_any_phrase(raw, (V("t_annual_leave"), V("t_rx_w_time_off")))
         or any_needle(raw, LEAVE_INTENT_AR)
     )
 
@@ -126,7 +133,7 @@ def _loan_intent(text: str) -> bool:
 def _attendance_intent(text: str) -> bool:
     raw = text or ""
     return bool(
-        has_any_word(raw, (V("t_attendance"), "permission", "excuse"))
+        has_any_word(raw, (V("t_attendance"), V("t_rx_w_permission"), V("t_rx_w_excuse")))
         or any_needle(raw, ATTENDANCE_INTENT_AR)
     )
 
@@ -297,10 +304,10 @@ def _ess_topic(text: str) -> bool:
     raw = text or ""
     cf = raw.casefold()
     return bool(
-        has_any_word(raw, (V("t_leave"), V("t_loan_2"), V("t_attendance"), V("t_vacation"), "permission"))
-        or "submit_my_leave" in cf
-        or "submit_my_loan" in cf
-        or "submit_my_attendance" in cf
+        has_any_word(raw, (V("t_leave"), V("t_loan_2"), V("t_attendance"), V("t_vacation"), V("t_rx_w_permission")))
+        or (V("t_rx_w_submit_leave") and V("t_rx_w_submit_leave") in cf)
+        or (V("t_rx_w_submit_loan") and V("t_rx_w_submit_loan") in cf)
+        or (V("t_rx_w_submit_attendance") and V("t_rx_w_submit_attendance") in cf)
         or any_needle(raw, ESS_TOPIC_AR)
     )
 
@@ -341,8 +348,9 @@ def is_ess_write_intent(message: str) -> bool:
 
 def handoff_spec_for_api(api_name: str | None) -> dict[str, str]:
     api = (api_name or "").strip().lower()
-    if api in _API_HANDOFF:
-        return dict(_API_HANDOFF[api])
+    row = row_for(_API_HANDOFF_ROWS, api)
+    if row:
+        return dict(row)
     return {
         "my_route": "/my",
         "my_label_en": "Open My",
@@ -372,10 +380,10 @@ def build_plan_mode_switch_handoff(
     already_plan = Surface.resolve(surface) is Surface.CHAT_PLAN
     if locale == "ar":
         if already_plan:
-            headline = "اعتماد الخطط يتم في الوكيل"
+            headline = "لم يُعتمد شيء بعد"
             prose = [
-                "وضع الخطّة يصيغ الخطة فقط. "
-                "افتح لوحة المهام لمراجعتها واعتمادها وتشغيلها.",
+                "هذه مسودة. لن يُحفظ شيء حتى تنشئ المهمة، "
+                "ولن يعمل شيء حتى تعتمدها في لوحة المهام.",
             ]
             label, summary = "فتح الوكيل", "مراجعة الخطة في الوكيل"
         else:
@@ -386,10 +394,10 @@ def build_plan_mode_switch_handoff(
             ]
             label, summary = "التبديل إلى خطّة", "بدّل إلى وضع الخطّة"
     elif already_plan:
-        headline = "Plans are approved in Agent"
+        headline = "Nothing is approved yet"
         prose = [
-            "Plan drafts the plan only. "
-            "Open the Tasks panel to review, approve, and run it.",
+            "This is a draft. Nothing is stored until you create the task, "
+            "and nothing runs until you approve it in Tasks.",
         ]
         label, summary = "Open in Agent", "Review the plan in Agent"
     else:
@@ -464,13 +472,21 @@ def build_chat_handoff_result(
     envelope = build_handoff_envelope(
         spec, draft=body, locale=locale, surface=surface,
     )
-    summary = (
-        V("t_prepared_leave_draft_handoff_to_agent")
-        if V("t_leave") in (spec.get("topic_en") or "")
-        else "Prepared draft — handoff to Agent or My"
-    )
-    if locale == "ar":
-        summary = "تم تجهيز مسودة — انتقل إلى الوكيل أو تطبيقاتي"
+    on_ask = Surface.resolve(surface) is Surface.CHAT_ASK
+    if on_ask:
+        summary = (
+            "تم تجهيز مسودة — بدّل إلى الخطّة أو تطبيقاتي"
+            if locale == "ar"
+            else "Prepared draft — handoff to Plan or My"
+        )
+    else:
+        summary = (
+            V("t_prepared_leave_draft_handoff_to_agent")
+            if V("t_leave") in (spec.get("topic_en") or "")
+            else "Prepared draft — handoff to Agent or My"
+        )
+        if locale == "ar":
+            summary = "تم تجهيز مسودة — انتقل إلى الوكيل أو تطبيقاتي"
     return {
         "action": "chat_handoff",
         # Internal only — never copy into caveats / thought UI.
@@ -509,13 +525,13 @@ def handoff_spec_for_intent(user_message: str) -> dict[str, str]:
             "manager_only": "1",
         }
     if _profile_change_intent(text):
-        return handoff_spec_for_api("submit_my_profile_change")
+        return handoff_spec_for_api(ID_SUBMIT_MY_PROFILE_CHANGE)
     if _leave_intent(text):
-        return handoff_spec_for_api("submit_my_leave")
+        return handoff_spec_for_api(ID_SUBMIT_MY_LEAVE)
     if _loan_intent(text):
-        return handoff_spec_for_api("submit_my_loan")
+        return handoff_spec_for_api(ID_SUBMIT_MY_LOAN)
     if _attendance_intent(text):
-        return handoff_spec_for_api("submit_my_attendance_permission")
+        return handoff_spec_for_api(ID_SUBMIT_MY_ATTENDANCE_PERMISSION)
     return handoff_spec_for_api(None)
 
 
@@ -529,20 +545,34 @@ def _label(spec: dict[str, str], key: str, locale: str) -> str:
     )
 
 
+def _plan_cta(action: dict[str, Any], locale: str) -> dict[str, Any]:
+    """Ask offers the Plan dial. The task pane is the step after Plan."""
+    if locale == "ar":
+        label, summary = "التبديل إلى خطّة", "بدّل إلى وضع الخطّة"
+    else:
+        label, summary = "Switch to Plan", "Switch to Plan mode"
+    return {**action, "panel": "plan", "label": label, "summary": summary}
+
+
 def build_handoff_actions(
     spec: dict[str, str],
     *,
     locale: str = "en",
     surface: str | Surface | None = None,
 ) -> list[dict[str, Any]]:
-    """Machine-readable CTAs — Agent first, then My (AIMessageBubble order).
+    """Machine-readable CTAs. Ask offers Plan, then My.
 
-    Manager Team-review and My-only profile intents skip Agent. A CTA that
-    would send the user to ``surface`` is dropped: offering the seat they are
-    already sitting in is the bug this argument exists to prevent.
+    On the Plan dial the primary CTA stays the task pane: approving a draft
+    is Agent's job. Manager Team-review and My-only profile intents skip
+    that CTA. A CTA that would send the user to ``surface`` is dropped.
     """
     actions = _build_handoff_actions(spec, locale=locale)
     current = Surface.resolve(surface)
+    if current is Surface.CHAT_ASK:
+        actions = [
+            _plan_cta(action, locale) if str(action.get("panel") or "") == "tasks" else action
+            for action in actions
+        ]
     return [a for a in actions if cta_target_surface(a) is not current]
 
 
@@ -646,22 +676,39 @@ def handoff_copy(
             f"Open {my_label} and submit the change there."
         )
     lead = no_submit_lead(topic, locale=locale, surface=surface)
+    on_ask = Surface.resolve(surface) is Surface.CHAT_ASK
     if locale == "ar":
+        if on_ask:
+            primary = (
+                "• **الخطّة** — بدّل المفتاح إلى «خطّة». وضع السؤال لا يُنشئ مهاماً."
+            )
+        else:
+            primary = (
+                "• **الوكيل (Agent)** — بدّل إلى وضع الوكيل وشغّل العملية المعتمدة "
+                "(التأكيد عند التشغيل)."
+            )
         lines = [
             lead,
             "",
             "لإتمام التغيير استخدم أحد المسارين:",
-            "• **الوكيل (Agent)** — بدّل إلى وضع الوكيل وشغّل العملية المعتمدة "
-            "(التأكيد عند التشغيل).",
+            primary,
             f"• **تطبيقاتي** — افتح «{my_label}» وقدّم الطلب هناك.",
         ]
     else:
+        if on_ask:
+            primary = (
+                "• **Plan** — switch the dial to Plan. Ask does not create tasks."
+            )
+        else:
+            primary = (
+                "• **Agent** — switch to Agent and run the governed process "
+                "(consent on Run)."
+            )
         lines = [
             lead,
             "",
             "To make the change, use one of these paths:",
-            "• **Agent** — switch to Agent and run the governed process "
-            "(consent on Run).",
+            primary,
             f"• **My** — open {my_label} and submit there.",
         ]
     if isinstance(draft, dict) and draft:
@@ -672,7 +719,9 @@ def handoff_copy(
             en_lab, ar_lab = FIELD_LABELS.get(
                 key, (key.replace("_", " "), key.replace("_", " "))
             )
-            lab = ar_lab if locale == "ar" else en_lab
+            lab = str(ar_lab if locale == "ar" else en_lab)
+            if not lab:
+                continue
             bits.append(f"{lab}: {value}")
         if bits:
             prefix = "تفاصيل المسودة (لم تُرسل): " if locale == "ar" else "Draft details (not submitted): "
@@ -689,12 +738,21 @@ def build_handoff_envelope(
 ) -> dict[str, Any]:
     """Typed envelope for handoff — draft table, **empty caveats** (RULE_23)."""
     topic = _label(spec, "topic", locale)
-    dial = Surface.resolve(surface).dial_label(locale)
+    current = Surface.resolve(surface)
+    dial = current.dial_label(locale)
+    on_ask = current is Surface.CHAT_ASK
     if locale == "ar":
         headline = f"لا يمكن تقديم {topic} من وضع «{dial}»"
         prose = [
-            f"جهّزنا التفاصيل أدناه. وضع «{dial}» لا يغيّر السجلات — "
-            "أكمل عبر الوكيل أو من تطبيقاتي.",
+            (
+                f"جهّزنا التفاصيل أدناه. وضع «{dial}» لا يغيّر السجلات — "
+                "بدّل إلى الخطّة أو أكمل من تطبيقاتي. وضع السؤال لا يُنشئ مهاماً."
+            )
+            if on_ask
+            else (
+                f"جهّزنا التفاصيل أدناه. وضع «{dial}» لا يغيّر السجلات — "
+                "أكمل عبر الوكيل أو من تطبيقاتي."
+            )
         ]
         table_title = "مسودة الطلب"
         col_field, col_value = "الحقل", "القيمة"
@@ -702,8 +760,15 @@ def build_handoff_envelope(
     else:
         headline = f"This {topic} cannot be submitted from {dial}"
         prose = [
-            "The details below are prepared as a draft only. "
-            "Use Agent or My to submit.",
+            (
+                "The details below are prepared as a draft only. "
+                "Switch to Plan, or open My. Ask does not create tasks."
+            )
+            if on_ask
+            else (
+                "The details below are prepared as a draft only. "
+                "Use Agent or My to submit."
+            )
         ]
         table_title = "Draft request"
         col_field, col_value = "Field", "Value"
@@ -765,10 +830,10 @@ def synthesize_intent_handoff(
 def chat_mutation_narration(api_name: str | None = None) -> str:
     """Honest progress line for Chat when a mutation tool is about to be blocked."""
     api = (api_name or "").strip().lower()
-    if V("t_leave") in api:
+    if V("t_leave") and V("t_leave") in api:
         return V("t_preparing_next_steps_for_your_leave")
-    if V("t_loan_2") in api:
+    if V("t_loan_2") and V("t_loan_2") in api:
         return V("t_preparing_next_steps_for_your_loan")
-    if V("t_attendance") in api:
+    if V("t_attendance") and V("t_attendance") in api:
         return V("t_preparing_next_steps_for_attendance")
     return "Checking how to complete this request…"

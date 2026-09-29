@@ -1,0 +1,112 @@
+# Open leaf for AASTMT Carbon onboarding. No activity quantities live here.
+id: O1
+title: Smart Village electricity and diesel
+status: open
+owner: carbon-inventory-lead
+locked: 2026-09-29
+product: Carbon on AASTMT
+campus: Smart Village
+campus_code: AASTMT-SV
+period:
+  count_open: 1
+  status: open
+  period_type: annual
+  start_before_end: true
+  boundary_required: true
+sources:
+  - name: Smart Village electricity
+    scope: 2
+    scope3_category: null
+    approach: location-based
+    activity_unit: kWh
+    org_unit_name: Smart Village
+  - name: Smart Village diesel
+    scope: 1
+    scope3_category: null
+    activity_unit: litre
+    stream:
+      field: description
+      exactly_one_of: [generators, fleet]
+      both_is_fail: true
+      empty_is_fail: true
+    org_unit_name: Smart Village
+coverage:
+  goal_scope: "1+2"
+  completeness_definition: materiality_bounded
+  min_quality_tier: 4
+  goal_status_until_sources_exist: absent
+  goal_status_after_sources_exist: draft
+  covered_requires:
+    - linked_tables non-empty on this period's InventorySourceStatus
+    - a Calculation row for the same reporting_period
+evaluator:
+  module: emissions.onboarding_o1
+  function: evaluate_o1
+  writes: false
+  endpoint: GET /carbon-api/carbon/onboarding/o1/
+  codes:
+    - open_period_count
+    - open_period_dates
+    - open_period_type
+    - open_period_met
+    - boundary_missing
+    - boundary_approach
+    - boundary_met
+    - source_missing
+    - source_no_status
+    - source_excluded
+    - source_covered
+    - source_covered_invalid
+    - source_declared
+    - diesel_stream_missing
+    - diesel_stream_both
+    - diesel_stream_met
+    - no_calculation
+    - summary_kg
+    - not_assured
+    - other_campus
+
+pulse:
+  legal_number_tools:
+    - get_calculation_summary
+    - get_chairman_overview
+  if_payload_has_no_number: say the period is opening
+pass:
+  - Exactly one ReportingPeriod with status open, start_date < end_date.
+  - That period's organizational_boundary.consolidation_approach is equity_share, financial_control, or operational_control.
+  - InventorySource "Smart Village electricity" scope 2 exists.
+  - InventorySource "Smart Village diesel" scope 1 exists, and its description contains exactly one of the words generators or fleet.
+  - Covered is used only under coverage.covered_requires.
+  - Pulse repeats a kg or tonne figure only when that figure is in the named tool payload.
+  - South Valley, Abu Qir, and Alamein are declared or excluded. They are not required to be covered.
+fail:
+  - A tonne figure with no calculation-summary or chairman payload.
+  - status covered with empty linked_tables.
+  - A second ReportingPeriod with status open.
+  - O1 marked passed from another campus or from Scope 3.
+  - target_coverage_pct stored before any InventorySource exists for the period.
+closed:
+  - id: O2
+    title: South Valley electricity and one fuel
+    status: closed
+    reason: Opens only after O1 has a named open period and a calculation summary. Until then declare the campus or exclude it with insufficient_data.
+  - id: O3
+    title: Abu Qir electricity and one fuel
+    status: closed
+    reason: Same gate as O2.
+  - id: O4
+    title: Alamein electricity and one fuel
+    status: closed
+    reason: Same gate as O2.
+  - id: O5
+    title: Scope 3 categories declared
+    status: closed
+    reason: Scope 3 is outside O1. Do not mark a category covered during onboarding.
+  - id: P1
+    title: A figure leaves the organisation
+    status: closed
+    reason: Requires data_quality_tier 3 or better on the quoted sources, and CR-INV-01 still catalogue planned until a method is frozen.
+  - id: P2
+    title: External assurance
+    status: closed
+    reason: No verifier is named. Corporate Standard version 3 is a draft.

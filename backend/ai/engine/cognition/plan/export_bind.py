@@ -6,7 +6,7 @@ and charts even when the draft LLM emitted placeholders or title-only args.
 """
 from __future__ import annotations
 from ai.engine.cognition.phrase_tables import T
-from ai.engine.pack_vocab import V
+from ai.engine.pack_vocab import LV, V, live_pattern
 
 
 import json
@@ -29,7 +29,7 @@ _PLACEHOLDER_RE = re.compile(
 
 # Template slots the LLM  in prose/tables — e.g. [Insert specific insights…],
 # [Avg Kuwaiti ], [Median Non-Kuwaiti ]. Any of these = hollow pack.
-_UNFILLED_SLOT_RE = re.compile(
+_UNFILLED_SLOT_RE = live_pattern(
     r"\["
     r"(?:"
     r"Insert\b"
@@ -42,11 +42,11 @@ _UNFILLED_SLOT_RE = re.compile(
     r"|Highest\b"
     r"|Lowest\b"
     r"|Specific insights?\b"
-    r"|actionable recommendations?\b"
-    + V("t_a_za_z_0_60_b")
-    + r")"
+    r"|actionable recommendations?\b",
+    LV("t_a_za_z_0_60_b"),
+    r")"
     r"[^\]]*\]",
-    re.IGNORECASE,
+    flags=re.IGNORECASE,
 )
 
 # Mid-run / incomplete language that must not ship as a finished deliverable.
@@ -649,6 +649,64 @@ def render_bound_catalog_read(
         restate_breakdown=True,
     )
     return rendered or None
+
+
+def _read_body(tool_output: Any) -> Any:
+    """Host payload inside a tool envelope, or None when the read is empty."""
+    if not isinstance(tool_output, dict):
+        return None
+    raw = tool_output.get("result")
+    if isinstance(raw, str):
+        stripped = raw.strip()
+        if not stripped:
+            return None
+        if stripped[0] in "{[":
+            try:
+                raw = json.loads(stripped)
+            except (json.JSONDecodeError, TypeError):
+                return stripped
+        else:
+            return stripped
+    if isinstance(raw, dict) and "status_code" in raw and "data" in raw:
+        raw = raw.get("data")
+    if raw in (None, "", [], {}):
+        return None
+    return raw
+
+
+def show_or_fail_read(
+    result: Any,
+    tool_args: dict | None,
+    *,
+    language: str,
+    catalog: Any,
+    is_mutation: bool,
+) -> None:
+    """Show a host body that produced no draft. An unshown body is a failure.
+
+    Mutations and pauses are left to the consent path. A draft that already
+    exists is not rewritten.
+    """
+    if is_mutation or getattr(result, "paused", False) or getattr(result, "error", None):
+        return
+    if (getattr(result, "draft_text", "") or "").strip():
+        return
+    if _read_body(getattr(result, "tool_output", None)) is None:
+        return
+    from ai.engine.cognition.turn.catalog_render import catalog_entry_named
+
+    api_name = str((tool_args or {}).get("api_name") or "").strip()
+    rendered = render_bound_catalog_read(
+        result.tool_output,
+        api_name,
+        language or "en",
+        catalog_entry=catalog_entry_named(catalog, api_name),
+    )
+    if (rendered or "").strip():
+        result.draft_text = rendered
+        return
+    result.error = "host result was not shown"
+    result.critic_verdict = "veto"
 
 
 def is_bound_resolve_entity(

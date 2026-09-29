@@ -13,6 +13,11 @@
 > - Invariants → [`INVARIANTS.md`](./INVARIANTS.md) · Effect paths → [`EFFECT-PATHS.md`](./EFFECT-PATHS.md)
 > - Remediation & phase history → `archive/` (superseded; provenance only)
 >
+> **Only two current Pulse boards:** `pulse-chat-deep-benchmark.canvas.tsx` is the
+> canonical **Ask** contract and score; `pulse-tasks-agent-benchmark.canvas.tsx`
+> is the canonical **Plan & Tasks** contract and score. Historical evidence and
+> accepted ADRs remain provenance, not competing scoreboards.
+>
 > **Naming (RULE_23):** "Pulse" is an **internal** term. User-facing text always says "AI" /
 > "the assistant" and describes **outcomes**, never internals.
 
@@ -322,7 +327,7 @@ code + this file over that scorecard.
 | Reasoning spine | `backend/ai/engine/cognition/turn/runner.py` + `turn/witnesses.py` |
 | Multi-step execution | `backend/ai/engine/cognition/plan/loop.py` |
 | The one door | `backend/ai/command_boundary.py`, `ai/pdp.py`, `ai/host_executor.py` |
-| Per-instance config | `backend/ai/engine/instances/<id>/instance.yaml`, `ai/instance_registry.py` |
+| Per-instance config | `domain_packs/<id>/instance.yaml` (via `pack.yaml`), `ai/instance_registry.py` |
 | Memory | `backend/ai/engine/memory/*` + `ai/context_assembler.py` |
 | Proactive engine | `backend/ai/engine/proactive/*` |
 | Learning loop | `backend/ai/engine/cognition/{trajectory,consolidation}.py` + `engine/skills/*` |

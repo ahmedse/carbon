@@ -1,0 +1,21 @@
+# Who may use Pulse is config. Cohort idnumbers are filled in the Moodle plugin.
+experiences:
+  ask:
+    enabled: true
+    dials: [ask]
+audiences:
+  staff:
+    setting: staff_cohorts
+    scope: enabled_courses
+  student:
+    setting: student_cohorts
+    scope: enabled_courses
+    default_idnumbers: []
+deny_unlisted: true
+course_list:
+  setting: enabled_courses
+  empty_blocks_content: true
+  miss_hides_names: true
+notes: >
+  Empty student idnumbers means faculty-only. Do not attach enrol_cohort
+  to these cohorts. The Dr. name prefix is a fill hint, not this file.

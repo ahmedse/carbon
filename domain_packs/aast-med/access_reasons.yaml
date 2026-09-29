@@ -1,0 +1,13 @@
+# The only four reasons a page can be missing. The sentence is the whole reply.
+version: 1
+reasons:
+  not_enrolled: "You are not enrolled."
+  wrong_group: "You are in the wrong group."
+  hidden: "This is hidden."
+  course_list: "This is not on the course list."
+why:
+  all_of_any:
+    - ["why can't i"]
+    - ["why is this missing"]
+    - ["why don't i"]
+    - ["why am i blocked"]

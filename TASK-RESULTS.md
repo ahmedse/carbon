@@ -1,3 +1,139 @@
+## [2026-09-29] platform — red CI jobs named, outside inbound
+
+- **Audit:** [CI failure scope](8e08d6fc-d505-4f3e-9388-8ffb5181842e). Confirmed with the Actions API: run `36320936245` failed at backend `Install dependencies`, frontend `Run unit tests`, and lint `Fail-open lint (P1-13)`. The excellence ratchet was skipped. CI Python is `3.11`. `requirements.txt` pins `numpy==2.5.3`. None of the failed steps are inbound tests.
+- **Rule:** a workflow conclusion of `failure` is a fail even when `Run tests` was skipped. Unknown is only when `gh` returns no run. The probe is not narrowed to inbound tests.
+- **Level:** scored gauge remains L4 · 45/54. Not persisted.
+
+---
+
+## [2026-09-29] platform — red CI is a fail, --no-db cannot pass the series
+
+- **Audit:** [Operable rank-5 cells](678aca01-c159-43f9-9d9c-b7958a2ca557). `--no-db` was not written on the observed probe. The collector now records unknown when Django is not set up, and a git-tracked series file fails. Collector tests 26 passed.
+- **Operated, not persisted:** `INBOUND-SPC-11` passed (`HEAD~1`, no inbound code diff). `INBOUND-SEC-06`, `INBOUND-GOV-05`, and `INBOUND-MNT-05` failed because `gh run list` for `0a66aa44` on `ci.yml` concluded `failure`. Nightly workflow and series file are still absent, so those probes stay unknown.
+- **Level:** scored gauge remains L4 · 45/54. These single-probe results are not a new level.
+
+---
+
+## [2026-09-29] platform — Arabic People door ran, gauge cell still unmet
+
+- **Audit:** [Arabic door spec](af803852-c61d-43fa-9489-4dedab8b21f2). Strings, server-wins language, and the preferences route are in the product. The spec was absent. No new clicks.
+- **Spec:** `journey-dms-people-door-ar.spec.ts`. `emp_2378`, PATCH `{language: ar}`, poll `dir=rtl`, eye `فتح الدفعة`, primary `استيراد جديد`, search `بحث الدفعات`, then PATCH `{language: en}` until `Search batches` and `Open batch`. No row click and no eye click. `CI=1` so the stack was not started.
+- **Result:** Arabic journey passed in 12.1s. English journey passed again in 8.5s. Collector unit tests 24 passed. Scored level stays L4 · 45/54. The gauge has not recorded `INBOUND-USE-06`.
+- **Live sample:** `INBOUND-PRF-06` read batch 6 as `emp_2378`. `sample_len` 1, `max_sample` 20, evidence `enforcement-verified`. Not persisted. One probe passing does not move the subject level.
+
+---
+
+## [2026-09-29] platform — series writer named, nightly runner still not
+
+- **Audit:** [Remaining rank-5 gaps](5ca91e1b-0903-4621-b42a-af940d3bca21). USE-06 had no language restore. OBS-05 had no caller. The ladder title said the collector writes the series. No `runs-on` except `ubuntu-latest`.
+- **Pinned:** `write_inbound_smoke_series` keeps 10 newest smoked or committed dict envelopes, does not write when empty, and the JSON is not committed. USE-06 restores `{language: en}` so the rank-4 strings `Search batches` and `Open batch` remain. The Arabic spec file is named and absent. `ubuntu-latest` in a nightly workflow is a fail.
+- **Tests:** series command 3 passed. Collector tests include the runner reject. Level stays L4 · 45/54. The evidence file was not created.
+
+---
+
+## [2026-09-29] platform — rank 5 match rules pinned
+
+- **Audit:** [Rank-5 contract gaps](b80b4f66-42e8-48f5-b3cf-e656c401cf54). The ratchet step name omitted `(ADR-0051)`, and the shorthand `python -m excellence.gauge --gate --changed` is not in `ci.yml`. That was a false fail.
+- **Pinned:** step `Excellence ledger tests + changed-subject ratchet (ADR-0051)`. Four substrings, including both gauge lines with `--only repo,observe`. Spec base is `GITHUB_BASE_SHA` else `HEAD~1`. Correct is a scheduled GitHub success for this commit; the collector does not run Playwright; `ubuntu-latest` is rejected. Secure and governed do not re-run pytest. The collector does not write the series file. Batch id 6 is not a rank-5 constant.
+- **Tests:** `excellence/tests/test_inbound_operated.py` — 21 passed. Level stays the last full score, L4 · 45/54. Not persisted.
+
+---
+
+## [2026-09-29] platform — rank 5 fields closed, collector still absent
+
+- **Audit:** [Probe field gaps](b1cdf6a3-c5c8-47a6-9877-a4eaac0067c9) — implementation was not allowed until SEC/GOV matched the ladder and the password env was named. Live sample of batch 6 (len 1, `people.leave_history`) fits `INBOUND-PRF-06` but was not written to the ledger.
+- **Reconciled:** `INBOUND-SEC-06` and `INBOUND-GOV-05` need a green `ci.yml` run of full `python -m pytest` plus the named nodes. No run → unknown. Red run → fail. `INBOUND-PRF-06` password comes from `NIBRAS_HR_PASSWORD` or `EMPLOYEE_DEFAULT_PASSWORD`. `INBOUND-USE-06` uses `PATCH accounts/me/preferences/` because server language wins over browser locale. `INBOUND-SPC-11` base is the ratchet base (`HEAD~1` off a PR). `INBOUND-OBS-05` must match `InboundBatch.smoke`.
+- **Not done:** `inbound_operated` is not registered. Level stays L4. Coverage stays 45/54.
+
+---
+
+## [2026-09-29] platform — rank 5 probes specified, collector not built
+
+- **Audit:** [Open benchmarks](d13d040b-bf04-45e8-8e0e-c67659e51a17) — the previous contract was not specific enough to implement. Nightly, soak, live path, RTL, and series path were still missing sentences. Health p95, Pulse cron, mtime-only series, and `i18n:check` alone were rejected.
+- **Binding sentences now in the ladder:** `INBOUND-SPC-11`, `INBOUND-COR-05` (workflow `.github/workflows/inbound-nightly.yml`, cron `30 3 * * *`, journey exit 0), `INBOUND-SEC-06`, `INBOUND-REL-06` (one scheduled green run, not Pulse's five nights), `INBOUND-PRF-06` (`GET /carbon-api/inbound/batches/{id}/`, sample ≤ 20, no `p95_ms`), `INBOUND-USE-06` (Arabic eye name `فتح الدفعة`, `dir=rtl`), `INBOUND-MNT-05`, `INBOUND-OBS-05` (path `docs/migration/evidence/inbound-smoke-series.json`, 14 days, schema 1), `INBOUND-GOV-05`.
+- **Collector** `inbound_operated` is named and not implemented. Remeasure `--no-db`: **L4**, coverage **45/54**, all nine new checks **unmeasured**. Not persisted.
+- **Not done:** no workflow file, no series file, no RTL run, no live sample read.
+
+---
+
+## [2026-09-29] platform — rank 5 contract, no implementation
+
+- **Audits:** [Rank-5 probes](db935a18-afdf-4966-974f-d28dffeda394) — `/api/health/` and `/carbon-api/health/` are a false L5 for inbound. `PLAT-OBS-02` is `executed`, below the rank-5 floor. [Rank-5 cells](a7dabab6-9001-4be9-b254-f214a81d77cf) — two cells marked READY-TO-BIND. Master rejected those: a YAML read of CI is not `enforcement-verified`.
+- **Written:** `docs/migration/DATA-MIGRATION-STUDIO.md` section "Rank 5 contract". Five principles. Nine cells, all DEFINED-OPEN. Milliseconds, soak nights, nightly job, RTL suite, and production series path are NOT DECLARED.
+- **Not done:** no new ladder probes, no runtime window, no series file. Level stays L4.
+
+---
+
+## [2026-09-29] platform — People door journey (usable rank 4)
+
+- **Journey:** `journey-dms-people-door.spec.ts`. emp_2378 opens `/people/import`, searches Leave history, row click stays on the list, eye opens `/people/import/6`, header shows Leave history and Committed.
+- **Blockers fixed on the way:** duplicate `CategoryIcon` import crashed Vite. `inbound.0002` was missing on `nibras_dev`, so targets returned 500 and the list never rendered. Migration applied. The server process was not restarted.
+- **Gauge:** collector runs the e2e config with `CI=1` so it does not start a web server. `--no-db` remeasure: **L4 Proven**, coverage **40/54**, usable **4**, all nine dimensions at 4. Rank 5 still unknown/unmeasured. Not persisted.
+- **Out:** L5/L6. Live p95, error rate, 429.
+
+---
+
+## [2026-09-29] platform — cartridge batches and smoke series
+
+- **Audits:** [Cartridge observe](efb76f2e-5cc6-4578-b14d-497e90035dcb) — observe was a count only. [Observed series](e2bbb4a8-12ef-40af-8360-b3fefe099067) — a hand-written JSON series fails the rung; the writer must read `InboundBatch.smoke` into a temp file.
+- **Observe:** retrieve returns `recent_batches` (id, kind, status, file, reject). The list stays `batch_count` + `last_status`. Detail grid: eye opens `/people/import/:id` or `/catalog/imports/:id` when that app owns the batch. Any other app opens a read-only dialog.
+- **Series:** `inbound/observe.py`. `test_smoke_series_matches_the_saved_envelope` smokes `ok` + `bad` and asserts the temp row is insert 1, reject 1, status smoked. File stays under `tmp_path`.
+- **Verify:** inbound observe + cartridges + pipe **15 passed**. Vitest cartridge list + detail **4 passed**. `i18n:check` 4805 keys. Gauge `--no-db`: **L3 Built**, coverage **39/54**, observed **4**, usable **3**. Not persisted.
+- **Out:** Playwright journey (no STACK-HOLD). L5/L6.
+
+---
+
+## [2026-09-29] platform — cartridge definition on inbound
+
+- **Seat:** inbound is the module. People does not own it. A cartridge is a declaration (`InboundCartridge`). Smoke and commit stay in the owning app’s `register()`. Another app defines a key the same way, then registers handlers.
+- **CRUD + observe:** `GET/POST/PATCH/DELETE /inbound/cartridges/`. Capability `inbound:define` (not implied by `people:manage`). UI: Platform Admin → Cartridges `/admin/migration/cartridges`. Eye opens the record. Row click highlights. Fields use TextField / SearchSelect / FilteredDataGrid / SystemDialog / ConfirmDialog.
+- **Refusals:** data_product POST 400. Unbound batch 400. Disabled hidden from targets. Delete of a bound cartridge 409. Studio label survives re-register.
+- **Verify:** pytest `inbound/tests` + excellence gauge/catalogue **35 passed**. Vitest `CartridgeListPage` **2 passed** (migration namespace added to the i18n test mock). `npm run i18n:check` OK (4793 keys). Gauge `--no-db`: **L3 Built**, coverage **38/54**, seven dimensions at L4. usable and observed stay 3. Not persisted.
+- **Out:** live click of Cartridges (running `:8009` was not reloaded). usable journey. observed series. L5/L6.
+
+---
+
+## [2026-09-29] qa-validator (Nibras) — DMS-8 leave live CSV
+
+- **Seat:** Nibras. People door only. Demo employee **IMP9010** (batch 3 snapshot). Not emp_1067.
+- **Live API** (`:8009` `/carbon-api`, stack already up, no manage.sh):
+  - Batch **5** `people.leave_opening_balance`. `emp_2378` smoke insert=1 update=0 reject=0. Same user commit **403**. `emp_2400` commit **200** written=1 reconcile entitlements=1.
+  - Host after commit: `LeaveEntitlement` IMP9010 / 2026 / annual / entitled 30 / used 4 / carried 0.
+  - Batch **6** `people.leave_history`. `emp_2378` smoke insert=1 reject=0. Same user commit **403**. `emp_2400` commit **200** written=1 reconcile leave_records=1 days=2.
+  - Host after history: one `LeaveRecord` 2019-01-15..2019-01-16, 2 days, approved. `used_days` still **4**.
+- **Out:** Playwright (no STACK-HOLD). No new chrome.
+
+---
+
+## [2026-09-28] Catalog — DMS-2 Data Product door
+
+- **Seat:** Catalog. Shared inbound chrome; door is `/catalog/imports` (`kind=data_product`). People cartridges untouched.
+- **Adapter:** `inbound/adapters/dataschema.py` — keys `dataschema.<table_id>`; smoke via `validate_row` (0 DataRow); commit `DataRow.create` + `ImportJob` id. inbound still does not import people.
+- **Caps:** `catalog:manage_products` / `datahub:ingest` → `inbound:prepare`; `datahub:manage` → `inbound:commit`. `people:manage` cannot create/list product targets (403).
+- **FE:** `ImportsDetailPage` + `ImportsStudioPage` wrap InboundList/Studio. No second sidebar row. `BulkImportWizard` / `ImportExportPage` kept.
+- **Verify:** pytest `inbound/tests` + `importexport/tests` + capability RBAC **297 passed**; `inbound/tests/test_data_product_adapter.py` **5 passed**; `npm run i18n:check` OK (4743 keys).
+- **Live API** (`:8009`, no manage.sh): ahmed `dataschema.1` (prog) batch **4** smoke insert=1 reject=0 (0 DataRow). `emp_2378` GET product targets / commit **403** kind. `admin` commit **200** written=1 ImportJob 1; `DataRow` `{aa: live-dms2}`.
+- **FE:** compact-ui — row click highlights; eye opens the batch (SCREEN-SPEC-DMS).
+- **Out:** DatasetVersion publish; Excel; leave live CSV.
+
+---
+
+## [2026-09-28] qa-validator (Nibras) — DMS-8 People door SoD
+
+- **Seat:** Nibras. Engine is `inbound`; this is the People door only. Catalog DMS-2 / Data Product path **not run**.
+- **pytest:** `inbound/tests` + `people/tests/test_inbound_cartridges.py` **13 passed** (pipe SoD, employee snapshot, leave balance, history `used_days` unchanged).
+- **Live API** (`:8009`, no manage.sh):
+  - `emp_2378` created batch **2** (`people.employee_snapshot`, `dms8-sod.csv`, IMP9010 / coiled-tubing) → smoke insert=1 reject=0.
+  - `emp_2378` POST commit → **403** `Preparer cannot commit this batch`.
+  - `emp_2400` POST commit → **200** status=committed written=1.
+  - Re-upload batch **3** same key → smoke insert=0 update=1; 2400 commit **200**; `Employee.objects.filter(employee_no='IMP9010').count()==1`; name `DMS8 SoD Updated` salary `125.000`.
+- **Live UI:** Ali (`emp_2378`) `/people/import/2` Commit step — SoD banner + **Commit disabled**. Both 2378 and 2400 have `inbound:commit` via `people_lead`; the SCREEN-SPEC “Commit hidden” does not match this GOFSCO cast.
+- **Chat:** no inbound/commit tool in `backend/ai/engine`.
+- **Out:** Playwright (no STACK-HOLD); Catalog Data Product fixture; leave live CSV (covered by pytest).
+- **Canvas:** `data-migration-studio.canvas.tsx`.
+
+---
+
 ## [2026-09-21] master-architect (Nibras) — NSR-9 Playwright closeout
 
 - **Seat:** Nibras (Pulse out of scope).

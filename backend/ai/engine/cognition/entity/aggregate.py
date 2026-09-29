@@ -1,6 +1,6 @@
 from __future__ import annotations
-from ai.engine.pack_vocab import V
-V("t_ecf_6_canonical_metric_aggregation_aggregate")
+from ai.engine.pack_vocab import LV, V
+LV("t_ecf_6_canonical_metric_aggregation_aggregate")
 
 
 from dataclasses import dataclass

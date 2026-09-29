@@ -1,6 +1,9 @@
 # PULSE — Concrete UX Design (Per-Room Wireframes & Component Specs)
 
-> **Status:** CANONICAL · **Owner:** Product Designer + Master Architect · **Last audited:** 2026-08-30
+> **Status:** IMPLEMENTATION REFERENCE · **Owner:** Product Designer + Master Architect · **Last audited:** 2026-08-30
+> **Current product contracts and scores:** `pulse-chat-deep-benchmark.canvas.tsx`
+> for Ask; `pulse-tasks-agent-benchmark.canvas.tsx` for Plan & Tasks. This file
+> remains a component and wireframe reference, not another Pulse board.
 > **This is the build-level companion to [`PULSE-UX.md`](./PULSE-UX.md).**
 > Philosophy and principles live there; **this file tells a Frontend Worker exactly what to build,
 > pixel-by-pixel, component-by-component, state-by-state.**

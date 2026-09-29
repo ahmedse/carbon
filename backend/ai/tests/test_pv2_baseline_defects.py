@@ -274,7 +274,7 @@ def nibras_cfg():
     import yaml
     from pathlib import Path
 
-    path = Path(__file__).resolve().parents[1] / "engine" / "instances" / "nibras" / "instance.yaml"
+    path = Path(__file__).resolve().parents[3] / "domain_packs" / "nibras" / "instance.yaml"
     return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 

@@ -158,6 +158,7 @@ function AIInputBar({
   onSeedDraftConsumed,
   process = 'ask',
   onProcessChange = null,
+  lockAsk = false,
 }) {
   const { t } = useTranslation('ai');
   const { token } = useAuth();
@@ -625,8 +626,9 @@ function AIInputBar({
         >
           <PulseProcessSwitch
             variant="thread"
-            value={process}
-            onChange={onProcessChange || undefined}
+            value={lockAsk ? 'ask' : process}
+            lockedIds={lockAsk ? ['plan'] : []}
+            onChange={lockAsk ? undefined : (onProcessChange || undefined)}
           />
           <Typography
             variant="caption"
@@ -634,7 +636,9 @@ function AIInputBar({
             sx={{ fontSize: '0.625rem', flex: 1, minWidth: 0 }}
             noWrap
           >
-            {t(process === 'plan' ? 'composerPlanHint' : 'composerAskHint')}
+            {lockAsk
+              ? t('composerAskHostHint', { defaultValue: 'Ask · this course page only. Nothing on Moodle is changed.' })
+              : t(process === 'plan' ? 'composerPlanHint' : 'composerAskHint')}
           </Typography>
         </Box>
       <Box

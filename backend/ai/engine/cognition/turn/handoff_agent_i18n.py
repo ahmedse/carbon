@@ -3,8 +3,17 @@
 No ``compiled regex`` in this module.
 """
 from __future__ import annotations
+
+from ai.engine.host_ids import (
+    ID_LEAVE_TYPE,
+    ID_LOAN_TYPE,
+    ID_PERMISSION_TYPE,
+    ID_SUBMIT_MY_ATTENDANCE_PERMISSION,
+    ID_SUBMIT_MY_LEAVE,
+    ID_SUBMIT_MY_LOAN,
+)
 from ai.engine.cognition.phrase_tables import T
-from ai.engine.pack_vocab import V
+from ai.engine.pack_vocab import LV, V
 
 
 READY_TO_SUBMIT_AR = T("turn/handoff_agent_i18n.py::READY_TO_SUBMIT_AR")
@@ -38,34 +47,34 @@ SLOT_STATUS_AR = T("turn/handoff_agent_i18n.py::SLOT_STATUS_AR")
 RELATIVE_DAY_AR = T("turn/handoff_agent_i18n.py::RELATIVE_DAY_AR")
 
 CLARIFY_TEXT = {
-    "submit_my_loan": {
-        "loan_type": {
-            "en": V("t_what_type_of_loan_are_you"),
-            "ar": V("t_أي_نوع_قرض_تريد"),
+    ID_SUBMIT_MY_LOAN: {
+        ID_LOAN_TYPE: {
+            "en": LV("t_what_type_of_loan_are_you"),
+            "ar": LV("t_أي_نوع_قرض_تريد"),
         },
         "principal": {
             "en": "How much do you need?",
             "ar": "كم المبلغ الذي تحتاجه؟",
         },
     },
-    "submit_my_leave": {
-        "leave_type": {
-            "en": V("t_what_type_of_leave_do_you"),
-            "ar": V("t_أي_نوع_إجازة_تريد"),
+    ID_SUBMIT_MY_LEAVE: {
+        ID_LEAVE_TYPE: {
+            "en": LV("t_what_type_of_leave_do_you"),
+            "ar": LV("t_أي_نوع_إجازة_تريد"),
         },
         "start_date": {
-            "en": V("t_which_dates_do_you_want_to"),
-            "ar": "ما تواريخ الإجازة؟",
+            "en": LV("t_which_dates_do_you_want_to"),
+            "ar": LV("t_rx_copy_leave_dates_ar"),
         },
     },
-    "submit_my_attendance_permission": {
-        "permission_type": {
-            "en": "What type of permission do you need?",
-            "ar": "أي نوع استئذان تحتاج؟",
+    ID_SUBMIT_MY_ATTENDANCE_PERMISSION: {
+        ID_PERMISSION_TYPE: {
+            "en": LV("t_rx_copy_perm_type_en"),
+            "ar": LV("t_rx_copy_perm_type_ar"),
         },
         "hours": {
-            "en": "How many hours do you need?",
-            "ar": "كم ساعة تحتاج؟",
+            "en": LV("t_rx_copy_perm_hours_en"),
+            "ar": LV("t_rx_copy_perm_hours_ar"),
         },
     },
 }
@@ -73,4 +82,5 @@ CLARIFY_TEXT = {
 
 def any_needle(text: str, needles: tuple[str, ...]) -> bool:
     raw = text or ""
-    return any(n in raw for n in needles)
+    # Empty is not a match. A pack that lacks the needle must not hit every utterance.
+    return any(n and str(n) in raw for n in needles)

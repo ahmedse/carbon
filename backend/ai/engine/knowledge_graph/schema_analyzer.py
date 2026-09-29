@@ -6,7 +6,7 @@ Runs after migration (Stage 1) has populated ENTITY + ATTRIBUTE nodes.
 Pure analysis — reads from the graph, writes enriched properties back.
 No LLM calls — all logic is heuristic / structural.
 """
-from ai.engine.pack_vocab import V
+from ai.engine.pack_vocab import LV, V
 import json
 import logging
 import math
@@ -23,7 +23,7 @@ _ABBREV_MAP: dict[str, list[str]] = {
     "cust": ["customer", "customers"],
     "prod": ["product", "products"],
     "org":  ["organization", "organizations", "organisation", "organisations"],
-    "emp":  [V("t_employee_4"), V("t_employees")],
+    "emp":  [LV("t_employee_4"), LV("t_employees")],
     "dept": ["department", "departments"],
     "inv":  ["invoice", "invoices", "inventory"],
     "txn":  ["transaction", "transactions"],

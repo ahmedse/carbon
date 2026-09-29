@@ -121,8 +121,17 @@ export const AuthProvider = ({ children }) => {
   };
 
   // --- Local Storage Sync on mount ---
+  const embedHost = typeof window !== 'undefined'
+    && window.location.pathname.endsWith('/embed/pulse');
+
   useEffect(() => {
     try {
+      if (embedHost) {
+        const embedUser = JSON.parse(sessionStorage.getItem('pulse_embed_user') || 'null');
+        if (embedUser?.token) setUser(embedUser);
+        setLoading(false);
+        return;
+      }
       const storedUser = JSON.parse(localStorage.getItem("user"));
       const storedProjects = JSON.parse(localStorage.getItem("projects"));
       const storedContext = JSON.parse(localStorage.getItem("context"));
@@ -146,16 +155,15 @@ export const AuthProvider = ({ children }) => {
       }
     } catch { /* ignore parse errors */ }
     setLoading(false);
-  }, []);
+  }, [embedHost]);
 
   useEffect(() => {
-    if (user) {
-      fetchPerspectiveContext(user.token).catch(() => {
-        console.warn("Failed to refresh perspective context on reload");
-      });
-    }
+    if (embedHost || !user) return;
+    fetchPerspectiveContext(user.token).catch(() => {
+      console.warn("Failed to refresh perspective context on reload");
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.token]);
+  }, [user?.token, embedHost]);
 
   // --- Inactivity & periodic token refresh logic ---
   useEffect(() => {
@@ -260,6 +268,14 @@ export const AuthProvider = ({ children }) => {
     }
     // eslint-disable-next-line
   }, [user, context?.modules, canViewTables]);
+
+  // Moodle iframe session. Kept in sessionStorage so it does not replace a Carbon login.
+  const acceptHostSession = async ({ access, refresh, username }) => {
+    const userObj = { username, token: access, refresh, roles: [] };
+    setUser(userObj);
+    sessionStorage.setItem('pulse_embed_user', JSON.stringify(userObj));
+    setLoading(false);
+  };
 
   // --- Login: fetch tokens, user roles, and build project list ---
   const login = async ({ username, password }) => {
@@ -478,6 +494,7 @@ export const AuthProvider = ({ children }) => {
         context,
         loading,
         login,
+        acceptHostSession,
         selectProject,
         logout,
         hasRole,

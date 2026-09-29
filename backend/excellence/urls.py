@@ -7,6 +7,7 @@ from .api import (
     InitiativeCloseView,
     InitiativeListCreateView,
     LadderView,
+    ControlRoomView,
     OverviewView,
     RunListCreateView,
     StandardView,
@@ -16,6 +17,7 @@ from .api import (
 
 urlpatterns = [
     path('overview/', OverviewView.as_view(), name='excellence-overview'),
+    path('control-room/', ControlRoomView.as_view(), name='excellence-control-room'),
     path('standard/', StandardView.as_view(), name='excellence-standard'),
     path('apps/<str:app_id>/', AppView.as_view(), name='excellence-app'),
     path('ladder/', LadderView.as_view(), name='excellence-ladder'),

@@ -22,6 +22,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .catalogue import LEVEL_NAMES, load_catalogue
+from .control_room import build_control_room
 from .cells import apps_in, build_grid, histogram, median, subjects_for_app
 from .evaluator import evaluate
 from .gauge import head_commit
@@ -409,6 +410,13 @@ def build_standard_view() -> dict:
             for r in standard.rungs
         ],
     }
+
+
+class ControlRoomView(APIView):
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        return Response(build_control_room())
 
 
 class OverviewView(APIView):

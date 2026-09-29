@@ -1,7 +1,7 @@
 from __future__ import annotations
 from ai.engine.cognition.phrase_tables import T
-from ai.engine.pack_vocab import V
-V("t_broad_payroll_salary_report_asks_clarify")
+from ai.engine.pack_vocab import LV, V
+LV("t_broad_payroll_salary_report_asks_clarify")
 
 
 from typing import Any
@@ -29,7 +29,10 @@ def _is_broad_report_en(text: str) -> bool:
         return True
     if any(has_gapped_words(text, doc, _BROAD_PAY, max_gap=6) for doc in _BROAD_DOCS):
         return True
-    return any(has_gapped_words(text, pay, _BROAD_PAY_DOCS, max_gap=4) for pay in (V("t_salary"), V("t_salaries"), V("t_payroll"), "compensation"))
+    return any(
+        pay and has_gapped_words(text, pay, _BROAD_PAY_DOCS, max_gap=4)
+        for pay in (V("t_salary"), V("t_salaries"), V("t_payroll"), V("t_rx_w_compensation"))
+    )
 
 #: Already scoped — do not re-ask.
 #: Note: ``charts?`` not ``chart`` — "with charts" must count as scoped.

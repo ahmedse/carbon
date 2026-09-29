@@ -1,0 +1,319 @@
+{
+    "courses": [
+        {
+            "shortname": "NMD1000",
+            "fullname": "NMD1000: Introduction to Medical School",
+            "category": 3,
+            "visible": 1,
+            "modules": {
+                "assign": 3,
+                "forum": 2,
+                "label": 2,
+                "page": 9,
+                "quiz": 3,
+                "resource": 59,
+                "url": 37
+            },
+            "links": {
+                "youtube": 8,
+                "google": 28,
+                "other": 1
+            },
+            "files": {
+                "pptx": 10,
+                "pdf": 41,
+                "docx": 9,
+                "other": 0
+            }
+        },
+        {
+            "shortname": "NMD1103",
+            "fullname": "NMD1103: Clinical Skills 1",
+            "category": 3,
+            "visible": 1,
+            "modules": {
+                "folder": 4,
+                "forum": 1,
+                "label": 3,
+                "page": 3,
+                "resource": 15,
+                "url": 11
+            },
+            "links": {
+                "youtube": 4,
+                "google": 6,
+                "other": 1
+            },
+            "files": {
+                "pptx": 6,
+                "pdf": 6,
+                "docx": 3,
+                "other": 0
+            }
+        },
+        {
+            "shortname": "NMD1301",
+            "fullname": "NMD1301: Medical Profession 1",
+            "category": 3,
+            "visible": 1,
+            "modules": {
+                "assign": 10,
+                "forum": 1,
+                "page": 2,
+                "quiz": 5,
+                "resource": 32,
+                "url": 26
+            },
+            "links": {
+                "youtube": 12,
+                "google": 3,
+                "other": 11
+            },
+            "files": {
+                "pptx": 17,
+                "pdf": 8,
+                "docx": 3,
+                "other": 0
+            }
+        },
+        {
+            "shortname": "NMD1402",
+            "fullname": "NMD1402: Research Skills 2",
+            "category": 4,
+            "visible": 1,
+            "modules": {
+                "forum": 1,
+                "page": 5,
+                "quiz": 2,
+                "resource": 16,
+                "url": 3
+            },
+            "links": {
+                "youtube": 1,
+                "google": 1,
+                "other": 1
+            },
+            "files": {
+                "pptx": 3,
+                "pdf": 10,
+                "docx": 2,
+                "other": 0
+            }
+        },
+        {
+            "shortname": "NMD2101",
+            "fullname": "NMD2101: Neuroscience 1",
+            "category": 6,
+            "visible": 1,
+            "modules": {
+                "assign": 1,
+                "forum": 1,
+                "label": 42,
+                "page": 30,
+                "quiz": 2,
+                "resource": 142,
+                "url": 61
+            },
+            "links": {
+                "youtube": 5,
+                "google": 56,
+                "other": 0
+            },
+            "files": {
+                "pptx": 56,
+                "pdf": 45,
+                "docx": 30,
+                "other": 7
+            }
+        },
+        {
+            "shortname": "MED213",
+            "fullname": "NMD2104: Clinical Skills 3",
+            "category": 6,
+            "visible": 1,
+            "modules": {
+                "forum": 1,
+                "label": 3,
+                "page": 8,
+                "resource": 17,
+                "url": 20
+            },
+            "links": {
+                "youtube": 7,
+                "google": 9,
+                "other": 4
+            },
+            "files": {
+                "pptx": 8,
+                "pdf": 4,
+                "docx": 2,
+                "other": 3
+            }
+        },
+        {
+            "shortname": "NMD2303",
+            "fullname": "NMD2303: Medical Profession 3",
+            "category": 6,
+            "visible": 1,
+            "modules": {
+                "assign": 3,
+                "forum": 1,
+                "page": 2,
+                "quiz": 5,
+                "resource": 6,
+                "url": 13
+            },
+            "links": {
+                "youtube": 5,
+                "google": 7,
+                "other": 1
+            },
+            "files": {
+                "pptx": 3,
+                "pdf": 2,
+                "docx": 0,
+                "other": 1
+            }
+        },
+        {
+            "shortname": "NMD2403",
+            "fullname": "NMD2403: Research 3",
+            "category": 6,
+            "visible": 1,
+            "modules": {
+                "forum": 1,
+                "quiz": 1,
+                "resource": 16,
+                "url": 7
+            },
+            "links": {
+                "youtube": 6,
+                "google": 0,
+                "other": 1
+            },
+            "files": {
+                "pptx": 2,
+                "pdf": 12,
+                "docx": 2,
+                "other": 0
+            }
+        },
+        {
+            "shortname": "NMD3101",
+            "fullname": "NMD3101: priniciples of infection",
+            "category": 10,
+            "visible": 1,
+            "modules": {
+                "forum": 1,
+                "label": 30,
+                "quiz": 4,
+                "resource": 80,
+                "url": 35
+            },
+            "links": {
+                "youtube": 23,
+                "google": 11,
+                "other": 1
+            },
+            "files": {
+                "pptx": 12,
+                "pdf": 59,
+                "docx": 4,
+                "other": 0
+            }
+        },
+        {
+            "shortname": "NMD3304",
+            "fullname": "NMD3304 - Medical Profession 4",
+            "category": 10,
+            "visible": 1,
+            "modules": {
+                "assign": 1,
+                "forum": 1,
+                "quiz": 1,
+                "resource": 11,
+                "url": 8
+            },
+            "links": {
+                "youtube": 3,
+                "google": 4,
+                "other": 1
+            },
+            "files": {
+                "pptx": 5,
+                "pdf": 6,
+                "docx": 0,
+                "other": 0
+            }
+        },
+        {
+            "shortname": "NMD4201",
+            "fullname": "NMD4201 - Surgery I",
+            "category": 15,
+            "visible": 1,
+            "modules": {
+                "forum": 1,
+                "quiz": 5,
+                "resource": 123,
+                "url": 16
+            },
+            "links": {
+                "youtube": 4,
+                "google": 12,
+                "other": 0
+            },
+            "files": {
+                "pptx": 32,
+                "pdf": 88,
+                "docx": 0,
+                "other": 2
+            }
+        },
+        {
+            "shortname": "MED520",
+            "fullname": "MED520 - Dermatology",
+            "category": 22,
+            "visible": 1,
+            "modules": {
+                "forum": 1,
+                "quiz": 2,
+                "resource": 32,
+                "url": 32
+            },
+            "links": {
+                "youtube": 0,
+                "google": 32,
+                "other": 0
+            },
+            "files": {
+                "pptx": 3,
+                "pdf": 28,
+                "docx": 0,
+                "other": 1
+            }
+        },
+        {
+            "shortname": "MED5310",
+            "fullname": "MED5310 - Medical profession 10",
+            "category": 23,
+            "visible": 1,
+            "modules": {
+                "assign": 1,
+                "forum": 1,
+                "quiz": 1,
+                "resource": 8
+            },
+            "links": {
+                "youtube": 0,
+                "google": 0,
+                "other": 0
+            },
+            "files": {
+                "pptx": 6,
+                "pdf": 2,
+                "docx": 0,
+                "other": 0
+            }
+        }
+    ]
+}

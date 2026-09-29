@@ -4,6 +4,11 @@ Keeps legacy soft-gate behaviour; moves weight out of ``runner.py`` so the
 harness ``runner_lines`` meter can fall without a behaviour change.
 """
 from __future__ import annotations
+
+from ai.engine.host_ids import (
+    ID_GET_MY_PROFILE,
+    ID_SUBMIT_MY_LEAVE,
+)
 from ai.engine.pack_vocab import V
 
 
@@ -162,7 +167,7 @@ class SoftSurfacesMixin:
             )
             if _profile_bound:
                 _step_tool, _step_args = "call_host_api", {
-                    "api_name": "get_my_profile",
+                    "api_name": ID_GET_MY_PROFILE,
                     "explanation": (
                         "First-person identity is the logged-in "
                         + V("t_employee_record")
@@ -439,6 +444,7 @@ class SoftSurfacesMixin:
         process_mode: str = "",
         progress_callback=None,
         dense_thinking: bool = False,
+        page_context: str = "",
     ):
         """Understand path. ``legacy`` skip; ``shadow`` log+fallthrough; ``v21`` act."""
         from types import SimpleNamespace
@@ -491,7 +497,11 @@ class SoftSurfacesMixin:
         # executor binds it. Write twins are described (Agent-only) so their
         # not_for can route; validate_decision hands any write to Agent.
         caps = capability_surface(instance_config, user_info)
-        scoped_catalog = list(caps.entries)
+        from ai.engine.cognition.turn.runner_util import catalog_for_page
+
+        scoped_catalog = catalog_for_page(
+            list(caps.entries), user_message or "", page_context,
+        )
         lines, allowed, write_names = catalog_prompt_lines(
             user_message or "",
             scoped_catalog,
@@ -514,6 +524,9 @@ class SoftSurfacesMixin:
             user_info=user_info,
             instance_config=cfg or None,
         )
+        page = str(page_context or "").strip()
+        if page:
+            system = f"{system}\n\n**Current page**:\n{page}"
         messages = [{"role": "system", "content": system}]
         if conversation_history:
             messages.extend(list(conversation_history)[-8:])
@@ -746,11 +759,21 @@ class SoftSurfacesMixin:
             # and args become the handoff card and seed the slots in state.
             from ai.engine.cognition.turn.handoff_agent import (
                 build_chat_write_handoff,
+                carry_handoff_slots,
                 seed_slots_into_state,
             )
             from ai.engine.llm.call_meter import current_meter
 
-            slots = flat_args(dict(lead.args or {}))
+            prior_slots: dict = {}
+            if state_ctx is not None and getattr(state_ctx, "state", None) is not None:
+                prior_slots = dict(getattr(state_ctx.state, "slots", None) or {})
+            slots = carry_handoff_slots(
+                handoff_api,
+                lead.args,
+                prior_slots=prior_slots,
+                user_message=user_message or "",
+                conversation_history=conversation_history,
+            )
             seed_slots_into_state(state_ctx, handoff_api, slots)
             outcome = build_chat_write_handoff(
                 api_name=handoff_api, slots=slots,
@@ -765,6 +788,7 @@ class SoftSurfacesMixin:
         if not (text or "").strip() and lead is not None and not executed:
             # ADR-0056: the Decision's own op finishes the turn.
             from ai.engine.cognition.turn.finish import (
+                grounded_reply,
                 navigation_for,
                 remember_slot,
                 write_answer,
@@ -781,42 +805,52 @@ class SoftSurfacesMixin:
             elif lead.op in {"answer", "set_slot"}:
                 if lead.op == "set_slot":
                     remember_slot(lead, state)
-                from ai.engine.cognition.turn.retrieve import RetrievalWitness
-
-                retrieval = await RetrievalWitness(
-                    knowledge_store=self.knowledge_store,
-                    memory_manager=getattr(self, "memory_manager", None),
-                ).retrieve(
-                    instance_id, conversation_id, user_message or "", user_info,
-                    host_user_id=str(host_user_id) if host_user_id else None,
-                )
-                text, usage = await write_answer(
-                    decision,
+                text = grounded_reply(
+                    lead, decision,
                     user_message=user_message or "",
                     conversation_history=conversation_history,
                     state=state,
-                    user_info=user_info,
-                    instance_config=instance_config,
-                    retrieval=retrieval,
-                    instance_id=instance_id,
-                    conversation_id=conversation_id,
                 )
-                # Words only. A leftover last-view envelope is not this turn.
-                envelope = None
-                if not text:
-                    cause = str((usage or {}).get("cause") or "empty_answer")
-                    if cause not in {"ungrounded", "empty_output", "model_error"}:
-                        cause = "empty_answer"
-                    _signal(
-                        ledger, "v21_understand", False, reason=cause,
-                        numbers=list((usage or {}).get("ungrounded") or []),
+                if text:
+                    envelope = None
+                else:
+                    from ai.engine.cognition.turn.retrieve import RetrievalWitness
+
+                    retrieval = await RetrievalWitness(
+                        knowledge_store=self.knowledge_store,
+                        memory_manager=getattr(self, "memory_manager", None),
+                    ).retrieve(
+                        instance_id, conversation_id, user_message or "", user_info,
+                        host_user_id=str(host_user_id) if host_user_id else None,
                     )
-                    logger.info(
-                        "[answer] cause=%s numbers=%s head=%r", cause,
-                        (usage or {}).get("ungrounded"), (usage or {}).get("rejected_head"),
+                    text, usage = await write_answer(
+                        decision,
+                        user_message=user_message or "",
+                        conversation_history=conversation_history,
+                        state=state,
+                        user_info=user_info,
+                        instance_config=instance_config,
+                        retrieval=retrieval,
+                        instance_id=instance_id,
+                        conversation_id=conversation_id,
+                        page_context=page_context,
                     )
-                    await record(cause, [])
-                    return _degraded_reply(ledger, Degradation("speak", cause), state, mode)
+                    # Words only. A leftover last-view envelope is not this turn.
+                    envelope = None
+                    if not text:
+                        cause = str((usage or {}).get("cause") or "empty_answer")
+                        if cause not in {"ungrounded", "empty_output", "model_error"}:
+                            cause = "empty_answer"
+                        _signal(
+                            ledger, "v21_understand", False, reason=cause,
+                            numbers=list((usage or {}).get("ungrounded") or []),
+                        )
+                        logger.info(
+                            "[answer] cause=%s numbers=%s head=%r", cause,
+                            (usage or {}).get("ungrounded"), (usage or {}).get("rejected_head"),
+                        )
+                        await record(cause, [])
+                        return _degraded_reply(ledger, Degradation("speak", cause), state, mode)
             elif lead.op == "handoff_agent" and (handoff_api == PLAN_PROCESS_ID or on_agent):
                 planned = await self._try_plan_dial_process_plan(
                     user_message=user_message or "", process_mode=process_mode,
@@ -1213,6 +1247,58 @@ class SoftSurfacesMixin:
             ledger.turn_decision = ledger.turn_decision or "answer"
         return response, ledger
 
+    async def _proposal_turn(
+        self,
+        proposal,
+        text: str,
+        *,
+        conversation_id: str,
+        ledger,
+        turn_id: str,
+        instance_id: str,
+        t0: float,
+    ):
+        """Show a draft, or say that nothing was approved. Never stores a task."""
+        from ai.engine.agent.reasoning import AgentResponse
+        from ai.engine.cognition.notifier import broadcast_run_event as _broadcast_run
+
+        total_latency = (time.monotonic() - t0) * 1000
+        ledger.final_response = (text or "")[:500]
+        ledger.total_latency_ms = total_latency
+        ledger.total_tokens = 0
+        ledger.total_llm_calls = 0
+        shown = None
+        if isinstance(proposal, dict) and proposal.get("kind"):
+            shown = {
+                **proposal,
+                "conversation_id": conversation_id or proposal.get("conversation_id") or "",
+            }
+            ledger.turn_decision = "clarify"
+        else:
+            ledger.turn_decision = "answer"
+        response = AgentResponse(
+            text=text,
+            sources_cited=[],
+            tools_used=[],
+            confidence=1.0,
+            total_tokens=0,
+            llm_calls=0,
+            model="",
+            response_type="clarification" if shown else "inferred",
+            open_question=shown,
+        )
+        try:
+            await _broadcast_run(instance_id, "run.completed", {
+                "run_id": turn_id,
+                "total_latency_ms": total_latency,
+                "total_llm_calls": 0,
+                "plan_dial_process": "",
+            })
+        except Exception:  # noqa: BLE001
+            logger.debug("plan_dial broadcast skipped", exc_info=True)
+        _signal(ledger, "plan_dial_process", bool(shown), drafted=bool(shown))
+        return response, ledger
+
     async def _try_plan_dial_process_plan(
         self,
         *,
@@ -1240,26 +1326,171 @@ class SoftSurfacesMixin:
         from ai.engine.cognition.notifier import broadcast_run_event as _broadcast_run
         from ai.engine.cognition.turn.navigation import detect_lang
         from ai.engine.cognition.turn.plan_dial import plan_dial_process_brief
-        from ai.engine.cognition.turn.plan_proposal import KIND as PROPOSAL_KIND
+        from ai.engine.cognition.turn.plan_proposal import (
+            KIND as PROPOSAL_KIND,
+            created_draft_text,
+            draft_was_cancelled,
+            dropped_draft_text,
+            hold_draft_text,
+            stick_to_open_draft,
+            unstored_draft_text,
+        )
         from ai.engine.cognition.turn.plan_proposal import revised_brief
 
         brief = (brief or "").strip() or plan_dial_process_brief(
             user_message, process_mode=process_mode,
         )
-        if not brief or not host_user_id:
+        if not host_user_id:
             return None
+        from ai.engine.cognition.turn.handoff_agent import (
+            brief_from_write_slots,
+            enough_slots_for_chat_handoff,
+            is_bound_write_affirmation,
+            is_ess_write_utterance,
+            merge_slots,
+            resolve_ess_write_from_brief,
+            seed_slots_into_state,
+        )
+
         # A bare slot answer to an open Chat clarify stays with the slot-filler.
         state = getattr(state_ctx, "state", None) if state_ctx is not None else None
         prior_plan = None
         revision = ""
+        slots: dict = {}
+        prior_api = ""
+        bound = ""
+        if state is not None:
+            slots = dict(getattr(state, "slots", None) or {})
+            prior_api = str((getattr(state, "intent", None) or {}).get("api") or "")
+            if prior_api and enough_slots_for_chat_handoff(prior_api, slots):
+                bound = brief_from_write_slots(prior_api, slots)
+                if bound and (
+                    is_bound_write_affirmation(user_message, slots)
+                    or not is_ess_write_utterance(user_message)
+                ):
+                    brief = bound
+        if not brief:
+            return None
+        try:
+            resolved = resolve_ess_write_from_brief(
+                brief, prefer_api=prior_api or None,
+            )
+        except Exception:  # noqa: BLE001
+            resolved = None
+        if resolved is not None:
+            prior_api, extracted = resolved
+            slots = merge_slots(slots, extracted)
+            seed_slots_into_state(state_ctx, prior_api, slots)
+            if enough_slots_for_chat_handoff(prior_api, slots):
+                bound = brief_from_write_slots(prior_api, slots) or bound
+                if bound:
+                    brief = bound
         if state is not None:
             decisions = getattr(state, "decisions", None) or []
             last = decisions[-1] if decisions and isinstance(decisions[-1], dict) else {}
-            prior_api = str((getattr(state, "intent", None) or {}).get("api") or "")
-            if prior_api and str(last.get("decision") or "") == "clarify" and len(brief) < 40:
-                return None
-            # With a draft open, the user's words revise that draft (typed state, not wording).
             open_q = getattr(state, "open_question", None) or {}
+            # Cancel drops the open draft before a short slot answer is claimed.
+            if (
+                stick_to_open_draft(open_q, change=False) is not None
+                and not bool(getattr(self, "_plan_change", False))
+                and (
+                    bool(getattr(self, "_plan_cancel", False))
+                    or draft_was_cancelled(brief)
+                )
+            ):
+                lang = "ar" if detect_lang(brief) == "ar" else "en"
+                return await self._proposal_turn(
+                    None, dropped_draft_text(lang),
+                    conversation_id=conversation_id, ledger=ledger,
+                    turn_id=turn_id, instance_id=instance_id, t0=t0,
+                )
+            from ai.engine.cognition.dialogue.affirmation import is_commit_affirmation
+
+            if (
+                stick_to_open_draft(open_q, change=False) is not None
+                and not bool(getattr(self, "_plan_change", False))
+                and is_commit_affirmation(user_message)
+            ):
+                from asgiref.sync import sync_to_async
+                from ai.engine.cognition.turn.plan_dial import open_tasks_action
+
+                def _commit_sync():
+                    from django.contrib.auth import get_user_model
+                    from ai.plans_service import PlansService
+
+                    User = get_user_model()
+                    try:
+                        user = User.objects.get(pk=host_user_id)
+                    except (User.DoesNotExist, ValueError):
+                        return None
+                    return PlansService().commit_proposal(user, conversation_id or "")
+
+                try:
+                    stored = await sync_to_async(
+                        _commit_sync, thread_sensitive=False,
+                    )()
+                except Exception:  # noqa: BLE001 — the draft stays if store fails
+                    stored = None
+                lang = "ar" if detect_lang(user_message) == "ar" else "en"
+                if isinstance(stored, dict) and stored.get("id"):
+                    from ai.engine.agent.reasoning import AgentResponse
+                    from ai.engine.cognition.notifier import (
+                        broadcast_run_event as _broadcast_run,
+                    )
+
+                    text = created_draft_text(lang)
+                    total_latency = (time.monotonic() - t0) * 1000
+                    ledger.final_response = text[:500]
+                    ledger.total_latency_ms = total_latency
+                    ledger.total_tokens = 0
+                    ledger.total_llm_calls = 0
+                    ledger.turn_decision = "answer"
+                    response = AgentResponse(
+                        text=text,
+                        sources_cited=[],
+                        tools_used=[],
+                        confidence=1.0,
+                        total_tokens=0,
+                        llm_calls=0,
+                        model="",
+                        response_type="inferred",
+                        actions=[open_tasks_action(str(stored["id"]), lang)],
+                    )
+                    try:
+                        await _broadcast_run(instance_id, "run.completed", {
+                            "run_id": turn_id,
+                            "total_latency_ms": total_latency,
+                            "total_llm_calls": 0,
+                            "plan_dial_process": str(stored.get("id") or ""),
+                        })
+                    except Exception:  # noqa: BLE001
+                        logger.debug("plan_dial broadcast skipped", exc_info=True)
+                    _signal(ledger, "plan_dial_process", True, created=True)
+                    return response, ledger
+                return await self._proposal_turn(
+                    None, unstored_draft_text(lang),
+                    conversation_id=conversation_id, ledger=ledger,
+                    turn_id=turn_id, instance_id=instance_id, t0=t0,
+                )
+            if (
+                prior_api
+                and str(last.get("decision") or "") == "clarify"
+                and len((user_message or "").strip()) < 40
+                and not bound
+            ):
+                return None
+            # With a draft open, only the Change control revises it.
+            # Any other message stays on this draft.
+            held = stick_to_open_draft(
+                open_q, change=bool(getattr(self, "_plan_change", False)),
+            )
+            if held is not None:
+                lang = "ar" if detect_lang(brief) == "ar" else "en"
+                return await self._proposal_turn(
+                    held, hold_draft_text(lang),
+                    conversation_id=conversation_id, ledger=ledger,
+                    turn_id=turn_id, instance_id=instance_id, t0=t0,
+                )
             if isinstance(open_q, dict) and open_q.get("kind") == PROPOSAL_KIND:
                 revision = brief
                 raw = open_q.get("plan_json")
@@ -1280,6 +1511,7 @@ class SoftSurfacesMixin:
             return PlansService().propose_plan(
                 user, brief, conversation_id=conversation_id or "",
                 prior_plan=prior_plan, revision=revision,
+                single_read=True,
             )
 
         try:
@@ -1291,9 +1523,13 @@ class SoftSurfacesMixin:
         except Exception:  # noqa: BLE001 — never break the turn
             logger.warning("plan_dial process plan create failed", exc_info=True)
             return None
-        # A brief the planner reduced to one bound read is a question.
         if not isinstance(plan, dict) or not proposal:
-            return None
+            lang = "ar" if detect_lang(brief) == "ar" else "en"
+            return await self._proposal_turn(
+                None, unstored_draft_text(lang),
+                conversation_id=conversation_id, ledger=ledger,
+                turn_id=turn_id, instance_id=instance_id, t0=t0,
+            )
 
         lang = "ar" if detect_lang(brief) == "ar" else "en"
         proposal = {**proposal, "conversation_id": conversation_id or ""}
@@ -1562,7 +1798,7 @@ class SoftSurfacesMixin:
                 user_message=user_message,
             )
         first_leave_dump = (
-            api_name == "submit_my_leave"
+            api_name == ID_SUBMIT_MY_LEAVE
             and not any(prior.get(k) for k in ("start_date", "end_date", "days"))
             and bool(body.get("start_date") or body.get("end_date") or body.get("days"))
         )
@@ -1574,7 +1810,7 @@ class SoftSurfacesMixin:
                 echo=True,
             )
         just_completed_leave = (
-            api_name == "submit_my_leave"
+            api_name == ID_SUBMIT_MY_LEAVE
             and last_decision == "clarify"
             and not prior_enough
         )

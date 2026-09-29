@@ -8,9 +8,20 @@ Track D — topic stack: when several recent assistant topics exist, list
 them so the user can pick instead of silently taking only the latest.
 """
 from __future__ import annotations
+
+from ai.engine.host_ids import (
+    ID_GET_MY_LEAVE_BALANCE,
+    ID_GET_MY_PROFILE,
+    ID_LIST_ATTENDANCE,
+    ID_LIST_LEAVE_ENTITLEMENTS,
+    ID_LIST_MY_ATTENDANCE_PERMISSIONS,
+    ID_LIST_MY_LEAVE,
+    ID_LIST_MY_LOANS,
+    ID_LIST_MY_PAYSLIPS,
+)
 from ai.engine.cognition.phrase_tables import T
 
-from ai.engine.pack_vocab import V
+from ai.engine.pack_vocab import LV, V, row_for
 
 import re
 from typing import Any
@@ -36,16 +47,16 @@ _TOPIC_STACK_MAX = 4
 
 _KNOWN_TOOL_IDENTIFIERS = T("dialogue/deixis.py::_KNOWN_TOOL_IDENTIFIERS")
 
-_API_TOPIC_PHRASES: dict[str, str] = {
-    "get_my_leave_balance": V("t_leave_balance"),
-    "list_leave_entitlements": V("t_leave_balance"),
-    "list_my_leave": V("t_leave_requests"),
-    "list_my_loans": V("t_loans"),
-    "list_my_payslips": V("t_payslips"),
-    "list_attendance": V("t_attendance"),
-    "list_my_attendance_permissions": V("t_attendance_permissions"),
-    "get_my_profile": "profile",
-}
+_API_TOPIC_ROWS = (
+    (ID_GET_MY_LEAVE_BALANCE, LV("t_leave_balance")),
+    (ID_LIST_LEAVE_ENTITLEMENTS, LV("t_leave_balance")),
+    (ID_LIST_MY_LEAVE, LV("t_leave_requests")),
+    (ID_LIST_MY_LOANS, LV("t_loans")),
+    (ID_LIST_MY_PAYSLIPS, LV("t_payslips")),
+    (ID_LIST_ATTENDANCE, LV("t_attendance")),
+    (ID_LIST_MY_ATTENDANCE_PERMISSIONS, LV("t_attendance_permissions")),
+    (ID_GET_MY_PROFILE, "profile"),
+)
 
 
 def has_deixis(message: str) -> bool:
@@ -66,8 +77,9 @@ def _api_to_domain_phrase(name: str) -> str:
     api = str(name or "").strip()
     if not api:
         return ""
-    if api in _API_TOPIC_PHRASES:
-        return _API_TOPIC_PHRASES[api]
+    phrase = row_for(_API_TOPIC_ROWS, api)
+    if phrase:
+        return str(phrase)
     for prefix in ("list_", "get_", "search_", "query_", "fetch_"):
         if api.startswith(prefix):
             api = api[len(prefix):]

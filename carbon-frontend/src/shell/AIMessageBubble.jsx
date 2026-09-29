@@ -317,6 +317,8 @@ function AIMessageBubble({
   onReject,
   onCorrect,
   onFollowUp,
+  onRevisePlan,
+  onDropPlan,
   onPromote,
   conversationType,
   appIdentifier,
@@ -341,6 +343,8 @@ function AIMessageBubble({
   onReplyInThread,
   /** Current Ask|Plan dial — hide "Switch to Plan" when already on Plan. */
   composerProcess = 'ask',
+  /** The open draft card belongs on the latest reply. Older bubbles keep the text. */
+  liveProposal = true,
 }) {
   const { token } = useAuth();
   const [createdPlanId, setCreatedPlanId] = useState('');
@@ -1161,7 +1165,8 @@ function AIMessageBubble({
               disabled={!onOpenPanel}
               onClick={() => onOpenPanel?.(act.panel, act.plan_id, {
                 processHint: act.process_hint || metadata.process_hint || '',
-                draft: metadata.draft || act.summary || '',
+                brief: act.brief || '',
+                draft: act.draft || metadata.draft || '',
                 // Chat proposes, Agent applies: a refined plan brief travels
                 // with the CTA and is applied via replan + diff review in Tasks.
                 revision: typeof act.revision === 'string' ? act.revision : '',
@@ -1400,14 +1405,15 @@ function AIMessageBubble({
           />
         )}
 
-        {metadata.form?.kind === 'plan_proposal' && (
+        {liveProposal && metadata.form?.kind === 'plan_proposal' && (
           <PlanProposalForm
             proposal={metadata.form}
             onCreate={metadata.form.conversation_id ? async () => {
               const plan = await commitPlanProposal(token, metadata.form.conversation_id);
               setCreatedPlanId(plan?.id || '');
             } : undefined}
-            onChange={(text) => onFollowUp?.(text)}
+            onChange={(text) => (onRevisePlan || onFollowUp)?.(text)}
+            onCancel={onDropPlan}
             onOpenTasks={onOpenPanel && createdPlanId
               ? () => onOpenPanel('tasks', createdPlanId, {})
               : undefined}
@@ -1828,6 +1834,9 @@ AIMessageBubble.propTypes = {
   onReject: PropTypes.func,
   onCorrect: PropTypes.func,
   onFollowUp: PropTypes.func,
+  onRevisePlan: PropTypes.func,
+  onDropPlan: PropTypes.func,
+  liveProposal: PropTypes.bool,
   onPromote: PropTypes.func,
   onRetry: PropTypes.func,
   onEdit: PropTypes.func,

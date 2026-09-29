@@ -4,6 +4,11 @@ On unless ``PULSE_TOOL_CHOICE=off``. When intent already names one host read
 at confidence ≥ 0.9, Draft is forced with named ``tool_choice``.
 """
 from __future__ import annotations
+
+from ai.engine.host_ids import (
+    ID_GET_MY_LEAVE_BALANCE,
+    ID_LIST_MY_LEAVE,
+)
 from ai.engine.cognition.phrase_tables import T
 from ai.engine.pack_vocab import V
 
@@ -101,9 +106,9 @@ def ensure_forced_call(draft: Any, resolution: Any, turn_id: str, function_names
     if tool_calls_include_api(calls, api):
         return draft
     # Drop the empty history twin when forcing a balance API.
-    if api == "get_my_leave_balance":
+    if api == ID_GET_MY_LEAVE_BALANCE:
         calls = [
-            tc for tc in calls if not tool_calls_include_api([tc], "list_my_leave")
+            tc for tc in calls if not tool_calls_include_api([tc], ID_LIST_MY_LEAVE)
         ]
     calls.append(build_ess_self_tool_call(api, turn_id or ""))
     return replace(draft, tool_calls=calls, text="")

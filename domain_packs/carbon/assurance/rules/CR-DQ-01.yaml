@@ -1,0 +1,22 @@
+id: CR-DQ-01
+journey: INV
+meaning: >
+  An activity row used for O1 electricity or diesel has reporting period,
+  quantity, unit, and org unit. quantity is greater than zero. unit is kWh
+  for electricity and litre for diesel, matching the EmissionFactor
+  activity_unit. A blank month is a gap note, not a zero.
+source: CR-FAC-01 activity units; dataschema activity tables linked from InventorySourceStatus.linked_tables
+owner: carbon-campus-data-owner
+failure: A zero is stored where the meter was not read, or the unit does not match the factor, so the calculation is a silent conversion.
+validation: >
+  For linked tables on the two O1 sources, reject quantity <= 0 and reject
+  a unit other than the benchmark activity_unit. A missing month stays a
+  gap on the status notes. It is not inserted as 0.
+implementation: >
+  Process step enter_activity is act_confirm for the campus data owner.
+  Host screen /carbon/my-data. Pulse does not post the row from Chat.
+confidence: medium
+catalogue: planned
+residual: >
+  The physical activity table is chosen by the data owner when they link it.
+  This rule does not create a DataTable.

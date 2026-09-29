@@ -1,0 +1,51 @@
+{
+  "tier": "persona_recheck",
+  "run_at": "2026-09-28T08:48:00.758651+00:00",
+  "surface": "tasks",
+  "purpose": "Caller-scoped GET cache. Warm one user, then observe My and Team inside the cache window.",
+  "warm_user": "emp_2378",
+  "warm": {
+    "pass": true,
+    "plan_id": "b1e03014-8e00-4833-b4a7-8e11b7eed53c",
+    "status": "completed",
+    "tools": [
+      "get_my_profile",
+      "get_my_leave_balance"
+    ],
+    "seconds": 4.71
+  },
+  "r6": {
+    "honest": "reached",
+    "note": "emp_1067 profile and leave matched the host and payroll runs stayed 403. emp_1712 direct reports matched the host row."
+  },
+  "personas": {
+    "my": {
+      "user": "emp_1067",
+      "pass": true,
+      "plan_id": "c5989a2a-9876-456f-a163-425e6bc8c44b",
+      "status": "completed",
+      "tools": [
+        "get_my_profile",
+        "get_my_leave_balance"
+      ],
+      "host_misses": [],
+      "misses": [],
+      "seconds": 3.78
+    },
+    "team": {
+      "user": "emp_1712",
+      "pass": true,
+      "plan_id": "8001bb99-51fe-4e2a-a56e-14ebd41b2307",
+      "status": "completed",
+      "tools": [
+        "list_my_direct_reports"
+      ],
+      "host_misses": [],
+      "misses": [],
+      "seconds": 5.81
+    }
+  },
+  "l6_l7": "not scored",
+  "night_2026_09_23": "FAIL stays",
+  "lab_meter": "T1-T10 is a different score. Do not merge."
+}

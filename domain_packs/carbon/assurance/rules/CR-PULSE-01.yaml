@@ -1,0 +1,25 @@
+id: CR-PULSE-01
+journey: PULSE
+meaning: >
+  Pulse Chat may answer with a kilogram or tonne figure only when that same
+  number is present in the get_calculation_summary or get_chairman_overview
+  payload for the reporting_period_id the user named. If the payload has no
+  number, Chat says the period is opening. Chat does not create tables,
+  rules, boundaries, periods, sources, or calculations.
+source: domain_packs/carbon/instance.yaml tools get_calculation_summary and get_chairman_overview; ADR-0046
+owner: carbon-inventory-lead
+failure: Chat states a footprint tonne that is not in the tool payload, or Chat performs a host write.
+validation: >
+  Compare each numeric emission claim in the Chat answer to the tool payload
+  for that turn. Fail the claim when the number is absent. Write tools in
+  Chat are handed off, not executed.
+implementation: >
+  Process step verify_quote is observe. instance.yaml keeps write tools on
+  requires_confirmation. No engine phrase table. The sentence lives in this
+  pack and in the instance persona.
+confidence: high-code
+catalogue: planned
+residual: >
+  get_chairman_overview divides kg by 1000 for tonnes. Quoting that payload
+  is legal. Quoting the July 2026 deployment sketch is not. There is no live
+  O1 payload on 2026-09-29.

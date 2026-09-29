@@ -254,8 +254,8 @@ def test_compile_widens_format_when_the_brief_names_two_files():
 
 def test_compile_uses_the_nibras_catalog_on_the_live_brief():
     path = (
-        Path(__file__).resolve().parents[1]
-        / "engine" / "instances" / "nibras" / "instance.yaml"
+        Path(__file__).resolve().parents[3]
+        / "domain_packs" / "nibras" / "instance.yaml"
     )
     catalog = list(yaml.safe_load(path.read_text(encoding="utf-8")).get("api_catalog") or [])
     plan = compile_catalog_plan(BRIEF, catalog)
@@ -279,8 +279,8 @@ def test_compile_uses_the_nibras_catalog_on_the_live_brief():
 
 def test_nibras_catalog_authors_gosi_observe_and_october_list():
     path = (
-        Path(__file__).resolve().parents[1]
-        / "engine" / "instances" / "nibras" / "instance.yaml"
+        Path(__file__).resolve().parents[3]
+        / "domain_packs" / "nibras" / "instance.yaml"
     )
     catalog = list(yaml.safe_load(path.read_text(encoding="utf-8")).get("api_catalog") or [])
     gosi = compile_catalog_plan(GOSI_OBSERVE, catalog)
@@ -296,8 +296,8 @@ def test_nibras_catalog_authors_gosi_observe_and_october_list():
 
 def test_nibras_catalog_does_not_author_a_profile_leave_brief():
     path = (
-        Path(__file__).resolve().parents[1]
-        / "engine" / "instances" / "nibras" / "instance.yaml"
+        Path(__file__).resolve().parents[3]
+        / "domain_packs" / "nibras" / "instance.yaml"
     )
     catalog = list(yaml.safe_load(path.read_text(encoding="utf-8")).get("api_catalog") or [])
     brief = "Create a 2-step task that reads my profile then my leave balance. Do not write."

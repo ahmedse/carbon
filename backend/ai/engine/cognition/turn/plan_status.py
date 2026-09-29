@@ -4,6 +4,11 @@ When the user asks "status of my request?" and state has an active plan
 (or Chat-handoff slots), answer deterministically — 0 LLM calls.
 """
 from __future__ import annotations
+
+from ai.engine.host_ids import (
+    ID_LEAVE_TYPE,
+    ID_LOAN_TYPE,
+)
 from ai.engine.cognition.phrase_tables import T
 from ai.engine.pack_vocab import V
 
@@ -62,8 +67,8 @@ def _lang(text: str, state: Any = None) -> str:
 
 
 def _title_from_slots(slots: dict) -> str:
-    advance_value = slots.get("loan_type")
-    kind_value = slots.get("leave_type")
+    advance_value = slots.get(ID_LOAN_TYPE)
+    kind_value = slots.get(ID_LEAVE_TYPE)
     amount = slots.get("amount") or slots.get("principal")
     if advance_value and amount is not None:
         return f"{advance_value} {V("t_loan_2")}"
@@ -83,8 +88,8 @@ def can_answer_plan_status(state: Any) -> bool:
         return True
     slots = getattr(state, "slots", None) or {}
     return bool(
-        slots.get("loan_type")
-        or slots.get("leave_type")
+        slots.get(ID_LOAN_TYPE)
+        or slots.get(ID_LEAVE_TYPE)
         or slots.get("principal")
         or slots.get("amount")
     )

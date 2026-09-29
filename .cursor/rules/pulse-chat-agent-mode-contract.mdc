@@ -4,7 +4,7 @@ globs:
   - backend/ai/engine_runtime.py
   - backend/ai/intelligence.py
   - backend/ai/engine/cognition/**/*
-  - backend/ai/engine/instances/**/instance.yaml
+  - domain_packs/*/instance.yaml
   - backend/ai/engine/agent/guardrails.py
   - backend/ai/host_executor.py
   - carbon-frontend/src/shell/AIMessageBubble.jsx

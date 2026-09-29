@@ -6,7 +6,7 @@ Prompts are now synthesized at runtime by llm.prompt_synthesizer — no
 hardcoded per-instance template. The SYSTEM_PROMPT_INTROSPECT templates
 below are the only remaining static prompts (schema analysis, not chat).
 """
-from ai.engine.pack_vocab import V
+from ai.engine.pack_vocab import LV, V
 
 # ── Note: SYSTEM_PROMPT_CHAT removed 2026-08-09 ──
 # build_chat_prompt() now calls llm.prompt_synthesizer.synthesize_system_prompt()
@@ -112,7 +112,7 @@ async def build_chat_prompt(
         roles_part = f" — Roles: {', '.join(roles)}" if roles else ""
         user_context = f"**{display_name}**{email_part}{roles_part}"
         # Domain subject binding: lets the model resolve first-person requests
-        # ("my ", "اجازاتي") to THIS person and steers it to self-scoped
+        # ("my") to THIS person and steers it to self-scoped
         # endpoints instead of the org-wide lists (which would leak others' data).
         person_row = user_info.get(V("t_employee_4")) or None
         if person_row:
@@ -126,29 +126,24 @@ async def build_chat_prompt(
             user_context = f"{user_context}\n**{V("t_employee")} identity**: {emp_line}"
             identity_directive = (
                 f"**Identity**: You are assisting {emp_line}. When they say "
-                "\"my\", \"me\", \"mine\", or \"I\" — or the Arabic اجازاتي / "
-                "راتبي / بياناتي / قروضي — it refers to THIS person; never ask "
+                "\"my\", \"me\", \"mine\", or \"I\" — "
+                + V("t_rx_copy_identity_ar")
+                + "it refers to THIS person; never ask "
                 + V("t_who_they_are_for_first_person")
                 + V("t_leave_balance_loans_or_profile_call")
-                + "self-service endpoints (get_my_profile, list_my_leave, "
-                "get_my_leave_balance, list_my_loans). "
-                "CRITICAL — Chat mode never submits or stages host writes "
+                + V("t_rx_copy_self_service_eps")
+                + "CRITICAL — Chat mode never submits or stages host writes "
                 + V("t_leave_loan_attendance_payroll_if_they")
                 + V("t_submit_leave_i_want_leave_أريد")
-                + "emergency) do NOT call submit_my_leave or any call_host_api "
-                "mutation — explain that Chat is advisory and direct them to "
+                + V("t_rx_copy_no_submit_leave")
                 + V("t_agent_leave_request_lifecycle_or_my")
                 + V("t_never_create_leave_record_that_needs")
                 + V("t_hr_admin_only_for_salary_compensation")
-                + "/ basic pay / راتبي call get_my_profile (or resolve_entity / "
-                "get_employee for a named coworker) — NEVER list_my_payslips for "
+                + V("t_rx_copy_basic_pay_route")
                 + V("t_a_contractual_salary_figure_empty_payslips")
-                + "data\", and a CBAC deny (people:view_compensation) must be "
-                "stated plainly. Use list_my_payslips for net pay, take-home, "
+                + V("t_rx_copy_comp_deny_rule")
                 + V("t_last_month_s_pay_deductions_gosi")
-                + "Do NOT use the organisation-wide list endpoints "
-                "(list_employees, list_leave_records, …) for a first-person "
-                "request — they return the whole population and would expose "
+                + V("t_rx_copy_no_org_lists")
                 + V("t_other_employees_data")
             )
     else:
@@ -369,7 +364,9 @@ def _build_grounding_directive(api_catalog: list | None) -> str:
     if has_analyze:
         lines += [
             "1. For ANY distribution, breakdown, or 'how many X are Y' question, "
-            "   use an `analyze_*` endpoint (e.g. `analyze_employees`) — NEVER count "
+            "   use an `analyze_*` endpoint "
+            + V("t_rx_copy_analyze_employees")
+            + "— NEVER count "
             "   rows from a `list_*` result. List endpoints are paginated and return "
             "   at most 100 rows; counting them gives WRONG totals. "
             + V("t_never_paste_raw_employee_salary_rows")
@@ -466,7 +463,7 @@ def _build_access_section(instance_config: dict | None) -> str:
 #: frontend renders assistant markdown richly (tables, syntax-highlighted
 #: code, live mermaid diagrams, KaTeX math, figure captions) — the model must
 #: know it can DRAW diagrams and format content instead of saying it cannot.
-RENDERING_CAPABILITIES = V("t_rich_content_rendering_your_replies_are")
+RENDERING_CAPABILITIES = LV("t_rich_content_rendering_your_replies_are")
 
 
 #: Compact always-on rendering directive (P4-03 progressive disclosure).
@@ -474,7 +471,7 @@ RENDERING_CAPABILITIES = V("t_rich_content_rendering_your_replies_are")
 #: ``rich-content-rendering`` skill folder's ``references/formatting-examples.md``
 #: and are loaded on demand.  This summary stays in the always-on prompt so the
 #: model still knows it can draw diagrams and format rich content.
-RENDERING_CAPABILITIES_SUMMARY = V("t_rich_content_rendering_your_replies_render")
+RENDERING_CAPABILITIES_SUMMARY = LV("t_rich_content_rendering_your_replies_render")
 
 
 def build_introspect_messages(

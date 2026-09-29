@@ -88,5 +88,6 @@ cp .ai-toolkit/decisions/0000-template.md .ai-toolkit/decisions/00NN-short-title
 | [0057](0057-pulse-declared-output.md) | Declared output is the only success (I1 output-fit; no invented export) | Proposed |
 | [0058](0058-pulse-catalog-request-write.md) | Catalog `kind: request` is the remaining effect when output-fit blocks | Proposed |
 | [0059](0059-pulse-named-pay-structure-get.md) | A pay-structure read is a named, closed GET; analytics stays headcount | Proposed |
+| [0060](0060-data-migration-studio.md) | Data Migration Studio: two destination kinds (Data Product vs typed cartridge) | Accepted |
 
 <!-- Add a row per ADR. Keep newest at the bottom. -->

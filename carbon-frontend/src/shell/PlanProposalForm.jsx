@@ -61,7 +61,7 @@ PlanProposalStep.propTypes = {
   index: PropTypes.number.isRequired,
 };
 
-function PlanProposalForm({ proposal, onCreate, onChange, onOpenTasks }) {
+function PlanProposalForm({ proposal, onCreate, onChange, onCancel, onOpenTasks }) {
   const { t } = useTranslation('ai');
   const steps = Array.isArray(proposal.steps) ? proposal.steps : [];
   const blocked = Number(proposal.blocked_count || 0);
@@ -166,6 +166,14 @@ function PlanProposalForm({ proposal, onCreate, onChange, onOpenTasks }) {
             >
               {t('plan.change')}
             </Button>
+            <Button
+              size="small"
+              variant="text"
+              disabled={locked || !onCancel}
+              onClick={onCancel}
+            >
+              {t('plan.cancel')}
+            </Button>
           </Stack>
         </Stack>
       )}
@@ -181,6 +189,7 @@ PlanProposalForm.propTypes = {
   }).isRequired,
   onCreate: PropTypes.func,
   onChange: PropTypes.func,
+  onCancel: PropTypes.func,
   onOpenTasks: PropTypes.func,
 };
 

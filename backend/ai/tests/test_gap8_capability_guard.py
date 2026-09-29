@@ -12,6 +12,8 @@ from ai.engine.cognition.turn.runner import (
     _filter_draft_tools,
     TurnPipelineRunner,
 )
+from ai.engine.cognition.turn.runner_util import catalog_for_page
+from ai.engine.cognition.turn.understand import catalog_prompt_lines
 
 
 # ── _is_capability_query ─────────────────────────────────────────────────────
@@ -88,6 +90,32 @@ def test_filter_includes_capability_tool_for_identity_domain():
 
 def test_filter_returns_none_for_none_tools():
     assert _filter_draft_tools(None, "what can you do", "general") is None
+
+
+def test_page_question_drops_the_access_catalog():
+    entries = [
+        {"name": "list_my_capabilities", "description": "apps the user can open"},
+        {"name": "search_knowledge", "description": "search"},
+    ]
+    page = "No course is open. Sections: (none)."
+    kept = catalog_for_page(entries, "what courses here and what to do", page)
+    assert [e["name"] for e in kept] == ["search_knowledge"]
+    _lines, allowed, _writes = catalog_prompt_lines(
+        "what courses here and what to do", kept, k=12,
+    )
+    assert "list_my_capabilities" not in allowed
+
+
+def test_capability_question_on_a_page_keeps_the_access_catalog():
+    entries = [{"name": "list_my_capabilities", "description": "apps"}]
+    kept = catalog_for_page(entries, "what can you do", "No course is open.")
+    assert kept == entries
+
+
+def test_empty_page_keeps_the_access_catalog():
+    entries = [{"name": "list_my_capabilities", "description": "apps"}]
+    kept = catalog_for_page(entries, "what courses here and what to do", "")
+    assert kept == entries
 
 
 def test_filter_does_not_drop_other_tools():

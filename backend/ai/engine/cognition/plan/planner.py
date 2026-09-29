@@ -1,3 +1,18 @@
+from ai.engine.host_ids import (
+    ID_APPROVE_ATTENDANCE_PERMISSION,
+    ID_CREATE_ATTENDANCE_PERMISSION,
+    ID_CREATE_EMPLOYEE,
+    ID_CREATE_LEAVE_RECORD,
+    ID_GET_MY_LEAVE_BALANCE,
+    ID_LIST_EMPLOYEES,
+    ID_LIST_LOANS,
+    ID_LIST_MY_ATTENDANCE_PERMISSIONS,
+    ID_LIST_MY_LEAVE,
+    ID_LIST_MY_LOANS,
+    ID_SUBMIT_MY_ATTENDANCE_PERMISSION,
+    ID_SUBMIT_MY_LEAVE,
+    ID_SUBMIT_MY_LOAN,
+)
 """
 SkillAwarePlanner — Agentic multi-step plan decomposition using skills.
 
@@ -7,7 +22,7 @@ Falls back to LLM decomposition if no skill matches, and to single-step for
 simple queries. Distinct from the SQL-focused MultiStepPlanner.
 """
 from ai.engine.cognition.phrase_tables import T
-from ai.engine.pack_vocab import V
+from ai.engine.pack_vocab import LV, V, live_pattern
 import json
 import logging
 import re
@@ -135,7 +150,7 @@ def _wants_explicit_task_creation(
 
 # ── LLM decompose prompt (agentic tool format, not SQL) ────────────────────────
 
-_DECOMPOSE_AGENT_PROMPT = V("t_task_plan_decompose_tool_catalog_rules")
+_DECOMPOSE_AGENT_PROMPT = LV("t_task_plan_decompose_tool_catalog_rules")
 
 
 # ── Pattern signals (reused from the SQL planner, simplified) ──────────────────
@@ -537,21 +552,21 @@ def _coerce_host_api_steps(
         # earlier, or still present if it somehow passed validation).
         if step.tool_name in catalog_names:
             api = step.tool_name
-            if api == "create_leave_record" and "submit_my_leave" in catalog_names:
-                api = "submit_my_leave"
+            if api == ID_CREATE_LEAVE_RECORD and ID_SUBMIT_MY_LEAVE in catalog_names:
+                api = ID_SUBMIT_MY_LEAVE
             if (
-                api == "create_attendance_permission"
-                and "submit_my_attendance_permission" in catalog_names
+                api == ID_CREATE_ATTENDANCE_PERMISSION
+                and ID_SUBMIT_MY_ATTENDANCE_PERMISSION in catalog_names
             ):
-                api = "submit_my_attendance_permission"
+                api = ID_SUBMIT_MY_ATTENDANCE_PERMISSION
             api = _rewrite_domain_api(api, domain, catalog_names)
             step.tool_name = "call_host_api"
             args = {"api_name": api, **{k: v for k, v in args.items() if k != "api_name"}}
-            if api == "submit_my_leave" and isinstance(args.get("body"), dict):
+            if api == ID_SUBMIT_MY_LEAVE and isinstance(args.get("body"), dict):
                 args["body"] = {
                     k: v for k, v in args["body"].items() if k != V("t_employee_4")
                 }
-            if api == "submit_my_attendance_permission" and isinstance(args.get("body"), dict):
+            if api == ID_SUBMIT_MY_ATTENDANCE_PERMISSION and isinstance(args.get("body"), dict):
                 args["body"] = {
                     k: v
                     for k, v in args["body"].items()
@@ -597,19 +612,19 @@ def _coerce_host_api_steps(
             # (Agent plans historically bound create_leave_record → /-records/
             # without  → HTTP 400; /me// is the governed self path).
             if (
-                candidate == "create_leave_record"
-                and "submit_my_leave" in catalog_names
+                candidate == ID_CREATE_LEAVE_RECORD
+                and ID_SUBMIT_MY_LEAVE in catalog_names
             ):
-                candidate = "submit_my_leave"
+                candidate = ID_SUBMIT_MY_LEAVE
                 body = args.get("body")
                 if isinstance(body, dict) and V("t_employee_4") in body:
                     body = {k: v for k, v in body.items() if k != V("t_employee_4")}
                     args["body"] = body
             if (
-                candidate == "create_attendance_permission"
-                and "submit_my_attendance_permission" in catalog_names
+                candidate == ID_CREATE_ATTENDANCE_PERMISSION
+                and ID_SUBMIT_MY_ATTENDANCE_PERMISSION in catalog_names
             ):
-                candidate = "submit_my_attendance_permission"
+                candidate = ID_SUBMIT_MY_ATTENDANCE_PERMISSION
                 body = args.get("body")
                 if isinstance(body, dict):
                     args["body"] = {
@@ -620,7 +635,7 @@ def _coerce_host_api_steps(
             rewritten = _rewrite_domain_api(candidate, domain, catalog_names)
             if rewritten != args.get("api_name"):
                 args["api_name"] = rewritten
-                if rewritten == "submit_my_attendance_permission" and isinstance(
+                if rewritten == ID_SUBMIT_MY_ATTENDANCE_PERMISSION and isinstance(
                     args.get("body"), dict,
                 ):
                     args["body"] = {
@@ -637,15 +652,15 @@ def _coerce_host_api_steps(
         step.tool_name = "call_host_api"
         coerced_api = candidate
         if (
-            candidate == "create_leave_record"
-            and "submit_my_leave" in catalog_names
+            candidate == ID_CREATE_LEAVE_RECORD
+            and ID_SUBMIT_MY_LEAVE in catalog_names
         ):
-            coerced_api = "submit_my_leave"
+            coerced_api = ID_SUBMIT_MY_LEAVE
         if (
-            candidate == "create_attendance_permission"
-            and "submit_my_attendance_permission" in catalog_names
+            candidate == ID_CREATE_ATTENDANCE_PERMISSION
+            and ID_SUBMIT_MY_ATTENDANCE_PERMISSION in catalog_names
         ):
-            coerced_api = "submit_my_attendance_permission"
+            coerced_api = ID_SUBMIT_MY_ATTENDANCE_PERMISSION
         coerced_api = _rewrite_domain_api(coerced_api, domain, catalog_names)
         new_args = {
             "api_name": coerced_api,
@@ -653,7 +668,7 @@ def _coerce_host_api_steps(
                 "api_name", "entity_name", "entity_type", "name", "query",
             )},
         }
-        if coerced_api == "submit_my_attendance_permission" and isinstance(
+        if coerced_api == ID_SUBMIT_MY_ATTENDANCE_PERMISSION and isinstance(
             new_args.get("body"), dict,
         ):
             new_args["body"] = {
@@ -694,24 +709,35 @@ def resolve_step_write_bodies(
             )
 
 
+def _has(text: str, needle: str) -> bool:
+    """Substring test. An empty pack string matches nothing."""
+    return bool(needle) and needle in text
+
+
 def _plan_domain(utterance: str) -> str:
     """Classify plan brief domain for API bind guards."""
     u = (utterance or "").casefold()
-    if V("t_loan_request") in u or re.search(r"\bloan\b", u):
-        if V("t_leave") not in u:
+    loan_word = live_pattern(LV("t_rx_loan_word")).search(u)
+    if _has(u, V("t_loan_request")) or loan_word:
+        if not _has(u, V("t_leave")):
             return V("t_loan_2")
-        # Mixed — prefer explicit process id
-        if V("t_loan_request") in u and V("t_leave_request") not in u:
+        if _has(u, V("t_loan_request")) and not _has(u, V("t_leave_request")):
             return V("t_loan_2")
-    if V("t_employee_onboarding") in u or "onboard" in u:
-        return "onboarding"
-    if V("t_attendance_permission_2") in u or V("t_attendance_permission") in u or V("t_إذن_حضور") in (utterance or ""):
+    onboard = V("t_rx_w_onboarding")
+    if _has(u, V("t_employee_onboarding")) or _has(u, V("t_rx_w_onboard")):
+        return onboard
+    if (
+        _has(u, V("t_attendance_permission_2"))
+        or _has(u, V("t_attendance_permission"))
+        or _has(utterance or "", V("t_إذن_حضور"))
+    ):
         return V("t_attendance")
-    if V("t_leave_request") in u or re.search(V("t_bleave_b_إجازة_اجازة"), utterance or "", re.I):
+    leave_re = V("t_bleave_b_إجازة_اجازة")
+    if _has(u, V("t_leave_request")) or (leave_re and re.search(leave_re, utterance or "", re.I)):
         return V("t_leave")
-    if V("t_payroll") in u:
+    if _has(u, V("t_payroll")):
         return V("t_payroll")
-    if V("t_gosi") in u or "wps" in u or "sif" in u:
+    if _has(u, V("t_gosi")) or _has(u, V("t_rx_w_wps")) or _has(u, V("t_rx_w_sif")):
         return V("t_gosi")
     return ""
 
@@ -720,27 +746,27 @@ def _rewrite_domain_api(
     api: str, domain: str, catalog_names: set[str],
 ) -> str:
     V("t_keep_leave_apis_off_loan_onboarding")
-    leave_only = {"submit_my_leave", "create_leave_record", "list_my_leave", "get_my_leave_balance"}
+    leave_only = {ID_SUBMIT_MY_LEAVE, ID_CREATE_LEAVE_RECORD, ID_LIST_MY_LEAVE, ID_GET_MY_LEAVE_BALANCE}
     if domain == V("t_loan_2") and api in leave_only:
-        if "submit_my_loan" in catalog_names:
-            return "submit_my_loan"
-        if "list_my_loans" in catalog_names:
-            return "list_my_loans"
-        if "list_loans" in catalog_names:
-            return "list_loans"
-    if domain == "onboarding" and api in leave_only:
-        if "create_employee" in catalog_names:
-            return "create_employee"
-        if "list_employees" in catalog_names:
-            return "list_employees"
+        if ID_SUBMIT_MY_LOAN in catalog_names:
+            return ID_SUBMIT_MY_LOAN
+        if ID_LIST_MY_LOANS in catalog_names:
+            return ID_LIST_MY_LOANS
+        if ID_LIST_LOANS in catalog_names:
+            return ID_LIST_LOANS
+    if domain and domain == V("t_rx_w_onboarding") and api in leave_only:
+        if ID_CREATE_EMPLOYEE in catalog_names:
+            return ID_CREATE_EMPLOYEE
+        if ID_LIST_EMPLOYEES in catalog_names:
+            return ID_LIST_EMPLOYEES
     if domain == V("t_attendance"):
-        if api in leave_only or api == "create_attendance_permission":
-            if "submit_my_attendance_permission" in catalog_names:
-                return "submit_my_attendance_permission"
-        if api == "approve_attendance_permission":
+        if api in leave_only or api == ID_CREATE_ATTENDANCE_PERMISSION:
+            if ID_SUBMIT_MY_ATTENDANCE_PERMISSION in catalog_names:
+                return ID_SUBMIT_MY_ATTENDANCE_PERMISSION
+        if api == ID_APPROVE_ATTENDANCE_PERMISSION:
             # ESS approve is Correspondence; drop admin PATCH from first-person plans
-            if "list_my_attendance_permissions" in catalog_names:
-                return "list_my_attendance_permissions"
+            if ID_LIST_MY_ATTENDANCE_PERMISSIONS in catalog_names:
+                return ID_LIST_MY_ATTENDANCE_PERMISSIONS
     return api
 
 

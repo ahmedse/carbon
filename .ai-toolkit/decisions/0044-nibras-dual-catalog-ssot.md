@@ -6,7 +6,7 @@
 
 ## Decision
 
-1. **Live Agent SSOT** is `backend/ai/engine/instances/nibras/instance.yaml` `api_catalog`.
+1. **Live Agent SSOT** is `domain_packs/nibras/instance.yaml` `api_catalog`.
 2. **Governance pack** `domain_packs/nibras/api_catalog.yaml`:
    - `capabilities:` own process fail-closed contracts (registry)
    - `tools:` must be a **subset** of instance api_catalog names
@@ -22,5 +22,7 @@
 ## Links
 
 - [domain_packs/nibras/README.md](../../domain_packs/nibras/README.md)
-- [instance.yaml](../../backend/ai/engine/instances/nibras/instance.yaml)
+- [instance.yaml](../../domain_packs/nibras/instance.yaml)
 - ADR-0017 (instance.yaml prompt config), ADR-0043 (four-view cockpit)
+
+**Note (2026-09-29 · ADR-0050):** the Agent SSOT file moved into the pack at `domain_packs/nibras/instance.yaml`; the loader resolves it only via `pack.yaml` and no longer reads `backend/ai/engine/instances/`.

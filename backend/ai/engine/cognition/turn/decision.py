@@ -191,6 +191,17 @@ def _confirm_call_api(confirm: Any) -> str:
     return str(confirm.get("api") or confirm.get("name") or "").strip()
 
 
+def _drop_catalog_names(spoken: str, names: list[str]) -> str:
+    """Remove catalog identifiers from a reply that is otherwise ready.
+
+    The command stays. A second model call is not spent to reword it.
+    """
+    cleaned = spoken
+    for token in names:
+        cleaned = cleaned.replace(token, " ")
+    return " ".join(cleaned.split()).strip(" -,:;.")
+
+
 def validate_decision(
     decision: Decision,
     *,
@@ -303,13 +314,21 @@ def validate_decision(
             continue
         named = sorted(t for t in (allowed_tools or ()) if spoken and t in spoken)
         if named:
-            rejections.append(Rejection(
-                index, cmd.op, "internal_name",
-                f"The reply names internal tools ({', '.join(named[:3])}). Emit the "
-                f"same op ({cmd.op}) again and reword only its text: say what can or "
-                "cannot be answered in the user's terms, without tool or catalog names.",
-            ))
-            continue
+            cleaned = _drop_catalog_names(spoken, named)
+            if not cleaned:
+                rejections.append(Rejection(
+                    index, cmd.op, "internal_name",
+                    f"The reply names internal tools ({', '.join(named[:3])}). Emit the "
+                    f"same op ({cmd.op}) again and reword only its text: say what can or "
+                    "cannot be answered in the user's terms, without tool or catalog names.",
+                ))
+                continue
+            if cmd.op == "answer":
+                cmd.text = cleaned
+            elif cmd.op == "clarify":
+                cmd.question = cleaned
+            else:
+                cmd.reason = cleaned
         out.append(cmd)
         if cmd.op == "call_tool" and list_fields is not None:
             supplied |= set(list_fields(cmd.name.strip()) or set())

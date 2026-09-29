@@ -1,5 +1,10 @@
 # Pulse QA Master Plan — Enterprise-Grade Evaluation
 
+> **Status:** HISTORICAL QA REFERENCE. Current scores and governing product
+> principles live only in `pulse-chat-deep-benchmark.canvas.tsx` (Ask) and
+> `pulse-tasks-agent-benchmark.canvas.tsx` (Plan & Tasks). Banks and dated
+> evidence remain valid inputs; this document is not a third scoreboard.
+>
 > **Owner:** Master Architect + QA Validator  
 > **Baseline:** 2026-09-03 · frontend 1,050 ✓ · backend 1,358 ✓  
 > **Methodology:** Test → Fix → Test → Validate cycles. Each cycle has entry/exit criteria.  

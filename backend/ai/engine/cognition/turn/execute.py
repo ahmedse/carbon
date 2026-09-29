@@ -7,7 +7,31 @@ Wave 8A: Broadcasts tool.started/completed/failed events to the studio
 event stream so the ActivityFeed can show what the agent *did*.
 """
 from __future__ import annotations
-from ai.engine.pack_vocab import V
+
+from ai.engine.host_ids import (
+    ID_ANALYZE_EMPLOYEES,
+    ID_CREATE_EMPLOYEE,
+    ID_CREATE_LEAVE_RECORD,
+    ID_GET_LEAVE_BALANCE,
+    ID_GET_MY_LEAVE_BALANCE,
+    ID_LIST_ATTENDANCE,
+    ID_LIST_ATTENDANCE_PERMISSIONS,
+    ID_LIST_LEAVE_ENTITLEMENTS,
+    ID_LIST_LEAVE_RECORDS,
+    ID_LIST_LOANS,
+    ID_LIST_LOAN_INSTALLMENTS,
+    ID_LIST_MY_ATTENDANCE,
+    ID_LIST_MY_ATTENDANCE_PERMISSIONS,
+    ID_LIST_MY_LEAVE,
+    ID_LIST_MY_LOANS,
+    ID_LIST_MY_PAYSLIPS,
+    ID_LIST_PAYSLIP_LINES,
+    ID_SUBMIT_MY_ATTENDANCE_PERMISSION,
+    ID_SUBMIT_MY_LEAVE,
+    ID_SUBMIT_MY_LOAN,
+    ID_UPDATE_EMPLOYEE,
+)
+from ai.engine.pack_vocab import V, copy_text, row_for
 from ai.engine.cognition.phrase_tables import T
 
 
@@ -27,16 +51,16 @@ logger = logging.getLogger("pulse.cognition.turn.execute")
 broadcast_run_event = None
 
 # Known HR → ESS twin map for self-service retries on host 403 (PV2-2C).
-_MY_API_TWINS: dict[str, str] = {
-    "list_payslip_lines": "list_my_payslips",
-    "list_leave_records": "list_my_leave",
-    "list_leave_entitlements": "list_my_leave",
-    "list_loans": "list_my_loans",
-    "list_loan_installments": "list_my_loans",
-    "list_attendance_permissions": "list_my_attendance_permissions",
-    "list_attendance": "list_my_attendance",
-    "get_leave_balance": "get_my_leave_balance",
-}
+_MY_API_TWINS = (
+    (ID_LIST_PAYSLIP_LINES, ID_LIST_MY_PAYSLIPS),
+    (ID_LIST_LEAVE_RECORDS, ID_LIST_MY_LEAVE),
+    (ID_LIST_LEAVE_ENTITLEMENTS, ID_LIST_MY_LEAVE),
+    (ID_LIST_LOANS, ID_LIST_MY_LOANS),
+    (ID_LIST_LOAN_INSTALLMENTS, ID_LIST_MY_LOANS),
+    (ID_LIST_ATTENDANCE_PERMISSIONS, ID_LIST_MY_ATTENDANCE_PERMISSIONS),
+    (ID_LIST_ATTENDANCE, ID_LIST_MY_ATTENDANCE),
+    (ID_GET_LEAVE_BALANCE, ID_GET_MY_LEAVE_BALANCE),
+)
 
 
 def find_my_api_twin(api_name: str, catalog: list | None) -> str | None:
@@ -49,9 +73,10 @@ def find_my_api_twin(api_name: str, catalog: list | None) -> str | None:
         for e in (catalog or [])
         if isinstance(e, dict) and e.get("name")
     }
-    mapped = _MY_API_TWINS.get(name)
-    if mapped and mapped in names:
-        return mapped
+    mapped = row_for(_MY_API_TWINS, name)
+    mapped_name = str(mapped or "")
+    if mapped_name and mapped_name in names:
+        return mapped_name
     # Heuristic: list_foo_bar → list_my_foo_bar / list_my_foos
     for prefix in ("list_", "get_", "submit_"):
         if not name.startswith(prefix):
@@ -145,15 +170,11 @@ def own_records_403_message(lang: str, api_name: str = "") -> str:
     # Allow callers to pass a user message as lang when they already detected.
     code = lang if lang in ("ar", "en") else detect_reply_language(lang or "")
     if code == "ar":
-        return (
-            "يمكنني فقط قراءة سجلاتك الخاصة — مثل قسائم راتبك عبر "
-            "list_my_payslips، أو إجازاتك وقروضك الذاتية. "
-            "لا أملك صلاحية قوائم الموارد البشرية على مستوى المؤسسة."
-        )
+        return copy_text("t_rx_copy_own_records_ar") or "Not authorized."
     return (
         V("t_i_can_only_read_your_own")
         + V("t_list_my_payslips_or_your_own")
-        + "I don't have access to organisation-wide HR lists."
+        + (copy_text("t_rx_copy_org_hr_lists") or "Not authorized.")
     )
 
 
@@ -541,20 +562,20 @@ def _narrate_tool(
         q = (a.get("query") or "").strip()
         return f"🔎 Searching every record for “{q}”…" if q else "🔎 Searching the records…"
     if name.startswith("call_host_api") or name in (
-        "submit_my_leave", "create_leave_record", "submit_my_loan",
-        "create_employee", "update_employee",
+        ID_SUBMIT_MY_LEAVE, ID_CREATE_LEAVE_RECORD, ID_SUBMIT_MY_LOAN,
+        ID_CREATE_EMPLOYEE, ID_UPDATE_EMPLOYEE,
     ):
         api = (a.get("api_name") or a.get("api") or name or "").strip()
         method = str(a.get("method") or "").strip().upper()
         friendly = {
-            "submit_my_leave": V("t_submitting_your_leave_request"),
-            "create_leave_record": V("t_submitting_a_leave_request"),
-            "get_my_leave_balance": V("t_checking_your_leave_balance"),
-            "list_my_leave": V("t_listing_your_leave_records"),
-            "submit_my_loan": V("t_submitting_your_loan_request"),
-            "create_employee": V("t_creating_an_employee_record"),
-            "update_employee": V("t_updating_the_employee_record"),
-            "submit_my_attendance_permission": V("t_submitting_an_attendance_permission"),
+            ID_SUBMIT_MY_LEAVE: V("t_submitting_your_leave_request"),
+            ID_CREATE_LEAVE_RECORD: V("t_submitting_a_leave_request"),
+            ID_GET_MY_LEAVE_BALANCE: V("t_checking_your_leave_balance"),
+            ID_LIST_MY_LEAVE: V("t_listing_your_leave_records"),
+            ID_SUBMIT_MY_LOAN: V("t_submitting_your_loan_request"),
+            ID_CREATE_EMPLOYEE: V("t_creating_an_employee_record"),
+            ID_UPDATE_EMPLOYEE: V("t_updating_the_employee_record"),
+            ID_SUBMIT_MY_ATTENDANCE_PERMISSION: V("t_submitting_an_attendance_permission"),
         }.get(api)
         if friendly:
             return f"✍️ {friendly}…"
@@ -568,7 +589,7 @@ def _narrate_tool(
             return f"📇 Fetching {api.removeprefix('list_').replace('_', ' ')}…"
         if api.startswith("get_"):
             return f"📄 Looking up {api.removeprefix('get_').replace('_', ' ')}…"
-        if api == "analyze_employees":
+        if api == ID_ANALYZE_EMPLOYEES:
             dim = a.get("dimension") or (a.get("query_params") or {}).get("dimension")
             return f"📊 Analysing {V("t_employees")} by {dim}…" if dim else "📊 Analysing the workforce…"
         return "📊 Checking your records…"
@@ -812,7 +833,7 @@ async def _execute_single_tool(
 
         # ── Self-heal: one bounded, read-only repair hop ────────────────
         # A lookup that missed by a naming hair ("leave_balance" when the
-        # live endpoint is "get_my_leave_balance") is retried once against
+        # live endpoint is ID_GET_MY_LEAVE_BALANCE) is retried once against
         # the capability that actually exists, instead of dead-ending on
         # "not found". Mutations are never repaired (RULE_21), and a repair
         # that also misses falls back to the original result so recovery

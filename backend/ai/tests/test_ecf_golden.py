@@ -22,7 +22,7 @@ from ai.engine.cognition.entity.contracts import grounded_refusal
 from ai.engine.cognition.entity.registry import load_descriptors
 from ai.engine.cognition.entity.resolver import resolve
 
-NIBRAS_YAML = Path(__file__).parent.parent / "engine/instances/nibras/instance.yaml"
+NIBRAS_YAML = Path(__file__).resolve().parents[3] / "domain_packs" / "nibras" / "instance.yaml"
 
 # In-memory population for metric golden cases (ECF-6). Mirrors the
 # KWT ≠ kuwaitization divergence that caused the real 55-vs-5 inconsistency.

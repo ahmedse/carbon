@@ -65,6 +65,8 @@ function AIWorkspaceHeader({
   linkedPlan = null,
   onOpenLinkedPlan,
   onDismissLinkedPlan,
+  onHome,
+  lockAsk = false,
 }) {
   const { t } = useTranslation('ai');
   const { token, userCapabilities } = useAuth();
@@ -117,7 +119,29 @@ function AIWorkspaceHeader({
           minHeight: 40,
         }}
       >
-        <PulseLogo size={20} showWordmark />
+        <Box
+          component="button"
+          type="button"
+          onClick={() => onHome?.()}
+          aria-label={t('pulseHome')}
+          data-testid="pulse-home"
+          sx={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            flexShrink: 0,
+            border: 0,
+            p: 0.25,
+            m: 0,
+            bgcolor: 'transparent',
+            color: 'inherit',
+            cursor: 'pointer',
+            borderRadius: 1,
+            '&:hover': { bgcolor: 'action.hover' },
+            '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' },
+          }}
+        >
+          <PulseLogo size={20} showWordmark />
+        </Box>
         {showContinuityChip ? (
           <Chip
             size="small"
@@ -153,8 +177,10 @@ function AIWorkspaceHeader({
         </Typography>
         <PulseProcessSwitch
           variant="workspace"
-          value={workspaceFromMode(mode)}
+          value={lockAsk ? 'chat' : workspaceFromMode(mode)}
+          lockedIds={lockAsk ? ['tasks'] : []}
           onChange={(next) => {
+            if (lockAsk) return;
             onModeChange?.(next === 'tasks' ? 'agent' : 'chat');
           }}
         />
@@ -260,6 +286,7 @@ AIWorkspaceHeader.propTypes = {
   }),
   onOpenLinkedPlan: PropTypes.func,
   onDismissLinkedPlan: PropTypes.func,
+  onHome: PropTypes.func,
 };
 
 export default AIWorkspaceHeader;

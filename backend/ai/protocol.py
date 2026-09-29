@@ -478,6 +478,12 @@ class ChatRequest:
     process_mode: str = "ask"
     # Client opt-in (Pulse status-bar switch): denser Thought panel. Default off.
     dense_thinking: bool = False
+    # True only when the Plan draft's Change control sent this message.
+    plan_change: bool = False
+    # True only when the Plan draft's Cancel control sent this message.
+    plan_cancel: bool = False
+    # Host page facts (Moodle course snapshot). Transport, not the user message.
+    page_context: str = ""
 
 
 @dataclass

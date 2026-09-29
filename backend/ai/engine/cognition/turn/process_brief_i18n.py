@@ -22,7 +22,8 @@ STEP_LABELS: dict[str, tuple[str, str]] = {
 
 def any_needle(text: str, needles: tuple[str, ...]) -> bool:
     raw = text or ""
-    return any(n in raw for n in needles)
+    # Empty is not a match. A pack that lacks the needle must not hit every utterance.
+    return any(n and str(n) in raw for n in needles)
 
 
 def has_arabic_script(text: str) -> bool:

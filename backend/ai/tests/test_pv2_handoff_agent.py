@@ -32,6 +32,7 @@ from ai.engine.cognition.turn.handoff_agent import (
     merge_slots,
     missing_slots_for_chat,
     plan_has_mutating_host_api,
+    carry_handoff_slots,
     resolve_ess_write_from_brief,
     seed_slots_into_state,
 )
@@ -166,6 +167,101 @@ def test_incomplete_loan_clarifies_and_named_leave_dates_bind():
     )
 
 
+def test_plan_brief_is_the_bound_write_not_the_last_chip():
+    from ai.engine.cognition.turn.handoff_agent import brief_from_write_slots
+
+    brief = brief_from_write_slots(
+        "submit_my_leave",
+        {
+            "leave_type": "annual",
+            "start_date": "2026-10-04",
+            "end_date": "2026-10-05",
+            "days": 2,
+        },
+    )
+    assert "annual" in brief
+    assert "leave" in brief
+    assert "2026-10-04" in brief
+    assert "2" in brief
+    outcome = build_chat_write_handoff(
+        api_name="submit_my_leave",
+        slots={
+            "leave_type": "annual",
+            "start_date": "2026-10-04",
+            "end_date": "2026-10-05",
+            "days": 2,
+        },
+        user_message="Make it 2 days.",
+    )
+    plan = next(a for a in outcome.actions if a.get("panel") == "plan")
+    assert plan["brief"].startswith("I want")
+    assert plan["draft"]["leave_type"] == "annual"
+    assert plan["label"] == "Switch to Plan"
+
+
+def test_a_note_with_no_tool_is_not_a_plan():
+    from ai.engine.cognition.turn.plan_proposal import is_shown_draft, proposal_payload
+
+    note = {
+        "steps": [{
+            "step_id": 1,
+            "intent": "Ask the user to clarify — the message is too brief",
+            "tool_name": "",
+        }],
+    }
+    assert is_shown_draft(note, single_read=True) is False
+    assert proposal_payload(note, brief="yes go", single_read=True) is None
+
+
+def test_user_weekday_beats_a_date_the_command_invented(monkeypatch):
+    from datetime import date
+
+    monkeypatch.setattr(
+        "django.utils.timezone.localdate",
+        lambda: date(2026, 9, 28),
+    )
+    slots = carry_handoff_slots(
+        "submit_my_leave",
+        {
+            "leave_type": "annual",
+            "start_date": "2026-10-05",
+            "end_date": "2026-10-06",
+            "days": 2,
+        },
+        prior_slots={},
+        user_message="Make it 2 days.",
+        conversation_history=[
+            {"role": "user", "content": "I want to request annual leave starting next Sunday."},
+        ],
+    )
+    assert slots.get("leave_type") == "annual"
+    assert slots.get("start_date") == "2026-10-04"
+    assert slots.get("end_date") == "2026-10-05"
+    assert slots.get("days") == 2
+
+
+def test_handoff_card_keeps_slots_the_conversation_already_held():
+    slots = carry_handoff_slots(
+        "submit_my_leave",
+        {},
+        prior_slots={},
+        user_message="Make it 2 days.",
+        conversation_history=[
+            {"role": "user", "content": "I want to request annual leave starting next Sunday."},
+            {"role": "assistant", "content": "How many days of annual leave do you want?"},
+        ],
+    )
+    assert slots.get("leave_type") == "annual"
+    assert slots.get("days") == 2
+    outcome = build_chat_write_handoff(
+        api_name="submit_my_leave",
+        slots=slots,
+        user_message="Make it 2 days.",
+    )
+    assert "annual" in outcome.text.lower()
+    assert "2" in outcome.text
+
+
 def test_merge_slots_and_brief():
     merged = merge_slots(
         {"loan_type": "emergency"},
@@ -210,7 +306,8 @@ def test_handoff_copy_en_and_ar_lists_slots():
     assert isinstance(en, ChatHandoffOutcome)
     assert "emergency" in en.text.lower()
     assert "3000" in en.text
-    assert "switch to Agent" in en.text
+    assert "switch to Plan" in en.text
+    assert "does not create tasks" in en.text
     assert "Chat does not submit" in en.text
     assert "approval" not in en.text.lower()
     assert en.tool_result.get("action") == "chat_handoff"
@@ -221,7 +318,7 @@ def test_handoff_copy_en_and_ar_lists_slots():
         slots={"loan_type": "emergency", "principal": 5000},
         user_message="أريد قرض طارئ ٥٠٠٠",
     )
-    assert "الوكيل" in ar.text or "Agent" in ar.text
+    assert "خطّة" in ar.text
     assert "قرض" in ar.text or "emergency" in ar.text.lower() or "5000" in ar.text
     assert "approval" not in ar.text.lower()
     assert "أتابع تقديم" not in ar.text
@@ -253,6 +350,8 @@ def test_plan_dial_withholds_host_reads_and_task_creation():
 
     tools = [
         {"function": {"name": "plan_task"}},
+        {"function": {"name": "edit_plan"}},
+        {"function": {"name": "approve_plan"}},
         {"function": {"name": "call_host_api"}},
         {"function": {"name": "resolve_entity"}},
         {"function": {"name": "search_knowledge"}},
@@ -527,7 +626,7 @@ async def test_return_chat_handoff_does_not_stage_host_runs():
     assert "chat_no_host_mutation" in (tools[0].get("guardrail_flags") or [])
     assert tools[0]["result"].get("action") == "chat_handoff"
     assert tools[0]["result"].get("requires_confirmation") is False
-    assert "switch to Agent" in (response.text or "")
+    assert "switch to Plan" in (response.text or "")
     assert "approval" not in (response.text or "").lower()
     run_objects.create.assert_not_called()
     step_objects.create.assert_not_called()

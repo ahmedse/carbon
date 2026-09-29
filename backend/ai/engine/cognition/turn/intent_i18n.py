@@ -1,7 +1,7 @@
 from __future__ import annotations
 from ai.engine.cognition.phrase_tables import T
-from ai.engine.pack_vocab import V
-V("t_arabic_needles_for_intent_leave_mutation")
+from ai.engine.pack_vocab import LV, V
+LV("t_arabic_needles_for_intent_leave_mutation")
 
 
 LEAVE_WANT_AR = T("turn/intent_i18n.py::LEAVE_WANT_AR")

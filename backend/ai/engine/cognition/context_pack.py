@@ -12,7 +12,7 @@ wording lives only in TaskBlock — never as a stage-local identity prompt
 from __future__ import annotations
 from ai.engine.cognition.phrase_tables import T
 
-from ai.engine.pack_vocab import V
+from ai.engine.pack_vocab import LV, V
 
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -92,9 +92,9 @@ You MAY suggest 2-3 concrete normalised candidates as a short bullet list, but A
 the user to confirm which one they meant. Do NOT fabricate data. Do NOT answer as if you
 found results. Do NOT mention tools, APIs, or fetching."""
 
-TASK_RECOVERY = V("t_task_tool_failure_recovery_explain_the")
+TASK_RECOVERY = LV("t_task_tool_failure_recovery_explain_the")
 
-TASK_SYNTHESIS = V("t_task_tool_result_synthesis_write_the")
+TASK_SYNTHESIS = LV("t_task_tool_result_synthesis_write_the")
 
 TASK_DRAFT = """TASK — Draft the next assistant reply for this Chat turn.
 Follow the identity, state, knowledge, and memory blocks above.
@@ -118,7 +118,7 @@ answer naturally."""
 
 # ── Agent plan / discovery TaskBlocks (PV2-2B) ─────────────────────────────
 
-TASK_DECOMPOSE = V("t_task_plan_decompose_decompose_the_user")
+TASK_DECOMPOSE = LV("t_task_plan_decompose_decompose_the_user")
 
 TASK_OBSERVE = """TASK — Observe tool result:
 Decide whether the tool result (plus any prior step results) fully answers the
@@ -141,7 +141,7 @@ Do not claim a host write succeeded unless a step result confirms receipt.
 Do not invent identity, amounts, or dates absent from the step results.
 Keep the reply concise and in the user's language when known."""
 
-TASK_DISCOVERY_CLARIFY = V("t_task_discovery_clarify_before_proposing_a")
+TASK_DISCOVERY_CLARIFY = LV("t_task_discovery_clarify_before_proposing_a")
 
 TASK_AGENT_PLAN_DRAFT = """TASK — Agent plan step draft:
 Execute the current plan step using the tools and bound args in the user message.

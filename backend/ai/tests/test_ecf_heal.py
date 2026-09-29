@@ -15,7 +15,7 @@ from ai.engine.cognition.entity.heal import (
     _NOMINATIONS_FILE,
 )
 
-NIBRAS_YAML = Path(__file__).parent.parent / "engine/instances/nibras/instance.yaml"
+NIBRAS_YAML = Path(__file__).resolve().parents[3] / "domain_packs" / "nibras" / "instance.yaml"
 
 _EMPLOYEES = [
     {"id": 9, "employee_no": "1009", "full_name": "Reena Sekaran", "name_en_given": "Reena", "name_en_family": "Sekaran", "name_ar_given": "", "name_ar_family": "", "civil_id": "", "is_active": True, "org_unit_id": 5},

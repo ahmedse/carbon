@@ -1,74 +1,51 @@
-// src/__tests__/AIDomainManifest.test.jsx
-// Phase 7A — domain manifest wiring: AIEmptyState renders manifest-driven
-// starter chips and forwards the exact starter args on click.
+// Empty Ask is a coworker introduction. Shortcuts are questions this user
+// can ask — not the first chips of every registered domain app.
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 
 import AIEmptyState from '../shell/AIEmptyState';
 
-const emissionsFixture = {
-  app_identifier: 'emissions',
-  display_name: 'Carbon Footprint',
-  supported_task_types: ['chat', 'dq_validate'],
-  entry_points: [],
+const otherBrand = {
+  app_identifier: 'finance',
+  display_name: 'Finance Operations',
   starter_prompts: {
     default: [
       {
-        label: 'What can I ask here?',
-        prompt: 'Tell me about my carbon footprint.',
+        label: 'Explain budget variance',
+        prompt: 'Explain how to analyze a budget variance for @{entity_name}.',
         task_type: 'chat',
-      },
-      {
-        label: 'Check data quality',
-        prompt: '',
-        task_type: 'dq_validate',
       },
     ],
   },
-  system_prompt_extension: true,
 };
 
-describe('AIEmptyState domain manifest starter chips (Phase 7A)', () => {
-  it('renders a Chip for each default starter prompt label', () => {
+describe('AIEmptyState coworker introduction', () => {
+  it('introduces Pulse and does not offer another brand’s catalog', () => {
     render(
-      <AIEmptyState manifests={[emissionsFixture]} onStartStarter={vi.fn()} />,
+      <AIEmptyState
+        onStartChat={vi.fn()}
+        manifests={[otherBrand]}
+        onStartStarter={vi.fn()}
+      />,
     );
 
-    expect(
-      screen.getByRole('button', { name: 'What can I ask here?' }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: 'Check data quality' }),
-    ).toBeInTheDocument();
-    expect(screen.getByText('Carbon Footprint')).toBeInTheDocument();
+    expect(screen.getByTestId('pulse-empty-state')).toHaveTextContent("I'm Pulse.");
+    expect(screen.queryByRole('button', { name: 'Explain budget variance' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'What can you help me with?' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Catch me up' })).toBeInTheDocument();
   });
 
-  it('calls onStartStarter with the exact starter args on chip click', () => {
+  it('starts a plain chat from a shortcut, with a real question', () => {
     const onStartStarter = vi.fn();
-    render(
-      <AIEmptyState manifests={[emissionsFixture]} onStartStarter={onStartStarter} />,
-    );
+    render(<AIEmptyState onStartStarter={onStartStarter} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'What can I ask here?' }));
-
+    fireEvent.click(screen.getByRole('button', { name: 'What can you help me with?' }));
     expect(onStartStarter).toHaveBeenCalledWith(
-      'emissions',
+      '',
       'chat',
-      'What can I ask here?',
-      'Tell me about my carbon footprint.',
+      'What can you help me with?',
+      'What can you help me with on this system?',
     );
-  });
-
-  it('falls back to the plain empty state when no manifests are present', () => {
-    render(
-      <AIEmptyState onStartChat={vi.fn()} manifests={[]} onStartStarter={vi.fn()} />,
-    );
-
-    expect(
-      screen.getByRole('button', { name: 'Start a Chat' }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole('button', { name: 'What can I ask here?' }),
-    ).not.toBeInTheDocument();
+    expect(onStartStarter.mock.calls[0][3]).not.toMatch(/@\{entity_name\}/);
   });
 });

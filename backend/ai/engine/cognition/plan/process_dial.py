@@ -1,7 +1,22 @@
 from __future__ import annotations
+
+from ai.engine.host_ids import (
+    ID_ATTENDANCE_PERMISSION,
+    ID_GET_MY_LEAVE_BALANCE,
+    ID_LEAVE_REQUEST,
+    ID_LEAVE_TYPE,
+    ID_LIST_MY_ATTENDANCE_PERMISSIONS,
+    ID_LIST_MY_LOANS,
+    ID_LOAN_REQUEST,
+    ID_LOAN_TYPE,
+    ID_PERMISSION_TYPE,
+    ID_SUBMIT_MY_ATTENDANCE_PERMISSION,
+    ID_SUBMIT_MY_LEAVE,
+    ID_SUBMIT_MY_LOAN,
+)
 from ai.engine.cognition.phrase_tables import T
-from ai.engine.pack_vocab import V
-V("t_process_dial_plan_materialization_hybrid_agent")
+from ai.engine.pack_vocab import LV, V, live_pattern
+LV("t_process_dial_plan_materialization_hybrid_agent")
 
 
 import logging
@@ -20,24 +35,24 @@ from ai.engine.cognition.plan.process_dial_i18n import (
 
 logger = logging.getLogger("pulse.cognition.plan.process_dial")
 
-PROCESS_LEAVE = V("t_leave_request_lifecycle")
+PROCESS_LEAVE = LV("t_leave_request_lifecycle")
 PROCESS_LEAVE_VERSION = "1.1"
-PROCESS_LOAN = V("t_loan_request_lifecycle")
+PROCESS_LOAN = LV("t_loan_request_lifecycle")
 PROCESS_LOAN_VERSION = "1.1"
-PROCESS_ATTENDANCE = V("t_attendance_permission_lifecycle")
+PROCESS_ATTENDANCE = LV("t_attendance_permission_lifecycle")
 PROCESS_ATTENDANCE_VERSION = "1.1"
 
 # Dates: no ``future: true`` — host ESS owns backdate window
 # (``leave_guards.MAX_BACKDATED_LEAVE_DAYS``). Agent must not invent dates.
 _LEAVE_SLOTS: list[dict[str, Any]] = [
-    {"field": "leave_type", "governed": True, "required": True},
+    {"field": ID_LEAVE_TYPE, "governed": True, "required": True},
     {"field": "start_date", "type": "date", "required": True},
     {"field": "end_date", "type": "date", "required": True},
     {"field": "days", "type": "days", "required": True},
 ]
 
 _LOAN_SLOTS: list[dict[str, Any]] = [
-    {"field": "loan_type", "governed": True, "required": True},
+    {"field": ID_LOAN_TYPE, "governed": True, "required": True},
     {"field": "principal", "type": "amount", "required": True},
     {"field": "term_months", "type": "months", "required": True},
     {"field": "interest_rate", "type": "rate", "required": False},
@@ -45,7 +60,7 @@ _LOAN_SLOTS: list[dict[str, Any]] = [
 ]
 
 _ATTENDANCE_SLOTS: list[dict[str, Any]] = [
-    {"field": "permission_type", "governed": True, "required": True},
+    {"field": ID_PERMISSION_TYPE, "governed": True, "required": True},
     {"field": "date", "type": "date", "future": True, "required": True},
     {"field": "hours", "type": "hours", "required": True},
 ]
@@ -62,9 +77,9 @@ def _attendance_brief(text: str) -> bool:
 
     raw = text or ""
     return bool(
-        has_any_word(raw, ("permission",))
+        has_any_word(raw, (V("t_rx_w_permission"),))
         or contains_any_phrase(
-            raw, (V("t_attendance_permission"), "short hours", V("t_early_leave")),
+            raw, (V("t_attendance_permission"), V("t_rx_w_short_hours"), V("t_early_leave")),
         )
         or any_needle(raw, ATTENDANCE_BRIEF_AR)
     )
@@ -214,11 +229,12 @@ def is_personal_attendance_brief(utterance: str) -> bool:
     if not _attendance_brief(text):
         return False
     # Bare "permission" without /استئذان context is too weak.
-    if re.search(r"\bpermission\b", text, re.I) and not re.search(
+    context = (
         V("t_b_attendance_hours_early_short_medical")
-        + V("t_استئذان_حضور_ساعة"),
-        text,
-        re.I,
+        + V("t_استئذان_حضور_ساعة")
+    )
+    if live_pattern(LV("t_rx_permission_word"), flags=re.I).search(text) and not (
+        context and re.search(context, text, re.I)
     ):
         return False
     return True
@@ -253,7 +269,7 @@ def materialize_leave_request_plan(
         intent=V("t_check_leave_balance_before_submitting"),
         tool_name="call_host_api",
         tool_args={
-            "api_name": "get_my_leave_balance",
+            "api_name": ID_GET_MY_LEAVE_BALANCE,
             "explanation": V("t_read_remaining_entitlement_before_the_leave"),
             "_process": {
                 **process_meta,
@@ -268,7 +284,7 @@ def materialize_leave_request_plan(
     )
 
     submit_args: dict[str, Any] = {
-        "api_name": "submit_my_leave",
+        "api_name": ID_SUBMIT_MY_LEAVE,
         "body": body,
         "explanation": (
             V("t_submit_personal_leave_via_leave_request")
@@ -287,11 +303,11 @@ def materialize_leave_request_plan(
     )
 
     grounded = [
-        k for k in ("leave_type", "start_date", "end_date", "days")
+        k for k in (ID_LEAVE_TYPE, "start_date", "end_date", "days")
         if body.get(k) not in (None, "")
     ]
     missing = [
-        k for k in ("leave_type", "start_date", "end_date", "days")
+        k for k in (ID_LEAVE_TYPE, "start_date", "end_date", "days")
         if k not in grounded
     ]
 
@@ -308,7 +324,7 @@ def materialize_leave_request_plan(
         )
 
     plan = Plan(
-        pattern="leave_request",
+        pattern=ID_LEAVE_REQUEST,
         steps=[balance_step, submit_step],
         synthesis_instruction=synthesis,
         source="process_dial",
@@ -318,7 +334,7 @@ def materialize_leave_request_plan(
             PlanPhase(
                 phase_id=0,
                 name="Prepare",
-                goal="Confirm entitlement",
+                goal=V("t_rx_copy_confirm_entitlement"),
                 strategy="sequential",
                 step_ids=[0],
             ),
@@ -351,12 +367,10 @@ def brief_requests_loan_submit(utterance: str) -> bool:
         V("t_أريد_قرض"), V("t_اريد_قرض"), V("t_تقديم_قرض"), V("t_طلب_قرض"), "قدّم طلب", "قدم طلب",
     )):
         return True
-    return bool(re.search(
-        r"\b(?:i\s+(?:want|need)|i'?d\s+like|apply|submit|request|file|raise)\b"
-        r".{0,64}\bloan\b",
-        text,
-        re.IGNORECASE | re.DOTALL,
-    ))
+    return bool(live_pattern(
+        LV("t_rx_loan_submit"),
+        flags=re.IGNORECASE | re.DOTALL,
+    ).search(text))
 
 
 def _materialize_loan_read_plan(brief: str):
@@ -374,7 +388,7 @@ def _materialize_loan_read_plan(brief: str):
             intent=V("t_check_existing_loans_read_only_no"),
             tool_name="call_host_api",
             tool_args={
-                "api_name": "list_my_loans",
+                "api_name": ID_LIST_MY_LOANS,
                 "explanation": V("t_the_brief_asked_to_review_loans"),
             },
             depends_on=[],
@@ -388,7 +402,7 @@ def _materialize_loan_read_plan(brief: str):
             intent=V("t_read_leave_balance_read_only"),
             tool_name="call_host_api",
             tool_args={
-                "api_name": "get_my_leave_balance",
+                "api_name": ID_GET_MY_LEAVE_BALANCE,
                 "explanation": "Parallel read the brief asked for; no write.",
             },
             depends_on=[],
@@ -461,7 +475,7 @@ def materialize_loan_request_plan(
         intent=V("t_check_existing_loans_before_submitting"),
         tool_name="call_host_api",
         tool_args={
-            "api_name": "list_my_loans",
+            "api_name": ID_LIST_MY_LOANS,
             "explanation": V("t_read_current_loans_before_staging_a"),
             "_process": {
                 **process_meta,
@@ -483,7 +497,7 @@ def materialize_loan_request_plan(
             intent=V("t_read_leave_balance_requested_alongside_the"),
             tool_name="call_host_api",
             tool_args={
-                "api_name": "get_my_leave_balance",
+                "api_name": ID_GET_MY_LEAVE_BALANCE,
                 "explanation": "Parallel read the brief asked for; no write.",
                 "_process": {
                     **process_meta,
@@ -500,7 +514,7 @@ def materialize_loan_request_plan(
     submit_id = len(prepare_steps)
 
     submit_args: dict[str, Any] = {
-        "api_name": "submit_my_loan",
+        "api_name": ID_SUBMIT_MY_LOAN,
         "body": body,
         "explanation": (
             V("t_submit_personal_loan_via_loan_request")
@@ -527,7 +541,7 @@ def materialize_loan_request_plan(
         agent_role="orchestrator",
     )
 
-    required = ("loan_type", "principal", "term_months", "start_date")
+    required = (ID_LOAN_TYPE, "principal", "term_months", "start_date")
     grounded = [k for k in required if body.get(k) not in (None, "")]
     missing = [k for k in required if k not in grounded]
 
@@ -549,7 +563,7 @@ def materialize_loan_request_plan(
         )
 
     plan = Plan(
-        pattern="loan_request",
+        pattern=ID_LOAN_REQUEST,
         steps=[*prepare_steps, submit_step],
         synthesis_instruction=synthesis,
         source="process_dial",
@@ -617,8 +631,8 @@ def materialize_attendance_permission_plan(
         intent=V("t_check_existing_attendance_permissions"),
         tool_name="call_host_api",
         tool_args={
-            "api_name": "list_my_attendance_permissions",
-            "explanation": "Read current permissions before staging a new one.",
+            "api_name": ID_LIST_MY_ATTENDANCE_PERMISSIONS,
+            "explanation": V("t_rx_copy_read_permissions"),
             "_process": {
                 **process_meta,
                 "process_step": "prepare",
@@ -632,7 +646,7 @@ def materialize_attendance_permission_plan(
     )
 
     submit_args: dict[str, Any] = {
-        "api_name": "submit_my_attendance_permission",
+        "api_name": ID_SUBMIT_MY_ATTENDANCE_PERMISSION,
         "body": body,
         "explanation": (
             V("t_submit_personal_attendance_permission_via")
@@ -651,7 +665,7 @@ def materialize_attendance_permission_plan(
         agent_role="orchestrator",
     )
 
-    required = ("permission_type", "date", "hours")
+    required = (ID_PERMISSION_TYPE, "date", "hours")
     grounded = [k for k in required if body.get(k) not in (None, "")]
     missing = [k for k in required if k not in grounded]
 
@@ -668,7 +682,7 @@ def materialize_attendance_permission_plan(
         )
 
     plan = Plan(
-        pattern="attendance_permission",
+        pattern=ID_ATTENDANCE_PERMISSION,
         steps=[list_step, submit_step],
         synthesis_instruction=synthesis,
         source="process_dial",
@@ -678,7 +692,7 @@ def materialize_attendance_permission_plan(
             PlanPhase(
                 phase_id=0,
                 name="Prepare",
-                goal="List existing permissions",
+                goal=V("t_rx_copy_list_permissions"),
                 strategy="sequential",
                 step_ids=[0],
             ),
@@ -703,7 +717,7 @@ def materialize_attendance_permission_plan(
 def _leave_submit_intent(brief: str, body: dict[str, Any]) -> str:
     """Human intent line — product language, no engine jargon."""
     parts = [V("t_submit_leave_request")]
-    lt = body.get("leave_type")
+    lt = body.get(ID_LEAVE_TYPE)
     if lt:
         parts.append(f"({lt})")
     start = body.get("start_date")
@@ -723,7 +737,7 @@ def _leave_submit_intent(brief: str, body: dict[str, Any]) -> str:
 
 def _loan_submit_intent(brief: str, body: dict[str, Any]) -> str:
     parts = [V("t_submit_loan_request")]
-    lt = body.get("loan_type")
+    lt = body.get(ID_LOAN_TYPE)
     if lt:
         parts.append(f"({lt})")
     principal = body.get("principal")
@@ -743,7 +757,7 @@ def _loan_submit_intent(brief: str, body: dict[str, Any]) -> str:
 
 def _attendance_submit_intent(brief: str, body: dict[str, Any]) -> str:
     parts = [V("t_submit_attendance_permission")]
-    pt = body.get("permission_type")
+    pt = body.get(ID_PERMISSION_TYPE)
     if pt:
         parts.append(f"({pt})")
     day = body.get("date")

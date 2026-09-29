@@ -1,29 +1,61 @@
-# Carbon domain vocabulary — starter skeleton.
-# P2-08 source-PR workers populate the real content later.
+# Carbon domain vocabulary — AASTMT onboarding leaf O1 (locked 2026-09-29).
 brand_name: Carbon
+tenant: AASTMT
 
 campuses:
-  - South Valley
-  - Smart Village
-  - Abu Qir
-  - Alamein
+  - name: South Valley
+    in_benchmark: O2
+    o1_expectation: declared or excluded with insufficient_data
+  - name: Smart Village
+    code: AASTMT-SV
+    in_benchmark: O1
+    o1_expectation: measured for electricity and diesel
+  - name: Abu Qir
+    in_benchmark: O3
+    o1_expectation: declared or excluded with insufficient_data
+  - name: Alamein
+    in_benchmark: O4
+    o1_expectation: declared or excluded with insufficient_data
+
+sources:
+  - name: Smart Village electricity
+    scope: 2
+    approach: location-based
+    activity_unit: kWh
+    benchmark: O1
+  - name: Smart Village diesel
+    scope: 1
+    activity_unit: litre
+    stream: generators or fleet, one stream
+    benchmark: O1
+
+scopes:
+  - id: 1
+    label: Scope 1 Direct
+  - id: 2
+    label: Scope 2 Indirect Energy
+  - id: 3
+    label: Scope 3 Value Chain
+    o1: outside
+
+quality_tiers:
+  - { tier: 1, label: Audited }
+  - { tier: 2, label: Verified }
+  - { tier: 3, label: Calculated }
+  - { tier: 4, label: Estimated, onboarding_minimum: true }
+  - { tier: 5, label: Proxy, may_be_stored: true, is_academy_footprint: false }
 
 concepts:
   - name: emission_factors
-    terms:
-      - emission factors
-      - list_emission_factors
+    terms: [emission factors, list_emission_factors]
   - name: ghg
-    terms:
-      - GHG
-      - GHG Protocol
-      - greenhouse gas
+    terms: [GHG, GHG Protocol, greenhouse gas]
   - name: footprint
-    terms:
-      - footprint
-      - carbon footprint
+    terms: [footprint, carbon footprint]
+  - name: onboarding_leaf
+    terms: [O1, Smart Village electricity, Smart Village diesel, onboarding]
 
 analysis_dimensions:
-  - supplier
-  - module
-  - category
+  - campus
+  - scope
+  - source

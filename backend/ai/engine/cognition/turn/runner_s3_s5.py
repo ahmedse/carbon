@@ -1,5 +1,9 @@
 """Extracted stage block from TurnPipelineRunner._run_metered."""
 from __future__ import annotations
+
+from ai.engine.host_ids import (
+    ID_LIST_MY_PAYSLIPS,
+)
 from ai.engine.pack_vocab import V
 
 import asyncio
@@ -38,6 +42,7 @@ from ai.engine.cognition.turn.runner_util import (
     _completed_tools_from_react,
     _fanout_skip_reason,
     _filter_draft_tools,
+    catalog_for_page,
     _is_declared_in_scope,
     _is_text_transform_request,
     _refusal_text,
@@ -109,7 +114,11 @@ async def run_s3_through_s5(
         from ai.engine.cognition.turn.capability import capability_surface
         _lines, _allowed, _writes = catalog_prompt_lines(
             st.user_message or "",
-            list(capability_surface(config, user_info).entries),
+            catalog_for_page(
+                list(capability_surface(config, user_info).entries),
+                st.user_message or "",
+                page_context,
+            ),
             k=12,
             context=catalog_context(conversation_history),
         )
@@ -367,7 +376,7 @@ async def run_s3_through_s5(
         _synth = None
         if state_ctx is not None and getattr(state_ctx, 'state', None) is not None:
             rows = list(state_ctx.state.last_results or [])
-            rows.append({'tool': 'call_host_api', 'api': 'list_my_payslips', 'digest': 'call_host_api list_my_payslips: count=0'})
+            rows.append({'tool': 'call_host_api', 'api': ID_LIST_MY_PAYSLIPS, 'digest': 'call_host_api list_my_payslips: count=0'})
             state_ctx.state.last_results = rows
     else:
         _catalog_render = None

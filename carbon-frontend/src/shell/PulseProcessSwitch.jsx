@@ -29,6 +29,7 @@ export default function PulseProcessSwitch({
   value,
   onChange,
   disabled = false,
+  lockedIds = [],
 }) {
   const { t } = useTranslation('ai');
   const items = variant === 'workspace' ? WORKSPACE_ITEMS : THREAD_ITEMS;
@@ -48,16 +49,17 @@ export default function PulseProcessSwitch({
     >
       {items.map(({ id, labelKey, ariaKey }) => {
         const selected = value === id;
+        const locked = disabled || lockedIds.includes(id);
         return (
           <Box
             key={id}
             component="button"
             type="button"
-            disabled={disabled}
+            disabled={locked}
             aria-label={t(ariaKey)}
             aria-pressed={selected}
             onClick={() => {
-              if (!disabled && value !== id) onChange?.(id);
+              if (!locked && value !== id) onChange?.(id);
             }}
             sx={{
               appearance: 'none',
@@ -72,9 +74,9 @@ export default function PulseProcessSwitch({
               fontWeight: selected ? 600 : 500,
               letterSpacing: '0.01em',
               lineHeight: 1.4,
-              cursor: disabled ? 'default' : 'pointer',
+              cursor: locked ? 'default' : 'pointer',
               fontFamily: 'inherit',
-              '&:hover': disabled
+              '&:hover': locked
                 ? undefined
                 : { bgcolor: selected ? 'action.selected' : 'action.hover' },
               '&:disabled': { opacity: 0.5 },

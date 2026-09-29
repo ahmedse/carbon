@@ -1,0 +1,6 @@
+# Questions about the activity the user has open.
+# A group matches only when every term is present.
+version: 1
+all_of_any:
+  - ["this lecture"]
+  - ["this activity"]

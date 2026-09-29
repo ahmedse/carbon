@@ -1,7 +1,7 @@
 # Nibras domain pack — governed People & Payroll processes
 
 **Brand:** Nibras (GOFSCO HRMS) · **Live Agent catalog SSOT:**  
-`backend/ai/engine/instances/nibras/instance.yaml`  
+`domain_packs/nibras/instance.yaml`  
 **This pack:** capabilities + process YAMLs + `tools:` parity with instance.
 
 ## Process inventory (vacation = leave)

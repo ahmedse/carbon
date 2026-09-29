@@ -25,6 +25,7 @@ local_settings.py
 # Secrets and configuration
 .env
 .env.bak*
+backend/.moodle_pulse_secret
 
 # Node.js-related files
 node_modules/

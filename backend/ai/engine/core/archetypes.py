@@ -2,9 +2,12 @@
 
 An archetype is a directory under `archetypes/<name>/` containing:
 - archetype.yaml         — metadata (name, version, description, icon_set, requires)
-- instance.template.yaml — Jinja2 template rendered into instances/<name>/instance.yaml
+- instance.template.yaml — Jinja2 template rendered to an instance config dict
 - playbook/              — optional system prompt blocks
 - domain/                — optional connector stubs
+
+Live instance YAML is owned by the domain pack (ADR-0050): resolved only via
+``domain_packs/<id>/pack.yaml`` → ``instance:`` (pack-relative path).
 """
 from __future__ import annotations
 
@@ -23,6 +26,11 @@ logger = logging.getLogger("pulse.core.archetypes")
 # ── Resolve archetypes root relative to the pulse project root ──
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 _ARCHETYPES_ROOT = _PROJECT_ROOT / "archetypes"
+# backend/ai/engine/core/archetypes.py → parents[4] = repo root
+_REPO_ROOT = Path(__file__).resolve().parents[4]
+_DOMAIN_PACKS_ROOT = _REPO_ROOT / "domain_packs"
+# Returned when id/manifest/path is invalid so load_instance_config yields {}.
+_MISSING_INSTANCE_PATH = _DOMAIN_PACKS_ROOT / ".missing" / "instance.yaml"
 
 
 # ── Data types ──────────────────────────────────────────────────────────────
@@ -168,7 +176,7 @@ def render_instance_config(
         extra_vars:     Extra Jinja2 template variables.
 
     Returns:
-        Parsed YAML dict ready to write to instances/<instance_name>/instance.yaml.
+        Parsed YAML dict (caller decides where to persist, if at all).
 
     Raises:
         FileNotFoundError: if the archetype or template is missing.
@@ -248,9 +256,55 @@ def validate_instance_config_or_raise(config: dict[str, Any]) -> None:
         raise ValueError(errs[0])
 
 
+def _is_single_path_segment(instance_id: str) -> bool:
+    """True when *instance_id* is a safe single path segment (pack directory name)."""
+    if not isinstance(instance_id, str) or not instance_id:
+        return False
+    if instance_id in (".", ".."):
+        return False
+    if "/" in instance_id or "\\" in instance_id:
+        return False
+    return Path(instance_id).name == instance_id
+
+
+def _path_inside_pack(candidate: Path, pack_dir: Path) -> bool:
+    """True when *candidate* resolves inside *pack_dir* (symlinks followed)."""
+    try:
+        candidate.resolve().relative_to(pack_dir.resolve())
+        return True
+    except (ValueError, OSError):
+        return False
+
+
 def get_instance_config_path(instance_name: str) -> Path:
-    """Return the path to an instance's YAML config file."""
-    return _PROJECT_ROOT / "instances" / instance_name / "instance.yaml"
+    """Resolve instance YAML via ``domain_packs/<id>/pack.yaml`` only.
+
+    The manifest ``instance`` key is a path relative to that pack directory.
+    Invalid id, missing manifest/key, or a path that escapes the pack returns a
+    non-existent path so :func:`load_instance_config` yields ``{}``.
+    """
+    if not _is_single_path_segment(instance_name):
+        return _MISSING_INSTANCE_PATH
+    pack_dir = _DOMAIN_PACKS_ROOT / instance_name
+    manifest_path = pack_dir / "pack.yaml"
+    if not manifest_path.is_file():
+        return _MISSING_INSTANCE_PATH
+    try:
+        data = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return _MISSING_INSTANCE_PATH
+    if not isinstance(data, dict):
+        return _MISSING_INSTANCE_PATH
+    rel = data.get("instance")
+    if not isinstance(rel, str) or not rel.strip():
+        return _MISSING_INSTANCE_PATH
+    rel = rel.strip()
+    if Path(rel).is_absolute():
+        return _MISSING_INSTANCE_PATH
+    candidate = (pack_dir / rel).resolve()
+    if not _path_inside_pack(candidate, pack_dir):
+        return _MISSING_INSTANCE_PATH
+    return candidate
 
 
 def validate_catalog_audiences(catalog: list | None) -> list[str]:

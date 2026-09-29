@@ -1,0 +1,36 @@
+# Closed topics for Ask. Matched by literal groups, not by a single word.
+# A group matches only when every term in it occurs in the message.
+# Lecture questions that merely mention a word are listed under allow in gold/l0.yaml.
+version: 1
+kinds:
+  - id: clinical_care
+    answer: I can't advise on a patient's care. I can only discuss what this course page contains.
+    all_of_any:
+      - [dose, patient]
+      - [dose, take]
+      - [prescribe]
+      - [prescription]
+      - [diagnos, patient]
+  - id: assignment_text
+    answer: I can't write or complete assessed work. I can only discuss what this course page contains.
+    all_of_any:
+      - [write, assignment]
+      - [write, essay]
+      - [write, reflection]
+      - [complete, assignment]
+      - [do my assignment]
+  - id: question_bank
+    answer: I can't show or write exam questions.
+    all_of_any:
+      - [question bank]
+      - [exam question]
+      - [mcq]
+  - id: mentorship_caseload
+    answer: I don't handle mentoring pairs, mentee lists, or changing a pairing. I can explain how the MedMentor pages work.
+    all_of_any:
+      - [who is my mentee]
+      - [my mentee]
+      - [mentoring pair]
+      - [medmentor, goals]
+      - [list my mentees]
+      - [change the mentoring pair]

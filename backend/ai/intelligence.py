@@ -533,6 +533,9 @@ class CarbonIntelligence:
         model: str | None = None,
         pulse_mode: str | None = None,
         dense_thinking: bool = False,
+        plan_change: bool = False,
+        plan_cancel: bool = False,
+        page_context: str = "",
     ):
         """Stream an answer as a generator of SSE-ready dict frames.
 
@@ -659,9 +662,17 @@ class CarbonIntelligence:
                     "workspace_chat",
                     conversation.task_payload_json or {},
                 )
+                if (conversation.app_identifier or "") == "moodle":
+                    pulse_mode = "ask"
+                    if not page_context:
+                        page_context = str(
+                            (conversation.task_payload_json or {}).get("page_context") or ""
+                        )
                 if pulse_mode in PULSE_DIAL_MODES:
                     payload = dict(conversation.task_payload_json or {})
                     payload["pulse_mode"] = pulse_mode
+                    if page_context:
+                        payload["page_context"] = page_context
                     conversation.task_payload_json = payload
                     conversation.save(update_fields=["task_payload_json"])
                 # Ask/Plan is structured transport metadata on ChatRequest.
@@ -686,6 +697,9 @@ class CarbonIntelligence:
                         )
                     ),
                     dense_thinking=bool(dense_thinking),
+                    plan_change=bool(plan_change),
+                    plan_cancel=bool(plan_cancel),
+                    page_context=str(page_context or ""),
                 )
 
                 partial_parts: list[str] = []
@@ -3882,17 +3896,20 @@ class CarbonIntelligence:
         )
         message = self._prepend_workspace_context(conversation, content)
         message = self._prepend_domain_context(scope, message)
+        stored = conversation.task_payload_json or {}
+        process_mode = str(stored.get("pulse_mode") or stored.get("pulse_process") or "ask")
+        page_context = ""
+        if (conversation.app_identifier or "") == "moodle":
+            process_mode = "ask"
+            page_context = str(stored.get("page_context") or "")
         chat_request = ChatRequest(
             message=message,
             conversation=conv_ctx,
             scope=scope,
             model=model,
             temperature=temperature,
-            process_mode=str(
-                (conversation.task_payload_json or {}).get("pulse_mode")
-                or (conversation.task_payload_json or {}).get("pulse_process")
-                or "ask"
-            ),
+            process_mode=process_mode,
+            page_context=page_context,
         )
         started_at = time.perf_counter()
         chat_response = self.provider.chat(chat_request)

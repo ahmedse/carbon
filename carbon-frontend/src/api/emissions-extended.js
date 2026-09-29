@@ -750,6 +750,25 @@ export async function fetchCoverage({ reporting_period, org_unit } = {}, token) 
  * Fetch the chairman overview payload (single round-trip for the Tier-1 screen).
  * GET /carbon/chairman/?reporting_period_id=<id>
  */
+/**
+ * Period calculation summary. Kilograms in the payload are the only figures
+ * the onboarding screen may show. This call does not create a calculation.
+ * GET /carbon/calculations/summary/?reporting_period_id=<id>
+ */
+export async function fetchPeriodCalculationSummary({ reporting_period_id } = {}, token) {
+  const params = new URLSearchParams();
+  if (reporting_period_id != null && reporting_period_id !== "") {
+    params.append("reporting_period_id", String(reporting_period_id));
+  }
+  const qs = params.toString();
+  return apiFetch(`${API_ROUTES.emissionsCalculationSummary}${qs ? `?${qs}` : ""}`, { token });
+}
+
+/** Read-only O1 checklist. The server decides the codes. This call writes nothing. */
+export async function fetchOnboardingO1(token) {
+  return apiFetch(API_ROUTES.emissionsOnboardingO1, { token });
+}
+
 export async function fetchChairmanData({ reporting_period_id } = {}, token) {
   const params = new URLSearchParams();
   if (reporting_period_id) params.append("reporting_period_id", reporting_period_id);

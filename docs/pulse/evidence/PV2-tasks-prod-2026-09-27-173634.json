@@ -1,0 +1,41 @@
+{
+  "generated_at": "2026-09-27T17:36:34.070885+00:00",
+  "tier": "persona_recheck",
+  "scope": "R6 only. R1-R5 and R7-R12 were not re-run.",
+  "previous": "PV2-tasks-prod-2026-09-27-124921.json",
+  "r6": {
+    "id": "R6",
+    "name": "Persona coverage",
+    "honest": "reached",
+    "note": "emp_1067 profile and leave matched the host and payroll runs stayed 403. emp_1712 direct reports matched the host row."
+  },
+  "cases": {
+    "personas": {
+      "my": {
+        "user": "emp_1067",
+        "pass": true,
+        "plan_id": "e451ae44-94b7-4d0a-be91-1f18bf7f93e7",
+        "status": "completed",
+        "tools": [
+          "get_my_profile",
+          "get_my_leave_balance"
+        ],
+        "host_misses": [],
+        "misses": [],
+        "seconds": 4.81
+      },
+      "team": {
+        "user": "emp_1712",
+        "pass": true,
+        "plan_id": "ee2c2a04-d888-479b-87c4-e952e279ef2e",
+        "status": "completed",
+        "tools": [
+          "list_my_direct_reports"
+        ],
+        "host_misses": [],
+        "misses": [],
+        "seconds": 3.37
+      }
+    }
+  }
+}

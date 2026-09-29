@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { apiFetch } from '../../../../api/api';
 import ExcellenceConsolePage from '../ExcellenceConsolePage';
+import '../../../../i18n';
 
 const overview = {
   head: 'abc1234def',
@@ -39,6 +40,24 @@ beforeEach(() => {
   apiFetch.mockReset();
   apiFetch.mockImplementation((url) => {
     if (url.startsWith('excellence/apps/')) return Promise.resolve(pulseApp);
+    if (url.startsWith('excellence/control-room')) {
+      return Promise.resolve({
+        domains: [
+          { id: 'pulse', instance: 'nibras' },
+          { id: 'nibras', instance: 'gofsco' },
+        ],
+        boards: { readiness: { columns: ['correct'] }, actualization: { columns: ['live'] } },
+        rows: {
+          pulse: [{ id: 'ask', owner: 'pulse-master' }],
+          nibras: [{ id: 'people', owner: 'nibras-master' }],
+        },
+        cells: {
+          pulse: { readiness: { ask: { correct: { state: 'fail', reading: 'Continuity failed', proof: 'C1', limit: 'One pass is not enough', action: 'Rerun', observed_at: '2026-09-26' } } }, actualization: { ask: { live: { state: 'unmeasured', reading: '', proof: '', limit: '', action: '', observed_at: '' } } } },
+          nibras: { readiness: { people: { correct: { state: 'partial', reading: 'Staff gate', proof: 'NSR-9', limit: 'Not payroll', action: 'Keep separate', observed_at: '2026-09-21' } } }, actualization: { people: { live: { state: 'reached', reading: 'Staff journeys', proof: 'NSR-9', limit: 'Staff only', action: 'Do not reuse', observed_at: '2026-09-21' } } } },
+        },
+        definitions: [{ id: 'readiness', group: 'boards' }],
+      });
+    }
     if (url.startsWith('excellence/overview')) return Promise.resolve(overview);
     return Promise.resolve({ version: 1, rungs: [] });
   });
@@ -49,6 +68,7 @@ function renderAt(path) {
     <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route path="/admin/excellence" element={<ExcellenceConsolePage />} />
+        <Route path="/admin/excellence/:context/cells/:board/:row/:column" element={<ExcellenceConsolePage />} />
         <Route path="/admin/excellence/:context" element={<ExcellenceConsolePage />} />
         <Route path="/admin/excellence/:context/:app" element={<ExcellenceConsolePage />} />
       </Routes>
@@ -57,12 +77,11 @@ function renderAt(path) {
 }
 
 describe('Excellence console', () => {
-  it('opens as a window on the framework', async () => {
+  it('opens as a domain catalogue', async () => {
     renderAt('/admin/excellence');
-    expect(await screen.findByText(/quality framework/i)).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'View Pulse' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'View Nibras' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'View Read the standard' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Pulse' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Nibras' })).toBeTruthy();
+    expect(screen.queryByText('fragile')).toBeNull();
   });
 
   it('opens Pulse ladder with open cell and weakest-aspect copy', async () => {
@@ -72,13 +91,13 @@ describe('Excellence console', () => {
     expect(screen.getByText(/Weakest: Secure/i)).toBeTruthy();
   });
 
-  it('opens the Pulse product page with coverage before coworker maturity', async () => {
+  it('opens the Pulse scoreboard and a cell page', async () => {
     const user = userEvent.setup();
     renderAt('/admin/excellence');
-    await screen.findByRole('button', { name: 'View Pulse' });
-    await user.click(screen.getByRole('button', { name: 'View Pulse' }));
-    expect(await screen.findByText(/weakest of nine aspects/i)).toBeTruthy();
-    expect(screen.getByText(/Pulse coworker maturity/i)).toBeTruthy();
-    expect(screen.getByText('Understands · not mapped')).toBeTruthy();
+    await user.click(await screen.findByRole('button', { name: 'Pulse' }));
+    expect(await screen.findByRole('tab', { name: 'Readiness' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Ask Correct Fail' }));
+    expect(await screen.findByText('Continuity failed')).toBeTruthy();
+    expect(screen.getByText(/does not borrow a neighboring cell/i)).toBeTruthy();
   });
 });

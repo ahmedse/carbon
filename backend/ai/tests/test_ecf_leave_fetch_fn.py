@@ -31,7 +31,7 @@ from ai.host_executor import (
     _people_entity_scope_lookup,
 )
 
-NIBRAS_YAML = Path(__file__).parent.parent / "engine/instances/nibras/instance.yaml"
+NIBRAS_YAML = Path(__file__).resolve().parents[3] / "domain_packs" / "nibras" / "instance.yaml"
 
 
 def _nibras_config() -> dict:

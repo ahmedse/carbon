@@ -95,7 +95,7 @@ DEPLOY_VERIFY=docker exec <container> grep -c <marker> /app/<path>  ← must be 
 
 ## ARCHITECTURE — Django Apps
 # Core platform apps (NEVER import emissions):
-ARCH_CORE_APPS=accounts, core, catalog, mdm, dq, dataschema, connections, evidence, importexport
+ARCH_CORE_APPS=accounts, core, catalog, mdm, dq, dataschema, connections, evidence, importexport, inbound
 # Hosted apps (may import core apps, never the reverse):
 ARCH_HOSTED_APPS=emissions, people, healthy
 # Planned hosted apps (design / scaffold):
@@ -133,7 +133,7 @@ ARCH_ADMIN_GROUP=admins_group
 
 RULE_1=Tenant model/code is FULLY removed. Do NOT reintroduce tenant, multi-tenancy, or tenant_id anywhere.
 RULE_2=Project model is FULLY removed (replaced by OrgUnit in mdm). Do NOT reintroduce Project.
-RULE_3=Core apps (accounts, core, catalog, mdm, dq, dataschema, connections, evidence, importexport) MUST NOT import from emissions. Emissions may import core.
+RULE_3=Core apps (accounts, core, catalog, mdm, dq, dataschema, connections, evidence, importexport, inbound) MUST NOT import from emissions or other hosted apps. Hosted apps may import core. inbound must not import people.
 RULE_4=API prefix is /carbon-api/ (config/urls.py). All backend routes are under this prefix.
 RULE_5=Frontend routes are ABSOLUTE and namespace-prefixed (/people/*, /my/*, /team/*, /carbon/*, /admin/*, /catalog/*, /dq/*, /settings, /help, /emissions). VITE_BASE (router basename) MUST stay "/" — App.jsx already carries the namespace prefixes, so any non-/ basename would double-prefix and 404. Dev entry URL is http://localhost:5179/ (NOT /carbon/ unless opening the emissions Carbon studio). manage.sh status/start/health MUST print the URL derived from VITE_BASE.
 RULE_6=Pulse is IN-HAND, vendored under backend/ai/engine/ (stateless engine only — agent/llm/cognition/core). Pulse holds NO memory, does NO learning, stores NO graphs. All durable AI state (conversations, knowledge, memory, feedback, graphs) is Carbon-owned via Django apps in backend/ai/. NO separate AI database: durable state → Carbon Postgres; transient/queue state → Redis.

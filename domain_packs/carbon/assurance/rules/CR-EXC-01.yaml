@@ -1,0 +1,23 @@
+id: CR-EXC-01
+journey: INV
+meaning: >
+  exclusion_reason is one of not_material, insufficient_data,
+  out_of_boundary, other. other requires non-empty notes. During O1 the
+  expected reason for South Valley, Abu Qir, and Alamein, when they are
+  excluded, is insufficient_data. Scope 3 is not excluded as not_material
+  just to finish onboarding.
+source: backend/emissions/models.py InventorySourceStatus.EXCLUSION_REASON_CHOICES
+owner: carbon-inventory-lead
+failure: A campus is dropped with no status, or excluded with reason other and empty notes, or Scope 3 is marked not_material without a recorded review.
+validation: >
+  Status excluded requires exclusion_reason. Reason other requires notes.
+  Status declared has a null exclusion_reason. O1 does not require the other
+  campuses to be excluded; declared is allowed.
+implementation: >
+  Process step cover_or_exclude is human_only, with campus_data_owner and
+  inventory_lead as distinct roles. Host screen inventory coverage.
+confidence: high-code
+catalogue: planned
+residual: >
+  not_material is a legal reason later. It is not the O1 default. Using it
+  in O1 fails this rule.

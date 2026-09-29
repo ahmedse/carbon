@@ -4,8 +4,30 @@ Resolve renderers by ``kind`` / ``empty_render`` from the instance catalog,
 not by hard-coded ``api_name`` branches in the runner.
 """
 from __future__ import annotations
+
+from ai.engine.host_ids import (
+    ID_GET_MY_LEAVE_BALANCE,
+    ID_LEAVE_HISTORY,
+    ID_LEAVE_TYPE,
+    ID_LIST_ATTENDANCE,
+    ID_LIST_LEAVE_ENTITLEMENTS,
+    ID_LIST_MY_ATTENDANCE,
+    ID_LIST_MY_ATTENDANCE_PERMISSIONS,
+    ID_LIST_MY_LEAVE,
+    ID_LIST_MY_LOANS,
+    ID_LIST_MY_PAYSLIPS,
+    ID_LOAN_TYPE,
+    ID_NO_ATTENDANCE_PERMISSIONS,
+    ID_NO_ATTENDANCE_ROWS,
+    ID_NO_BALANCE,
+    ID_NO_LEAVE_REQUESTS,
+    ID_NO_LOANS,
+    ID_NO_PAYSLIPS,
+    ID_PERMISSION_TYPE,
+    ID_SCOPE_PERMISSIONS,
+)
 from ai.engine.cognition.phrase_tables import T
-from ai.engine.pack_vocab import V
+from ai.engine.pack_vocab import LV, V, row_for
 
 
 import json
@@ -20,20 +42,20 @@ BALANCE_APIS = T("turn/catalog_render.py::BALANCE_APIS")
 PAYSLIP_APIS = T("turn/catalog_render.py::PAYSLIP_APIS")
 
 # Fallback when the scoped catalog entry is not passed into the renderer.
-_API_RENDER_META: dict[str, dict[str, str]] = {
-    "get_my_leave_balance": {"kind": "balance", "empty_render": "no_balance_configured"},
-    "list_leave_entitlements": {"kind": "balance", "empty_render": "no_balance_configured"},
-    "list_my_leave": {"kind": "history", "empty_render": "no_leave_requests", "scope": "leave_history"},
-    "list_my_loans": {"kind": "history", "empty_render": "no_loans", "scope": V("t_loans")},
-    "list_my_payslips": {"kind": V("t_payslip_2"), "empty_render": "no_payslips", "scope": V("t_payslip_2")},
-    "list_attendance": {"kind": "history", "empty_render": "no_attendance_rows", "scope": V("t_attendance")},
-    "list_my_attendance": {"kind": "history", "empty_render": "no_attendance_rows", "scope": V("t_attendance")},
-    "list_my_attendance_permissions": {
+_API_RENDER_ROWS = (
+    (ID_GET_MY_LEAVE_BALANCE, {"kind": "balance", "empty_render": ID_NO_BALANCE}),
+    (ID_LIST_LEAVE_ENTITLEMENTS, {"kind": "balance", "empty_render": ID_NO_BALANCE}),
+    (ID_LIST_MY_LEAVE, {"kind": "history", "empty_render": ID_NO_LEAVE_REQUESTS, "scope": ID_LEAVE_HISTORY}),
+    (ID_LIST_MY_LOANS, {"kind": "history", "empty_render": ID_NO_LOANS, "scope": LV("t_loans")}),
+    (ID_LIST_MY_PAYSLIPS, {"kind": LV("t_payslip_2"), "empty_render": ID_NO_PAYSLIPS, "scope": LV("t_payslip_2")}),
+    (ID_LIST_ATTENDANCE, {"kind": "history", "empty_render": ID_NO_ATTENDANCE_ROWS, "scope": LV("t_attendance")}),
+    (ID_LIST_MY_ATTENDANCE, {"kind": "history", "empty_render": ID_NO_ATTENDANCE_ROWS, "scope": LV("t_attendance")}),
+    (ID_LIST_MY_ATTENDANCE_PERMISSIONS, {
         "kind": "history",
-        "empty_render": "no_attendance_permissions",
-        "scope": "permissions",
-    },
-}
+        "empty_render": ID_NO_ATTENDANCE_PERMISSIONS,
+        "scope": ID_SCOPE_PERMISSIONS,
+    }),
+)
 
 
 def _unwrap_tool_payload(tool_output: Any) -> Any:
@@ -113,12 +135,12 @@ def resolve_render_meta(api_name: str, catalog_entry: dict | None = None) -> dic
         return None
     entry = catalog_entry if isinstance(catalog_entry, dict) else None
     if entry is None:
-        entry = _API_RENDER_META.get(api)
+        entry = row_for(_API_RENDER_ROWS, api)
     if not isinstance(entry, dict):
-        return _API_RENDER_META.get(api)
+        return row_for(_API_RENDER_ROWS, api)
     kind = str(entry.get("kind") or entry.get("render") or "").strip()
     if kind == "write" or not kind:
-        return _API_RENDER_META.get(api)
+        return row_for(_API_RENDER_ROWS, api)
     meta = {
         "kind": kind,
         "empty_render": str(entry.get("empty_render") or "").strip(),
@@ -130,23 +152,23 @@ def resolve_render_meta(api_name: str, catalog_entry: dict | None = None) -> dic
         meta["scope"] = "balance"
     elif api in PAYSLIP_APIS:
         meta["scope"] = V("t_payslip_2")
-    elif api == "list_my_leave":
-        meta["scope"] = "leave_history"
-    elif api == "list_my_loans":
+    elif api == ID_LIST_MY_LEAVE:
+        meta["scope"] = ID_LEAVE_HISTORY
+    elif api == ID_LIST_MY_LOANS:
         meta["scope"] = V("t_loans")
-    elif api in {"list_attendance", "list_my_attendance"}:
+    elif api in {ID_LIST_ATTENDANCE, ID_LIST_MY_ATTENDANCE}:
         meta["scope"] = V("t_attendance")
-    elif api == "list_my_attendance_permissions":
+    elif api == ID_LIST_MY_ATTENDANCE_PERMISSIONS:
         meta["scope"] = "permissions"
     if not meta["empty_render"]:
-        fallback = _API_RENDER_META.get(api) or {}
+        fallback = row_for(_API_RENDER_ROWS, api) or {}
         meta["empty_render"] = str(fallback.get("empty_render") or "").strip()
     return meta
 
 
 def _balance_row_chunk(row: dict, *, ar: bool) -> str | None:
     kind = (
-        _code_or_text(row.get("leave_type"))
+        _code_or_text(row.get(ID_LEAVE_TYPE))
         or _code_or_text(row.get("leave_type_label"))
     )
     if not kind:
@@ -211,9 +233,10 @@ def render_balance_rows(rows: list[dict], language: str, *, empty_render: str) -
                 lines.append(f"{who}")
             lines.append(f"- {chunk}")
         if not lines:
-            return empty_render_text(empty_render or "no_balance_configured", language)
-        prefix = "أرصدة الإجازات" if ar else V("t_leave_balances")
-        return f"{prefix}\n\n" + "\n".join(lines)
+            return empty_render_text(empty_render or ID_NO_BALANCE, language)
+        prefix = V("t_rx_copy_leave_balances_ar") if ar else V("t_leave_balances")
+        body = "\n".join(lines)
+        return f"{prefix}\n\n{body}" if prefix else body
 
     parts: list[str] = []
     for row in rows:
@@ -221,7 +244,7 @@ def render_balance_rows(rows: list[dict], language: str, *, empty_render: str) -
         if chunk:
             parts.append(chunk)
     if not parts:
-        return empty_render_text(empty_render or "no_balance_configured", language)
+        return empty_render_text(empty_render or ID_NO_BALANCE, language)
     # Markdown bullets — Chat MarkdownMessage renders a readable list instead of
     # one semicolon-glued paragraph (which looked oversized / washed out).
     # Plain prefix (not **bold**) so Chat never promotes the label to a big heading.
@@ -251,7 +274,7 @@ def render_history_rows(
 
 
 def _format_leave_history_row(row: dict, *, ar: bool) -> str:
-    kind = _code_or_text(row.get("leave_type")) or V("t_leave")
+    kind = _code_or_text(row.get(ID_LEAVE_TYPE)) or V("t_leave")
     status = _code_or_text(row.get("status") or row.get("correspondence_status"))
     start = row.get("start_date") or row.get("from_date")
     end = row.get("end_date") or row.get("to_date")
@@ -266,7 +289,7 @@ def _format_leave_history_row(row: dict, *, ar: bool) -> str:
 
 
 def _format_loan_history_row(row: dict, *, ar: bool) -> str:
-    kind = _code_or_text(row.get("loan_type")) or V("t_loan_2")
+    kind = _code_or_text(row.get(ID_LOAN_TYPE)) or V("t_loan_2")
     principal = row.get("principal")
     months = row.get("term_months")
     status = _code_or_text(row.get("status") or row.get("correspondence_status"))
@@ -301,7 +324,7 @@ def _format_attendance_row(row: dict, *, ar: bool) -> str:
 
 
 def _format_permission_row(row: dict, *, ar: bool) -> str:
-    kind = _code_or_text(row.get("permission_type")) or "permission"
+    kind = _code_or_text(row.get(ID_PERMISSION_TYPE)) or "permission"
     hours = row.get("hours")
     day = row.get("date")
     bits = [kind]
@@ -711,43 +734,43 @@ def render_catalog_read(
     empty_key = meta.get("empty_render") or ""
 
     if kind == "balance" or api in BALANCE_APIS:
-        return render_balance_rows(rows, language, empty_render=empty_key or "no_balance_configured")
+        return render_balance_rows(rows, language, empty_render=empty_key or ID_NO_BALANCE)
 
     if kind == V("t_payslip_2") or api in PAYSLIP_APIS:
         return render_history_rows(
             rows,
             language,
-            empty_render=empty_key or "no_payslips",
+            empty_render=empty_key or ID_NO_PAYSLIPS,
             scope_key=meta.get("scope") or V("t_payslip_2"),
             row_formatter=_format_payslip_row,
         )
 
     if kind == "history":
-        if api == "list_my_leave":
+        if api == ID_LIST_MY_LEAVE:
             return render_history_rows(
                 rows, language,
-                empty_render=empty_key or "no_leave_requests",
-                scope_key="leave_history",
+                empty_render=empty_key or ID_NO_LEAVE_REQUESTS,
+                scope_key=ID_LEAVE_HISTORY,
                 row_formatter=_format_leave_history_row,
             )
-        if api == "list_my_loans":
+        if api == ID_LIST_MY_LOANS:
             return render_history_rows(
                 rows, language,
-                empty_render=empty_key or "no_loans",
+                empty_render=empty_key or ID_NO_LOANS,
                 scope_key=V("t_loans"),
                 row_formatter=_format_loan_history_row,
             )
-        if api in {"list_attendance", "list_my_attendance"}:
+        if api in {ID_LIST_ATTENDANCE, ID_LIST_MY_ATTENDANCE}:
             return render_history_rows(
                 rows, language,
-                empty_render=empty_key or "no_attendance_rows",
+                empty_render=empty_key or ID_NO_ATTENDANCE_ROWS,
                 scope_key=V("t_attendance"),
                 row_formatter=_format_attendance_row,
             )
-        if api == "list_my_attendance_permissions":
+        if api == ID_LIST_MY_ATTENDANCE_PERMISSIONS:
             return render_history_rows(
                 rows, language,
-                empty_render=empty_key or "no_attendance_permissions",
+                empty_render=empty_key or ID_NO_ATTENDANCE_PERMISSIONS,
                 scope_key="permissions",
                 row_formatter=_format_permission_row,
             )

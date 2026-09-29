@@ -39,8 +39,8 @@ from ai.engine.cognition.state_store import ConversationState
 
 def nibras_cfg():
     path = (
-        Path(__file__).resolve().parents[1]
-        / "engine" / "instances" / "nibras" / "instance.yaml"
+        Path(__file__).resolve().parents[3]
+        / "domain_packs" / "nibras" / "instance.yaml"
     )
     return yaml.safe_load(path.read_text(encoding="utf-8"))
 

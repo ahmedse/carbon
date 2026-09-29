@@ -59,11 +59,243 @@ evidence → not done.
 | **GradeVance E2E QA** | **EduOS** | **DONE** | Seed 6 runs + LCT report · `docs/eduos/qa-evidence/E2E-SUMMARY.json` |
 | **GradeVance HITL P2** | **EduOS** | **ACTIVE** | Learning loop proven: edit→proposal→accept→bump→repin · `docs/eduos/qa-evidence/HITL-LEARNING-LOOP.json` · next: UI path + Phase C depth |
 | **PV2** (Pulse v2 Intelligence Contract, ADR-0047) | **Pulse** | **ACTIVE** | **20/20 · L0–L5 · 6B DONE 5/5 · ADR-0047 Accepted** · 4A still soaking |
-| **PV21** (Pulse 2.1, ADR-0049 Proposed) | **Pulse** | **ACTIVE** | Model understands, catalog executes. Flags default legacy/off. No live flip. No stack restart. |
+| **PV21** (Pulse 2.1, ADR-0049 Proposed) | **Pulse** | **ACTIVE** | Understanding defaults to v21. Tasks production 9/12, not ready (R6 reached 084800; R7 missing; night 2026-09-23 FAIL stays). Ask 9/10 on 1018 (Plan handoff; C8 still 4 of 19 over 4 s). L6/L7 not claimed. |
+| **DMS** (Data Migration Studio, ADR-0060 Accepted) | **inbound** (doors: People, Catalog) | **ACTIVE** | L4 Proven · 45/54 (last full `--no-db`). Rank 5 not a new level. `0a66aa44` CI run 36320936245 failed at Install dependencies, Run unit tests, and Fail-open lint. Ratchet skipped. Nightly runner unnamed. Series file absent. |
 
-**Multi-Master:** `.ai-toolkit/shared/multi-master.md` · seats · `docs/ops/MASTERS-COMMS.md` · RULE_30. · **This session seat: Pulse.**
+**Multi-Master:** `.ai-toolkit/shared/multi-master.md` · seats · `docs/ops/MASTERS-COMMS.md` · RULE_30. · **This session seat: Nibras.**
 
 **NSR principle (Nibras seat only):** every nav item under people/my/team is either architecture-thick + tested + E2E-QA’d for GOFSCO staff use, or demoted/hidden until it is.
+
+---
+
+## DMS — Data Migration Studio · PLAN 2026-09-28
+
+**Scope:** new core app `backend/inbound/**`, People `/people/import` + Catalog `/catalog/imports` upgrade, Data Product adapter, People typed cartridges.  
+**Docs:** ADR-0060 · `docs/migration/DATA-MIGRATION-STUDIO.md` · `docs/migration/SCREEN-SPEC-DMS.md`  
+**Canvas:** `data-migration-studio.canvas.tsx`  
+**Out of scope:** Pulse Chat/Agent commit, payroll/YTD load, Excel, Dataset Hub as employee store, `BulkImportWizard` rewrite, `import_gofsco_employees` replacement.  
+**Contracts:** `shared/{api-contract,security,data-layer,testing,definition-of-done,frontend-ready,design-system}` · ADR 0025, 0006, 0027, 0046, 0060 · RULE_3, RULE_27, RULE_30, RULE_35.  
+Human "go" 2026-09-28 installed `inbound` (COMMS 20260928-6). Human then ran DMS-2 (Catalog door) 2026-09-28.
+
+### Wave map
+
+| Wave | Phases | Owner | Status | Outcome |
+|------|--------|-------|--------|---------|
+| **W0** | DMS-0 | Nibras | DONE | ADR + spec + seats + COMMS |
+| **W1** | DMS-1 | Nibras | DONE | Domain-free pipe |
+| **W2** | DMS-2 · DMS-3 | Catalog · Nibras | **DONE** | Both destination kinds |
+| **W3** | DMS-4 | Nibras | DONE | Studio chrome (both doors) |
+| **W4** | DMS-5 · DMS-6 | Nibras | DONE | Leave balance then history |
+| **W5** | DMS-7 | Nibras | DONE | Commit / SoD / reject UX |
+| **W6** | DMS-8 | Nibras · Catalog | **DONE** | People SoD + Catalog product commit |
+
+**Audit 2026-09-28:** leave + snapshot tests live in `people/tests/test_inbound_cartridges.py`. Pipe tests are `inbound/tests/test_pipe.py` + `test_boundary.py` + `test_data_product_adapter.py`. Catalog `/catalog/imports` is inbound chrome (`kind=data_product`). `BulkImportWizard` / `ImportExportPage` kept as-is.
+
+### Phase DMS-0 — Toolkit: ADR + spec + ownership
+**Date:** 2026-09-28  
+**Worker Role:** master-architect  
+**Status:** DONE  
+**Owner:** Nibras  
+
+**Delivered:** ADR-0060 Accepted · `docs/migration/DATA-MIGRATION-STUDIO.md` · `docs/migration/SCREEN-SPEC-DMS.md` · seats Shared `inbound` · COMMS 20260928-1 · Active focus DMS · canvas `data-migration-studio` (actual People door screens).
+
+---
+
+### Phase DMS-1 — Backend: `inbound` pipe (no domain)
+**Date:** 2026-09-28  
+**Worker Role:** backend-worker  
+**Status:** DONE (human go 2026-09-28)  
+**Owner:** Nibras  
+**Depends on:** DMS-0 · Catalog ACK  
+
+#### Context
+Create the domain-free pipe. No People strings. No DataTable writes.
+
+#### Files to create
+- `backend/inbound/` app: `apps.py`, `models.py`, `registry.py`, `services.py`, `serializers.py`, `views.py`, `urls.py`, `permissions.py`, `admin.py`, `migrations/0001_initial.py`
+- `backend/inbound/tests/test_pipe.py`, `test_registry.py`, `test_api.py`
+
+#### Models (minimum)
+`InboundBatch` (status: `draft|mapped|smoked|committed|failed`, kind, target_key, file, sha256, encoding, delimiter, mapping JSON, smoke JSON, prepared_by, committed_by, prepared_at, committed_at).  
+`InboundTemplate` (name, kind, target_key, mapping JSON, owner).  
+No `DataTable` FK. No `Employee` FK.
+
+#### Do
+1. Register app in settings **only after ACK**. Add `inbound` to `ARCH_CORE_APPS` + RULE_3 list in `project.config.md`.
+2. `registry.py`: `register(kind, key, label, fields, smoke, commit)` + `get(key)`. Hosted apps will call this from their `ready()`. `inbound` must not import hosted apps (`./.ai-toolkit/scripts/import-boundary-lint.py` stays green).
+3. Service: store file, detect/override encoding, parse CSV on server, return sample (≤20 rows). Persist mapping. `smoke()` calls registry callable, writes envelope, **zero** adapter writes. `commit()` refuses unless status=`smoked` and user has `inbound:commit`; then calls registry commit.
+4. Caps: `inbound:prepare`, `inbound:commit` (CBAC). Prepare endpoints require prepare. Commit requires commit.
+5. API under `/carbon-api/inbound/` as in `docs/migration/SCREEN-SPEC-DMS.md`.
+6. Tests: encoding override; unmapped required field blocks smoke; commit without smoke → 409; same-user commit hook is a no-op until People SoD (document); registry unknown key → 400; import-boundary lint.
+
+#### DO NOT TOUCH
+`backend/people/**`, `backend/catalog/**`, `backend/importexport/**` (except url include in `config/urls.py`), `backend/ai/**`, `carbon-frontend/**`.
+
+#### Verification Gate
+```bash
+cd /home/ahmed/ws/carbon/backend && ../.venv/bin/python -m pytest inbound/tests -q
+./.ai-toolkit/scripts/import-boundary-lint.py
+../.venv/bin/python manage.py makemigrations inbound --check --dry-run
+```
+Expect: pytest pass · lint 0 new core→hosted imports · no extra migrations after 0001.
+
+---
+
+### Phase DMS-2 — Backend: Data Product adapter
+**Date:** 2026-09-28  
+**Worker Role:** backend-worker  
+**Status:** DONE  
+**Owner:** Catalog  
+**Depends on:** DMS-1  
+
+#### Context
+Kind `data_product` commits through existing `ImportService` / `BulkImportService`. Do not reimplement pandas parse.
+
+#### Do
+1. In `catalog` or a thin `inbound/adapters/dataschema.py` that imports `importexport`/`dataschema` (core→core OK): register `data_product` targets from active `DataTable`s the user may ingest.
+2. Map target fields = active `DataField`s. Smoke = parse + required + type; no `DataRow` insert.
+3. Commit = `ImportService.run_import` (or BulkImportService) with the saved mapping. Batch stores resulting `ImportJob.id` in smoke/commit JSON (no FK required in v1).
+4. Tests: smoke writes 0 `DataRow`; commit creates rows; user without catalog ingest cap → 403.
+5. Do **not** publish DatasetVersion in this phase.
+
+#### DO NOT TOUCH
+`backend/people/**`, `backend/ai/**`, People cartridges, `BulkImportWizard.jsx` behavior (may keep working).
+
+#### Verification Gate
+```bash
+cd /home/ahmed/ws/carbon/backend && ../.venv/bin/python -m pytest inbound/tests/test_data_product_adapter.py importexport/tests -q
+```
+
+---
+
+### Phase DMS-3 — Backend: People `EmployeeSnapshot` cartridge
+**Date:** 2026-09-28  
+**Worker Role:** backend-worker  
+**Status:** DONE  
+**Owner:** Nibras  
+**Depends on:** DMS-1  
+
+#### Context
+First typed object. Key `employee_no`. Manager is a second pass.
+
+#### Do
+1. `backend/people/inbound_cartridges.py` registers `people.employee_snapshot` in `PeopleConfig.ready()`.
+2. Declared fields only (not `_meta`): `employee_no`, `full_name`, name parts, `civil_id`, `org_unit` (code), `position` (title), `join_date`, `basic_salary`, `kuwaitization`, `nationality`, `gender`, `employment_type`, `rotation`, `manager_employee_no`, `is_active`. Lookups via `ReferenceValue` (ADR-0027).
+3. Smoke: project rows; unresolved org/ref/manager counted as reject; **no** Employee insert.
+4. Commit: upsert by `employee_no` through existing people create/update path; emit `GovernanceEvent`; second pass sets `manager`. Do not invent `join_date` or salary (reject if required and empty — salary is required on the model; missing salary = reject, do not use title inference from `import_gofsco_employees`).
+5. SoD: `prepared_by == committed_by` → 403 unless superuser.
+6. Tests: idempotent re-upload updates; manager second pass; smoke zero writes; SoD 403; no `DataRow` created.
+7. Leave `import_gofsco_employees` as-is.
+
+#### DO NOT TOUCH
+`backend/ai/**`, `backend/catalog/**`, `importexport` models, Pulse catalogs.
+
+#### Verification Gate
+```bash
+cd /home/ahmed/ws/carbon/backend && ../.venv/bin/python -m pytest people/tests/test_inbound_employee_snapshot.py inbound/tests -q
+./.ai-toolkit/scripts/import-boundary-lint.py
+```
+
+---
+
+### Phase DMS-4 — Frontend: studio chrome (list + map + smoke)
+**Date:** 2026-09-28  
+**Worker Role:** frontend-worker  
+**Status:** DONE (People + Catalog doors)  
+**Owner:** Nibras  
+**Depends on:** DMS-1 + (DMS-2 or DMS-3)  
+**Screen spec:** `docs/migration/SCREEN-SPEC-DMS.md` (both screens). Do not code without it.
+
+#### Do
+1. People: manifest item Configuration → Import. Routes `/people/import`, `/people/import/:id`. Breadcrumbs. Caps gate the item.
+2. Catalog: replace `/catalog/imports` body with the same list+Wizard chrome, `kind=data_product`. Add `/catalog/imports/:id`. Do not add a second sidebar row.
+3. Implement list + Wizard Upload/Map/Smoke per `docs/migration/SCREEN-SPEC-DMS.md`. Commit hidden until DMS-7 if needed.
+4. i18n in existing `people` + `catalog` en/ar files. No papaparse. `Wizard` + `FilteredDataGrid` + `SearchSelect` only.
+5. Vitest: forbidden, empty, map incomplete blocks Next, People list never shows a Data Product batch.
+
+#### DO NOT TOUCH
+`backend/ai/**`. Do not add `PLATFORM_STUDIOS` / `/migrate`. Do not put Import on My/Team.
+
+#### Verification Gate
+```bash
+cd /home/ahmed/ws/carbon/carbon-frontend && npx vitest run src/apps/people src/pages/catalog --reporter=dot
+```
+(Must include new Import tests; not a zero-test pass.)
+
+---
+
+### Phase DMS-5 — Backend: `LeaveOpeningBalance` cartridge
+**Worker Role:** backend-worker  
+**Status:** DONE  
+**Owner:** Nibras  
+
+Opening balance as-of a date. Natural key employee + year + leave_type. Sets
+`entitled_days` / `used_days` / `carried_forward`. Does not create `LeaveRecord`.
+Missing employee_no → reject. Tests + typed_gate. Policy/version left null (legacy).
+
+#### DO NOT TOUCH
+Leave self-service submit path. `import_gofsco_employees`. Pulse.
+
+#### Verification Gate
+```bash
+cd /home/ahmed/ws/carbon/backend && ../.venv/bin/python -m pytest people/tests/test_inbound_leave_balance.py -q
+```
+
+---
+
+### Phase DMS-6 — Backend: `LeaveHistory` cartridge + reconcile
+**Worker Role:** backend-worker  
+**Status:** DONE  
+**Owner:** Nibras  
+
+Conversion history: `LeaveRecord` approved/cancelled as mapped; **no** correspondence,
+**no** manager notify, **must not** increment entitlement `used_days`. Reconcile
+returns count of records + sum of days (informational). Loading both balance +
+history is allowed; balance wins. Tests prove used_days unchanged by history commit.
+
+#### Verification Gate
+```bash
+cd /home/ahmed/ws/carbon/backend && ../.venv/bin/python -m pytest people/tests/test_inbound_leave_history.py -q
+```
+
+---
+
+### Phase DMS-7 — Frontend: commit, SoD, reject download
+**Worker Role:** frontend-worker  
+**Status:** DONE (People Wizard Commit / SoD / rejects)  
+**Owner:** Nibras  
+**Screen spec:** `docs/migration/SCREEN-SPEC-DMS.md` Commit pane.
+
+Confirm dialog (SystemDialog). Hide Commit without `inbound:commit`. Show SoD
+403 honestly. Reject CSV download. Reconcile table after success. Vitest those
+states. i18n en+ar.
+
+#### Verification Gate
+```bash
+cd /home/ahmed/ws/carbon/carbon-frontend && npx vitest run src/apps/people src/pages/catalog --reporter=dot
+```
+
+---
+
+### Phase DMS-8 — QA: HR journey + product-path regression
+**Worker Role:** qa-validator  
+**Status:** DONE (People 2026-09-28 · Catalog item 4 live 2026-09-28)  
+**Owner:** Nibras  
+
+1. `emp_2378` prepare EmployeeSnapshot smoke (fixture CSV) → cannot commit.
+2. `emp_2400` commit → employees exist; re-upload updates, no dupes.
+3. Leave balance then history: used_days from balance only.
+4. Data Product path: smoke 0 rows; commit writes DataRows (Catalog fixture).
+5. Chat cannot commit (no new tool).
+6. Append `TASK-RESULTS.md` `## DMS-8` with commands + counts.
+
+No `manage.sh` start/kill unless STACK-HOLD. No Playwright live unless STACK-HOLD.
+
+**Nibras evidence 2026-09-28:** live batch 2 `dms8-sod.csv` IMP9010 — 2378 smoke + Commit disabled / API 403; 2400 commit 200 written=1; batch 3 re-upload update=1 no dupe (name DMS8 SoD Updated, salary 125.000). pytest inbound+cartridges **13 passed**. Live cast: both HR users have `inbound:commit` (`people_lead`); SoD is same-user 403, not a hidden Commit step.
+
+**Catalog evidence 2026-09-28:** batch **4** `dataschema.1` (prog) — ahmed smoke insert=1 / 0 DataRow; `emp_2378` commit **403** kind; `admin` commit **200** written=1 ImportJob 1; `DataRow` `{aa: live-dms2}`. compact-ui: eye opens studio.
+
+**Leave live 2026-09-29:** IMP9010 batch **5** opening balance (2378 smoke insert=1, self-commit 403, 2400 commit written=1, entitled 30 / used 4). Batch **6** history (insert=1, 403, 2400 written=1, record 2 days). `used_days` stayed 4.
 
 ---
 
@@ -634,8 +866,8 @@ cd /home/ahmed/ws/carbon && npx playwright test e2e/journeys/nibras-leave-approv
 
 ## PEC — Pulse Enterprise Control-plane (DISPATCHED 2026-09-16)
 
-**Canonical plan:** `docs/pulse/PULSE-ROADMAP.md` · **SSOT:** `docs/pulse/PULSE-CANONICAL.md`  
-**Gap map:** Cursor canvas `pulse-enterprise-control-plane.canvas.tsx`  
+**Canonical plan:** `docs/pulse/PULSE-ROADMAP.md` · **Architecture:** `docs/pulse/PULSE-CANONICAL.md`  
+**Current boards:** `pulse-chat-deep-benchmark.canvas.tsx` (Ask) · `pulse-tasks-agent-benchmark.canvas.tsx` (Plan & Tasks)  
 **Principle:** freeze the spine (boundary/PDP/Flight Director); ship metabolism + measurement.  
 **Contracts:** `shared/ai-contract.md`, `security.md`, `api-contract.md`, `testing.md`, `definition-of-done.md`  
 **Test partitioning:** MASTER DIRECTIVE above — never full-suite pytest / never bare vitest.

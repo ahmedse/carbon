@@ -152,6 +152,8 @@ export const API_ROUTES = {
   emissionsMyData: "carbon/my-data/",
   emissionsFactors: "carbon/factors/",
   emissionsCalculations: "carbon/calculations/",
+  emissionsCalculationSummary: "carbon/calculations/summary/",
+  emissionsOnboardingO1: "carbon/onboarding/o1/",
   emissionsRules: "carbon/rules/",
   emissionsVerification: "carbon/verifications/",
   emissionsGWP: "carbon/gwp/",

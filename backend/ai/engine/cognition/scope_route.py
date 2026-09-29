@@ -1,7 +1,11 @@
 from __future__ import annotations
+
+from ai.engine.host_ids import (
+    ID_LEAVE_REQUEST,
+)
 from ai.engine.cognition.phrase_tables import T
-from ai.engine.pack_vocab import V
-V("t_agent_discovery_scope_router_gate_briefs")
+from ai.engine.pack_vocab import LV, V
+LV("t_agent_discovery_scope_router_gate_briefs")
 
 
 from dataclasses import dataclass, field
@@ -81,7 +85,7 @@ class ScopeRoute:
 def _leave_cards(*, personal_primary: bool) -> list[dict[str, Any]]:
     return [
         {
-            "id": "leave_request",
+            "id": ID_LEAVE_REQUEST,
             "label": V("t_create_a_leave_request_plan"),
             "hint": "Stay in Agent — draft a reviewable plan you can edit before approving",
             "primary": personal_primary,
@@ -158,7 +162,7 @@ def scope_route(text: str, *, stage: str = "brief") -> ScopeRoute:
                 + V("t_and_approve_or_plan_a_leave")
                 + "Chat stays available if you only want advice."
             ),
-            recommended="leave_request",
+            recommended=ID_LEAVE_REQUEST,
             plannable=False,
             handoff_target="chat",
             cards=_leave_cards(personal_primary=True),

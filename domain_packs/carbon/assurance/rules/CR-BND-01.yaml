@@ -1,0 +1,24 @@
+id: CR-BND-01
+journey: INV
+meaning: >
+  The open ReportingPeriod (status open) has organizational_boundary set.
+  That boundary's consolidation_approach is equity_share, financial_control,
+  or operational_control. The boundary name states which of Smart Village,
+  South Valley, Abu Qir, and Alamein are inside. A campus left out is not
+  silently inside.
+source: backend/emissions/models.py OrganizationalBoundary.consolidation_approach; ReportingPeriod.organizational_boundary
+owner: carbon-inventory-lead
+failure: Staff quote a footprint while the open period has no boundary, or the approach is a free-text value outside the three choices.
+validation: >
+  Count ReportingPeriod rows with status open. Require exactly one (CR-PER-01).
+  Read its organizational_boundary_id. Fail when null. Read
+  consolidation_approach and fail when it is not one of the three model choices.
+implementation: >
+  Host screen /carbon/admin/boundaries. Process step name_boundary is human_only.
+  No management command creates the AASTMT boundary in this rule.
+confidence: high-code
+catalogue: planned
+residual: >
+  Org-unit rows for the four campuses are not seeded by this rule. The boundary
+  can name them in description until OrgUnit records exist. That description is
+  not a tonne figure.

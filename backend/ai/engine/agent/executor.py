@@ -22,12 +22,24 @@ logger = logging.getLogger("pulse.agent.executor")
 _api_cache: dict[str, tuple[float, dict]] = {}  # key → (expires_at, result)
 _API_CACHE_TTL = 60  # seconds
 
-def _cache_key(method: str, endpoint: str, params: dict | None) -> str | None:
-    """Return a cache key for GET requests, None for mutations."""
+def _cache_key(
+    method: str,
+    endpoint: str,
+    params: dict | None,
+    actor: str | None = None,
+) -> str | None:
+    """Return a cache key for GET requests, None for mutations.
+
+    The caller is part of the key. A GET stored for one caller is not
+    served to another. No caller id means no cache entry.
+    """
     if method.upper() != "GET":
         return None
+    who = str(actor or "").strip()
+    if not who:
+        return None
     p = json.dumps(params or {}, sort_keys=True)
-    return f"{endpoint}|{p}"
+    return f"{who}|{endpoint}|{p}"
 
 def _cache_get(key: str) -> dict | None:
     entry = _api_cache.get(key)
@@ -238,7 +250,9 @@ class HostAPIExecutor:
     ) -> dict:
         """Call a host API directly (for read-only GET requests that don't need confirmation)."""
         # Check TTL cache for GET requests
-        ck = _cache_key(method, endpoint, params)
+        ck = _cache_key(
+            method, endpoint, params, getattr(self, "host_user_id", None),
+        )
         if ck:
             cached = _cache_get(ck)
             if cached is not None:

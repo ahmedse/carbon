@@ -1,0 +1,23 @@
+id: CR-WRITE-01
+journey: PULSE
+meaning: >
+  instance.yaml tools that mutate host data keep requires_confirmation true.
+  On 2026-09-29 those tools are create_table, create_dq_rule, and
+  bind_dq_rules. Inventory writes are not Chat tools. They stay on the host
+  screens and on Agent after approval. A new write tool added to this pack
+  without requires_confirmation true fails this rule.
+source: domain_packs/carbon/instance.yaml api_catalog; ADR-0046; ADR-0050
+owner: carbon-inventory-lead
+failure: A catalog entry that POSTs, PUTs, or DELETEs host data is callable from Chat without confirmation.
+validation: >
+  Parse instance.yaml api_catalog. Every item with method other than GET
+  must have requires_confirmation true and requires_auth true.
+implementation: >
+  Pack contract reads the instance. This rule is the inventory meaning of
+  that check. Chat write-intent for inventory becomes a handoff to Agent
+  or to /carbon/onboarding.
+confidence: high-code
+catalogue: planned
+residual: >
+  Catalogue stays planned until an assurance event records a Chat turn that
+  attempted a write and was handed off. The static file check is not that event.

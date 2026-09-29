@@ -9,7 +9,7 @@ under `archetypes/<name>/` and is rendered into a concrete instance config.
 ```
 archetypes/<name>/
 ├── archetype.yaml            # REQUIRED — metadata (name, display_name, version, description, tags, icon)
-├── instance.template.yaml    # REQUIRED — Jinja2 template → instances/<name>/instance.yaml
+├── instance.template.yaml    # REQUIRED — Jinja2 template → instance config dict
 ├── playbook/                 # optional — persona.j2, domain.j2 (system-prompt blocks)
 ├── domain/                   # optional — connectors.yaml (host integration stubs)
 └── skills/                   # optional — reusable skill YAMLs (prompt_template / tool skills)

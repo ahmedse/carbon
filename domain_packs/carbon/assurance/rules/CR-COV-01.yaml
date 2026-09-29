@@ -1,0 +1,27 @@
+id: CR-COV-01
+journey: INV
+meaning: >
+  CoverageGoal for onboarding, once InventorySource rows exist, uses scope
+  "1+2", completeness_definition materiality_bounded, min_quality_tier 4
+  (Estimated), and status draft. target_coverage_pct is not written before
+  at least the two O1 sources exist. InventorySourceStatus covered is legal
+  only when that period's linked_tables is non-empty and a Calculation exists
+  for the same reporting_period. Tier 1 is Audited through tier 5 Proxy, as
+  on InventorySourceStatus.TIER_CHOICES. A smaller tier is better data.
+source: backend/emissions/models.py CoverageGoal; InventorySourceStatus; ADR-0020
+owner: carbon-inventory-lead
+failure: A coverage percent with an empty source list, status covered carried from another year, or min_quality_tier left null so proxy counts as the goal.
+validation: >
+  Reject CoverageGoal create when no InventorySource exists for the open
+  period. Reject status covered when linked_tables is empty or no Calculation
+  matches reporting_period. Goal scope must be 1+2 and min_quality_tier must
+  be 4 while benchmark O1 status is open.
+implementation: >
+  compute_coverage on GET /carbon-api/carbon/coverage/?reporting_period=<id>.
+  The onboarding page reads. It does not POST a goal.
+confidence: high-code
+catalogue: planned
+residual: >
+  target_coverage_pct is a required decimal on the model, so the goal row
+  stays absent until the lead chooses a percent of the declared list. The
+  page must not default that percent to 100.

@@ -66,6 +66,9 @@ ROUTE_CAPABILITY_MAP = {
     '/people/employees': 'people:view',
     '/people/payroll': 'people:manage',
     '/people/config': 'people:manage',
+    '/people/import': 'inbound:prepare',
+    '/catalog/imports': 'inbound:prepare',
+    '/admin/migration/cartridges': 'inbound:define',
 }
 
 # Routes available to all authenticated users (no capability check)

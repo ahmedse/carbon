@@ -6,7 +6,9 @@ from pathlib import Path
 
 from ai.eval.harness_budget import (
     _COUNT_KEYS,
+    _count_brand_literals,
     _is_phrase_table_line,
+    _iter_engine_vocab_files,
     _line_tokens,
     measure,
     pack_ids,
@@ -44,6 +46,27 @@ def test_domain_tokeniser_handles_arabic_and_english():
     assert "leave" in _line_tokens("if is_leave_topic(text):  # leave routing")
     assert "إجازة" in _line_tokens('needles = ("إجازة", "قرض")')
     assert "gosi" in _line_tokens("GOSI cap")
+
+
+def test_vocab_scan_includes_phrase_tables_without_domain_terms():
+    from ai.eval.harness_budget import ENGINE_ROOT
+
+    files = _iter_engine_vocab_files(ENGINE_ROOT)
+    names = {path.name for path in files}
+    assert any(path.suffix == ".yaml" for path in files)
+    assert "phrase_tables.yaml" in names
+    assert not any("instances" in path.parts for path in files)
+    result = measure()
+    assert result["domain_terms_in_core"] == 0
+    assert result["brand_literals_in_core"] == 0
+
+
+def test_brand_count_includes_a_restored_instance_folder(tmp_path: Path):
+    pack = tmp_path / "instances" / "nibras"
+    pack.mkdir(parents=True)
+    target = pack / "instance.yaml"
+    target.write_text("name: nibras\n", encoding="utf-8")
+    assert _count_brand_literals([target], frozenset({"nibras"})) == 1
 
 
 def test_pack_ids_come_from_domain_packs_dir():

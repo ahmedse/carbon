@@ -14,7 +14,7 @@ This module never auto-mutates business data (RULE_21).
 from __future__ import annotations
 from ai.engine.cognition.phrase_tables import T
 
-from ai.engine.pack_vocab import V
+from ai.engine.pack_vocab import LV, V
 
 import json
 import logging
@@ -167,7 +167,7 @@ def handle_turn_signal(
     prior_tool_result: dict | None,
     prior_assistant_response: str,
     *,
-    entity_type: str = V("t_employee_4"),
+    entity_type: str = LV("t_employee_4"),
     query: str = "",
     instance_config: dict | None = None,
     fetch_fn=None,

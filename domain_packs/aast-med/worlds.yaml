@@ -1,0 +1,12 @@
+# Category worlds for this Moodle. Ids are from the 2026-09-27 seed.
+# The engine must not branch on these names; the host snapshot carries the category.
+worlds:
+  - id: aast-mbbs
+    categories: [2, 3, 4, 5, 6, 7, 9, 10, 12, 14, 15, 19, 21, 22, 23, 20, 28, 27]
+    note: AAST years, electives, CPD, mentorship containers as ordinary courses
+  - id: ahfad
+    categories: [24, 25, 26, 16, 18, 13]
+    note: Separate programme. Do not blend into an MBBS answer.
+  - id: hidden-admin
+    categories: [1, 17]
+    note: Do not tell a user these exist unless they can already open them.

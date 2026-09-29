@@ -352,3 +352,58 @@ def test_arbiter_plan_dial_process_is_tool_answer():
     # A Chat handoff that also fired still outranks it (ADR-0046).
     signals.append({"gate": "chat_handoff", "fired": True})
     assert Arbiter().decide(signals) == TurnDecision.HANDOFF_AGENT
+
+
+def test_plan_dial_one_read_is_a_draft_only_on_plan():
+    from ai.engine.cognition.turn.plan_proposal import is_task_plan, proposal_payload
+
+    one_read = {
+        "steps": [{
+            "step_id": 1,
+            "intent": "List my direct reports",
+            "tool_name": "call_host_api",
+            "tool_args": {"api_name": "list_my_direct_reports"},
+            "is_mutation": False,
+        }],
+    }
+    assert is_task_plan(one_read) is False
+    assert proposal_payload(one_read, brief="list them") is None
+    shown = proposal_payload(one_read, brief="list them", single_read=True)
+    assert shown["kind"] == "plan_proposal"
+    assert shown["steps"][0]["intent"] == "List my direct reports"
+
+
+def test_a_short_cancel_drops_the_open_draft():
+    from ai.engine.cognition.turn.plan_proposal import draft_was_cancelled
+
+    assert draft_was_cancelled("cancel")
+    assert draft_was_cancelled("i said cancel")
+    assert draft_was_cancelled("i saied cancel")
+    assert not draft_was_cancelled("why you approved it ?!")
+    assert not draft_was_cancelled(
+        "Create a 1-step task that lists my direct reports then stops. Do not write."
+    )
+
+
+def test_open_draft_sticks_unless_change():
+    from ai.engine.cognition.turn.plan_proposal import stick_to_open_draft
+
+    draft = {
+        "kind": "plan_proposal",
+        "plan_json": {"steps": [{"step_id": 1, "intent": "List reports"}]},
+        "steps": [{"step_id": 1, "intent": "List reports"}],
+    }
+    assert stick_to_open_draft(draft, change=False) is draft
+    assert stick_to_open_draft(draft, change=True) is None
+    assert stick_to_open_draft({"kind": "other"}, change=False) is None
+
+
+def test_plan_dial_cancel_does_not_claim_approval():
+    from ai.engine.agent.chat_surface import Surface, build_plan_mode_switch_handoff
+
+    env = build_plan_mode_switch_handoff(
+        user_message="list them", surface=Surface.CHAT_PLAN,
+    )
+    blob = " ".join([env["envelope"]["headline"], *env["envelope"]["prose"]])
+    assert "Plans are approved" not in blob
+    assert env["envelope"]["headline"] == "Nothing is approved yet"

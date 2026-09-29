@@ -1,7 +1,7 @@
 from __future__ import annotations
 from ai.engine.cognition.phrase_tables import T
-from ai.engine.pack_vocab import V
-V("t_governed_process_briefing_chat_concept_answers")
+from ai.engine.pack_vocab import LV, V
+LV("t_governed_process_briefing_chat_concept_answers")
 
 
 from pathlib import Path
@@ -62,8 +62,14 @@ def is_process_briefing(text: str) -> bool:
         return True
     # Lifecycle + explain verbs without an exact id (still concept, not nav).
     if (_is_briefing_ask_en(raw) or any_needle(raw, BRIEFING_ASK_AR)) and (
-        has_any_word(raw, (V("t_leave"), V("t_loan_2"), V("t_payroll"), V("t_gosi"), "wps", "sif", "onboarding", "onboard"))
-        or any_needle(raw, (V("t_إجازة"), V("t_اجازة"), V("t_قرض"), V("t_رواتب"), "تأمينات", "توظيف", "تعيين"))
+        has_any_word(raw, (
+            V("t_leave"), V("t_loan_2"), V("t_payroll"), V("t_gosi"),
+            V("t_rx_w_wps"), V("t_rx_w_sif"), V("t_rx_w_onboarding"), V("t_rx_w_onboard"),
+        ))
+        or any_needle(raw, (
+            V("t_إجازة"), V("t_اجازة"), V("t_قرض"), V("t_رواتب"),
+            V("t_rx_w_ins_ar"), V("t_rx_w_hire_ar"), V("t_rx_w_appoint_ar"),
+        ))
     ):
         return True
     return False
@@ -80,18 +86,20 @@ def extract_process_id(text: str) -> str | None:
         (V("t_leave_request_lifecycle"), (V("t_leave_request"), V("t_leave_lifecycle"), V("t_leave_process"), V("t_إجازة"), V("t_اجازة"))),
         (V("t_loan_request_lifecycle"), (V("t_loan_request"), V("t_loan_lifecycle"), V("t_loan_process"), V("t_قرض"))),
         (V("t_payroll_run_lifecycle"), (V("t_payroll_run"), V("t_payroll_lifecycle"), V("t_payroll_process"), V("t_رواتب"))),
-        ("gosi_wps.sif.lifecycle", (V("t_gosi"), "wps", "sif", "تأمينات")),
-        (V("t_employee_onboarding_lifecycle"), ("onboarding", "onboard", "توظيف", "تعيين")),
+        (V("t_rx_w_gosi_lifecycle"), (V("t_gosi"), V("t_rx_w_wps"), V("t_rx_w_sif"), V("t_rx_w_ins_ar"))),
+        (V("t_employee_onboarding_lifecycle"), (
+            V("t_rx_w_onboarding"), V("t_rx_w_onboard"), V("t_rx_w_hire_ar"), V("t_rx_w_appoint_ar"),
+        )),
         (V("t_attendance_permission_lifecycle"), (
             V("t_attendance_permission_2"), V("t_attendance_permission"), V("t_attendance_lifecycle"),
-            "short hours", V("t_إذن_حضور"), V("t_اذن_حضور"), V("t_صلاحية_حضور"),
+            V("t_rx_w_short_hours"), V("t_إذن_حضور"), V("t_اذن_حضور"), V("t_صلاحية_حضور"),
         )),
     )
     if not (_is_briefing_ask_en(raw) or any_needle(raw, BRIEFING_ASK_AR)):
         return None
     for pid, needles in aliases:
-        if any(n.casefold() in low or n in raw for n in needles):
-            return pid
+        if pid and any(n and (str(n).casefold() in low or str(n) in raw) for n in needles):
+            return str(pid)
     return None
 
 

@@ -1,0 +1,101 @@
+{
+  "title": "Readiness & Excellence",
+  "chooseDomain": "Choose a domain",
+  "chooseDomainHint": "A domain is the center of this room. More domains appear here when they are declared.",
+  "allDomains": "All domains",
+  "engineeringLadder": "Engineering ladder",
+  "ladderHint": "Open a component for the nine-aspect ladder. This list is not a readiness or actualization score.",
+  "ladderUnavailable": "The engineering ledger did not load. The scoreboards above do not depend on it.",
+  "component": "Component",
+  "progress": "Progress",
+  "emptyTitle": "No domains are declared",
+  "emptyDescription": "The control-room catalogue did not return a domain.",
+  "loadFailed": "The readiness catalogue could not be loaded.",
+  "tabs": {
+    "readiness": "Readiness",
+    "actualization": "Actualization",
+    "definitions": "Definitions and references"
+  },
+  "boards": {
+    "readiness": "Whether the product is good enough for its named target.",
+    "actualization": "Whether this deployment has made the capability real."
+  },
+  "states": {
+    "reached": "Reached",
+    "partial": "Partial",
+    "fail": "Fail",
+    "missing": "Missing",
+    "absent": "Absent",
+    "unmeasured": "Unmeasured"
+  },
+  "columns": {
+    "contract": { "title": "Contract", "means": "The promise, the forbidden behavior, and the pass rule are written." },
+    "correct": { "title": "Correct", "means": "The result matches the host or the declared specification." },
+    "safe": { "title": "Safe", "means": "No unauthorized write, leak, invented fact, or broken separation of duties." },
+    "continuous": { "title": "Continuous", "means": "Repeated runs and the next turn stay true. One pass does not count." },
+    "fast": { "title": "Fast", "means": "The declared latency budget holds on the relevant population." },
+    "proven": { "title": "Proven", "means": "The required evidence is current. A stale or partial run stays visible." },
+    "built": { "title": "Built", "means": "The behavior exists in the version this instance runs." },
+    "configured": { "title": "Configured", "means": "Policies, periods, workflows, and local rules are set." },
+    "data": { "title": "Data", "means": "Required records are complete, valid, accurate, current, and reconciled." },
+    "access": { "title": "Access", "means": "The real roles, scope, and separation of duties are in place." },
+    "adopted": { "title": "Adopted", "means": "The named persona completes the scenario without a shadow process." },
+    "operated": { "title": "Operated", "means": "Support, monitoring, recovery, and the runbook are ready." },
+    "live": { "title": "Live", "means": "A valid real cycle exists. A demo or seed does not close this cell." }
+  },
+  "rows": {
+    "ask": { "title": "Ask", "question": "Is advisory chat dependable?" },
+    "plan-lab": { "title": "Plan · lab", "question": "Does the lab contract hold?" },
+    "plan-prod": { "title": "Plan · production", "question": "Is Plan enterprise-ready?" },
+    "memory": { "title": "Memory", "question": "Does confirmed memory stay scoped and usable?" },
+    "expertise": { "title": "Expertise", "question": "Does it stay correct across the declared scenario families?" },
+    "operations": { "title": "Operations", "question": "Does the service hold over time?" },
+    "people": { "title": "People", "question": "Is the employee lifecycle enterprise-grade?" },
+    "payroll": { "title": "Payroll", "question": "Can a month of pay be legally relied on?" },
+    "stores": { "title": "Stores", "question": "Can inventory operations run here?" },
+    "finance-a": { "title": "Finance A", "question": "Is Sage-layer finance intelligence ready?" },
+    "finance-b": { "title": "Finance B", "question": "Is a finance system of record in scope and proven?" },
+    "documents": { "title": "Documents", "question": "Are business records governed and linked?" }
+  },
+  "domains": {
+    "pulse": { "title": "Pulse", "question": "Can someone depend on Ask and Plan?" },
+    "nibras": { "title": "Nibras", "question": "What is enterprise-grade, and what is real at GOFSCO?" }
+  },
+  "instances": {
+    "nibras": "Nibras instance",
+    "gofsco": "GOFSCO"
+  },
+  "cell": {
+    "means": "What this cell means",
+    "reading": "Current reading",
+    "proof": "Proof",
+    "limit": "Limit",
+    "action": "Next action",
+    "owner": "Accountable owner",
+    "observed": "Observed",
+    "unmeasuredReading": "No probe is bound to this cell.",
+    "neighbor": "This page does not borrow a neighboring cell. Lab proof stays on the lab row. Staff go-live stays on the staff target."
+  },
+  "definitions": {
+    "group": "Group",
+    "term": "Term",
+    "open": "Open definition",
+    "target": { "title": "Target profile", "body": "A named definition of done. Staff go-live, legal payroll, Ask dependable, and Plan enterprise are different targets and can be true at the same time." },
+    "leaf": { "title": "Atomic leaf", "body": "One scenario, one persona, one site, one channel, and one material variant. Features support the leaf. They are not a second percentage." },
+    "readiness": { "title": "Readiness", "body": "Product quality against the named target. It does not say the customer has entered the data." },
+    "actualization": { "title": "Actualization", "body": "Instance reality: built, configured, populated, authorized, adopted, operated, and used for real." },
+    "weakest": { "title": "Weakest gate", "body": "A row is only as ready as its weakest required cell. A percentage cannot hide one critical failure." },
+    "unknown": { "title": "Unmeasured", "body": "No probe is bound. The cell stays on the board. It is not zero and it is not green." },
+    "partial-run": { "title": "Partial rerun", "body": "A rerun updates only the cells it exercised. The last full run remains the row baseline." },
+    "evidence": { "title": "Evidence facets", "body": "Every measured cell names its proof. Dev evidence cannot upgrade production. Seed data cannot close a live gate." },
+    "owners": { "title": "Two owners", "body": "The accountable owner accepts the gap. The resolver supplies the data, configuration, or proof. A missing owner is itself a gap." },
+    "sources": { "title": "Source register", "body": "ADR-0046, ADR-0051, the Pulse benches, NSR-9, the deployment certificate, and the Nibras strategy. This room is generated from those sources." }
+  },
+  "groups": {
+    "targets": "Targets",
+    "boards": "Boards",
+    "rules": "Rules",
+    "evidence": "Evidence",
+    "sources": "Sources"
+  }
+}

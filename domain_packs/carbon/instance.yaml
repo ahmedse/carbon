@@ -46,6 +46,13 @@ persona: >
   When a user asks you to remember or store something, propose it; it is
   only saved after the user confirms the proposal.
   Never claim you lack memory or that memory is unavailable.
+  For the AASTMT inventory onboarding, do not state a kilogram or tonne
+  figure unless the tool result for this turn contains that figure. If it
+  does not, say the period is opening. Do not copy quantities from a
+  deployment sketch. The open work is Smart Village electricity and Smart
+  Village diesel for one open period. South Valley, Abu Qir, and Alamein
+  stay declared or explicitly excluded. Chat does not create or change
+  inventory records.
 
 domain_topics:
   - data quality
@@ -177,7 +184,47 @@ api_catalog:
     requires_auth: true
     requires_confirmation: false
 
+  - name: list_organizational_boundaries
+    method: GET
+    path: /carbon-api/carbon/boundaries/
+    description: >
+      List organizational boundaries. Fields include name and
+      consolidation_approach (equity_share, financial_control, or
+      operational_control).
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: list_inventory_sources
+    method: GET
+    path: /carbon-api/carbon/inventory-sources/
+    description: >
+      List declared inventory sources. Fields include source_name, scope,
+      and org unit. A campus with no row is absent, not zero.
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: get_inventory_coverage
+    method: GET
+    path: /carbon-api/carbon/coverage/
+    description: >
+      Read inventory coverage for the reporting period given by query
+      param reporting_period. Returns the declared denominator, covered
+      count, gaps, and exclusions. Does not create a coverage goal.
+    requires_auth: true
+    requires_confirmation: false
+
 navigation_routes:
+  - name: carbon_onboarding
+    type: page
+    path: /carbon/onboarding
+    description: >
+      AASTMT inventory onboarding. Staff open one period and enter Smart
+      Village electricity and diesel, or record an explicit gap.
+    label: Inventory onboarding
+    labels:
+      en: [onboarding, inventory onboarding, carbon onboarding, smart village]
+      ar: [التهيئة, تهيئة المخزون, تهيئة البصمة, القرية الذكية]
+
   - name: carbon_home
     type: app
     path: /carbon/chairman

@@ -7,8 +7,13 @@ a tool the executor cannot run is never shown.
 """
 from __future__ import annotations
 
+from ai.engine.host_ids import (
+    ID_LIST_MY_CAPABILITIES,
+)
+
 import json
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 
@@ -293,6 +298,45 @@ def capability_surface(
     return CapabilitySurface(entries=tuple(scoped + tools))
 
 
+# Named by a pack. Absence means the turn gets no host app inventory.
+HOST_INVENTORY = "host_rbac"
+
+
+def inventory_provider(instance_id: str) -> str:
+    """Provider declared on the pack. Empty when the pack names none.
+
+    The id selects the pack directory. Core does not contain a brand name.
+    """
+    pack_id = str(instance_id or "").strip()
+    if not pack_id or any(ch in pack_id for ch in "/\\") or pack_id in {".", ".."}:
+        return ""
+    path = Path(__file__).resolve().parents[5] / "domain_packs" / pack_id / "pack.yaml"
+    if not path.is_file():
+        return ""
+    try:
+        import yaml
+
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, yaml.YAMLError):
+        return ""
+    if not isinstance(data, dict):
+        return ""
+    provider = str(data.get("inventory") or "").strip()
+    return provider if provider == HOST_INVENTORY else ""
+
+
+def wants_platform_inventory(instance_config: dict | None) -> bool:
+    """True only when this turn's pack named the host inventory provider."""
+    if not isinstance(instance_config, dict):
+        return False
+    named = str(instance_config.get("inventory") or "").strip()
+    if named == HOST_INVENTORY:
+        return True
+    if named:
+        return False
+    return inventory_provider(str(instance_config.get("instance_id") or "")) == HOST_INVENTORY
+
+
 def tool_capabilities(instance_config: dict | None) -> list[dict]:
     """Chat-visible engine tools as catalog entries run by their own name (ADR-0056).
 
@@ -315,6 +359,8 @@ def tool_capabilities(instance_config: dict | None) -> list[dict]:
         fn = (tool or {}).get("function") or {}
         name = str(fn.get("name") or "")
         if not name or name not in allow or name == "call_host_api":
+            continue
+        if name == ID_LIST_MY_CAPABILITIES and not wants_platform_inventory(instance_config):
             continue
         plugin = plugins.get(name)
         if plugin is not None and not getattr(plugin, "decision_surface", True):

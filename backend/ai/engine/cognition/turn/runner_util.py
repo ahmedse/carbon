@@ -1,5 +1,9 @@
 """Shared turn-runner utilities extracted for L7 runner_lines meter."""
 from __future__ import annotations
+
+from ai.engine.host_ids import (
+    ID_LIST_MY_CAPABILITIES,
+)
 from ai.engine.cognition.phrase_tables import T
 from ai.engine.pack_vocab import V
 
@@ -25,6 +29,20 @@ def _is_capability_query(text: str) -> bool:
     if not text:
         return False
     return contains_any_phrase(text, _CAPABILITY_PHRASES)
+
+
+def catalog_for_page(entries, user_message: str, page_context: str):
+    """A filled page is the subject of the turn.
+
+    The access inventory stays available only for an explicit capabilities
+    question. A question about the page must not become the apps catalog.
+    """
+    if not str(page_context or "").strip() or _is_capability_query(user_message or ""):
+        return entries
+    return [
+        entry for entry in (entries or [])
+        if str((entry or {}).get("name") or "") != ID_LIST_MY_CAPABILITIES
+    ]
 
 # ── G5 text-transformation meta-task guard ────────────────────────────────
 # A turn whose ACTUAL ask is to transform quoted text (correct spelling/grammar,
@@ -53,11 +71,11 @@ def _ess_topic(text: str) -> bool:
             text,
             (
                 V("t_leave"), V("t_loan_2"), V("t_attendance"), V("t_vacation"), V("t_payslip_2"), V("t_salary"),
-                "absence", V("t_overtime"),
+                V("t_rx_w_absence"), V("t_overtime"),
             ),
         )
-        or "time off" in (text or "").casefold()
-        or "time-off" in (text or "").casefold()
+        or (V("t_rx_w_time_off") and V("t_rx_w_time_off") in (text or "").casefold())
+        or (V("t_rx_w_time_off_h") and V("t_rx_w_time_off_h") in (text or "").casefold())
         or any_needle(text, ESS_TOPIC_AR)
     )
 
@@ -182,7 +200,7 @@ def _filter_draft_tools(
     ):
         tools = [
             d for d in tools
-            if d.get("function", {}).get("name") != "list_my_capabilities"
+            if d.get("function", {}).get("name") != ID_LIST_MY_CAPABILITIES
         ]
     # Process mode is structured transport metadata. Prefix support remains
     # only for replaying pre-migration transcripts, inside ``Surface.resolve``.
@@ -212,6 +230,8 @@ def _filter_draft_tools(
             "search_knowledge",
             "web_research",
             "plan_task",
+            "edit_plan",
+            "approve_plan",
             "get_entity_details",
         })
         tools = [

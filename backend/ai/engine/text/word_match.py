@@ -16,6 +16,13 @@ def contains_phrase(text: str, phrase: str) -> bool:
     return phrase.casefold() in casefold(text)
 
 
+def contains_text(text: str, needle: str) -> bool:
+    """Substring test. An empty needle matches nothing."""
+    if not needle:
+        return False
+    return str(needle) in (text or "")
+
+
 def contains_any_phrase(text: str, phrases: tuple[str, ...]) -> bool:
     cf = casefold(text)
     return any(p.casefold() in cf for p in phrases if p)

@@ -1,0 +1,23 @@
+# Frozen L1 gold. One listed course. Every reply is the snapshot titles.
+version: 1
+course:
+  shortname: NMD1103
+  fullname: Clinical Skills 1
+sections:
+  - {number: 0, name: General, visible: true}
+  - {number: 1, name: Introduction to clinical skills, visible: true}
+  - {number: 2, name: History taking, visible: true}
+asks:
+  - What is on this page?
+  - What are the sections?
+  - List the section titles
+  - Give me the outline
+  - Show the course map
+  - What are the topics on this page?
+  - What are the weeks?
+  - Please list the weeks
+  - What's on this page?
+  - What does this page contain?
+  - Show the contents
+  - What are the contents of this page?
+foreign_title: Secret Clinical Skills

@@ -55,6 +55,48 @@ def remember_slot(cmd: Command, state: Any) -> None:
     slots[key] = cmd.value
 
 
+def grounded_reply(
+    cmd: Command,
+    decision: Decision,
+    *,
+    user_message: str,
+    conversation_history: list[dict] | None,
+    state: Any,
+) -> str:
+    """The reply already on an answer command, when it can be shown as-is.
+
+    Empty when the command has no reply, the language does not match, or a
+    figure is not already in the conversation. The caller then writes one.
+    """
+    from ai.engine.cognition.turn.grounding import ungrounded_numbers
+    from ai.engine.text.word_match import has_arabic_script
+
+    if cmd.op != "answer":
+        return ""
+    text = (cmd.text or "").strip()
+    if not text:
+        return ""
+    if decision.language == "ar" and not has_arabic_script(text):
+        return ""
+    # A prior host row is evidence the writer restates. A paraphrase of it
+    # can drop a value the record holds.
+    if getattr(state, "last_results", None):
+        return ""
+    history = list(conversation_history or [])[-8:]
+    allowed = [
+        user_message or "",
+        *(str(m.get("content") or "") for m in history if isinstance(m, dict)),
+        *(
+            str(row.get("digest") or "")
+            for row in (getattr(state, "last_results", None) or [])
+            if isinstance(row, dict)
+        ),
+    ]
+    if ungrounded_numbers(text, allowed):
+        return ""
+    return text
+
+
 async def write_answer(
     decision: Decision,
     *,
@@ -66,6 +108,7 @@ async def write_answer(
     retrieval: Any,
     instance_id: str,
     conversation_id: str,
+    page_context: str = "",
 ) -> tuple[str, dict]:
     """One writer call, retried once when empty or a number is not in the conversation.
 
@@ -94,9 +137,13 @@ async def write_answer(
         include_knowledge=True,
         include_memory=True,
     )
+    system = pack.system_prompt()
+    page = str(page_context or "").strip()
+    if page:
+        system = f"{system}\n\n**Current page**:\n{page}"
     allowed = [
         user_message or "",
-        pack.system_prompt(),
+        system,
         *(str(m.get("content") or "") for m in history if isinstance(m, dict)),
         *(
             str(row.get("digest") or "")
@@ -104,7 +151,7 @@ async def write_answer(
             if isinstance(row, dict)
         ),
     ]
-    messages = [{"role": "system", "content": pack.system_prompt()}, *history]
+    messages = [{"role": "system", "content": system}, *history]
     messages.append({"role": "user", "content": user_message or ""})
     note = ""
     text = ""

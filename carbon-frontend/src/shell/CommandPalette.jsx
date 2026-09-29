@@ -29,6 +29,7 @@ import BarChartIcon from '@mui/icons-material/BarChart';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import DescriptionIcon from '@mui/icons-material/Description';
 import PeopleIcon from '@mui/icons-material/People';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import SecurityIcon from '@mui/icons-material/Security';
 import BusinessIcon from '@mui/icons-material/Business';
 
@@ -143,6 +144,16 @@ const COMMANDS = [
     path: '/admin/org-units',
     icon: BusinessIcon,
     keywords: ['organization', 'units', 'structure', 'hierarchy', 'orgs'],
+  },
+
+  {
+    id: 'people-import',
+    label: 'People · Import',
+    description: 'Upload and map a People CSV batch',
+    appId: 'people',
+    path: '/people/import',
+    icon: CloudUploadIcon,
+    keywords: ['people', 'import', 'csv', 'migration', 'inbound', 'hr'],
   },
 
   // Settings commands

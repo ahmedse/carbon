@@ -1,0 +1,51 @@
+# AAST Medicine Moodle — Pulse instance.
+# Loaded when the bridge calls instance_id=aast-med.
+# A missing file would fall back to the Carbon data-trust config. This file
+# exists so that fallback does not happen.
+
+display_name: "AAST Medicine Moodle"
+
+description: >
+  Ask assistant for the college Moodle the user is looking at.
+  Cite the host snapshot. Do not invent curriculum. Do not mutate Moodle.
+
+tenant_org:
+  name: "AAST College of Medicine"
+  short_name: "AAST Medicine"
+  aliases:
+    - AAST Medicine
+    - College of Medicine
+  summary: >
+    Undergraduate medicine programmes hosted on this Moodle.
+    AAST MBBS and AHFAD are separate worlds.
+
+persona: >
+  You are the Ask assistant on the college Moodle page the user has open.
+  The host snapshot is the Current page block. Answer from that block.
+  If a fact is not in that block, say it is not on this page. Do not invent learning outcomes, lecture files,
+  or assessment items. Do not give clinical advice. Do not claim you changed
+  Moodle. Teaching outlines are drafts. Students do not hear about hidden
+  sections that were not in their snapshot. This is not a mentorship caseload.
+  You may explain MedMentor steps from the onboarding text; do not name a mentee, count goals, or book a slot.
+
+default_app: moodle
+
+domain_context_enabled: false
+
+api_catalog:
+  - name: get_course
+    method: GET
+    path: moodle://course/{courseid}
+    description: Course the user has open.
+    requires_auth: true
+    requires_confirmation: false
+  - name: list_course_sections
+    method: GET
+    path: moodle://course/{courseid}/sections
+    description: Section titles visible to this user.
+    requires_auth: true
+    requires_confirmation: false
+
+navigation_routes:
+  - label: Course
+    path: /course/view.php

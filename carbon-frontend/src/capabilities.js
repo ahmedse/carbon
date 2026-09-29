@@ -83,6 +83,14 @@ export const CONNECTIONS_MANAGE = 'connections:manage';
 // ── Import/Export ──────────────────────────────────────────────────
 export const IMPORTEXPORT_VIEW   = 'importexport:view';
 export const IMPORTEXPORT_MANAGE = 'importexport:manage';
+export const INBOUND_PREPARE = 'inbound:prepare';
+export const INBOUND_COMMIT  = 'inbound:commit';
+export const INBOUND_DEFINE  = 'inbound:define';
+
+export const DATAHUB_VIEW    = 'datahub:view';
+export const DATAHUB_INGEST  = 'datahub:ingest';
+export const DATAHUB_APPROVE = 'datahub:approve';
+export const DATAHUB_MANAGE  = 'datahub:manage';
 
 // ── Dataschema ─────────────────────────────────────────────────────
 export const DATASCHEMA_VIEW   = 'dataschema:view';
@@ -161,6 +169,12 @@ export const ROUTE_CAPABILITIES = {
   '/my/payslips':  MY_ACCESS,
   '/my/attendance': MY_ACCESS,
   '/my/requests':  MY_ACCESS,
+  '/people/import': INBOUND_PREPARE,
+  '/people/import/*': INBOUND_PREPARE,
+  '/catalog/imports': INBOUND_PREPARE,
+  '/catalog/imports/*': INBOUND_PREPARE,
+  '/admin/migration/cartridges': INBOUND_DEFINE,
+  '/admin/migration/cartridges/*': INBOUND_DEFINE,
 
   // Team (manager approvals inbox)
   '/team':       TEAM_ACCESS,
@@ -232,6 +246,7 @@ export const MENU_ITEM_CAPABILITIES = {
   'LTI':                  GRADEVANCE_MANAGE,
 
   // Learn
+  'Import':               INBOUND_PREPARE,
   'My assignments':       LEARN_ACCESS,
   'Progress':             LEARN_ACCESS,
 };
@@ -263,9 +278,11 @@ export const CAPABILITY_INHERITANCE = {
   [CARBON_GENERATE_REPORTS]: [CARBON_VIEW_CONSOLE, CARBON_VIEW_DASHBOARD],
   [CARBON_VIEW_ANALYTICS]: [CARBON_VIEW_CONSOLE, CARBON_VIEW_DASHBOARD],
 
-  [CATALOG_MANAGE_PRODUCTS]: [CATALOG_VIEW],
+  [CATALOG_MANAGE_PRODUCTS]: [CATALOG_VIEW, INBOUND_PREPARE],
   [CATALOG_MANAGE_METADATA]: [CATALOG_VIEW],
   [CATALOG_MANAGE_POLICIES]: [CATALOG_VIEW, CATALOG_VIEW_GOVERNANCE],
+  [DATAHUB_INGEST]: [DATAHUB_VIEW, INBOUND_PREPARE],
+  [DATAHUB_MANAGE]: [DATAHUB_VIEW, DATAHUB_INGEST, INBOUND_COMMIT],
 
   [DQ_MANAGE_RULES]: [DQ_VIEW],
   [MDM_MANAGE]: [MDM_VIEW],
@@ -274,7 +291,8 @@ export const CAPABILITY_INHERITANCE = {
   [DATASCHEMA_MANAGE]: [DATASCHEMA_VIEW],
   [EVIDENCE_MANAGE]: [EVIDENCE_VIEW],
   [AI_MANAGE_CONSOLE]: [AI_VIEW_CONSOLE],
-  [PEOPLE_MANAGE]: [PEOPLE_VIEW],
+  [PEOPLE_MANAGE]: [PEOPLE_VIEW, INBOUND_PREPARE],
+  [INBOUND_COMMIT]: [INBOUND_PREPARE],
   [CORRESPONDENCE_ADMIN]: [CORRESPONDENCE_ACT, CORRESPONDENCE_SUBMIT, MY_ACCESS, TEAM_ACCESS],
 
   // GradeVance — mirrors backend IMPLIES

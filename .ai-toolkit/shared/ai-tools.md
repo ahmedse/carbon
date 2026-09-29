@@ -98,7 +98,7 @@ answer requires per-question tools, your catalog is wrong, not your tooling.
 
 ## Nibras (HRMS) — `call_host_api` examples
 
-Live names live in `backend/ai/engine/instances/nibras/instance.yaml` (ADR-0044).  
+Live names live in `domain_packs/nibras/instance.yaml` (ADR-0044).  
 Pack `domain_packs/nibras/api_catalog.yaml` `tools:` must stay ⊆ that catalog.
 
 | Intent | `api_name` | Notes |

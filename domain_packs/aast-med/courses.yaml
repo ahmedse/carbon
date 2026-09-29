@@ -1,0 +1,24 @@
+# Courses Pulse may cite on the dev college Moodle. Exact shortnames.
+# AHFAD stays off this list until world isolation is green.
+version: 1
+world: aast-mbbs
+enabled_courses:
+  - {year: 1, shortname: NMD1000, fullname: "Introduction to Medical School"}
+  - {year: 1, shortname: NMD1103, fullname: "Clinical Skills 1"}
+  - {year: 1, shortname: NMD1301, fullname: "Medical Profession 1"}
+  - {year: 1, shortname: NMD1402, fullname: "Research Skills 2"}
+  - {year: 2, shortname: NMD2101, fullname: "Neuroscience 1"}
+  - {year: 2, shortname: MED213, fullname: "Clinical Skills 3"}
+  - {year: 2, shortname: NMD2303, fullname: "Medical Profession 3"}
+  - {year: 2, shortname: NMD2403, fullname: "Research 3"}
+  - {year: 3, shortname: NMD3101, fullname: "Principles of infection"}
+  - {year: 3, shortname: NMD3304, fullname: "Medical Profession 4"}
+  - {year: 4, shortname: NMD4201, fullname: "Surgery I"}
+  - {year: 5, shortname: MED520, fullname: "Dermatology"}
+  - {year: 5, shortname: MED5310, fullname: "Medical profession 10"}
+not_on_list:
+  - NMD1601
+  - NMD2603
+  - NMD3405
+  - NMD4305
+  - MED5309

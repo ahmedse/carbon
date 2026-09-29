@@ -4,14 +4,11 @@
 """
 from __future__ import annotations
 
-from pathlib import Path
-
 import yaml
 from django.core.management.base import BaseCommand, CommandError
 
+from ai.engine.core.archetypes import get_instance_config_path
 from ai.eval.api_catalog_contract import catalog_violations
-
-REPO = Path(__file__).resolve().parents[4]
 
 
 class Command(BaseCommand):
@@ -21,20 +18,12 @@ class Command(BaseCommand):
         parser.add_argument(
             "--instance",
             default="nibras",
-            help="Brand under backend/ai/engine/instances/<id>/instance.yaml",
+            help="Pack id (domain_packs/<id>/instance.yaml via pack.yaml)",
         )
 
     def handle(self, *args, **options):
         instance = options["instance"]
-        path = (
-            REPO
-            / "backend"
-            / "ai"
-            / "engine"
-            / "instances"
-            / instance
-            / "instance.yaml"
-        )
+        path = get_instance_config_path(instance)
         if not path.is_file():
             raise CommandError(f"missing {path}")
         data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}

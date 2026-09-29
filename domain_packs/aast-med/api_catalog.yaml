@@ -1,0 +1,15 @@
+# Read catalog the Moodle host may satisfy. Ask era: the PHP plugin sends the
+# snapshot; these names are the contract for a later tool loop. No writes.
+tools:
+  - name: get_course
+    method: HOST
+    description: Course the user has open, or one they can already see.
+  - name: list_my_courses
+    method: HOST
+    description: Courses in the audience scope.
+  - name: list_course_sections
+    method: HOST
+    description: Section titles. Students receive visible sections only.
+  - name: explain_access
+    method: HOST
+    description: Enrol, group, or hidden — for this user on this course.

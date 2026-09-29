@@ -118,6 +118,12 @@ async def create_completion(client: AsyncOpenAI, **kwargs):
     chat path previously bypassed retry by calling the raw client directly.
     """
     base_url = getattr(client, "base_url", None)
+    from ai.engine.pack_vocab import as_data
+
+    if "messages" in kwargs:
+        kwargs["messages"] = as_data(kwargs["messages"])
+    if "tools" in kwargs:
+        kwargs["tools"] = as_data(kwargs["tools"])
     return await client.chat.completions.create(
         **_apply_provider_kwargs(kwargs, str(base_url) if base_url is not None else None)
     )
@@ -176,9 +182,11 @@ async def _chat_completion(
     model = model or settings.LLM_MODEL
     logger.debug(f"_chat_completion: model={model}  messages={len(messages)}")
 
+    from ai.engine.pack_vocab import as_data
+
     kwargs: dict = {
         "model": model,
-        "messages": messages,
+        "messages": as_data(messages),
         "temperature": temperature,
     }
     if response_format:
@@ -208,10 +216,12 @@ async def _chat_completion_with_tools(
     client = get_llm_client()
     model = model or settings.LLM_MODEL
 
+    from ai.engine.pack_vocab import as_data
+
     kwargs: dict = {
         "model": model,
-        "messages": messages,
-        "tools": tools,
+        "messages": as_data(messages),
+        "tools": as_data(tools),
         "temperature": temperature,
     }
     if response_format:

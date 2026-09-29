@@ -1,0 +1,16 @@
+# Measured out of engine/. Occurrence inside backend/ai/engine is a leak.
+terms:
+  - course
+  - section
+  - cohort
+  - enrolment
+  - shortname
+  - AAST
+  - AHFAD
+  - NMD
+  - Moodle
+forbidden_in_engine: true
+not_this_pack:
+  - medmentor pairs
+  - office-hour slots
+  - mentee goals

@@ -1,6 +1,6 @@
 from __future__ import annotations
-from ai.engine.pack_vocab import V
-V("t_consent_resume_remember_an_action_the")
+from ai.engine.pack_vocab import LV, V
+LV("t_consent_resume_remember_an_action_the")
 
 
 import re

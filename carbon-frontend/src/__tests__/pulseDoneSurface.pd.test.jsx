@@ -1,5 +1,5 @@
 // PD-* / PX-* fixtures — Done Answer surface + discovering honesty (Pulse × Nibras coworker QA).
-// IDs map to canvases/pulse-nibras-coworker-qa.canvas.tsx §7b.
+// Product contract and score: pulse-tasks-agent-benchmark.canvas.tsx (Plan & Tasks).
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import AITaskAuditCard from '../shell/AITaskAuditCard';

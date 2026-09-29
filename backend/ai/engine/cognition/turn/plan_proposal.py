@@ -28,6 +28,94 @@ def is_task_plan(plan: dict | None) -> bool:
     return _step_effect(steps[0])
 
 
+def is_shown_draft(plan: dict | None, *, single_read: bool = False) -> bool:
+    """A reviewable draft. On Plan, one host read is enough to show.
+
+    A step with no tool is not a plan. It is a note that the brief was empty.
+    """
+    if is_task_plan(plan):
+        return True
+    if not single_read:
+        return False
+    steps = [s for s in ((plan or {}).get("steps") or []) if isinstance(s, dict)]
+    if len(steps) != 1:
+        return False
+    return bool(str(steps[0].get("tool_name") or "").strip())
+
+
+def draft_was_cancelled(text: str) -> bool:
+    """A short 'cancel' drops the open draft. A longer message is a new brief."""
+    raw = " ".join((text or "").casefold().split())
+    if not raw or "?" in raw or "؟" in raw:
+        return False
+    words = [w.strip(".,!؟") for w in raw.split() if w.strip(".,!؟")]
+    if not words or len(words) > 4:
+        return False
+    last = words[-1]
+    if last in ("cancel", "cancelled", "canceled", "إلغاء", "الغاء"):
+        return True
+    return raw in ("never mind", "nevermind")
+
+
+def dropped_draft_text(language: str) -> str:
+    """Said when the user drops the open draft. Nothing was stored."""
+    if language == "ar":
+        return "أُسقطت المسودة. لم يُحفظ شيء."
+    return "The draft is dropped. Nothing was stored."
+
+
+def stick_to_open_draft(open_question, *, change: bool) -> dict | None:
+    """The open draft, when this turn must not start another plan.
+
+    The Change control is the revision. Any other message stays on this draft.
+    """
+    if change or not isinstance(open_question, dict):
+        return None
+    if open_question.get("kind") != KIND:
+        return None
+    raw = open_question.get("plan_json")
+    has_plan = isinstance(raw, dict) and bool(raw.get("steps"))
+    if not has_plan and not open_question.get("steps"):
+        return None
+    return open_question
+
+
+def hold_draft_text(language: str) -> str:
+    """Said while a draft is open and this message is not a revision."""
+    if language == "ar":
+        return (
+            "لم يُعتمد شيء ولم يُحفظ شيء. "
+            "هذه المسودة ما زالت بانتظار «إنشاء المهمة»."
+        )
+    return (
+        "Nothing has been approved and nothing is stored. "
+        "This draft is still waiting for Create task."
+    )
+
+
+def created_draft_text(language: str) -> str:
+    """Said after the user consents to Create task, in words or on the control."""
+    if language == "ar":
+        return (
+            "أُنشئت المهمة. لم يُعتمد شيء ولم يُشغَّل شيء. "
+            "افتح المهام للاعتماد ثم التشغيل."
+        )
+    return (
+        "The task is created. Nothing is approved and nothing has run. "
+        "Open Tasks to Approve, then Run."
+    )
+
+
+def unstored_draft_text(language: str) -> str:
+    """Said when Plan could not show a draft. Nothing was approved."""
+    if language == "ar":
+        return "لم يُعتمد شيء ولم يُحفظ شيء. لم أستطع تحويل هذا إلى مسودة."
+    return (
+        "Nothing was approved and nothing was stored. "
+        "I could not turn this into a draft."
+    )
+
+
 def revised_brief(prior: str, change: str) -> str:
     """The open draft's brief with the user's revision appended, for the planner to redo."""
     prior = " ".join((prior or "").split())
@@ -107,9 +195,10 @@ def proposal_payload(
     *,
     brief: str = "",
     findings: list | None = None,
+    single_read: bool = False,
 ) -> dict | None:
-    """``None`` unless this decomposition is a reviewable task."""
-    if not is_task_plan(plan):
+    """``None`` unless this decomposition is a reviewable draft."""
+    if not is_shown_draft(plan, single_read=single_read):
         return None
     steps = []
     for step in (plan or {}).get("steps") or []:

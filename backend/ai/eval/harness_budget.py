@@ -140,6 +140,21 @@ def _iter_engine_py_files(root: Path) -> list[Path]:
     return sorted(p for p in root.rglob("*.py") if p.is_file())
 
 
+def _iter_engine_vocab_files(root: Path) -> list[Path]:
+    """Python plus YAML under the engine.
+
+    ``phrase_tables.yaml`` is included. Host-domain rows live in the pack that
+    owns the turn, so a domain word in this file is a real leak. Instance files
+    no longer live under the engine, so there is no folder exemption.
+    """
+    files: list[Path] = []
+    for pattern in ("*.py", "*.yaml", "*.yml"):
+        for path in root.rglob(pattern):
+            if path.is_file():
+                files.append(path)
+    return sorted(files)
+
+
 def _count_re_compile_and_arabic(files: list[Path]) -> tuple[int, int]:
     re_total = 0
     arabic_sites = 0
@@ -261,8 +276,6 @@ def _count_brand_literals(files: list[Path], ids: frozenset[str]) -> int:
         return 0
     total = 0
     for path in files:
-        if path.parent.name in ids and path.parent.parent.name == "instances":
-            continue  # a pack's own instance folder may name itself
         for line in path.read_text(encoding="utf-8").splitlines():
             if any(tok in ids for tok in _line_tokens(line)):
                 total += 1
@@ -272,9 +285,10 @@ def _count_brand_literals(files: list[Path], ids: frozenset[str]) -> int:
 def measure() -> dict[str, Any]:
     """Return budget counters plus ``measured_at`` (ISO date)."""
     _, engine_root, runner_path, llm_root = _repo_paths()
-    engine_files = _iter_engine_py_files(engine_root)
+    engine_py = _iter_engine_py_files(engine_root)
+    engine_vocab = _iter_engine_vocab_files(engine_root)
     runner_text = runner_path.read_text(encoding="utf-8")
-    re_compile, arabic_regex = _count_re_compile_and_arabic(engine_files)
+    re_compile, arabic_regex = _count_re_compile_and_arabic(engine_py)
     runner_lines = runner_text.count("\n") + (1 if runner_text and not runner_text.endswith("\n") else 0)
     if not runner_text:
         runner_lines = 0
@@ -293,8 +307,8 @@ def measure() -> dict[str, Any]:
         "runner_lines": runner_lines,
         "tool_choice_uses": _count_tool_choice(llm_root),
         "routing_phrase_sets": _count_phrase_tables(COGNITION_ROOT),
-        "domain_terms_in_core": _count_domain_terms(engine_files),
-        "brand_literals_in_core": _count_brand_literals(engine_files, pack_ids()),
+        "domain_terms_in_core": _count_domain_terms(engine_vocab),
+        "brand_literals_in_core": _count_brand_literals(engine_vocab, pack_ids()),
         "measured_at": date.today().isoformat(),
     }
 

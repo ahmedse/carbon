@@ -131,6 +131,7 @@ export const NAV_LABEL_KEYS = {
   People: 'nav.people',
   Positions: 'nav.positions',
   Policies: 'nav.policies',
+  Import: 'nav.import',
   Employees: 'nav.employees',
   Requests: 'nav.requests',
   Leave: 'nav.leave',
@@ -153,6 +154,7 @@ export const NAV_LABEL_KEYS = {
   'Team Directory': 'nav.teamDirectory',
   "Who's Out": 'nav.whosOut',
   'Chairman Overview': 'nav.chairmanOverview',
+  'Inventory onboarding': 'nav.inventoryOnboarding',
   'Inventory Coverage': 'nav.inventoryCoverage',
   Stems: 'nav.stems',
   Calibration: 'nav.calibration',
@@ -210,6 +212,7 @@ export const GROUP_LABEL_KEYS = {
   Workforce: 'group.workforce',
   'Payroll & Benefits': 'group.payrollBenefits',
   Executive: 'group.executive',
+  Onboarding: 'group.onboarding',
   'BI & Analytics': 'group.biAnalytics',
 };
 

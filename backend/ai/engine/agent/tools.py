@@ -1,7 +1,20 @@
 """
 Tool definitions and execution functions for the Pulse agent.
 """
-from ai.engine.pack_vocab import V
+from ai.engine.host_ids import (
+    ID_CAP_COMPENSATION,
+    ID_CAP_VIEW_COMP,
+    ID_CAP_VIEW_PREFIX,
+    ID_GET_EMPLOYEE,
+    ID_GET_MY_PROFILE,
+    ID_LIST_EMPLOYEES,
+    ID_LIST_LEAVE_ENTITLEMENTS,
+    ID_LIST_LEAVE_RECORDS,
+    ID_LIST_LOANS,
+    ID_LIST_MY_PAYSLIPS,
+    ID_LIST_PAYSLIP_LINES,
+)
+from ai.engine.pack_vocab import LV, V, copy_text, live_alt, live_pattern, present_ids, same_id
 import copy
 import json
 import logging
@@ -25,24 +38,25 @@ from ai.engine.llm.router import route_chat
 logger = logging.getLogger("pulse.agent.tools")
 
 #: Person-scoped list APIs that must carry  filter when WM has focus (B1).
-_FOCUS_SCOPED_HOST_APIS = frozenset({
-    "list_leave_entitlements",
-    "list_leave_records",
-    "list_loans",
-})
+def _focus_scoped_host_apis() -> frozenset[str]:
+    return present_ids(
+        ID_LIST_LEAVE_ENTITLEMENTS,
+        ID_LIST_LEAVE_RECORDS,
+        ID_LIST_LOANS,
+    )
 
 #: Resolve queries that are instruction / mode text, not person names (C1).
 #: Matched as data-as-data → honest no_match; never clarify modes / dump .
-_INSTRUCTION_SHAPED_QUERY = re.compile(
+_INSTRUCTION_SHAPED_QUERY = live_pattern(
     r"(?is)"
     r"(ignore\s+(all\s+)?(previous|prior|above)|"
     r"disregard\s+(all\s+)?(previous|prior|instructions?)|"
-    r"system\s+prompt|"
-    + V("t_show_s_all_s_salaries")
-    + V("t_reveal_s_all_s_salaries")
-    + r"you\s+are\s+now|"
+    r"system\s+prompt|",
+    LV("t_show_s_all_s_salaries"),
+    LV("t_reveal_s_all_s_salaries"),
+    r"you\s+are\s+now|"
     r"new\s+instructions?\s*:|"
-    r"override\s+(all\s+)?(rules|instructions?|guards?))"
+    r"override\s+(all\s+)?(rules|instructions?|guards?))",
 )
 
 
@@ -95,7 +109,7 @@ def _inject_focus_employee_params(
     conversation_id: str,
 ) -> dict | None:
     V("t_when_listing_leave_loans_without_an")
-    if api_name not in _FOCUS_SCOPED_HOST_APIS:
+    if api_name not in _focus_scoped_host_apis():
         return query_params
     qp = dict(query_params or {})
     if any(qp.get(k) not in (None, "") for k in (V("t_employee_4"), "employee_id", "employee_no")):
@@ -176,7 +190,7 @@ STATIC_TOOL_DEFINITIONS = [
             "description": (
                 "Get detailed schema and business description for a knowledge-store "
                 "entity (database table / documented concept). For live host data "
-                + V("t_leave_balance_employees_payslips_use_call")
+                + LV("t_leave_balance_employees_payslips_use_call")
                 + "api_name from the Host API catalog — do not pass catalog names here."
             ),
             "parameters": {
@@ -1188,17 +1202,17 @@ async def execute_call_host_api(
     entry = executor.get_catalog_entry(api_name)
     user_message = str(kwargs.get("user_message") or "")
     if not entry and first_person_profile_ask(user_message):
-        entry = executor.get_catalog_entry("get_my_profile")
+        entry = executor.get_catalog_entry(ID_GET_MY_PROFILE)
         if entry:
-            api_name = "get_my_profile"
+            api_name = ID_GET_MY_PROFILE
     if not entry:
         return {"error": f"Unknown API endpoint: '{api_name}'. Check the api_catalog."}
 
     # First-person identity is /people/me/ — never get_employee + list_employees.
-    if api_name == "get_employee" and first_person_profile_ask(user_message):
-        self_entry = executor.get_catalog_entry("get_my_profile")
+    if api_name == ID_GET_EMPLOYEE and first_person_profile_ask(user_message):
+        self_entry = executor.get_catalog_entry(ID_GET_MY_PROFILE)
         if self_entry:
-            api_name = "get_my_profile"
+            api_name = ID_GET_MY_PROFILE
             entry = self_entry
             path_params = None
 
@@ -2114,7 +2128,7 @@ STATIC_TOOL_EXECUTORS = {
 
 # Fallback wording when instance_config / descriptors are unavailable at
 # catalog assembly time. Prefer dynamic names from load_descriptors().
-_ECF_ENTITY_TYPE_FALLBACK = (V("t_employee_4"), "leave_record")
+_ECF_ENTITY_TYPE_FALLBACK = (LV("t_employee_4"), "leave_record")
 _ECF_METRIC_FALLBACK = ("headcount", "kuwaiti")
 
 _ECF_RESOLVE_ENTITY_DEFINITION = {
@@ -2123,8 +2137,8 @@ _ECF_RESOLVE_ENTITY_DEFINITION = {
         "name": "resolve_entity",
         "description": (
             "Find a specific record by name, number, or identifier. "
-            + V("t_use_this_for_find_employee_x")
-            + V("t_من_هو_x_ابحث_عن_x")
+            + LV("t_use_this_for_find_employee_x")
+            + LV("t_من_هو_x_ابحث_عن_x")
             + "Performs a COMPLETE scan (not capped at 100 rows) across all records, "
             "in Arabic and English. Returns a single match, a disambiguation list, "
             "or a grounded 'not found' that includes how many records were searched. "
@@ -2138,13 +2152,13 @@ _ECF_RESOLVE_ENTITY_DEFINITION = {
                     "type": "string",
                     "description": (
                         "Registered entity type from HRMS instance descriptors "
-                        + V("t_e_g_employee_leave_record_must")
+                        + LV("t_e_g_employee_leave_record_must")
                     ),
                     "enum": list(_ECF_ENTITY_TYPE_FALLBACK),
                 },
                 "query": {
                     "type": "string",
-                    "description": V("t_name_employee_number_id_date_or"),
+                    "description": LV("t_name_employee_number_id_date_or"),
                 },
                 "explanation": {
                     "type": "string",
@@ -2167,8 +2181,8 @@ _ECF_AGGREGATE_ENTITY_DEFINITION = {
         "name": "aggregate_entity",
         "description": (
             "Return a CANONICAL named metric count for an entity type. "
-            + V("t_use_for_total_headcount_كم_عدد")
-            + V("t_كم_كويتي_موظف_and_for_leave")
+            + LV("t_use_for_total_headcount_كم_عدد")
+            + LV("t_كم_كويتي_موظف_and_for_leave")
             + "registered. Metrics are descriptor-defined — "
             "'headcount' ALWAYS means is_active=True; 'kuwaiti' ALWAYS means "
             "nationality_code=KW (never the kuwaitization boolean). "
@@ -2183,7 +2197,7 @@ _ECF_AGGREGATE_ENTITY_DEFINITION = {
                     "type": "string",
                     "description": (
                         "Registered entity type from HRMS instance descriptors "
-                        + V("t_e_g_employee_leave_record_must")
+                        + LV("t_e_g_employee_leave_record_must")
                     ),
                     "enum": list(_ECF_ENTITY_TYPE_FALLBACK),
                 },
@@ -2294,14 +2308,14 @@ async def _legacy_resolve_via_list_get(executor, query: str) -> dict:
     if not q:
         return {"found": False, "path": "empty_query"}
 
-    resolution = _get_slug_resolution(executor, "get_employee")
-    list_api = "list_employees"
+    resolution = _get_slug_resolution(executor, ID_GET_EMPLOYEE)
+    list_api = ID_LIST_EMPLOYEES
     match_fields = ["employee_no", "name_en_given", "name_en_family"]
     if resolution:
         list_api, match_fields = resolution
 
     get_entry = (
-        executor.get_catalog_entry("get_employee")
+        executor.get_catalog_entry(ID_GET_EMPLOYEE)
         if hasattr(executor, "get_catalog_entry")
         else None
     )
@@ -2320,13 +2334,13 @@ async def _legacy_resolve_via_list_get(executor, query: str) -> dict:
             ):
                 return {
                     "found": True,
-                    "path": "get_employee",
+                    "path": ID_GET_EMPLOYEE,
                     "record": _compact_legacy_record(data),
                 }
         except Exception as exc:  # noqa: BLE001 — best-effort
             return {
                 "found": False,
-                "path": "get_employee",
+                "path": ID_GET_EMPLOYEE,
                 "error": str(exc),
             }
 
@@ -2470,33 +2484,31 @@ async def _llm_transliterate(query: str, instance_id: str, conversation_id: str)
 # Compensation fields: omit from Chat identity lookups unless the user asked
 # about pay (A5 minimize-disclosure — even when CBAC allows the amount).
 _COMPENSATION_INTENT_WORDS = (
-    V("t_salary"), "compensation", "pay", "wage", V("t_payroll"),
+    LV("t_salary"), LV("t_rx_w_compensation"), LV("t_rx_w_pay"), LV("t_rx_w_wage"), LV("t_payroll"),
 )
-_COMPENSATION_INTENT_PHRASES = ("basic pay", V("t_basic_salary"))
+_COMPENSATION_INTENT_PHRASES = (LV("t_rx_w_basic_pay"), LV("t_basic_salary"))
 
-_PAYSLIP_SPECIFIC_RE = re.compile(
-    r"(?i)("
-    + V("t_payslip_pay_s_slip")
-    + r"|net\s*pay|take[\s_-]*home|takehome"
-    r"|last\s+month(?:'s)?\s+(?:net\s+)?pay"
-    r"|deductions?\s+(?:were|applied|on)"
-    + V("t_gosi_3")
-    + r")"
+_PAYSLIP_SPECIFIC_RE = live_alt(
+    LV("t_payslip_pay_s_slip"),
+    LV("t_rx_payslip_specific_en"),
+    LV("t_gosi_3"),
+    flags=re.IGNORECASE,
 )
 
 
-_COMP_DENY_MESSAGE = (
-    "Not authorized to view compensation (people:view_compensation required)."
-)
+def _comp_deny_message(cap: str = "") -> str:
+    """Host deny sentence. A pack that has none of it gets a subject-free deny."""
+    shown = str(cap or ID_CAP_COMPENSATION)
+    if not shown:
+        return "Not authorized."
+    return copy_text("t_rx_copy_comp_deny", cap=shown) or "Not authorized."
 
-_PAYSLIP_API_NAMES = frozenset({
-    "list_my_payslips",
-    "list_payslip_lines",
-})
+def _payslip_api_names() -> frozenset[str]:
+    return present_ids(ID_LIST_MY_PAYSLIPS, ID_LIST_PAYSLIP_LINES)
 
-_PROFILE_API_NAMES = frozenset({
-    "get_my_profile",
-})
+
+def _profile_api_names() -> frozenset[str]:
+    return present_ids(ID_GET_MY_PROFILE)
 
 
 def _first_person_en(text: str) -> bool:
@@ -2534,7 +2546,7 @@ def first_person_compensation_ask(text: str | None) -> bool:
 
 
 _FIRST_PERSON_PROFILE_PHRASES = (
-    V("t_employee_number"), V("t_employee_no"), V("t_employee_2"),
+    LV("t_employee_number"), LV("t_employee_no"), LV("t_employee_2"),
     "what department am i", "department am i", "which department am i",
     "my department", "who is my manager", "my manager", "manager's name",
     "managers name", "who am i", "my profile",
@@ -2570,7 +2582,7 @@ _NAMED_COWORKER_RE = re.compile(
 )
 _NAMED_COWORKER_STOP = frozenset({
     "my", "me", "i", "you", "the", "a", "an", "this", "that",
-    V("t_payroll"), V("t_leave"), V("t_loan_2"), "today", "tomorrow",
+    LV("t_payroll"), LV("t_leave"), LV("t_loan_2"), "today", "tomorrow",
 })
 
 
@@ -2582,34 +2594,31 @@ def extract_named_coworker_query(text: str | None) -> str | None:
     if not match:
         return None
     name = (match.group(1) or "").strip(" .,-")
-    if not name or name.casefold() in _NAMED_COWORKER_STOP:
+    if not name or name.casefold() in {str(item) for item in _NAMED_COWORKER_STOP}:
         return None
     if len(name) < 2:
         return None
     return name
 
 
-_LEAVE_BALANCE_INTENT_RE = re.compile(
-    r"("
-    + V("t_leave_s_balance_remaining_s_leave")
-    + V("t_days_s_of_s_leave_s")
-    + V("t_how_s_much_s_leave_annual_2")
-    + V("t_leave_s_entitlement_sick_s_leave")
-    + V("t_my_s_leaves_b")
-    + r")",
-    re.IGNORECASE,
+_LEAVE_BALANCE_INTENT_RE = live_pattern(
+    r"(",
+    LV("t_leave_s_balance_remaining_s_leave"),
+    LV("t_days_s_of_s_leave_s"),
+    LV("t_how_s_much_s_leave_annual_2"),
+    LV("t_leave_s_entitlement_sick_s_leave"),
+    LV("t_my_s_leaves_b"),
+    r")",
+    flags=re.IGNORECASE,
 )
 
 
-_NAMED_LEAVE_HINT_RE = re.compile(
-    r"("
-    r"\bemp[_\s-]?\d+\b|"
-    r"\bemployee\s*(?:no\.?|number|#|:)?\s*\d+|"
-    r"\bfor\s+(?!me\b)\w+|"
-    + V("t_s_s_leave_annual_sick_balance")
-    + r"\bdoes\s+[A-Z][\w'-]+\s+have\b"
-    r")",
-    re.IGNORECASE,
+_NAMED_LEAVE_HINT_RE = live_alt(
+    LV("t_rx_emp_id"),
+    r"\bfor\s+(?!me\b)\w+",
+    LV("t_s_s_leave_annual_sick_balance"),
+    r"\bdoes\s+[A-Z][\w'-]+\s+have\b",
+    flags=re.IGNORECASE,
 )
 
 
@@ -2635,12 +2644,14 @@ def _leave_intent_forms(text: str | None) -> tuple[str, ...]:
 def _named_leave_proper(text: str) -> bool:
     V("t_case_sensitive_given_name_leave_topic")
     tokens = (text or "").split()
-    nouns = {V("t_leave"), "annual", "sick", "balance"}
+    nouns = {
+        str(n) for n in (V("t_leave"), V("t_rx_w_annual"), V("t_rx_w_sick"), V("t_rx_w_balance")) if n
+    }
     stop = {
         "What", "How", "Show", "Where", "When", "Who", "Why", "Tell", "Please",
         "Can", "Could", "Would", "Should", "May", "My", "The", "A", "An", "OK",
         "Remaining", "List", "About", "Does", "Did", "Is", "Are", "I", "We",
-        "You", V("t_leave_2"), V("t_loan"), "Annual", "Sick", "Your", "Our", "Their",
+        "You", V("t_leave_2"), V("t_loan"), V("t_rx_w_annual_cap"), V("t_rx_w_sick_cap"), "Your", "Our", "Their",
     }
     for i, tok in enumerate(tokens):
         clean = tok.strip(".,?؟!'\"")
@@ -2699,8 +2710,8 @@ def _compensation_deny_dict() -> dict:
     return {
         "unauthorized": True,
         "status_code": 403,
-        "capability": "people:view_compensation",
-        "message": _COMP_DENY_MESSAGE,
+        "capability": ID_CAP_COMPENSATION,
+        "message": _comp_deny_message(),
     }
 
 
@@ -2749,7 +2760,7 @@ def stamp_compensation_deny_on_soft_empty(
     if payslip_specific_ask(user_message):
         # Net pay / take-home / last : empty list is the truth.
         return completed_tools
-    if caps and "people:view_compensation" in caps:
+    if caps and ID_CAP_COMPENSATION in caps:
         return completed_tools
 
     deny = _compensation_deny_dict()
@@ -2770,18 +2781,19 @@ def stamp_compensation_deny_on_soft_empty(
         if not isinstance(data, dict):
             out.append(item)
             continue
-        if data.get("unauthorized") and "view_compensation" in str(
+        comp_mark = str(ID_CAP_VIEW_COMP)
+        if data.get("unauthorized") and comp_mark and comp_mark in str(
             data.get("capability") or data.get("message") or ""
         ):
             out.append(item)
             continue
 
         is_payslip = (
-            api in _PAYSLIP_API_NAMES
-            or V("t_payslip_2") in api
+            api in _payslip_api_names()
+            or (V("t_payslip_2") and V("t_payslip_2") in api)
             or V("t_payslip_2") in str(data.get("endpoint") or "").lower()
         )
-        is_profile = api in _PROFILE_API_NAMES or api in {"me", "get_my_profile"}
+        is_profile = api in _profile_api_names() or api == "me" or same_id(api, ID_GET_MY_PROFILE)
         should_stamp = False
         if is_payslip and _payload_is_empty_list(data):
             should_stamp = True
@@ -2842,13 +2854,15 @@ def compensation_authz_deny_message(completed_tools: list[dict] | None) -> str |
             continue
         cap = str(data.get("capability") or "")
         msg = str(data.get("message") or "")
-        if "view_compensation" not in cap and "view_compensation" not in msg:
+        if ID_CAP_VIEW_COMP not in cap and ID_CAP_VIEW_COMP not in msg:
             continue
-        body = msg.strip() or _COMP_DENY_MESSAGE
+        body = msg.strip() or _comp_deny_message(cap or ID_CAP_COMPENSATION)
+        header = copy_text("t_rx_copy_comp_deny_header") or "Not authorized."
+        bullet = copy_text("t_rx_copy_comp_deny_bullet")
         return (
-            f"**Not authorized to view compensation.** {body}\n\n"
+            f"{header} {body}\n\n"
             "**Key takeaways:**\n"
-            "- Access requires the `people:view_compensation` capability.\n"
+            + bullet
             + V("t_this_is_an_authorization_deny_not")
         )
     return None
@@ -2894,16 +2908,14 @@ def _compensation_unauthorized_payload(
     scrubbed = dict(record)
     for field_name in missing:
         scrubbed.pop(field_name, None)
-    cap = required_cap or "people:view_compensation"
+    cap = required_cap or ID_CAP_COMPENSATION
     return {
         "found": True,
         "action": "match",
         "unauthorized": True,
         "status_code": 403,
         "capability": cap,
-        "message": (
-            f"Not authorized to view compensation ({cap} required)."
-        ),
+        "message": _comp_deny_message(cap),
         "record": scrubbed,
         "unauthorized_fields": missing,
     }
@@ -3003,18 +3015,18 @@ async def execute_resolve_entity(
             if (
                 entity_type == V("t_employee_4")
                 and compensation_intent_asked(intent_text)
-                and "people:view_compensation" not in caps
+                and ID_CAP_COMPENSATION not in caps
             ):
                 ar = (result.lang or "") == "ar"
                 return {
                     "found": False,
                     "unauthorized": True,
                     "status_code": 403,
-                    "capability": "people:view_compensation",
+                    "capability": str(ID_CAP_COMPENSATION),
                     "message": (
-                        "غير مصرح بعرض بيانات التعويض (مطلوب صلاحية people:view_compensation)."
+                        (copy_text("t_rx_copy_comp_deny_ar") or "Not authorized.")
                         if ar
-                        else _COMP_DENY_MESSAGE
+                        else _comp_deny_message()
                     ),
                     "searched_total": result.searched_total,
                     "query": query,
@@ -3026,7 +3038,7 @@ async def execute_resolve_entity(
             exists_fn = getattr(executor, "entity_exists_unscoped", None)
             if (
                 entity_type == V("t_employee_4")
-                and "people:view" not in caps
+                and str(ID_CAP_VIEW_PREFIX) not in caps and str(ID_CAP_VIEW_PREFIX)
                 and callable(exists_fn)
                 and (query or "").strip()
             ):
@@ -3049,7 +3061,7 @@ async def execute_resolve_entity(
                             continue
             if (
                 entity_type == V("t_employee_4")
-                and "people:view" not in caps
+                and str(ID_CAP_VIEW_PREFIX) not in caps and str(ID_CAP_VIEW_PREFIX)
                 and exists_elsewhere
             ):
                 ar = (result.lang or "") == "ar"

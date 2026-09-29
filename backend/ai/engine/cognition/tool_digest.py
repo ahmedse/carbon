@@ -1,7 +1,7 @@
 from __future__ import annotations
 from ai.engine.cognition.phrase_tables import T
-from ai.engine.pack_vocab import V
-V("t_per_message_tool_digests_pv2_1c")
+from ai.engine.pack_vocab import LV, V
+LV("t_per_message_tool_digests_pv2_1c")
 
 
 import json

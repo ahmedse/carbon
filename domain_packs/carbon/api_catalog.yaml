@@ -30,6 +30,56 @@ tools:
     requires_confirmation: false
     source_type: carbon_api
 
+  - name: list_dq_rules
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+  - name: bind_dq_rules
+    kind: write
+    requires_confirmation: true
+    source_type: carbon_api
+
+  - name: create_table
+    kind: write
+    requires_confirmation: true
+    source_type: carbon_api
+
+  - name: list_data_tables
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+  - name: get_data_product_details
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+  - name: list_reporting_periods
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+  - name: list_emission_factors
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+  - name: list_gwp_gases
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+  - name: get_calculation_summary
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+  - name: get_chairman_overview
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
 # Governed host-action capabilities (P3-01). Each entry is a capability
 # contract; ``host_action`` resolves against backend/ai/capability_registry.py.
 # Pilot: docs/pulse/PILOT.md ``dq.rule.release``

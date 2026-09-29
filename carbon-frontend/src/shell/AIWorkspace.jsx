@@ -69,7 +69,9 @@ import {
   processCreatePayload,
   processForConversation,
   rememberConversationProcess,
+  withHostPayload,
 } from './pulseProcessThreads';
+import { usePulseHost } from './pulseHostContext';
 import { AGENT_VIEW_KEY, readActivePlanId } from './sessionRestore';
 
 const LOCAL_STORAGE_KEY = 'carbon-ai-active-conversation';
@@ -86,6 +88,8 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
   const { isRtl } = useLanguage();
   const isMobile = useIsMobile();
   const { token } = useAuth();
+  const host = usePulseHost();
+  const embedded = Boolean(host);
   const { notifyFromError } = useNotification();
   const { pendingTransferId, clearPendingTransfer } = useAITaskTransfer();
 
@@ -94,6 +98,7 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
   const [order, setOrder] = useState([]); // visible (non-archived) ids, pinned first
   const [archivedIds, setArchivedIds] = useState([]);
   const [activeId, setActiveId] = useState(() => {
+    if (embedded) return null;
     try {
       return localStorage.getItem(LOCAL_STORAGE_KEY) || null;
     } catch {
@@ -107,7 +112,9 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
   // W5-A (ADR-0014) — workspace-level mode: 'chat' (advisory conversation) or
   // 'agent' (planning + execution + consent + audit). Persisted so the user's
   // last mode survives close/reopen.
+  const [showSplash, setShowSplash] = useState(false);
   const [mode, setMode] = useState(() => {
+    if (embedded) return 'chat';
     try {
       return localStorage.getItem(MODE_STORAGE_KEY) === 'agent' ? 'agent' : 'chat';
     } catch {
@@ -117,6 +124,7 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
   // Ask | Plan = separate sessions. Dial flip switches conversation_id so
   // ConversationState (slots / intent) never mingles across modes.
   const [composerProcess, setComposerProcess] = useState(() => {
+    if (embedded) return 'ask';
     try {
       return normalizePulseProcess(localStorage.getItem(PROCESS_STORAGE_KEY));
     } catch {
@@ -277,6 +285,7 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
       try {
         const data = await apiListConversations(token, { limit: 200 });
         indexList(data);
+        setShowSplash(false);
         setActiveId(pendingTransferId);
       } catch {
         // failed silently — conversation will appear on next load
@@ -288,6 +297,7 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
 
   // Save active conversation to localStorage.
   useEffect(() => {
+    if (embedded) return;
     try {
       if (activeId) {
         localStorage.setItem(LOCAL_STORAGE_KEY, activeId);
@@ -297,24 +307,26 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
     } catch {
       /* ignore */
     }
-  }, [activeId]);
+  }, [activeId, embedded]);
 
   // W5-A — persist the workspace mode (ADR-0014: mode survives close/reopen).
   useEffect(() => {
+    if (embedded) return;
     try {
       localStorage.setItem(MODE_STORAGE_KEY, mode);
     } catch {
       /* ignore */
     }
-  }, [mode]);
+  }, [mode, embedded]);
 
   useEffect(() => {
+    if (embedded) return;
     try {
       localStorage.setItem(PROCESS_STORAGE_KEY, composerProcess);
     } catch {
       /* ignore */
     }
-  }, [composerProcess]);
+  }, [composerProcess, embedded]);
 
   useEffect(() => {
     try {
@@ -356,10 +368,12 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
   // stale value with "The `value` provided to the Tabs component is invalid").
   // Falls back to the first visible conversation when none is active — e.g. a
   // fresh session with no stored selection, or the active tab was just closed.
-  const effectiveActiveId = useMemo(
-    () => (visibleIds.includes(activeId) ? activeId : visibleIds[0] || null),
-    [visibleIds, activeId],
-  );
+  const effectiveActiveId = useMemo(() => {
+    if (visibleIds.includes(activeId)) return activeId;
+    // The Moodle pane starts on the open course, not the last thread.
+    if (embedded) return null;
+    return visibleIds[0] || null;
+  }, [visibleIds, activeId, embedded]);
 
   // Persist the effective id into state so localStorage and the activeRef
   // (Ctrl+W archive target) stay in sync with what's actually rendered.
@@ -397,17 +411,18 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
       const title = composerProcess === 'plan' ? t('newPlanChatTitle') : t('newAskChatTitle');
       const conv = await apiCreateConversation(
         token,
-        processCreatePayload(composerProcess, title),
+        withHostPayload(processCreatePayload(composerProcess, title), host),
       );
       rememberConversationProcess(conv.id, composerProcess);
       setById((prev) => ({ ...prev, [conv.id]: conv }));
       setOrder((prev) => [conv.id, ...prev]);
+      setShowSplash(false);
       setActiveId(conv.id);
       setShowArchived(false);
     } catch (err) {
       notifyFromError(err, 'Could not create conversation');
     }
-  }, [token, notifyFromError, t, composerProcess]);
+  }, [token, notifyFromError, t, composerProcess, host]);
 
   // Ask ↔ Plan flips the conversation, not a flag on the same thread.
   // The Switch-to-Plan CTA carries the request and the recent thread into a
@@ -415,6 +430,7 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
   const handleComposerProcessChange = useCallback(
     async (next, carry) => {
       if (processSwitching) return;
+      if (embedded && normalizePulseProcess(next) === 'plan') return;
       const dial = normalizePulseProcess(next);
       const carried = String(carry?.request || '').trim();
       if (carried) {
@@ -422,7 +438,7 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
         try {
           const conv = await apiCreateConversation(
             token,
-            processCreatePayload('plan', t('newPlanChatTitle')),
+            withHostPayload(processCreatePayload('plan', t('newPlanChatTitle')), host),
           );
           rememberConversationProcess(conv.id, 'plan');
           const prior = String(carry.context || '').trim();
@@ -431,6 +447,7 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
           setById((prev) => ({ ...prev, [conv.id]: conv }));
           setOrder((prev) => [conv.id, ...prev]);
           setComposerProcess('plan');
+          setShowSplash(false);
           setActiveId(conv.id);
           setShowArchived(false);
         } catch (err) {
@@ -453,6 +470,7 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
         // Atomic thread + dial switch: never render Plan controls on the old
         // Ask conversation (or vice versa).
         setComposerProcess(dial);
+        setShowSplash(false);
         setActiveId(targetId);
         setShowArchived(false);
         return;
@@ -466,12 +484,13 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
         const title = dial === 'plan' ? t('newPlanChatTitle') : t('newAskChatTitle');
         const conv = await apiCreateConversation(
           token,
-          processCreatePayload(dial, title),
+          withHostPayload(processCreatePayload(embedded ? 'ask' : dial, title), host),
         );
         rememberConversationProcess(conv.id, dial);
         setById((prev) => ({ ...prev, [conv.id]: conv }));
         setOrder((prev) => [conv.id, ...prev]);
         setComposerProcess(dial);
+        setShowSplash(false);
         setActiveId(conv.id);
         setShowArchived(false);
       } catch (err) {
@@ -480,7 +499,7 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
         setProcessSwitching(false);
       }
     },
-    [processSwitching, composerProcess, activeId, order, byId, token, notifyFromError, t],
+    [processSwitching, composerProcess, activeId, order, byId, token, notifyFromError, t, host, embedded],
   );
 
   // Handle a manifest starter chip: open a conversation of the right type and
@@ -488,23 +507,26 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
   const handleStartStarter = useCallback(
     async (appId, taskType, label, prompt) => {
       try {
-        const conv = await apiCreateConversation(token, {
+        const conv = await apiCreateConversation(token, withHostPayload({
           conversation_type: taskType,
           title: label,
           app_identifier: appId,
-        });
+        }, host));
         setById((prev) => ({ ...prev, [conv.id]: conv }));
         setOrder((prev) => [conv.id, ...prev]);
+        setShowSplash(false);
         setActiveId(conv.id);
         setShowArchived(false);
-        if (prompt) {
+        if (prompt && embedded) {
+          setChatSeedDraft(prompt);
+        } else if (prompt) {
           await apiSendMessage(token, conv.id, prompt);
         }
       } catch (err) {
         notifyFromError(err, 'Could not start conversation');
       }
     },
-    [token, notifyFromError],
+    [token, notifyFromError, host, embedded],
   );
 
   // Phase 9-B — "New investigation" opens a bare investigate conversation
@@ -518,6 +540,7 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
       });
       setById((prev) => ({ ...prev, [conv.id]: conv }));
       setOrder((prev) => [conv.id, ...prev]);
+      setShowSplash(false);
       setActiveId(conv.id);
       setShowArchived(false);
       setActivePanel('sessions');
@@ -528,6 +551,7 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
 
   // Phase 9-B — open an investigate conversation's thread (rendered in chat mode).
   const handleOpenInvestigation = useCallback((convId) => {
+    setShowSplash(false);
     setActiveId(convId);
     setActivePanel('sessions');
   }, []);
@@ -554,6 +578,7 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
       if (!convId) return;
       setArchivedIds((prev) => prev.filter((x) => x !== convId));
       setOrder((prev) => [convId, ...prev]);
+      setShowSplash(false);
       setActiveId(convId);
       setShowArchived(false);
       try {
@@ -572,6 +597,7 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
     if (!forked?.id) return;
     setById((prev) => ({ ...prev, [forked.id]: forked }));
     setOrder((prev) => [forked.id, ...prev]);
+    setShowSplash(false);
     setActiveId(forked.id);
     setShowArchived(false);
   }, []);
@@ -663,6 +689,7 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
     (convId) => {
       const conv = byId[convId];
       setChatActivePlans([]);
+      setShowSplash(false);
       if (conv?.is_archived) handleRestore(convId);
       else setActiveId(convId);
     },
@@ -721,12 +748,19 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
 
   // W5-A — switch the workspace-level mode. The sessions/context drawer is a
   // chat-mode surface, so it closes when entering Agent mode.
+  const handleGoHome = useCallback(() => {
+    setMode('chat');
+    setShowSplash(true);
+    setActivePanel(null);
+  }, []);
+
   const handleModeChange = useCallback((nextMode) => {
+    if (embedded && nextMode === 'agent') return;
     setMode(nextMode);
     if (nextMode === 'agent') {
       setActivePanel(null);
     }
-  }, []);
+  }, [embedded]);
 
   // W5-A — AITaskPanel reports its lifecycle state; the header shows the
   // matching safety-contract text (ADR-0014 §4).
@@ -783,6 +817,14 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
   // returns to the default Tasks view.
   const selectAgentView = (view) => setAgentView((prev) => (prev === view ? 'tasks' : view));
 
+  const courseMatch = embedded
+    ? (host?.pageContext || '').match(/^Open course (.+?) id=/m)
+    : null;
+  const courseLine = courseMatch ? courseMatch[1].trim() : '';
+  const hostIntro = embedded
+    ? `${courseLine ? `${courseLine}. ` : ''}Ask about this page. Cite only what is listed, and say when a fact is not on it. Nothing on Moodle is changed.`
+    : undefined;
+
   return (
     <ExecuteModeProvider>
     <PulsePrefsProvider>
@@ -803,6 +845,8 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
             linkedPlan={mode === 'chat' ? headerLinkedPlan : null}
             onOpenLinkedPlan={openLinkedPlan}
             onDismissLinkedPlan={dismissLinkedPlan}
+            onHome={handleGoHome}
+            lockAsk={embedded}
           />
           {loading ? (
             <Box
@@ -858,8 +902,17 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
                 <InvestigateTab conversations={investigateConversations} onSelect={handleOpenInvestigation} onNew={handleNewInvestigation} />
               ) : activePanel === 'artifacts' ? (
                 <OpsCanvasShelf conversationId={effectiveActiveId} />
-              ) : !hasAny ? (
-                <AIEmptyState onStartChat={handleNewChat} manifests={manifests} onStartStarter={handleStartStarter} />
+              ) : showSplash || !hasAny ? (
+                <AIEmptyState
+                  onStartChat={handleNewChat}
+                  manifests={manifests}
+                  onStartStarter={handleStartStarter}
+                  intro={hostIntro}
+                  suggestions={embedded ? [
+                    { appId: 'moodle', taskType: 'chat', label: 'What is on this page?', prompt: 'What is on this page?' },
+                    { appId: 'moodle', taskType: 'chat', label: 'List the sections', prompt: 'List the sections on this course page.' },
+                  ] : undefined}
+                />
               ) : activeConversation ? (
                 <AIConversationView
                   key={activeConversation.id}
@@ -874,12 +927,22 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
                   planCarry={planCarry?.id === activeConversation.id ? planCarry.text : null}
                   onPlanCarryConsumed={() => setPlanCarry(null)}
                   onActivePlans={setChatActivePlans}
-                  process={composerProcess}
+                  process={embedded ? 'ask' : composerProcess}
                   processSwitching={processSwitching}
                   onProcessChange={handleComposerProcessChange}
+                  lockAsk={embedded}
                 />
               ) : (
-                <AIEmptyState onStartChat={handleNewChat} manifests={manifests} onStartStarter={handleStartStarter} />
+                <AIEmptyState
+                  onStartChat={handleNewChat}
+                  manifests={manifests}
+                  onStartStarter={handleStartStarter}
+                  intro={hostIntro}
+                  suggestions={embedded ? [
+                    { appId: 'moodle', taskType: 'chat', label: 'What is on this page?', prompt: 'What is on this page?' },
+                    { appId: 'moodle', taskType: 'chat', label: 'List the sections', prompt: 'List the sections on this course page.' },
+                  ] : undefined}
+                />
               )}
             </>
           )}

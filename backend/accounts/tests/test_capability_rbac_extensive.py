@@ -217,7 +217,7 @@ class TestCapabilityDefinitions:
         """
         count = len(ALL_CAPABILITIES)
         assert count >= 60, f"Expected at least 60 capabilities, got {count}"
-        assert count <= 75, f"Expected at most 75 capabilities, got {count}"
+        assert count <= 80, f"Expected at most 80 capabilities, got {count}"
 
     @pytest.mark.parametrize("domain,min_count", [
         ("carbon", 15),

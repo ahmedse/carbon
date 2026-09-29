@@ -17,6 +17,11 @@ Schema v1 (top-level keys exactly)::
 Engine-only: imports nothing from the Django host (import boundary).
 """
 from __future__ import annotations
+
+from ai.engine.host_ids import (
+    ID_LIST_MY_PAYSLIPS,
+    ID_LOAN_TYPE,
+)
 from ai.engine.cognition.phrase_tables import T
 
 from ai.engine.pack_vocab import V
@@ -486,14 +491,25 @@ def _infer_open_question_slot(
     gates = {str(g) for g in (fired_gates or []) if g}
     if "report_clarify" in gates or "zero_llm" in gates:
         text_l = (response_text or "").lower()
-        if "focus on" in text_l or V("t_salary_report") in text_l or "تقرير الرواتب" in (response_text or ""):
+        salary_report = V("t_salary_report")
+        salary_report_ar = V("t_rx_w_salary_report_ar")
+        if (
+            "focus on" in text_l
+            or (salary_report and salary_report in text_l)
+            or (salary_report_ar and salary_report_ar in (response_text or ""))
+        ):
             return "report_aspect"
     text_l = (response_text or "").lower()
-    if "focus on" in text_l and ("pay distribution" in text_l or V("t_payroll_run_3") in text_l):
+    pay_distribution = V("t_rx_w_pay_distribution")
+    payroll_run = V("t_payroll_run_3")
+    if "focus on" in text_l and (
+        (pay_distribution and pay_distribution in text_l)
+        or (payroll_run and payroll_run in text_l)
+    ):
         return "report_aspect"
     # ESS: first missing known write slot.
     known = dict(slots or {})
-    for key in ("loan_type", "amount", "principal", "reason", "start_date", "end_date", "days"):
+    for key in (ID_LOAN_TYPE, "amount", "principal", "reason", "start_date", "end_date", "days"):
         if key not in known or known.get(key) in (None, ""):
             if key in text_l or key.replace("_", " ") in text_l:
                 return key
@@ -567,7 +583,7 @@ def update_state_from_turn(
     raw = response_text or ""
     if contains_any_phrase(raw, _EMPTY_PAYSLIP_REPLY_PHRASES) or any_needle(raw, EMPTY_PAYSLIP_AR):
         already = any(
-            "list_my_payslips" in str(row.get("api") or row.get("digest") or "")
+            ID_LIST_MY_PAYSLIPS in str(row.get("api") or row.get("digest") or "")
             and (
                 "count=0" in str(row.get("digest") or "")
                 or "results=[]" in str(row.get("digest") or "")
@@ -579,7 +595,7 @@ def update_state_from_turn(
             state.last_results.append({
                 "turn": turn,
                 "tool": "call_host_api",
-                "api": "list_my_payslips",
+                "api": ID_LIST_MY_PAYSLIPS,
                 "digest": "call_host_api list_my_payslips: count=0",
             })
 

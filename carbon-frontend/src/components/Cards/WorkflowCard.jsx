@@ -5,7 +5,18 @@ import { Box, Typography, Tooltip } from '@mui/material';
 function WorkflowCard({ icon, title, description, onClick, disabled }) {
   const content = (
     <Box
+      role="button"
+      tabIndex={disabled ? -1 : 0}
+      aria-label={title}
+      aria-disabled={disabled || undefined}
       onClick={disabled ? undefined : onClick}
+      onKeyDown={(event) => {
+        if (disabled || !onClick) return;
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onClick(event);
+        }
+      }}
       sx={{
         p: 1.25,
         borderRadius: 2,

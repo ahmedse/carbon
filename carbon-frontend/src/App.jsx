@@ -67,6 +67,7 @@ const GovernancePage = React.lazy(() => import("./pages/catalog/GovernancePage")
 const DataSourcesDetailPage = React.lazy(() => import("./pages/catalog/DataSourcesDetailPage"));
 const ExportsDetailPage = React.lazy(() => import("./pages/catalog/ExportsDetailPage"));
 const ImportsDetailPage = React.lazy(() => import("./pages/catalog/ImportsDetailPage"));
+const ImportsStudioPage = React.lazy(() => import("./pages/catalog/ImportsStudioPage"));
 const DataOwnerAssetsPage = React.lazy(() => import("./pages/data-owner/DataOwnerAssetsPage"));
 const FactorsHubPage = React.lazy(() => import("./pages/emissions/FactorsHubPage"));
 const CalculationRulesPage = React.lazy(() => import("./pages/emissions/CalculationRulesPage"));
@@ -79,6 +80,7 @@ const CarbonConsolePage = React.lazy(() => import("./pages/carbon/CarbonConsoleP
 const CarbonDashboardPage = React.lazy(() => import("./pages/carbon/CarbonDashboardPage"));
 const AnalyticsDashboard = React.lazy(() => import("./pages/dashboards/AnalyticsDashboard"));
 const ChairmanDashboard = React.lazy(() => import("./pages/carbon/ChairmanDashboard"));
+const OnboardingPage = React.lazy(() => import("./pages/carbon/OnboardingPage"));
 const ReportsPage = React.lazy(() => import("./pages/carbon/ReportsPage"));
 const MyDataPage = React.lazy(() => import("./pages/carbon/MyDataPage"));
 const ModuleWorkspacePage = React.lazy(() => import("./pages/carbon/ModuleWorkspacePage"));
@@ -90,6 +92,8 @@ const AssuranceBoardPage = React.lazy(() => import("./pages/admin/AssuranceBoard
 const ExcellenceConsolePage = React.lazy(() => import("./pages/admin/excellence/ExcellenceConsolePage"));
 const ExcellenceSubjectPage = React.lazy(() => import("./pages/admin/excellence/ExcellenceSubjectPage"));
 const PlatformConfigPage = React.lazy(() => import("./pages/admin/PlatformConfigPage"));
+const CartridgeListPage = React.lazy(() => import("./pages/admin/migration/CartridgeListPage"));
+const CartridgeDetailPage = React.lazy(() => import("./pages/admin/migration/CartridgeDetailPage"));
 // ADR-0036 Pulse Control Plane — six hubs + engage routes + legacy redirects
 const CommandCenterPage = React.lazy(() =>
   import("./pages/admin/ai/control/hubPages").then((m) => ({ default: m.CommandCenterPage })),
@@ -112,6 +116,7 @@ const PlatformHubPage = React.lazy(() =>
 const LegacyAiRedirect = React.lazy(() => import("./pages/admin/ai/control/LegacyAiRedirect"));
 const ProcessObjectPage = React.lazy(() => import("./pages/admin/ai/control/ProcessObjectPage"));
 const AIWorkspacePage = React.lazy(() => import("./pages/admin/ai/AIWorkspacePage"));
+const PulseEmbedPage = React.lazy(() => import("./pages/embed/PulseEmbedPage"));
 const AIConversationsPage = React.lazy(() => import("./pages/admin/ai/AIConversationsPage"));
 const HealthyDashboard = React.lazy(() => import("./apps/healthy/HealthyDashboard"));
 const LoadoutSheetPage = React.lazy(() => import("./apps/healthy/LoadoutSheetPage"));
@@ -152,6 +157,8 @@ const CertificationsPage = React.lazy(() => import("./apps/people/Certifications
 const RotationSchedulesPage = React.lazy(() => import("./apps/people/RotationSchedulesPage"));
 const PoliciesPage = React.lazy(() => import("./apps/people/PoliciesPage"));
 const PolicyDetailPage = React.lazy(() => import("./apps/people/PolicyDetailPage"));
+const ImportListPage = React.lazy(() => import("./apps/people/ImportListPage"));
+const ImportStudioPage = React.lazy(() => import("./apps/people/ImportStudioPage"));
 const MyDashboard = React.lazy(() => import("./apps/my/MyDashboard"));
 const MyLeave = React.lazy(() => import("./apps/my/MyLeave"));
 const MyPayslips = React.lazy(() => import("./apps/my/MyPayslips"));
@@ -244,6 +251,7 @@ export default function App() {
             <Suspense fallback={<LoadingSpinner />}>
               <Routes>
                 <Route path="/login" element={<Login />} />
+                <Route path="/embed/pulse" element={<PulseEmbedPage />} />
                 <Route path="/forgot-password" element={<ForgotPasswordPage />} />
                 <Route path="/reset-password/:uidb64/:token" element={<ResetPasswordPage />} />
                 <Route element={<RequireAuth />}>
@@ -284,6 +292,7 @@ export default function App() {
                 {/* Namespace root redirect — hitting the bare /carbon root (e.g. the
                     /carbon/ deployment mount path) must never 404. RULE_22. */}
                 <Route path="/carbon" element={<AppEnabledRoute appId="carbon"><Navigate to="/carbon/chairman" replace /></AppEnabledRoute>} />
+                <Route path="/carbon/onboarding" element={<AppEnabledRoute appId="carbon"><OnboardingPage /></AppEnabledRoute>} />
                 <Route path="/carbon/chairman" element={<AppEnabledRoute appId="carbon"><ChairmanDashboard /></AppEnabledRoute>} />
                 <Route path="/carbon/console" element={<AppEnabledRoute appId="carbon"><CarbonConsolePage /></AppEnabledRoute>} />
                 <Route path="/carbon/dashboard" element={<AppEnabledRoute appId="carbon"><CarbonDashboardPage /></AppEnabledRoute>} />
@@ -379,6 +388,8 @@ export default function App() {
                 <Route path="/people/rotation" element={<RotationSchedulesPage />} />
                 <Route path="/people/policies" element={<PoliciesPage />} />
                 <Route path="/people/policies/:policyId" element={<PolicyDetailPage />} />
+                <Route path="/people/import" element={<ImportListPage />} />
+                <Route path="/people/import/:id" element={<ImportStudioPage />} />
                 {/* My app — employee self-service. Bare namespace root resolves to MyDashboard. RULE_22. */}
                 <Route path="/my" element={<MyDashboard />} />
                 <Route path="/my/leave" element={<MyLeave />} />
@@ -489,9 +500,13 @@ export default function App() {
                 <Route path="/admin/excellence/exemptions" element={<AdminRoute><ExcellenceConsolePage /></AdminRoute>} />
                 <Route path="/admin/excellence/initiatives" element={<AdminRoute><ExcellenceConsolePage /></AdminRoute>} />
                 <Route path="/admin/excellence/subjects/:subjectId" element={<AdminRoute><ExcellenceSubjectPage /></AdminRoute>} />
+                <Route path="/admin/excellence/:context/cells/:board/:row/:column" element={<AdminRoute><ExcellenceConsolePage /></AdminRoute>} />
+                <Route path="/admin/excellence/:context/definitions/:definitionId" element={<AdminRoute><ExcellenceConsolePage /></AdminRoute>} />
                 <Route path="/admin/excellence/:context" element={<AdminRoute><ExcellenceConsolePage /></AdminRoute>} />
                 <Route path="/admin/excellence/:context/:app" element={<AdminRoute><ExcellenceConsolePage /></AdminRoute>} />
                 <Route path="/admin/config" element={<AdminRoute><PlatformConfigPage /></AdminRoute>} />
+                <Route path="/admin/migration/cartridges" element={<AdminRoute><CartridgeListPage /></AdminRoute>} />
+                <Route path="/admin/migration/cartridges/:id" element={<AdminRoute><CartridgeDetailPage /></AdminRoute>} />
                 {/* Pulse Control Plane (ADR-0036) — six destinations */}
                 <Route path="/admin/ai" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><CommandCenterPage /></AdminRoute>} />
                 <Route path="/admin/ai/domain" element={<AdminRoute requiredCapability={AI_VIEW_CONSOLE}><DomainHubPage /></AdminRoute>} />
@@ -582,6 +597,7 @@ export default function App() {
                   <Route path="/catalog/sources" element={<DataSourcesDetailPage />} />
                   <Route path="/catalog/exports" element={<ExportsDetailPage />} />
                   <Route path="/catalog/imports" element={<ImportsDetailPage />} />
+                  <Route path="/catalog/imports/:id" element={<ImportsStudioPage />} />
                 </Route>
 
                 {/* DQ Workspace — outside CatalogRoute: DQ has its own capability gates (dq:view / dq:manage_rules) */}

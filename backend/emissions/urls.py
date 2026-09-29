@@ -38,6 +38,7 @@ from .views import (
     InventoryCoverageAPIView,
     ChairmanAPIView,
 )
+from .onboarding_o1 import OnboardingO1APIView
 
 app_name = 'emissions'
 
@@ -85,6 +86,7 @@ for _view in (
     CoverageActionViewSet,
     InventoryCoverageAPIView,
     ChairmanAPIView,
+    OnboardingO1APIView,
 ):
     _brand_gate(_view)
 
@@ -164,6 +166,7 @@ urlpatterns = [
     path('', include(coverage_goal_router.urls)),
     path('', include(coverage_action_router.urls)),
     path('coverage/', InventoryCoverageAPIView.as_view(), name='inventory-coverage'),
+    path('onboarding/o1/', OnboardingO1APIView.as_view(), name='onboarding-o1'),
     
     # Dashboard API
     path('dashboard/', DashboardAPIView.as_view(), name='dashboard'),

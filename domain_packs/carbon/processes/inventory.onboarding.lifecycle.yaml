@@ -1,0 +1,134 @@
+# AASTMT inventory onboarding — O1 leaf (Smart Village electricity + diesel).
+# People perform the host writes. Pulse Chat does not. Agent may stage a
+# confirmed step only. This file does not create a reporting period.
+id: inventory.onboarding.lifecycle
+version: "1.0"
+owner: carbon-inventory-lead
+status: active
+benchmark: O1
+
+objects:
+  - type: inventory.onboarding
+    selector: period_id
+
+inputs:
+  period_id:
+    type: string
+
+scope:
+  source: authenticated_host_context
+
+objective:
+  predicate: inventory.onboarding.o1_sources_declared_or_excluded
+
+steps:
+  - id: name_boundary
+    kind: human_task
+    capability: carbon.boundary.maintain
+    depends_on: []
+    autonomy: human_only
+    binds_to: organizational_boundary
+    consent: false
+    approval_ref: inventory.onboarding.name_boundary
+    rule: CR-BND-01
+
+  - id: open_period
+    kind: human_task
+    capability: carbon.period.open
+    depends_on:
+      - name_boundary
+    autonomy: human_only
+    binds_to: reporting_period
+    consent: true
+    approval_ref: inventory.onboarding.open_period
+    rule: CR-PER-01
+
+  - id: declare_sources
+    kind: human_task
+    capability: carbon.inventory.declare
+    depends_on:
+      - open_period
+    autonomy: human_only
+    binds_to: inventory_source
+    consent: true
+    approval_ref: inventory.onboarding.declare_sources
+    rule: CR-SRC-01
+
+  - id: bind_factors
+    kind: human_task
+    capability: carbon.factor.maintain
+    depends_on:
+      - declare_sources
+    autonomy: human_only
+    binds_to: emission_factor
+    consent: false
+    approval_ref: inventory.onboarding.bind_factors
+    rule: CR-FAC-01
+
+  - id: enter_activity
+    kind: command
+    capability: carbon.activity.enter
+    depends_on:
+      - bind_factors
+    autonomy: act_confirm
+    binds_to: activity_data
+    consent: true
+    idempotency_scope: period_id+source_name
+    unknown_outcome: escalate
+    rule: CR-DQ-01
+
+  - id: calculate
+    kind: command
+    capability: carbon.calculation.run
+    depends_on:
+      - enter_activity
+    autonomy: act_confirm
+    binds_to: calculation
+    consent: true
+    idempotency_scope: period_id
+    unknown_outcome: escalate
+    rule: CR-COV-01
+
+  - id: cover_or_exclude
+    kind: human_task
+    capability: carbon.inventory.cover
+    depends_on:
+      - calculate
+    autonomy: human_only
+    separation_of_duties:
+      - campus_data_owner
+      - inventory_lead
+    binds_to: inventory_source_status
+    consent: true
+    approval_ref: inventory.onboarding.cover_or_exclude
+    rule: CR-EXC-01
+
+  - id: verify_quote
+    kind: assertion
+    capability: inventory.onboarding.quote_matches_summary
+    depends_on:
+      - cover_or_exclude
+    autonomy: observe
+    binds_to: calculation_summary
+    consent: false
+    rule: CR-PULSE-01
+
+constraints:
+  precedence:
+    - from: name_boundary
+      to: open_period
+    - from: open_period
+      to: declare_sources
+    - from: declare_sources
+      to: bind_factors
+    - from: bind_factors
+      to: enter_activity
+    - from: enter_activity
+      to: calculate
+    - from: calculate
+      to: cover_or_exclude
+    - from: cover_or_exclude
+      to: verify_quote
+  separation_of_duties:
+    - step: cover_or_exclude
+      distinct_roles: [campus_data_owner, inventory_lead]

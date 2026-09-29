@@ -5,7 +5,7 @@ No ``compiled regex`` in this module — Arabic literals stay outside harness
 """
 from __future__ import annotations
 from ai.engine.cognition.phrase_tables import T
-from ai.engine.pack_vocab import V
+from ai.engine.pack_vocab import LV, V
 
 
 THANKS_AR = T("turn/zero_llm_i18n.py::THANKS_AR")
@@ -37,17 +37,17 @@ NOTIFICATION_TEXT = {
 }
 PAYROLL_SCHEDULE_TEXT = {
     "en": (
-        V("t_i_don_t_have_next_month")
+        LV("t_i_don_t_have_next_month")
         + "That date is on the committed run in People — I won't guess it."
     ),
     "ar": (
-        V("t_ليس_لدي_تاريخ_معالجة_رواتب_الشهر")
-        + V("t_التاريخ_على_مسير_الرواتب_المعتمد_في")
+        LV("t_ليس_لدي_تاريخ_معالجة_رواتب_الشهر")
+        + LV("t_التاريخ_على_مسير_الرواتب_المعتمد_في")
     ),
 }
 PAYSLIP_DOWNLOAD_TEXT = {
     "en": (
-        V("t_payslips_are_in_my_if_none")
+        LV("t_payslips_are_in_my_if_none")
     ),
     "ar": (
         "القسائم في تطبيقاتي. إذا لم تُعتمد قسيمة بعد، فلا يوجد ما يُحمَّل."
@@ -57,4 +57,5 @@ PAYSLIP_DOWNLOAD_TEXT = {
 
 def any_needle(text: str, needles: tuple[str, ...]) -> bool:
     raw = text or ""
-    return any(n in raw for n in needles)
+    # Empty is not a match. A pack that lacks the needle must not hit every utterance.
+    return any(n and str(n) in raw for n in needles)

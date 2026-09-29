@@ -13,4 +13,5 @@ OFFER = T("turn/next_step_i18n.py::OFFER")
 
 def any_needle(text: str, needles: tuple[str, ...]) -> bool:
     raw = text or ""
-    return any(n in raw for n in needles)
+    # Empty is not a match. A pack that lacks the needle must not hit every utterance.
+    return any(n and str(n) in raw for n in needles)

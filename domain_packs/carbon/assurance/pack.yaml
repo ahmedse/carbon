@@ -3,5 +3,10 @@ title: Carbon organizational inventory
 brand: carbon
 journeys:
   - id: INV
-    title: Organizational GHG inventory
+    title: Organizational GHG inventory onboarding (benchmark O1)
+  - id: PULSE
+    title: Pulse quotes only the calculation payload
 blocks_release: []
+# Planned rules are not release gates. A rule enters blocks_release only after
+# its catalogue is configured and a fault-demonstrated event exists.
+# 2026-09-29: CR-INV-01 through CR-WRITE-01 are catalogue planned.

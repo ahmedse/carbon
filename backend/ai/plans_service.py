@@ -229,6 +229,86 @@ def _hold_for_missed_acceptance(run, report: dict | None) -> bool:
     return True
 
 
+def _step_api_name(step) -> str:
+    args = getattr(step, "tool_args_json", None)
+    if isinstance(args, str):
+        try:
+            args = json.loads(args)
+        except (json.JSONDecodeError, TypeError):
+            return ""
+    if not isinstance(args, dict):
+        return ""
+    return str(args.get("api_name") or "").strip()
+
+
+def _profile_employee_no(tool_output) -> str:
+    raw = tool_output
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return ""
+    if not isinstance(raw, dict):
+        return ""
+    body = raw.get("result", raw)
+    if isinstance(body, str):
+        try:
+            body = json.loads(body)
+        except (json.JSONDecodeError, TypeError):
+            return ""
+    if isinstance(body, dict) and "status_code" in body and "data" in body:
+        body = body.get("data")
+    if not isinstance(body, dict):
+        return ""
+    return str(body.get("employee_no") or "").strip()
+
+
+def apply_self_read_owner(run, steps, owner_employee_no: str) -> bool:
+    """Fail a self-profile read whose host body names a different employee.
+
+    The leave read on that same run fails with it. A direct-reports list is
+    not this check: those employee numbers are the reports.
+    """
+    owner = str(owner_employee_no or "").strip()
+    if not owner:
+        return False
+    mismatch = ""
+    for step in steps or []:
+        if _step_api_name(step) != "get_my_profile":
+            continue
+        found = _profile_employee_no(getattr(step, "tool_output_json", None))
+        if found and found != owner:
+            mismatch = found
+            break
+    if not mismatch:
+        return False
+    note = (
+        f"This read belongs to employee {owner}. "
+        f"The host result was employee {mismatch}."
+    )
+    for step in steps or []:
+        if _step_api_name(step) not in ("get_my_profile", "get_my_leave_balance"):
+            continue
+        step.status = STEP_FAILED
+        step.error = note
+        step.save(update_fields=["status", "error", "updated_at"])
+    run.status = STATUS_FAILED
+    run.final_response = note
+    run.save(update_fields=["status", "final_response", "updated_at"])
+    return True
+
+
+def _owner_employee_no(user_pk: str) -> str:
+    from django.contrib.auth import get_user_model
+
+    try:
+        user = get_user_model().objects.get(pk=user_pk)
+        profile = user.employee_profile
+    except Exception:  # noqa: BLE001 - missing owner is not a foreign read
+        return ""
+    return str(getattr(profile, "employee_no", "") or "").strip()
+
+
 def _reconcile_run_status_from_steps(run, steps) -> None:
     """Persist plan status from step outcomes when all steps have finished.
 
@@ -2558,11 +2638,12 @@ class PlansService:
     def propose_plan(
         self, user, brief: str, conversation_id: str = "",
         *, prior_plan: dict | None = None, revision: str = "",
+        single_read: bool = False,
     ) -> tuple:
         """``(plan_json, proposal)`` for a brief worth planning, ``(None, None)`` otherwise.
 
-        Nothing is stored. The planner decides what a task is: a brief that
-        decomposes to one bound read is a question the turn should answer.
+        Nothing is stored. On Ask, one bound read is a question. On Plan
+        (``single_read``), that same read is the draft the user reviews.
         The caller keeps ``plan_json`` in conversation state; the task exists
         only after the user commits it (``commit_proposal``).
 
@@ -2570,13 +2651,13 @@ class PlansService:
         formats, the existing steps stay — the planner does not re-decompose.
         """
         from ai.engine.cognition.turn.plan_proposal import (
-            is_task_plan,
+            is_shown_draft,
             proposal_payload,
         )
 
         if prior_plan and revision:
             shaped, proposal = self._propose_format_revision(
-                prior_plan, revision, brief,
+                prior_plan, revision, brief, single_read=single_read,
             )
             if shaped is not None:
                 return shaped, proposal
@@ -2584,14 +2665,16 @@ class PlansService:
         if drafted is None:
             return None, None
         shaped = self._plan_to_dict(drafted)
-        if not is_task_plan(shaped):
+        if not is_shown_draft(shaped, single_read=single_read):
             return None, None
         return shaped, proposal_payload(
             shaped, brief=brief, findings=shaped.get("contract_findings"),
+            single_read=single_read,
         )
 
     def _propose_format_revision(
         self, prior_plan: dict, revision: str, brief: str,
+        *, single_read: bool = False,
     ) -> tuple:
         """``(plan_json, proposal)`` when the change only widens the file set."""
         from types import SimpleNamespace
@@ -2599,7 +2682,7 @@ class PlansService:
         from ai.engine.cognition.plan.contract import apply_plan_contract
         from ai.engine.cognition.turn.plan_proposal import (
             apply_format_revision,
-            is_task_plan,
+            is_shown_draft,
             proposal_payload,
         )
 
@@ -2615,9 +2698,11 @@ class PlansService:
         )
         drafted.findings = [f.as_dict() for f in findings]
         shaped = self._plan_to_dict(drafted)
-        if not is_task_plan(shaped):
+        if not is_shown_draft(shaped, single_read=single_read):
             return None, None
-        return shaped, proposal_payload(shaped, brief=brief, findings=findings)
+        return shaped, proposal_payload(
+            shaped, brief=brief, findings=findings, single_read=single_read,
+        )
 
     def commit_proposal(self, user, conversation_id: str) -> dict:
         """Store the drafted plan the user just consented to, exactly as reviewed.
@@ -4960,6 +5045,9 @@ class PlansService:
 
         # All steps finished → align plan status before the done frame so the
         # picker / SSE consumers see completed|failed correctly.
+        owner_no = await sync_to_async(_owner_employee_no)(str(run.host_user_id or ""))
+        if owner_no:
+            await sync_to_async(apply_self_read_owner)(run, steps, owner_no)
         await sync_to_async(_reconcile_run_status_from_steps)(run, steps)
         await sync_to_async(run.refresh_from_db)()
 

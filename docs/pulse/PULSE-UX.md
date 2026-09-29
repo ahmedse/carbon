@@ -1,6 +1,10 @@
 # PULSE — The Experience (UI/UX Philosophy & Spec)
 
-> **Status:** CANONICAL · **Owner:** Product Designer + Master Architect · **Last audited:** 2026-08-30
+> **Status:** REFERENCE · **Owner:** Product Designer + Master Architect · **Last audited:** 2026-08-30
+> **Current product contracts:** `pulse-chat-deep-benchmark.canvas.tsx` for
+> Ask and `pulse-tasks-agent-benchmark.canvas.tsx` for Plan & Tasks. This
+> document supplies UX history and implementation intent; it is not a third
+> principle set or scoreboard.
 > **Companions:** [`PULSE-MASTER.md`](./PULSE-MASTER.md) (what Pulse *is*) ·
 > [`PULSE-0.2-ROADMAP.md`](./PULSE-0.2-ROADMAP.md) (how we build it).
 > **This file governs how Pulse must *feel*.** It does **not** restate the toolkit —

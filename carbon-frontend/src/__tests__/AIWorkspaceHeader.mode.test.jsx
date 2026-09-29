@@ -77,6 +77,14 @@ describe('AIWorkspaceHeader mode toggle + safety contract (W5-A / ADR-0014)', ()
     expect(onModeChange).toHaveBeenCalledWith('chat');
   });
 
+  it('opens the splash when the Pulse mark is clicked', () => {
+    const onHome = vi.fn();
+    render(<AIWorkspaceHeader onClose={vi.fn()} onHome={onHome} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pulse home' }));
+    expect(onHome).toHaveBeenCalledTimes(1);
+  });
+
   it('does not report a change when re-selecting the active mode', () => {
     const onModeChange = vi.fn();
     render(<AIWorkspaceHeader onClose={vi.fn()} mode="agent" onModeChange={onModeChange} />);

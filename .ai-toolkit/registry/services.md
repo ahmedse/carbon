@@ -1,4 +1,4 @@
-# Registry: Backend Services & Utilities  (auto-generated 2026-09-23 10:44 — DO NOT EDIT)
+# Registry: Backend Services & Utilities  (auto-generated 2026-09-27 20:20 — DO NOT EDIT)
 
 > Business logic lives in services. Before writing a new one, check this list — extend, don't duplicate.
 
@@ -10,7 +10,7 @@ backend/accounts/services.py:61:class AppManifestService:
 backend/ai/audit_service.py:23:class AuditService:
 backend/ai/catalog_service.py:60:class CatalogService:
 backend/ai/durable_service.py:101:class DurableExecutionService:
-backend/ai/plans_service.py:833:class PlansService:
+backend/ai/plans_service.py:952:class PlansService:
 backend/ai/subagent_service.py:68:class SubagentService:
 backend/appregistry/services.py:13:class AppRegistryService:
 backend/connections/services.py:22:class ConnectionService:
@@ -22,21 +22,21 @@ backend/dataschema/services.py:181:class SchemaValidationService:
 backend/dataschema/tests/test_validate_row.py:419:class ValidateRowViaServiceTests(TestCase):
 backend/dq/profiling_service.py:28:class ProfilingService:
 backend/dq/scorecard_service.py:25:class ScorecardService:
-backend/emissions/services.py:1001:class OwnerService:
-backend/emissions/services.py:1212:class MyDataService:
-backend/emissions/services.py:1340:class ConsoleService:
-backend/emissions/services.py:1490:class ReportConfigService:
-backend/emissions/services.py:1493:class TargetService:
-backend/emissions/services.py:154:class DashboardService:
-backend/emissions/services.py:1584:class ReportConfigService:
-backend/emissions/services.py:1699:class VerificationService:
-backend/emissions/services.py:1770:class PeriodLockService:
-backend/emissions/services.py:1812:class InventoryCoverageService:
-backend/emissions/services.py:1894:class ChairmanService:
-backend/emissions/services.py:261:class YearlyComparisonService:
-backend/emissions/services.py:419:class ReportService:
-backend/emissions/services.py:59:class CalculationSummaryService:
-backend/emissions/services.py:764:class CalculationEngineService:
+backend/emissions/services.py:1003:class OwnerService:
+backend/emissions/services.py:1205:class MyDataService:
+backend/emissions/services.py:1333:class ConsoleService:
+backend/emissions/services.py:1483:class ReportConfigService:
+backend/emissions/services.py:1486:class TargetService:
+backend/emissions/services.py:156:class DashboardService:
+backend/emissions/services.py:1577:class ReportConfigService:
+backend/emissions/services.py:1692:class VerificationService:
+backend/emissions/services.py:1763:class PeriodLockService:
+backend/emissions/services.py:1805:class InventoryCoverageService:
+backend/emissions/services.py:1887:class ChairmanService:
+backend/emissions/services.py:263:class YearlyComparisonService:
+backend/emissions/services.py:421:class ReportService:
+backend/emissions/services.py:61:class CalculationSummaryService:
+backend/emissions/services.py:766:class CalculationEngineService:
 backend/emissions/tests/test_calculation_summary.py:21:class CalculationSummaryServicePeriodFallbackTests(TestCase):
 backend/emissions/tests/test_inventory_coverage.py:88:class InventoryCoverageServiceTests(TestCase):
 backend/emissions/tests/test_services.py:119:class OwnerServiceTests(TestCase):
@@ -66,8 +66,8 @@ backend/mdm/services.py:190:class OrgUnitService:
 backend/mdm/services.py:79:class ReferenceSetService:
 backend/people/compensation_service.py:22:class CompensationService:
 backend/people/loan_service.py:24:class LoanServiceError(Exception):
-backend/people/payroll_service.py:142:class PayrollRunService:
-backend/people/payroll_service.py:41:class PayrollServiceError(Exception):
+backend/people/payroll_service.py:170:class PayrollRunService:
+backend/people/payroll_service.py:43:class PayrollServiceError(Exception):
 backend/people/services.py:13:class CalculationService:
 backend/people/tests/test_host_sod.py:123:class WpsSoDServiceTests(TestCase):
 backend/people/tests/test_host_sod.py:82:class PayrollSoDServiceTests(TestCase):
@@ -85,6 +85,7 @@ backend/accounts/management/commands/populate_demo_users.py
 backend/accounts/management/commands/provision_alamein_rbac.py
 backend/accounts/management/commands/run_backup.py
 backend/accounts/management/commands/seed_rbac.py
+backend/ai/management/commands/check_api_catalog.py
 backend/ai/management/commands/check_tool_catalog.py
 backend/ai/management/commands/ensure_pulse_instance.py
 backend/ai/management/commands/learn_from_feedback.py
@@ -100,6 +101,7 @@ backend/ai/management/commands/seed_complex_agent_demos.py
 backend/ai/management/commands/seed_nibras_knowledge.py
 backend/ai/management/commands/seed_nibras_processes.py
 backend/ai/management/commands/seed_ops_canvas_examples.py
+backend/ai/management/commands/seed_pulse_audit_payslips.py
 backend/ai/management/commands/simulate_agent_workflows.py
 backend/ai/management/commands/simulate_nibras_operator_processes.py
 backend/ai/management/commands/simulate_nibras_pulse_processes.py
@@ -141,6 +143,8 @@ backend/people/management/commands/backfill_salary_estimates.py
 backend/people/management/commands/import_gofsco_employees.py
 backend/people/management/commands/link_employee_users.py
 backend/people/management/commands/normalize_employee_genders.py
+backend/people/management/commands/populate_leave_balances.py
+backend/people/management/commands/populate_payroll_history.py
 backend/people/management/commands/propagate_leave_policies.py
 backend/people/management/commands/seed_gofsco.py
 backend/people/management/commands/seed_gofsco_rules.py

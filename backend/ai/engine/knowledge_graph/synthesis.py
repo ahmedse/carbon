@@ -10,7 +10,7 @@ SynthesizedAnswer that carries:
   - provenance            (entities queried)
   - retry metadata        (how many SQL repairs were needed)
 """
-from ai.engine.pack_vocab import V
+from ai.engine.pack_vocab import LV, V
 import json
 import logging
 from dataclasses import dataclass, field
@@ -64,7 +64,7 @@ class ValidationResult:
 # ── Column-name heuristics ────────────────────────────────────────────────────
 
 _CURRENCY_HEURISTICS = frozenset({
-    "amount", "total", "revenue", "cost", "price", "value", V("t_salary"),
+    "amount", "total", "revenue", "cost", "price", "value", LV("t_salary"),
     "budget", "fee", "balance", "payment", "income", "sales",
 })
 _DATE_HEURISTICS = frozenset({
@@ -305,7 +305,7 @@ def _format_cell(val: Any, col_name: str, currency_symbol: str) -> Any:
 
     if isinstance(val, (int, float, decimal.Decimal)):
         num = float(val) if isinstance(val, decimal.Decimal) else val
-        is_currency = any(tok in col_l for tok in _CURRENCY_HEURISTICS)
+        is_currency = any(str(tok) in col_l for tok in _CURRENCY_HEURISTICS)
         if is_currency:
             return f"{currency_symbol}{num:,.2f}"
         if isinstance(val, int) or (isinstance(val, float) and val == int(val)):

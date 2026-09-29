@@ -201,6 +201,8 @@ def test_extract_tool_actions_promotes_chat_handoff_ctas():
         },
     ])
     assert pending == []
+    plan = next(a for a in actions if a.get("panel") == "plan")
+    assert plan["draft"]["leave_type"] == "annual"
     assert any(a.get("type") == "open_panel" for a in actions)
     assert any(
         a.get("type") == "navigate" and a.get("route") == "/my/leave"

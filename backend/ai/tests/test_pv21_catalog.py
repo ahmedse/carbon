@@ -13,9 +13,8 @@ from ai.eval.api_catalog_contract import catalog_violations
 
 def _nibras_catalog() -> list:
     path = (
-        Path(__file__).resolve().parents[1]
-        / "engine"
-        / "instances"
+        Path(__file__).resolve().parents[3]
+        / "domain_packs"
         / "nibras"
         / "instance.yaml"
     )

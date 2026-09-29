@@ -147,3 +147,54 @@ def test_format_revision_ignores_a_scope_change():
         ]
     }
     assert apply_format_revision(plan, "add department") is None
+
+
+@pytest.mark.asyncio
+async def test_yes_go_creates_the_open_draft(monkeypatch):
+    from types import SimpleNamespace
+
+    from ai.engine.cognition.dialogue.affirmation import is_commit_affirmation
+    from ai.engine.cognition.turn.plan_proposal import created_draft_text
+    from ai.engine.cognition.turn.runner_surfaces import SoftSurfacesMixin
+    from ai.engine.cognition.turn.witnesses import TurnLedger
+
+    assert is_commit_affirmation("yes go") is True
+    stored = {"id": "plan-yes-go", "status": "pending_approval"}
+
+    class _Users:
+        def get(self, **_kw):
+            return SimpleNamespace(pk=7)
+
+    monkeypatch.setattr(
+        "django.contrib.auth.get_user_model",
+        lambda: SimpleNamespace(objects=_Users()),
+    )
+    monkeypatch.setattr(
+        "ai.plans_service.PlansService.commit_proposal",
+        lambda self, user, cid: stored,
+    )
+
+    runner = SoftSurfacesMixin.__new__(SoftSurfacesMixin)
+    runner._plan_change = False
+    runner._plan_cancel = False
+    state = ConversationState()
+    state.open_question = {
+        "kind": KIND,
+        "brief": "I want annual leave for 2 days starting 2026-10-04 ending 2026-10-05.",
+        "plan_json": {"steps": [{"step_id": 1, "intent": "Submit the leave"}]},
+    }
+    response, ledger = await runner._try_plan_dial_process_plan(
+        user_message="yes go",
+        process_mode="plan",
+        state_ctx=SimpleNamespace(state=state),
+        ledger=TurnLedger(),
+        turn_id="t1",
+        instance_id="nibras",
+        conversation_id="c1",
+        host_user_id="7",
+        t0=0.0,
+    )
+    assert created_draft_text("en") in (response.text or "")
+    assert ledger.turn_decision == "answer"
+    assert response.actions[0]["panel"] == "tasks"
+    assert response.actions[0]["plan_id"] == "plan-yes-go"

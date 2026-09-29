@@ -52,7 +52,7 @@ DEFAULT_PASS_K = 3
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
 _REPO_ROOT = _BACKEND_DIR.parent
 _NIBRAS_INSTANCE_YAML = (
-    _BACKEND_DIR / "ai" / "engine" / "instances" / "nibras" / "instance.yaml"
+    _REPO_ROOT / "domain_packs" / "nibras" / "instance.yaml"
 )
 _NIBRAS_PROCESS_YAML = (
     _REPO_ROOT / "domain_packs" / "nibras" / "processes" / "payroll.run.lifecycle.yaml"

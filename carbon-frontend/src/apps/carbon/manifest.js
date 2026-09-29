@@ -51,6 +51,10 @@ export default {
   navigation: {
     section: 'Carbon Footprint',
     items: [
+      { type: 'group', label: 'Onboarding' },
+      { label: 'Inventory onboarding', path: '/carbon/onboarding', role: '*' },
+      { type: 'divider' },
+
       // ── Executive (strategic read — board / management) ──
       { type: 'group', label: 'Executive' },
       { label: 'Chairman Overview',    path: '/carbon/chairman',           role: '*' },

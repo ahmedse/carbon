@@ -1,7 +1,7 @@
 from __future__ import annotations
 from ai.engine.cognition.phrase_tables import T
-from ai.engine.pack_vocab import V
-V("t_bilingual_en_ar_navigation_grounding_navigation")
+from ai.engine.pack_vocab import LV, V
+LV("t_bilingual_en_ar_navigation_grounding_navigation")
 
 
 import re

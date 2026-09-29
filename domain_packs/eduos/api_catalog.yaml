@@ -1,0 +1,33 @@
+# EduOS host tools the turn already calls. Names match the instance catalog.
+default_source_type: carbon_api
+
+tools:
+  - name: get_calibration
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+  - name: list_review_queue
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+  - name: get_qa_summary
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+  - name: list_proposals
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+  - name: get_run
+    kind: read
+    requires_confirmation: false
+    source_type: carbon_api
+
+  - name: suggest_splits
+    kind: write
+    requires_confirmation: false
+    source_type: carbon_api

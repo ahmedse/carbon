@@ -1,0 +1,8 @@
+# Frozen L2 gold for the open activity. Two activities, two questions each.
+version: 1
+activities:
+  - {cmid: 101, name: "Airway opening", module: page, section: 1}
+  - {cmid: 202, name: "Wound closure", module: page, section: 2}
+asks:
+  - What is this lecture?
+  - Explain this lecture

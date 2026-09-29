@@ -1,7 +1,15 @@
 from __future__ import annotations
+
+from ai.engine.host_ids import (
+    ID_LEAVE_TYPE,
+    ID_LOAN_TYPE,
+    ID_PERMISSION_TYPE,
+    ID_SUBMIT_MY_LEAVE,
+    ID_SUBMIT_MY_LOAN,
+)
 from ai.engine.cognition.phrase_tables import T
-from ai.engine.pack_vocab import V
-V("t_plan_dial_personal_ess_brief_deterministic")
+from ai.engine.pack_vocab import LV, V
+LV("t_plan_dial_personal_ess_brief_deterministic")
 
 
 import logging
@@ -195,12 +203,12 @@ def _missing_slots(plan: dict) -> list[str]:
         if not api.startswith("submit_"):
             continue
         body = args.get("body") if isinstance(args.get("body"), dict) else {}
-        if api == "submit_my_loan":
-            required = ("loan_type", "principal", "term_months", "start_date")
-        elif api == "submit_my_leave":
-            required = ("leave_type", "start_date", "end_date", "days")
+        if api == ID_SUBMIT_MY_LOAN:
+            required = (ID_LOAN_TYPE, "principal", "term_months", "start_date")
+        elif api == ID_SUBMIT_MY_LEAVE:
+            required = (ID_LEAVE_TYPE, "start_date", "end_date", "days")
         else:
-            required = ("permission_type", "date", "hours")
+            required = (ID_PERMISSION_TYPE, "date", "hours")
         return [k for k in required if body.get(k) in (None, "")]
     return []
 

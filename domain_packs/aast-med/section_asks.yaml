@@ -1,0 +1,16 @@
+# Questions that must be answered from the signed section list alone.
+# A group matches only when every term is present.
+version: 1
+all_of_any:
+  - ["what is on this page"]
+  - ["what are the sections"]
+  - ["section titles"]
+  - ["the outline"]
+  - ["course map"]
+  - ["topics on this page"]
+  - ["what are the weeks"]
+  - ["list the weeks"]
+  - ["what's on this page"]
+  - ["what does this page contain"]
+  - ["show the contents"]
+  - ["contents of this page"]

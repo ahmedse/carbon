@@ -72,7 +72,7 @@ audit domain_gaps \
   ${PANEL_DOMAIN:+--models $PANEL_DOMAIN}
 
 audit instance_review \
-  --files backend/ai/engine/instances/nibras/instance.yaml
+  --files domain_packs/nibras/instance.yaml
 
 # Skill audit only if the instance has guidance skills.
 if compgen -G "$REPO/domain_packs/nibras/skills/*/SKILL.md" >/dev/null 2>&1; then

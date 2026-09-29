@@ -1,6 +1,6 @@
 from __future__ import annotations
-from ai.engine.pack_vocab import V
-V("t_canonical_short_affirmation_detection_english_ar")
+from ai.engine.pack_vocab import LV, V
+LV("t_canonical_short_affirmation_detection_english_ar")
 
 
 from ai.engine.cognition.dialogue.affirmation_helpers import (

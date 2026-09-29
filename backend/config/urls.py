@@ -9,6 +9,7 @@ from accounts.views import ThrottledTokenObtainPairView, ThrottledTokenRefreshVi
 from accounts.password_reset_signals import NotifyingPasswordResetView
 from .health_views import health_check, metrics_view, prometheus_metrics_view
 from ai import workspace_api as ai_workspace_views
+from ai.moodle_host_api import MoodleAskView, MoodleEmbedSessionView, MoodleEmbedView
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 from accounts.permissions import AdminOrSuperuserOnly
 
@@ -81,6 +82,7 @@ urlpatterns = [
     path(f'{api_prefix}/mdm/', include('mdm.urls')),
     path(f'{api_prefix}/connections/', include('connections.urls')),
     path(f'{api_prefix}/importexport/', include('importexport.urls')),
+    path(f'{api_prefix}/inbound/', include('inbound.urls')),
     path(f'{api_prefix}/dq/', include('dq.urls')),
     path(f'{api_prefix}/apps/', include('appregistry.urls')),
     path(f'{api_prefix}/integrations/turnkey/', include('integrations.turnkey.urls')),
@@ -89,6 +91,9 @@ urlpatterns = [
     path(f'{api_prefix}/gradevance/', include('gradevance.urls')),
     path(f'{api_prefix}/correspondence/', include('correspondence.urls')),
     path(f'{api_prefix}/ai/workspace/', include('ai.workspace_urls')),
+    path(f'{api_prefix}/ai/moodle/ask/', MoodleAskView.as_view(), name='ai-moodle-ask'),
+    path(f'{api_prefix}/ai/moodle/embed/', MoodleEmbedView.as_view(), name='ai-moodle-embed'),
+    path(f'{api_prefix}/ai/moodle/embed/session/', MoodleEmbedSessionView.as_view(), name='ai-moodle-embed-session'),
     path(f'{api_prefix}/ai/work-objectives/', include('ai.work_objectives_urls')),
     path(f'{api_prefix}/ai/plans/', include('ai.plans_urls')),
     path(f'{api_prefix}/ai/catalog/', include('ai.catalog_urls')),

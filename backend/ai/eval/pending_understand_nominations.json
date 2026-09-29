@@ -809,5 +809,60 @@
     "conversation_id": "4a5bf816-ce5d-44c1-876a-f46e1dcb7bd4",
     "nominated_at": "2026-09-26T21:51:32.716227+00:00",
     "status": "pending_human_review"
+  },
+  {
+    "utterance": "كم عدد الموظفين النشطين؟ أجب بالعربية.",
+    "audience": [
+      "ess",
+      "hr"
+    ],
+    "raw_ops": [
+      "answer"
+    ],
+    "final_ops": [],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "answer",
+        "code": "wrong_language",
+        "detail": "The reply must be in Arabic, the language this Decision names; figures stay as they are."
+      },
+      {
+        "index": 0,
+        "name": "answer",
+        "code": "wrong_language",
+        "detail": "The reply must be in Arabic, the language this Decision names; figures stay as they are."
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "0bbbdfa3-b442-4b49-9708-de6d5633d9a8",
+    "nominated_at": "2026-09-28T08:55:52.490654+00:00",
+    "status": "pending_human_review"
+  },
+  {
+    "utterance": "2",
+    "audience": [
+      "ess",
+      "hr"
+    ],
+    "raw_ops": [
+      "confirm",
+      "handoff_agent"
+    ],
+    "final_ops": [
+      "handoff_agent"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "confirm",
+        "code": "confirm_without_action",
+        "detail": "The pending question asks for missing details and has no action to confirm. Emit the command that question was gathering for, with the user's answer and the earlier details filled in."
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "b5c7ce2a-e38f-49bd-bf20-09d20a924845",
+    "nominated_at": "2026-09-28T09:50:22.385054+00:00",
+    "status": "pending_human_review"
   }
 ]

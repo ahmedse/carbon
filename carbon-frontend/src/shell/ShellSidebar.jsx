@@ -39,6 +39,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import StorageIcon from '@mui/icons-material/Storage';
 import DownloadIcon from '@mui/icons-material/Download';
 import UploadIcon from '@mui/icons-material/Upload';
+import CategoryIcon from '@mui/icons-material/Category';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
 import ScienceIcon from '@mui/icons-material/Science';
@@ -59,7 +60,6 @@ import MemoryIcon from '@mui/icons-material/Memory';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
 import HandymanIcon from '@mui/icons-material/Handyman';
 import ExtensionIcon from '@mui/icons-material/Extension';
-import CategoryIcon from '@mui/icons-material/Category';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
@@ -176,6 +176,7 @@ const CARBON_ITEM_ICONS = {
   'Organizational Boundaries': AccountTreeIcon,
   'Base Years':               HistoryIcon,
   'Inventory Coverage':       TrackChangesIcon,
+  'Inventory onboarding':     AssignmentTurnedInIcon,
 };
 
 // People HRMS — filled / distinct glyphs (avoid thin-outline twins)
@@ -194,6 +195,7 @@ const PEOPLE_ITEM_ICONS = {
   'Loans':          RequestQuoteIcon,
   'Policies':       GavelIcon,
   'App Config':     TuneIcon,
+  'Import':         UploadIcon,
 };
 
 // My (ESS)
@@ -268,13 +270,14 @@ function getSidebarItems(studioId, helpApps = []) {
         { type: 'group', label: 'Trust' },
         { label: 'Field Policies', path: '/admin/catalog/field-policies', icon: SecurityIcon, role: 'admin' },
         { label: 'Audit Log', path: '/admin/audit', icon: HistoryIcon, role: 'admin' },
-        { label: 'Excellence', path: '/admin/excellence', icon: StairsIcon, role: 'admin' },
+        { label: 'Readiness & Excellence', path: '/admin/excellence', icon: StairsIcon, role: 'admin' },
         { type: 'divider' },
         { type: 'group', label: 'Apps' },
         { label: 'Registered Apps', path: '/admin/apps', icon: AppsIcon, role: 'admin' },
         { label: 'Role Registry', path: '/admin/role-matrix', icon: GridViewIcon, role: 'admin' },
         { type: 'divider' },
         { type: 'group', label: 'Platform' },
+        { label: 'Cartridges', path: '/admin/migration/cartridges', icon: CategoryIcon, role: 'admin' },
         { label: 'System Logs', path: '/admin/logs', icon: ArticleIcon, role: 'admin' },
         { label: 'Platform Config', path: '/admin/config', icon: SettingsIcon, role: 'admin' },
       ];

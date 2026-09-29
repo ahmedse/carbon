@@ -6,7 +6,9 @@
 - **Area:** cross-cutting — `backend/ai/engine/*`, `plans_service.py`, `engine_runtime.py`, `intelligence.py`, `ai/eval`, Pulse UI
 - **Extends:** ADR-0014 (Chat/Agent split), ADR-0043 (Agent cockpit), ADR-0046 (Chat no host mutation), RULE_21, RULE_23, QA bank G2
 - **Does not change:** the Chat/Agent trust contract. Chat stays advisory; all host writes stay on Agent Run consent or host UI.
-- **Canvas:** `pulse-v2-intelligence-objectives.canvas.tsx` (Cursor canvases folder)
+- **Canonical boards:** `pulse-chat-deep-benchmark.canvas.tsx` for Ask;
+  `pulse-tasks-agent-benchmark.canvas.tsx` for Plan & Tasks. This contract is
+  provenance and implementation detail, not a third scoreboard.
 
 ## 0. Executive summary
 

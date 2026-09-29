@@ -5,8 +5,29 @@ execute ReAct / stage consent. Emit a deterministic bilingual handoff and
 persist bound slots into ConversationState so Agent can inherit them.
 """
 from __future__ import annotations
+
+from ai.engine.host_ids import (
+    ID_ENUM_ANNUAL,
+    ID_ENUM_CAR,
+    ID_ENUM_EMERGENCY,
+    ID_ENUM_HOUSING,
+    ID_ENUM_MATERNITY,
+    ID_ENUM_MEDICAL,
+    ID_ENUM_OFFICIAL,
+    ID_ENUM_PERSONAL,
+    ID_ENUM_SICK,
+    ID_ENUM_UNPAID,
+    ID_LEAVE_TYPE,
+    ID_LOAN_TYPE,
+    ID_PERMISSION_TYPE,
+    ID_PRINCIPAL,
+    ID_SUBMIT_MY_ATTENDANCE_PERMISSION,
+    ID_SUBMIT_MY_LEAVE,
+    ID_SUBMIT_MY_LOAN,
+    ID_SUBMIT_MY_PREFIX,
+)
 from ai.engine.cognition.phrase_tables import T
-from ai.engine.pack_vocab import V
+from ai.engine.pack_vocab import LV, V, live_alt, live_pattern, row_for, same_id
 
 
 import logging
@@ -48,11 +69,18 @@ from ai.engine.cognition.turn.handoff_agent_i18n import (
 logger = logging.getLogger("pulse.cognition.turn.handoff_agent")
 
 # Minimum slots before Chat stops clarifying and hands off (Agent fills the rest).
-_MIN_SLOTS: dict[str, tuple[str, ...]] = {
-    "submit_my_loan": ("loan_type", "principal"),
-    "submit_my_leave": ("leave_type",),
-    "submit_my_attendance_permission": ("permission_type",),
-}
+_MIN_SLOT_ROWS = (
+    (ID_SUBMIT_MY_LOAN, (ID_LOAN_TYPE, ID_PRINCIPAL)),
+    (ID_SUBMIT_MY_LEAVE, (ID_LEAVE_TYPE,)),
+    (ID_SUBMIT_MY_ATTENDANCE_PERMISSION, (ID_PERMISSION_TYPE,)),
+)
+
+
+def _required_slots(api: str) -> tuple[str, ...] | None:
+    row = row_for(_MIN_SLOT_ROWS, api)
+    if row is None:
+        return None
+    return tuple(s for item in row if (s := str(item)))
 
 #  also needs a date or day count (either is enough to stop Chat looping).
 _LEAVE_DATE_SLOTS = T("turn/handoff_agent.py::_LEAVE_DATE_SLOTS")
@@ -153,15 +181,16 @@ def enough_slots_for_chat_handoff(api_name: str, slots: dict | None) -> bool:
         return False
     api = (api_name or "").strip().lower()
     # Accept amount as a synonym for principal (StateBlock / C8 alias).
-    if api == "submit_my_loan" and "principal" not in body and "amount" in body:
-        body = {**body, "principal": body["amount"]}
-    required = _MIN_SLOTS.get(api)
+    principal = str(ID_PRINCIPAL)
+    if same_id(api, ID_SUBMIT_MY_LOAN) and principal and principal not in body and "amount" in body:
+        body = {**body, principal: body["amount"]}
+    required = _required_slots(api)
     if required is None:
         # Unknown write API — hand off as soon as any slot is bound.
         return True
     if not all(body.get(k) not in (None, "", [], {}) for k in required):
         return False
-    if api == "submit_my_leave":
+    if api == ID_SUBMIT_MY_LEAVE:
         return any(body.get(k) not in (None, "", [], {}) for k in _LEAVE_DATE_SLOTS)
     return True
 
@@ -173,11 +202,12 @@ def missing_slots_for_chat(api_name: str, slots: dict | None) -> list[str]:
         if v not in (None, "", [], {})
     }
     api = (api_name or "").strip().lower()
-    if api == "submit_my_loan" and "principal" not in body and "amount" in body:
-        body = {**body, "principal": body["amount"]}
-    required = list(_MIN_SLOTS.get(api) or ())
+    principal = str(ID_PRINCIPAL)
+    if same_id(api, ID_SUBMIT_MY_LOAN) and principal and principal not in body and "amount" in body:
+        body = {**body, principal: body["amount"]}
+    required = list(_required_slots(api) or ())
     missing = [k for k in required if body.get(k) in (None, "", [], {})]
-    if api == "submit_my_leave" and not any(
+    if api == ID_SUBMIT_MY_LEAVE and not any(
         body.get(k) not in (None, "", [], {}) for k in _LEAVE_DATE_SLOTS
     ):
         missing.append("start_date")
@@ -198,10 +228,10 @@ def render_slot_status(text: str, slots: dict | None) -> str:
         k: v for k, v in (slots or {}).items()
         if v not in (None, "", [], {})
     }
-    kind_value = str(body.get("leave_type") or "").strip()
-    if kind_value and re.search(r"\btype\b|\bleave\b", text or "", re.I):
+    kind_value = str(body.get(ID_LEAVE_TYPE) or "").strip()
+    if kind_value and live_alt(r"\btype\b", LV("t_rx_leave_word"), flags=re.I).search(text or ""):
         return f"You requested {kind_value} {V("t_leave")}."
-    advance_value = str(body.get("loan_type") or "").strip()
+    advance_value = str(body.get(ID_LOAN_TYPE) or "").strip()
     amount = body.get("principal", body.get("amount"))
     if advance_value or amount not in (None, ""):
         bits = []
@@ -229,8 +259,8 @@ def build_chat_write_clarify(
     api = (api_name or "").strip()
     body = dict(slots or {})
     choices: list[str] = []
-    if echo and api == "submit_my_leave":
-        kind_value = str(body.get("leave_type") or V("t_leave")).strip()
+    if echo and api == ID_SUBMIT_MY_LEAVE:
+        kind_value = str(body.get(ID_LEAVE_TYPE) or V("t_leave")).strip()
         start = _pretty_date(body.get("start_date"))
         end = _pretty_date(body.get("end_date"))
         if locale == "ar":
@@ -242,11 +272,13 @@ def build_chat_write_clarify(
             )
     else:
         missing = missing_slots_for_chat(api, body)
-        key = missing[0] if missing else "loan_type"
+        key = missing[0] if missing else ID_LOAN_TYPE
         pack = (CLARIFY_TEXT.get(api) or {}).get(key) or {}
-        text = pack.get(locale) or pack.get("en") or "What else do I need to know?"
-        advance_value = str(body.get("loan_type") or "").strip()
-        if api == "submit_my_loan" and advance_value and key == "principal":
+        text = str(pack.get(locale) or pack.get("en") or "")
+        if not text:
+            text = "What else do I need to know?"
+        advance_value = str(body.get(ID_LOAN_TYPE) or "").strip()
+        if api == ID_SUBMIT_MY_LOAN and advance_value and key == "principal":
             if locale == "ar":
                 text = f"{V("t_قرض")} {advance_value}. كم المبلغ الذي تحتاجه؟"
             else:
@@ -301,41 +333,51 @@ def _understood_prefix(
 # Closed-set slot choices. Every label must re-parse through the alias tables
 # below (``_first_alias``) so a chip click is a valid slot fill, and must stay
 # a host vocabulary (//permission types) — never invented.
-_SLOT_CHOICES: dict[str, dict[str, tuple[tuple[str, str, str], ...]]] = {
-    "submit_my_loan": {
-        "loan_type": (
-            ("emergency", V("t_emergency_loan"), V("t_قرض_طارئ")),
-            ("housing", V("t_housing_loan"), V("t_قرض_سكن")),
-            (V("t_salary"), V("t_salary_advance"), V("t_سلفة_راتب")),
-            ("car", V("t_car_loan"), V("t_قرض_سيارة")),
-            ("personal", V("t_personal_loan"), V("t_قرض_شخصي")),
-        ),
-    },
-    "submit_my_leave": {
-        "leave_type": (
-            ("annual", V("t_annual_leave_2"), V("t_إجازة_سنوية")),
-            ("sick", V("t_sick_leave"), V("t_إجازة_مرضية")),
-            ("emergency", V("t_emergency_leave"), V("t_إجازة_طارئة")),
-            ("unpaid", V("t_unpaid_leave"), V("t_إجازة_بدون_راتب")),
-            ("maternity", V("t_maternity_leave"), V("t_إجازة_أمومة")),
-        ),
-    },
-    "submit_my_attendance_permission": {
-        "permission_type": (
-            ("official", "Official permission", "استئذان رسمي"),
-            ("medical", "Medical permission", "استئذان طبي"),
-            ("emergency", "Emergency permission", "استئذان طارئ"),
-            ("personal", "Personal permission", "استئذان شخصي"),
-        ),
-    },
-}
+_SLOT_CHOICE_ROWS = (
+    (ID_SUBMIT_MY_LOAN, (
+        (ID_LOAN_TYPE, (
+            (ID_ENUM_EMERGENCY, LV("t_emergency_loan"), LV("t_قرض_طارئ")),
+            (ID_ENUM_HOUSING, LV("t_housing_loan"), LV("t_قرض_سكن")),
+            (LV("t_salary"), LV("t_salary_advance"), LV("t_سلفة_راتب")),
+            (ID_ENUM_CAR, LV("t_car_loan"), LV("t_قرض_سيارة")),
+            (ID_ENUM_PERSONAL, LV("t_personal_loan"), LV("t_قرض_شخصي")),
+        )),
+    )),
+    (ID_SUBMIT_MY_LEAVE, (
+        (ID_LEAVE_TYPE, (
+            (ID_ENUM_ANNUAL, LV("t_annual_leave_2"), LV("t_إجازة_سنوية")),
+            (ID_ENUM_SICK, LV("t_sick_leave"), LV("t_إجازة_مرضية")),
+            (ID_ENUM_EMERGENCY, LV("t_emergency_leave"), LV("t_إجازة_طارئة")),
+            (ID_ENUM_UNPAID, LV("t_unpaid_leave"), LV("t_إجازة_بدون_راتب")),
+            (ID_ENUM_MATERNITY, LV("t_maternity_leave"), LV("t_إجازة_أمومة")),
+        )),
+    )),
+    (ID_SUBMIT_MY_ATTENDANCE_PERMISSION, (
+        (ID_PERMISSION_TYPE, (
+            (ID_ENUM_OFFICIAL, LV("t_rx_copy_perm_official"), LV("t_rx_copy_perm_official_ar")),
+            (ID_ENUM_MEDICAL, LV("t_rx_copy_perm_medical"), LV("t_rx_copy_perm_medical_ar")),
+            (ID_ENUM_EMERGENCY, LV("t_rx_copy_perm_emergency"), LV("t_rx_copy_perm_emergency_ar")),
+            (ID_ENUM_PERSONAL, LV("t_rx_copy_perm_personal"), LV("t_rx_copy_perm_personal_ar")),
+        )),
+    )),
+)
+
+
+def _slot_choice_table(api_name: str, slot_key: str):
+    slots = row_for(_SLOT_CHOICE_ROWS, (api_name or "").strip())
+    if not slots:
+        return ()
+    for key, rows in slots:
+        if same_id(slot_key, key):
+            return rows
+    return ()
 
 
 def clarify_choices(api_name: str, slot_key: str, locale: str = "en") -> list[str]:
     """Chip labels for a governed slot; ``[]`` for free-form slots (amount, dates)."""
-    table = (_SLOT_CHOICES.get((api_name or "").strip()) or {}).get(slot_key) or ()
+    table = _slot_choice_table(api_name, slot_key)
     idx = 2 if locale == "ar" else 1
-    return [row[idx] for row in table]
+    return [label for row in table if (label := str(row[idx]))]
 
 
 def build_slot_status_answer(
@@ -382,8 +424,8 @@ def build_bound_write_confirmation_answer(
         if v not in (None, "", [], {})
     }
     api = (api_name or "").strip()
-    if api == "submit_my_leave":
-        kind_value = str(body.get("leave_type") or V("t_leave")).strip()
+    if api == ID_SUBMIT_MY_LEAVE:
+        kind_value = str(body.get(ID_LEAVE_TYPE) or V("t_leave")).strip()
         start = _pretty_date(body.get("start_date"))
         end = _pretty_date(body.get("end_date")) or start
         if locale == "ar":
@@ -527,25 +569,40 @@ def _carryover_handoff_copy(
             lab = ar_lab if locale == "ar" else en_lab
             bits.append(f"{lab}: {_display_slot_value(value, user_message)}")
 
+    on_ask = Surface.resolve(surface) is Surface.CHAT_ASK
     if locale == "ar":
         if bits:
             have = "لدي: " + "؛ ".join(bits) + "."
         else:
             have = f"جهّزت تفاصيل {topic}."
-        return (
-            f"{have}\n\n"
-            "لإرسال الطلب بدّل إلى وضع الوكيل (Agent) — سأنقل هذه التفاصيل "
-            f"معك. أو قدّم من تطبيقاتي. وضع «{dial}» لا يُرسل ولا يغيّر السجلات."
-        )
+        if on_ask:
+            step = (
+                "لإرسال الطلب بدّل المفتاح إلى «خطّة» — سأنقل هذه التفاصيل "
+                f"معك. أو قدّم من تطبيقاتي. وضع «{dial}» لا يُرسل ولا يغيّر السجلات. "
+                "وضع السؤال لا يُنشئ مهاماً."
+            )
+        else:
+            step = (
+                "لإرسال الطلب بدّل إلى وضع الوكيل (Agent) — سأنقل هذه التفاصيل "
+                f"معك. أو قدّم من تطبيقاتي. وضع «{dial}» لا يُرسل ولا يغيّر السجلات."
+            )
+        return f"{have}\n\n{step}"
     if bits:
         have = "I have: " + "; ".join(bits) + "."
     else:
         have = f"I have the details for your {topic}."
-    return (
-        f"{have}\n\n"
-        "To submit it, switch to Agent — I'll carry these details over. "
-        f"Or open My and submit there. {dial} does not submit or change records."
-    )
+    if on_ask:
+        step = (
+            "To submit it, switch to Plan — I'll carry these details over. "
+            f"Or open My and submit there. {dial} does not submit or change records. "
+            "Ask does not create tasks."
+        )
+    else:
+        step = (
+            "To submit it, switch to Agent — I'll carry these details over. "
+            f"Or open My and submit there. {dial} does not submit or change records."
+        )
+    return f"{have}\n\n{step}"
 
 
 def build_chat_write_handoff(
@@ -573,6 +630,12 @@ def build_chat_write_handoff(
         surface=surface,
     )
     actions = build_handoff_actions(spec, locale=locale, surface=surface)
+    carry = brief_from_write_slots(api, body)
+    for action in actions:
+        if str(action.get("panel") or "") == "plan":
+            action["draft"] = dict(body)
+            if carry:
+                action["brief"] = carry
     envelope = build_handoff_envelope(
         spec, draft=body, locale=locale, surface=surface,
     )
@@ -637,21 +700,22 @@ def is_ess_slot_continuation(text: str, api_name: str | None) -> bool:
     """True when the turn only fills a slot for an already-open ESS write."""
     api = (api_name or "").strip().lower()
     raw = (text or "").strip()
-    if not api.startswith("submit_my_") or not raw:
+    prefix = str(ID_SUBMIT_MY_PREFIX)
+    if not prefix or not api.startswith(prefix) or not raw:
         return False
-    if api == "submit_my_loan":
+    if api == ID_SUBMIT_MY_LOAN:
         return bool(
             _parse_amount(raw)
             or _first_alias(raw, _LOAN_TYPE_WORDS, _LOAN_TYPE_NEEDLES)
         )
-    if api == "submit_my_leave":
+    if api == ID_SUBMIT_MY_LEAVE:
         return bool(
             _first_alias(raw, _LEAVE_TYPE_WORDS, _LEAVE_TYPE_NEEDLES)
             or _parse_iso_date(raw)
             or _parse_named_dates(raw)
             or _parse_count_with_units(raw, _DAYS_RE, DAYS_AR)
         )
-    if api == "submit_my_attendance_permission":
+    if api == ID_SUBMIT_MY_ATTENDANCE_PERMISSION:
         return bool(
             _first_alias(raw, _PERMISSION_TYPE_WORDS, _PERMISSION_TYPE_NEEDLES)
             or _parse_iso_date(raw)
@@ -665,26 +729,26 @@ def is_ess_slot_continuation(text: str, api_name: str | None) -> bool:
 _NeedleRow = tuple[tuple[str, ...], str]
 _LOAN_TYPE_WORDS = T("turn/handoff_agent.py::_LOAN_TYPE_WORDS")
 _LOAN_TYPE_NEEDLES: tuple[_NeedleRow, ...] = (
-    (LOAN_EMERGENCY_AR, "emergency"),
-    (LOAN_HOUSING_AR, "housing"),
-    (LOAN_SALARY_AR, V("t_salary")),
-    (LOAN_CAR_AR, "car"),
-    (LOAN_PERSONAL_AR, "personal"),
+    (LOAN_EMERGENCY_AR, ID_ENUM_EMERGENCY),
+    (LOAN_HOUSING_AR, ID_ENUM_HOUSING),
+    (LOAN_SALARY_AR, LV("t_salary")),
+    (LOAN_CAR_AR, ID_ENUM_CAR),
+    (LOAN_PERSONAL_AR, ID_ENUM_PERSONAL),
 )
 _LEAVE_TYPE_WORDS = T("turn/handoff_agent.py::_LEAVE_TYPE_WORDS")
 _LEAVE_TYPE_NEEDLES: tuple[_NeedleRow, ...] = (
-    (LEAVE_ANNUAL_AR, "annual"),
-    (LEAVE_SICK_AR, "sick"),
-    (LEAVE_EMERGENCY_AR, "emergency"),
-    (LEAVE_UNPAID_AR, "unpaid"),
-    (LEAVE_MATERNITY_AR, "maternity"),
+    (LEAVE_ANNUAL_AR, ID_ENUM_ANNUAL),
+    (LEAVE_SICK_AR, ID_ENUM_SICK),
+    (LEAVE_EMERGENCY_AR, ID_ENUM_EMERGENCY),
+    (LEAVE_UNPAID_AR, ID_ENUM_UNPAID),
+    (LEAVE_MATERNITY_AR, ID_ENUM_MATERNITY),
 )
 _PERMISSION_TYPE_WORDS = T("turn/handoff_agent.py::_PERMISSION_TYPE_WORDS")
 _PERMISSION_TYPE_NEEDLES: tuple[_NeedleRow, ...] = (
-    (PERM_OFFICIAL_AR, "official"),
-    (PERM_MEDICAL_AR, "medical"),
-    (PERM_EMERGENCY_AR, "emergency"),
-    (PERM_PERSONAL_AR, "personal"),
+    (PERM_OFFICIAL_AR, ID_ENUM_OFFICIAL),
+    (PERM_MEDICAL_AR, ID_ENUM_MEDICAL),
+    (PERM_EMERGENCY_AR, ID_ENUM_EMERGENCY),
+    (PERM_PERSONAL_AR, ID_ENUM_PERSONAL),
 )
 _AliasRow = tuple[tuple[str, ...], tuple[str, ...], str]
 _LOAN_TYPE_ALIASES: tuple[_AliasRow, ...] = tuple(
@@ -710,11 +774,11 @@ def _first_alias(
                 return word
         for needles, code in needles_table:
             if any_needle(raw, needles):
-                return code
+                return str(code) or None
         return None
     for en_words, needles, code in table_or_en:
         if has_any_word(raw, en_words) or any_needle(raw, needles):
-            return code
+            return str(code) or None
     return None
 
 
@@ -722,10 +786,10 @@ _AR_DIGITS = str.maketrans(
     "\u0660\u0661\u0662\u0663\u0664\u0665\u0666\u0667\u0668\u0669",
     "0123456789",
 )
-_AMOUNT_RE = re.compile(
-    r"([0-9]{2,}(?:[.,][0-9]+)?)\s*(?:sar|kwd|riyal|dinar|dinars)?"
-    + V("t_sar_kwd_loan_s_0_9"),
-    re.I,
+_AMOUNT_RE = live_pattern(
+    r"([0-9]{2,}(?:[.,][0-9]+)?)\s*(?:sar|kwd|riyal|dinar|dinars)?",
+    LV("t_sar_kwd_loan_s_0_9"),
+    flags=re.I,
 )
 # No trailing word-boundary after unit stems that carry suffixes.
 _MONTHS_RE = re.compile(r"\b(\d{1,2})\s*(?:months?\b)", re.I)
@@ -838,6 +902,51 @@ def _parse_iso_date(text: str) -> str | None:
     return match.group(1) if match else None
 
 
+def _parse_named_weekday(text: str) -> str | None:
+    """The coming weekday when the user said next or this plus its name.
+
+    Names live in the function so they are not a routing phrase set.
+    """
+    raw = (text or "").lower()
+    if "next" not in raw and "this" not in raw:
+        return None
+    names = (
+        "monday", "tuesday", "wednesday", "thursday",
+        "friday", "saturday", "sunday",
+    )
+    index = next((i for i, name in enumerate(names) if name in raw), None)
+    if index is None:
+        return None
+    try:
+        from django.utils import timezone
+
+        today = timezone.localdate()
+    except Exception:  # noqa: BLE001
+        from datetime import date as _date
+
+        today = _date.today()
+    ahead = (index - today.weekday()) % 7
+    if "next" in raw and ahead == 0:
+        ahead = 7
+    from datetime import timedelta
+
+    return (today + timedelta(days=ahead)).isoformat()
+
+
+def _inclusive_end(start: str, days: Any) -> str | None:
+    try:
+        from datetime import date as _date
+        from datetime import timedelta
+
+        span = int(days)
+        if span < 1:
+            return None
+        day = _date.fromisoformat(str(start)[:10])
+    except (TypeError, ValueError):
+        return None
+    return (day + timedelta(days=span - 1)).isoformat()
+
+
 def _parse_relative_day(text: str) -> str | None:
     raw = (text or "").strip()
     if not re.search(r"\btoday\b", raw, re.I) and not any_needle(
@@ -904,11 +1013,11 @@ def resolve_ess_write_from_brief(
         return None
 
     prefer = (prefer_api or "").strip().lower()
-    as_loan = prefer == "submit_my_loan" or is_personal_loan_brief(text)
-    as_leave = prefer == "submit_my_leave" or (
+    as_loan = prefer == ID_SUBMIT_MY_LOAN or is_personal_loan_brief(text)
+    as_leave = prefer == ID_SUBMIT_MY_LEAVE or (
         not as_loan and is_personal_leave_brief(text)
     )
-    as_attendance = prefer == "submit_my_attendance_permission" or (
+    as_attendance = prefer == ID_SUBMIT_MY_ATTENDANCE_PERMISSION or (
         not as_loan and not as_leave and is_personal_attendance_brief(text)
     )
 
@@ -916,7 +1025,7 @@ def resolve_ess_write_from_brief(
         body: dict = {}
         code = _first_alias(text, _LOAN_TYPE_WORDS, _LOAN_TYPE_NEEDLES)
         if code:
-            body["loan_type"] = code
+            body[ID_LOAN_TYPE] = code
         amount = _parse_amount(text)
         if amount is not None:
             body["principal"] = amount
@@ -927,13 +1036,13 @@ def resolve_ess_write_from_brief(
         parsed = _parse_iso_date(text)
         if parsed:
             body["start_date"] = parsed
-        return "submit_my_loan", body
+        return ID_SUBMIT_MY_LOAN, body
 
     if as_leave:
         body = {}
         code = _first_alias(text, _LEAVE_TYPE_WORDS, _LEAVE_TYPE_NEEDLES)
         if code:
-            body["leave_type"] = code
+            body[ID_LEAVE_TYPE] = code
         parsed = _parse_iso_date(text)
         named = _parse_named_dates(text)
         if parsed:
@@ -945,25 +1054,148 @@ def resolve_ess_write_from_brief(
         relative = _parse_relative_day(text)
         if relative and "start_date" not in body:
             body["start_date"] = relative
+        weekday = _parse_named_weekday(text)
+        if weekday and "start_date" not in body:
+            body["start_date"] = weekday
         days = _parse_count_with_units(text, _DAYS_RE, DAYS_AR)
         if days:
             body["days"] = days
-        return "submit_my_leave", body
+        if body.get("start_date") and body.get("days") and "end_date" not in body:
+            end = _inclusive_end(body["start_date"], body["days"])
+            if end:
+                body["end_date"] = end
+        return ID_SUBMIT_MY_LEAVE, body
 
     if as_attendance:
         body = {}
         code = _first_alias(text, _PERMISSION_TYPE_WORDS, _PERMISSION_TYPE_NEEDLES)
         if code:
-            body["permission_type"] = code
+            body[ID_PERMISSION_TYPE] = code
         parsed = _parse_iso_date(text)
         if parsed:
             body["date"] = parsed
         hours = _parse_hours(text)
         if hours is not None:
             body["hours"] = hours
-        return "submit_my_attendance_permission", body
+        return ID_SUBMIT_MY_ATTENDANCE_PERMISSION, body
 
     return None
+
+
+def carry_handoff_slots(
+    api_name: str,
+    command_args: dict | None,
+    *,
+    prior_slots: dict | None = None,
+    user_message: str = "",
+    conversation_history: list[dict] | None = None,
+) -> dict:
+    """Slots for a Chat handoff card.
+
+    Stored slots come first, then this command. Values the user's own words
+    already bind win, including a date the command invented.
+    """
+    from ai.engine.cognition.turn.capability import flat_args
+
+    prior = dict(prior_slots or {})
+    brief = combine_user_brief(user_message, conversation_history, prior)
+    bound: dict = {}
+    try:
+        resolved = resolve_ess_write_from_brief(brief, prefer_api=api_name or None)
+    except Exception:  # noqa: BLE001 — an empty bind still shows stored slots
+        resolved = None
+    if resolved:
+        bound = dict(resolved[1] or {})
+    return merge_slots(prior, flat_args(command_args), bound)
+
+
+def brief_from_write_slots(api_name: str, slots: dict | None) -> str:
+    """A Plan brief from slots the conversation already bound.
+
+    The last chip is not the brief. This sentence is what Plan materializes.
+    """
+    body = {
+        key: value
+        for key, value in (slots or {}).items()
+        if value not in (None, "", [], {})
+    }
+    if not body:
+        return ""
+    kind = str(
+        body.get(ID_LEAVE_TYPE)
+        or body.get(ID_LOAN_TYPE)
+        or body.get(ID_PERMISSION_TYPE)
+        or ""
+    ).strip()
+    parts = ["I want"]
+    if kind:
+        parts.append(kind)
+    if body.get(ID_LEAVE_TYPE):
+        parts.append(V("t_leave"))
+    elif body.get(ID_LOAN_TYPE):
+        parts.append(V("t_loan_2"))
+    else:
+        parts.append("this request")
+    days = body.get("days")
+    if days not in (None, ""):
+        parts.append(f"for {days} days")
+    hours = body.get("hours")
+    if hours not in (None, ""):
+        parts.append(f"for {hours} hours")
+    amount = body.get("principal", body.get("amount"))
+    if amount not in (None, ""):
+        parts.append(str(amount))
+    start = body.get("start_date") or body.get("date")
+    if start:
+        parts.append(f"starting {start}")
+    end = body.get("end_date")
+    if end:
+        parts.append(f"ending {end}")
+    return " ".join(parts) + "."
+
+
+def bound_write_args(
+    messages: list[dict] | None,
+    state: Any = None,
+) -> tuple[str, dict] | None:
+    """A write the user's words already bind, or None.
+
+    Used when a confirm has nothing to confirm, so the turn does not spend
+    another model call inventing the missing values.
+    """
+    users: list[str] = []
+    for msg in messages or []:
+        if not isinstance(msg, dict) or (msg.get("role") or "") != "user":
+            continue
+        text = str(msg.get("content") or "").strip()
+        if text:
+            users.append(text)
+    if not users:
+        return None
+    prior: dict = {}
+    prefer = ""
+    if state is not None:
+        prior = dict(getattr(state, "slots", None) or {})
+        prefer = str((getattr(state, "intent", None) or {}).get("api") or "")
+    history = [{"role": "user", "content": text} for text in users[:-1]]
+    brief = combine_user_brief(users[-1], history, prior)
+    try:
+        resolved = resolve_ess_write_from_brief(brief, prefer_api=prefer or None)
+    except Exception:  # noqa: BLE001
+        return None
+    if resolved is None:
+        return None
+    api_name, _body = resolved
+    slots = carry_handoff_slots(
+        api_name,
+        {},
+        prior_slots=prior,
+        user_message=users[-1],
+        conversation_history=history,
+    )
+    if not enough_slots_for_chat_handoff(api_name, slots):
+        return None
+    return api_name, slots
 
 
 def merge_slots(*parts: dict | None) -> dict:

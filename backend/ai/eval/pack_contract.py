@@ -32,6 +32,27 @@ _REQUIRED = ("id", "version", "domain", "instance", "compat")
 _EXTERNAL_OK = frozenset({"banks"})
 
 
+def _escapes_pack(rel: str) -> bool:
+    """True when a pack-relative path string is absolute or uses ``..``."""
+    if not rel or rel.startswith(("/", "\\")):
+        return True
+    return ".." in Path(rel).parts
+
+
+def _resolve_pack_relative(pack_dir: Path, rel: str) -> Path | None:
+    """Resolve *rel* under *pack_dir*; None if it escapes the pack."""
+    if _escapes_pack(rel):
+        return None
+    if Path(rel).is_absolute():
+        return None
+    candidate = (pack_dir / rel).resolve()
+    try:
+        candidate.relative_to(pack_dir.resolve())
+    except (ValueError, OSError):
+        return None
+    return candidate
+
+
 def _load_manifest(pack_dir: Path) -> dict[str, Any] | None:
     path = pack_dir / "pack.yaml"
     if not path.is_file():
@@ -59,7 +80,7 @@ def _check_owned_paths(pack_dir: Path, owns: Any, violations: list[str], pack: s
             if key in _EXTERNAL_OK:
                 target = REPO_ROOT / rel
             else:
-                if rel.startswith(("/", "..")) or "/../" in rel:
+                if _escapes_pack(rel):
                     violations.append(f"{pack}: owns.{key} points outside the pack ({rel})")
                     continue
                 target = pack_dir / rel
@@ -83,17 +104,23 @@ def check_pack(pack_dir: Path) -> tuple[dict[str, Any], list[str]]:
     version = manifest.get("version")
     if not isinstance(version, int) or isinstance(version, bool) or version < 1:
         violations.append(f"{pack}: version must be an integer ≥ 1 (got {version!r})")
+    instance_path: Path | None = None
     instance = manifest.get("instance")
     if isinstance(instance, str) and instance.strip():
-        if not (REPO_ROOT / instance.strip()).is_file():
+        instance_path = _resolve_pack_relative(pack_dir, instance.strip())
+        if instance_path is None:
+            violations.append(f"{pack}: instance points outside the pack ({instance})")
+        elif not instance_path.is_file():
             violations.append(f"{pack}: instance file missing ({instance})")
+    elif "instance" in manifest:
+        violations.append(f"{pack}: instance must be a non-empty pack-relative path")
     compat = manifest.get("compat")
     if not isinstance(compat, dict) or not str(compat.get("engine") or "").strip():
         violations.append(f"{pack}: compat.engine required")
     _check_owned_paths(pack_dir, manifest.get("owns"), violations, pack)
-    if isinstance(instance, str) and (REPO_ROOT / instance.strip()).is_file():
+    if instance_path is not None and instance_path.is_file():
         violations.extend(
-            f"{pack}: {msg}" for msg in tool_reference_violations(REPO_ROOT / instance.strip())
+            f"{pack}: {msg}" for msg in tool_reference_violations(instance_path)
         )
     return manifest, violations
 
@@ -188,11 +215,16 @@ def check_all(root: Path = DOMAIN_PACKS_ROOT) -> tuple[list[dict[str, Any]], lis
         if pid in seen:
             violations.append(f"duplicate pack id `{pid}` ({seen[pid]}, {pack_dir.name})")
         seen[pid] = pack_dir.name
+        instance_rel = manifest.get("instance")
+        instance_ok = False
+        if isinstance(instance_rel, str) and instance_rel.strip():
+            resolved = _resolve_pack_relative(pack_dir, instance_rel.strip())
+            instance_ok = resolved is not None and resolved.is_file()
         rows.append({
             "id": pid,
             "version": manifest.get("version"),
             "domain": manifest.get("domain"),
-            "instance_ok": bool(manifest.get("instance")) and (REPO_ROOT / str(manifest.get("instance"))).is_file(),
+            "instance_ok": instance_ok,
             "violations": len(errs),
         })
     return rows, violations

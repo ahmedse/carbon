@@ -14,7 +14,7 @@ from ai.engine.cognition.entity.resolver import resolve, ResolveResult
 import yaml
 from pathlib import Path
 
-NIBRAS_YAML = Path(__file__).parent.parent / "engine/instances/nibras/instance.yaml"
+NIBRAS_YAML = Path(__file__).resolve().parents[3] / "domain_packs" / "nibras" / "instance.yaml"
 
 # ── In-memory employee fixtures ───────────────────────────────────────────────
 # Deliberately includes records beyond row 100 to prove the resolver reaches them.

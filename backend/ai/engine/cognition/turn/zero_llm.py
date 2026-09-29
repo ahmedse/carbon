@@ -6,8 +6,14 @@ Write handoff stays in ``handoff_agent.py``. Plan status stays in
 short-circuits that must not spend intent+draft.
 """
 from __future__ import annotations
+
+from ai.engine.host_ids import (
+    ID_CAP_VIEW_PREFIX,
+    ID_GET_MY_PROFILE,
+    ID_LIST_MY_PAYSLIPS,
+)
 from ai.engine.cognition.phrase_tables import T
-from ai.engine.pack_vocab import V
+from ai.engine.pack_vocab import LV, V, copy_text, live_pattern
 
 
 import calendar
@@ -90,7 +96,8 @@ def last_directory_deny(last_results: list[dict] | None) -> dict | None:
         if row.get("unauthorized"):
             return row
         digest = str(row.get("digest") or "").lower()
-        if "unauthorized=true" in digest or "people:view" in digest:
+        view = str(ID_CAP_VIEW_PREFIX)
+        if "unauthorized=true" in digest or (view and view in digest):
             return row
         if str(row.get("tool") or "") == "resolve_entity" and "not authorized" in digest:
             return row
@@ -322,7 +329,7 @@ def last_payslip_was_empty(
             continue
         api = str(row.get("api") or "")
         digest = str(row.get("digest") or "")
-        if "list_my_payslips" not in api and "list_my_payslips" not in digest:
+        if ID_LIST_MY_PAYSLIPS not in api and ID_LIST_MY_PAYSLIPS not in digest:
             continue
         if _empty_payslip_digest(digest):
             return True
@@ -357,7 +364,7 @@ def is_empty_payslip_tool_result(completed_tools: list | None) -> bool:
         looks_payslip = (
             V("t_payslip_2") in blob.lower()
             or "قسيمة" in blob
-            or "list_my_payslips" in api
+            or ID_LIST_MY_PAYSLIPS in api
         )
         if not looks_payslip:
             continue
@@ -376,9 +383,9 @@ def is_empty_payslip_tool_result(completed_tools: list | None) -> bool:
 
 
 _PAYSLIP_LINE_CODES = T("turn/zero_llm.py::_PAYSLIP_LINE_CODES")
-_DIGEST_AMOUNT_RE = re.compile(
-    V("t_b_gross_gosi_loan_installment_net"),
-    re.I,
+_DIGEST_AMOUNT_RE = live_pattern(
+    LV("t_b_gross_gosi_loan_installment_net"),
+    flags=re.I,
 )
 
 
@@ -430,7 +437,7 @@ def payslip_lines_from_tools(completed_tools: list | None) -> dict[str, str]:
         if (
             V("t_payslip_2") not in blob.lower()
             and "قسيمة" not in blob
-            and "list_my_payslips" not in api
+            and ID_LIST_MY_PAYSLIPS not in api
         ):
             continue
         out.update(payslip_lines_from_payload(_unwrap_tool_json(item.get("result"))))
@@ -451,7 +458,7 @@ def payslip_lines_from_state(
             continue
         blob = f"{row.get('api') or ''} {row.get('digest') or ''}"
         looks_payslip = (
-            "list_my_payslips" in blob
+            ID_LIST_MY_PAYSLIPS in blob
             or V("t_payslip_2") in blob.lower()
             or bool(_DIGEST_AMOUNT_RE.search(str(row.get("digest") or "")))
         )
@@ -487,85 +494,97 @@ def render_payslip_grounded(text: str, lines: dict[str, str]) -> str | None:
         total = total
     lower = raw.lower()
     lang = "ar" if detect_lang(raw) == "ar" else "en"
-    if re.search(r"deductions? were|what deductions|applied|خصم|استقطاع", lower):
+    if live_pattern(LV("t_rx_deductions_ask")).search(lower):
         parts = []
         if deduction_value:
             parts.append(f"{V("t_gosi_2")} {deduction_value}")
         if advance_value:
-            parts.append(
-                f"قسط القرض {advance_value}" if lang == "ar" else f"{V("t_loan_2")} installment {advance_value}"
+            bit = copy_text(
+                "t_rx_copy_advance_bit_ar" if lang == "ar" else "t_rx_copy_advance_bit_en",
+                slot_c=V("t_loan_2"),
+                amount=advance_value,
             )
+            if bit:
+                parts.append(bit)
         if parts:
-            if lang == "ar":
-                return "الاستقطاعات المعتمدة: " + " و".join(parts) + "."
-            return "Committed deductions: " + " and ".join(parts) + "."
+            joined = (" و" if lang == "ar" else " and ").join(parts)
+            line = copy_text(
+                "t_rx_copy_deductions_ar" if lang == "ar" else "t_rx_copy_deductions_en",
+                parts=joined,
+            )
+            return line or None
         return None
     if re.search(V("t_after_gosi_take_s_home_بعد"), lower):
         if after_gosi:
-            if lang == "ar":
-                return (
-                    f"بعد خصم {V("t_gosi_2")} البالغ {deduction_value}، المتبقي قبل قسط القرض هو {after_gosi}."
-                )
-            return (
-                f"After the {V("t_gosi_2")} deduction of {deduction_value}, take-home before the "
-                f"{V("t_loan_2")} installment is {after_gosi}."
+            line = copy_text(
+                "t_rx_copy_after_gosi_ar" if lang == "ar" else "t_rx_copy_after_gosi_en",
+                slot_e=V("t_gosi_2"),
+                deduction=deduction_value,
+                slot_c=V("t_loan_2"),
+                after=after_gosi,
             )
+            return line or None
         if net:
-            return (
-                f"صافي الراتب المعتمد هو {net}."
-                if lang == "ar"
-                else f"Committed take-home (net) is {net}."
+            line = copy_text(
+                "t_rx_copy_take_home_ar" if lang == "ar" else "t_rx_copy_take_home_en",
+                net=net,
             )
+            return line or None
         return None
-    if re.search(r"net\s*pay|last month|صافي|راتبي|الراتب", lower) and net:
+    if live_pattern(LV("t_rx_net_pay_ask")).search(lower) and net:
         if lang == "ar":
-            if gross and re.search(r"شهري|إجمالي|اجمالي", raw):
-                return f"الراتب الإجمالي المعتمد هو {gross}. الصافي {net}."
-            return f"صافي الراتب المعتمد هو {net}."
-        return f"Last month's committed net pay is {net}."
+            gross_re = V("t_rx_gross_ar")
+            if gross and gross_re and re.search(gross_re, raw):
+                line = copy_text("t_rx_copy_gross_ar", gross=gross, net=net)
+                return line or None
+            line = copy_text("t_rx_copy_take_home_ar", net=net)
+            return line or None
+        line = copy_text("t_rx_copy_net_month_en", net=net)
+        return line or None
     if re.search(V("t_loan_amount_قسط_0_8_قرض"), lower) and advance_value:
-        return (
-            f"قسط القرض المعتمد هو {advance_value}."
-            if lang == "ar"
-            else f"The committed {V("t_loan_2")} installment is {advance_value}."
+        line = copy_text(
+            "t_rx_copy_installment_ar" if lang == "ar" else "t_rx_copy_installment_en",
+            slot_c=V("t_loan_2"),
+            amount=advance_value,
         )
-    if re.search(r"total deductions|إجمالي.{0,8}خصم|اجمالي.{0,8}خصم", lower) and total:
+        return line or None
+    if live_pattern(LV("t_rx_total_deductions")).search(lower) and total:
         stated = [
             m.group(0)
             for m in _USER_AMOUNT_RE.finditer(_western_digits(raw))
         ]
-        base = (
-            f"إجمالي الاستقطاعات المعتمدة {total} ({V("t_gosi_2")} {deduction_value} + {V("t_قرض")} {advance_value})."
-            if lang == "ar"
-            else f"Committed total deductions are {total} ({V("t_gosi_2")} {deduction_value} + {V("t_loan_2")} {advance_value})."
+        base = copy_text(
+            "t_rx_copy_total_ded_ar" if lang == "ar" else "t_rx_copy_total_ded_en",
+            total=total,
+            slot_e=V("t_gosi_2"),
+            deduction=deduction_value,
+            slot_c=V("t_قرض") if lang == "ar" else V("t_loan_2"),
+            advance=advance_value,
         )
+        if not base:
+            return None
         if stated and _fmt_amount(stated[-1].replace(",", "")) == total:
             return f"Yes. {base}" if lang != "ar" else f"نعم. {base}"
         if stated:
             return f"{base} You mentioned {stated[-1]} — that does not match."
         return base
     if re.search(V("t_gosi"), lower) and deduction_value:
-        return (
-            f"بند {V("t_gosi_2")} المعتمد هو {deduction_value}. لن أخترع نسبة نظامية أبعد من هذا البند."
-            if lang == "ar"
-            else (
-                f"The committed {V("t_gosi_2")} line is {deduction_value}. "
-                "I will not invent a statutory rate beyond that line."
-            )
+        line = copy_text(
+            "t_rx_copy_gosi_line_ar" if lang == "ar" else "t_rx_copy_gosi_line_en",
+            slot_e=V("t_gosi_2"),
+            deduction=deduction_value,
         )
+        return line or None
     if net and _is_payroll_followup(raw):
-        return (
-            f"صافي الراتب المعتمد هو {net}."
-            if lang == "ar"
-            else f"Committed net pay is {net}."
+        line = copy_text(
+            "t_rx_copy_take_home_ar" if lang == "ar" else "t_rx_copy_net_pay_en",
+            net=net,
         )
+        return line or None
     return None
 
 
-_PROFILE_DIGEST_RE = re.compile(
-    r"\b(employee_no|department|manager|job_title|full_name)\s*=\s*([^,]+)",
-    re.I,
-)
+_PROFILE_DIGEST_RE = live_pattern(LV("t_rx_profile_digest"), flags=re.I)
 def _nested_label(value: Any) -> str | None:
     if isinstance(value, dict):
         text = value.get("name") or value.get("full_name") or value.get("label")
@@ -603,7 +622,7 @@ def profile_from_tools(completed_tools: list | None) -> dict[str, str]:
         args = item.get("tool_args") if isinstance(item.get("tool_args"), dict) else {}
         api = str(args.get("api_name") or args.get("name") or args.get("api") or "")
         blob = f"{args} {api} {item.get('tool_name') or ''}"
-        if "get_my_profile" not in blob and "profile" not in blob.lower():
+        if ID_GET_MY_PROFILE not in blob and "profile" not in blob.lower():
             data = _unwrap_tool_json(item.get("result"))
             parsed = profile_from_payload(data)
             if "employee_no" not in parsed:
@@ -626,7 +645,7 @@ def profile_from_state(
         if not isinstance(row, dict):
             continue
         digest = str(row.get("digest") or "")
-        if "employee_no=" not in digest and "get_my_profile" not in digest:
+        if "employee_no=" not in digest and ID_GET_MY_PROFILE not in digest:
             continue
         for match in _PROFILE_DIGEST_RE.finditer(digest):
             out[match.group(1).lower()] = match.group(2).strip()

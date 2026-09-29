@@ -1,5 +1,5 @@
-from ai.engine.pack_vocab import V
-V("t_p4_3_skills_admission_gate_three")
+from ai.engine.pack_vocab import LV, V
+LV("t_p4_3_skills_admission_gate_three")
 
 import json
 import logging

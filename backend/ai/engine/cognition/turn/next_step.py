@@ -5,6 +5,12 @@ user must take next (switch to Agent / Approve / Run / Confirm). Chat
 never submits (ADR-0046).
 """
 from __future__ import annotations
+
+from ai.engine.host_ids import (
+    ID_LEAVE_TYPE,
+    ID_LOAN_TYPE,
+    ID_PERMISSION_TYPE,
+)
 from ai.engine.cognition.phrase_tables import T
 
 
@@ -85,8 +91,8 @@ def next_step_action(state: Any) -> str | None:
     ]
     if plans:
         return None
-    if slots.get("loan_type") or slots.get("leave_type") or slots.get(
-        "permission_type"
+    if slots.get(ID_LOAN_TYPE) or slots.get(ID_LEAVE_TYPE) or slots.get(
+        ID_PERMISSION_TYPE
     ) or slots.get("principal") or slots.get("amount"):
         return "submit_in_agent"
     return None

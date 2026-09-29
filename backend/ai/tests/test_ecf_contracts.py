@@ -19,7 +19,7 @@ from ai.engine.cognition.entity.contracts import (
 from ai.engine.cognition.entity.resolver import ResolveResult
 from ai.engine_runtime import _apply_ecf_entity_contracts
 
-NIBRAS_YAML = Path(__file__).parent.parent / "engine/instances/nibras/instance.yaml"
+NIBRAS_YAML = Path(__file__).resolve().parents[3] / "domain_packs" / "nibras" / "instance.yaml"
 
 
 @pytest.fixture

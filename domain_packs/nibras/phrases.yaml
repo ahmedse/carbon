@@ -1,0 +1,641 @@
+# Phrase overlay. A turn bound to this pack uses these rows in place of the
+# core table with the same key. Other packs keep the core table only.
+context_pack.py::CHAT_AUTONOMY:
+  kind: str
+  value: 'Autonomy (Chat · ADR-0046): advise, draft, explain, and hand off — never claim to
+    have submitted or staged a host write. For leave / loan / attendance / payroll mutations,
+    direct the user to Agent or My.'
+entity/contracts.py::_NONEXISTENCE_PHRASES:
+  items:
+  - no such
+  - no matching
+  - no employee
+  - no record
+  - not found
+  - does not exist
+  kind: tuple
+plan/process_dial_i18n.py::ATTENDANCE_BRIEF_AR:
+  items:
+  - استئذان
+  - إذن حضور
+  - اذن حضور
+  - ساعات قصيرة
+  - سجل حضوري الآن
+  - سجل حضورى الان
+  kind: tuple
+plan/process_dial_i18n.py::LOAN_BRIEF_AR:
+  items:
+  - قرض
+  - قروضي
+  - أريد قرض
+  - اريد قرض
+  - تقديم قرض
+  kind: tuple
+scope_route.py::_BARE_LEAVE_EN:
+  items:
+  - leave
+  - time off
+  - time-off
+  - vacation
+  - pto
+  kind: frozenset
+scope_route.py::_LEAVE_COMPLIANCE_PHRASES:
+  items:
+  - leave compliance
+  - leave risk
+  - leave variance
+  - leave report
+  - leave pack
+  - leave board
+  - absence rate
+  kind: tuple
+scope_route.py::_LEAVE_PERSONAL_PHRASES:
+  items:
+  - i want leave
+  - i want annual leave
+  - i want time off
+  - i want timeoff
+  - i want vacation
+  - i want pto
+  - i want holiday
+  - i need leave
+  - i need annual leave
+  - i need time off
+  - i need vacation
+  - i need pto
+  - i need holiday
+  - i request leave
+  - i request annual leave
+  - i request time off
+  - i request vacation
+  - i request pto
+  - i request holiday
+  - requesting leave
+  - requesting annual leave
+  - requesting time off
+  - requesting vacation
+  - request leave
+  - request annual leave
+  - apply for leave
+  - apply for annual leave
+  - apply for time off
+  - apply for vacation
+  - apply for pto
+  - apply for holiday
+  - take leave
+  - take annual leave
+  - take time off
+  - take vacation
+  - take pto
+  - take holiday
+  - reporting an absence
+  - reporting absence
+  - report an absence
+  - report absence
+  kind: tuple
+scope_route_i18n.py::BARE_LEAVE_AR:
+  items:
+  - إجازة
+  - اجازة
+  - اجازه
+  kind: frozenset
+scope_route_i18n.py::LEAVE_WORD_AR:
+  items:
+  - إجازة
+  - اجازة
+  - اجازه
+  kind: tuple
+state_store.py::_EMPTY_PAYSLIP_REPLY_PHRASES:
+  items:
+  - no payslips
+  - no committed payslips
+  - found no payslips
+  - no payslips are on file
+  - no payslips were on file
+  - no payslips are found
+  - no payslips were found
+  kind: tuple
+tool_digest.py::_PAYSLIP_IDENTITY_CODES:
+  items:
+  - gross
+  - gosi
+  - loan_installment
+  - net
+  kind: tuple
+turn/ess_read.py::_BARE_PLACE_EN:
+  items:
+  - leave
+  - leaves
+  - loan
+  - loans
+  - payroll
+  - payslip
+  - payslips
+  - attendance
+  - home
+  kind: frozenset
+turn/ess_read.py::_PROPER_NAME_STOP:
+  items:
+  - What
+  - How
+  - Show
+  - Where
+  - When
+  - Who
+  - Why
+  - Tell
+  - Please
+  - Can
+  - Could
+  - Would
+  - Should
+  - May
+  - My
+  - The
+  - A
+  - An
+  - OK
+  - Remaining
+  - List
+  - About
+  - Does
+  - Did
+  - Is
+  - Are
+  - I
+  - We
+  - You
+  - Leave
+  - Loan
+  - Annual
+  - Sick
+  - Your
+  - Our
+  - Their
+  kind: frozenset
+turn/handoff_agent.py::_LOAN_TYPE_WORDS:
+  items:
+  - emergency
+  - housing
+  - salary
+  - car
+  - personal
+  kind: tuple
+turn/handoff_agent.py::_PAYROLL_STATUS_WORDS:
+  items:
+  - payslip
+  - payslips
+  - deduction
+  - deductions
+  - gosi
+  - payroll
+  kind: tuple
+turn/handoff_agent_i18n.py::AMOUNT_PREFIX_AR:
+  items:
+  - مبلغ
+  - قرض
+  kind: tuple
+turn/handoff_agent_i18n.py::LEAVE_UNPAID_AR:
+  items:
+  - بدون راتب
+  - بدون  راتب
+  kind: tuple
+turn/handoff_agent_i18n.py::LOAN_SALARY_AR:
+  items:
+  - راتب
+  kind: tuple
+turn/intent_i18n.py::LEAVE_WORD_AR:
+  items:
+  - إجازة
+  - اجازة
+  - اجازه
+  kind: tuple
+turn/memory_recall.py::_HOST_IDENTITY_PHRASES:
+  items:
+  - employee number
+  - employee no
+  - job title
+  - organisation
+  - organization
+  - org unit
+  kind: tuple
+turn/memory_recall_i18n.py::HOST_IDENTITY_AR:
+  items:
+  - مدير
+  - قسم
+  - رقم الموظف
+  kind: tuple
+turn/navigation.py::_PLACE_TOPICS:
+  items:
+  - loans
+  - loan
+  - leave
+  - payroll
+  - payslips
+  - payslip
+  - attendance
+  - home
+  - notifications
+  - notification
+  - dashboard
+  kind: tuple
+turn/navigation_i18n.py::PLACE_TOPIC_AR:
+  items:
+  - قرض
+  - قروض
+  - إجازة
+  - اجازة
+  - راتب
+  - رواتب
+  - قسيمة
+  - حضور
+  - رئيسية
+  - إشعار
+  kind: tuple
+turn/next_step.py::_PAYROLL_WORDS:
+  items:
+  - payslip
+  - payroll
+  - gosi
+  - deduction
+  kind: tuple
+turn/next_step_i18n.py::PAYROLL_AR:
+  items:
+  - قسيمة
+  - راتب
+  - استقطاع
+  kind: tuple
+turn/plan_dial.py::_EN_SLOT:
+  items:
+    date: date
+    days: days
+    end_date: end date
+    hours: hours
+    leave_type: leave type
+    loan_type: loan type
+    permission_type: permission type
+    principal: amount
+    start_date: start date
+    term_months: term (months)
+  kind: dict
+turn/plan_dial.py::_EN_STEP_BY_API:
+  items:
+    get_my_leave_balance: Read my leave balance (read)
+    list_my_attendance_permissions: Check my current attendance permissions (read)
+    list_my_leave: Read my leave records (read)
+    list_my_loans: Check my current loans (read)
+    submit_my_attendance_permission: Submit the attendance permission
+    submit_my_leave: Submit the leave request
+    submit_my_loan: Submit the loan request
+  kind: dict
+turn/plan_dial.py::_NEW_CONTENT_WORDS:
+  items:
+  - submit
+  - apply
+  - request
+  - loan
+  - leave
+  - attendance
+  - salary
+  - payroll
+  - report
+  kind: tuple
+turn/plan_dial_i18n.py::NEW_CONTENT_AR:
+  items:
+  - قرض
+  - إجاز
+  - اجاز
+  - استئذان
+  - راتب
+  - رواتب
+  - تقرير
+  - قدّم
+  - قدم
+  - اطلب
+  kind: tuple
+turn/plan_status.py::_HAPPENED_TAILS:
+  items:
+  - request
+  - loan
+  - leave
+  - plan
+  - application
+  kind: tuple
+turn/plan_status.py::_STATUS_TAILS:
+  items:
+  - status
+  - request
+  - application
+  - plan
+  - loan
+  - leave
+  kind: tuple
+turn/plan_status_i18n.py::STATUS_OBJECT_AR:
+  items:
+  - طلب
+  - قرض
+  - إجازة
+  - اجازة
+  - المخطط
+  - الخطة
+  kind: tuple
+turn/report_clarify.py::_ASPECT_PHRASES:
+  items:
+  - pay mix
+  - run health
+  - payroll run
+  - payroll runs
+  - high level
+  - high-level
+  - all of the
+  - all the
+  - all four
+  - all aspects
+  - all options
+  - all above
+  - all them
+  - each aspect
+  - each one
+  kind: tuple
+turn/report_clarify.py::_ASPECT_WORDS:
+  items:
+  - distribution
+  - band
+  - bands
+  - tier
+  - tiers
+  - committed
+  - draft
+  - failed
+  - gosi
+  - pifss
+  - deduction
+  - board
+  - executive
+  - summary
+  - both
+  - everything
+  kind: tuple
+turn/report_clarify.py::_BROAD_PAY:
+  items:
+  - salary
+  - salaries
+  - payroll
+  - compensation
+  - pay
+  kind: tuple
+turn/report_clarify.py::_CLARIFY:
+  items:
+    ar: 'بكل سرور أساعد في تقرير الرواتب — على ماذا تريد التركيز؟
+
+
+      - **توزيع الرواتب حسب الشرائح** (رسوم بيانية)
+
+      - **صحة مسيرات الرواتب** (معتمد / مسودة / فاشل)
+
+      - **الاستقطاعات والتأمينات (GOSI)**
+
+      - **ملخص لمجلس الإدارة** (مستوى عالٍ بدون جداول صفوف)
+
+      - أمر آخر — حدّد **الجمهور** و**الزاوية**'
+    en: 'Happy to help with a salary report — what should **this report** focus on?
+
+
+      - **Pay distribution by band** (charts + tiers)
+
+      - **Payroll run health** (committed / draft / failed)
+
+      - **Deductions & GOSI** overview
+
+      - **Board-ready summary** (high level, no row dumps)
+
+      - Something else — tell me the **audience** and the **angle**'
+  kind: dict
+turn/report_clarify.py::_PAYROLL_DIGEST_MARKERS:
+  items:
+  - list_payroll_runs
+  - list_payslip_lines
+  - analyze_employees
+  - aggregate_entity
+  - headcount
+  - payslip
+  - payroll
+  - metric=headcount
+  kind: tuple
+turn/report_clarify.py::_PRIOR_CLARIFY_MARKERS:
+  items:
+  - what should
+  - focus on
+  - happy to help with a salary report
+  - بكل سرور أساعد في تقرير الرواتب
+  - على ماذا تريد التركيز
+  kind: tuple
+turn/report_clarify.py::_PRIOR_REPORT_ANSWER_MARKERS:
+  items:
+  - payroll run status
+  - payslip line
+  - active employees
+  - headcount by
+  - salary band
+  - pay distribution
+  - gosi
+  - pifss
+  - committed
+  - draft
+  - failed
+  kind: tuple
+turn/report_clarify.py::_SALARY_ASPECT_BY_NUM:
+  items:
+    '1': Pay distribution by band with charts and tiers
+    '2': Payroll run health committed draft failed
+    '3': Deductions and GOSI overview
+    '4': Board-ready salary summary high level no row dumps
+    '5': Board-ready salary summary high level no row dumps
+    both: all four salary report aspects with charts
+  kind: dict
+turn/report_clarify.py::_SCOPED_WORDS:
+  items:
+  - board
+  - executive
+  - finance
+  - manager
+  - committee
+  - distribution
+  - breakdown
+  - band
+  - bands
+  - tier
+  - tiers
+  - histogram
+  - chart
+  - charts
+  - graph
+  - graphs
+  - visual
+  - visuals
+  - viz
+  - gosi
+  - pifss
+  - deduction
+  - variance
+  - committed
+  - draft
+  - failed
+  - word
+  - excel
+  - pdf
+  - pptx
+  - export
+  - pack
+  kind: tuple
+turn/report_clarify.py::_TOPIC_ASPECT_BY_NUM:
+  items:
+    '1': Headcount and organization structure — active employees by department, role, and
+      employment type with charts
+    '2': Payroll and compensation — salary ranges, gross pay, deductions, net pay trends with
+      charts
+    '3': Leave and attendance balances usage patterns with charts
+    '4': GOSI and statutory employer employee contributions compliance
+    '5': Payroll run status draft computed validated committed failed
+    both: Headcount and organization structure with charts — departments, roles, employment
+      type
+  kind: dict
+turn/report_clarify.py::_TOPIC_MENU_MARKERS:
+  items:
+  - headcount & organization
+  - payroll & compensation
+  - what's the main topic
+  - i'd like to focus this report
+  kind: tuple
+turn/report_clarify_i18n.py::BROAD_REPORT_AR:
+  items:
+  - تقرير
+  - رواتب
+  - راتب
+  - مسير
+  - الأجور
+  - كامل
+  - شامل
+  - مفصل
+  kind: tuple
+turn/router.py::_REPORT_OPTIONS:
+  items:
+  - id: '1'
+    label: Pay distribution by band
+    value: Pay distribution by band with charts and tiers
+  - id: '2'
+    label: Payroll run health
+    value: Payroll run health committed draft failed
+  - id: '3'
+    label: Deductions & GOSI
+    value: Deductions and GOSI overview
+  - id: '4'
+    label: Board-ready summary
+    value: Board-ready salary summary high level no row dumps
+  kind: tuple
+turn/runner_util_i18n.py::ESS_TOPIC_AR:
+  items:
+  - إجاز
+  - اجاز
+  - قرض
+  - راتب
+  - رواتب
+  - حضور
+  - غياب
+  - قسيم
+  - استئذان
+  - سلف
+  kind: tuple
+turn/zero_llm.py::_EMPTY_PAYSLIP_REPLY_PHRASES:
+  items:
+  - no payslips
+  - no committed payslips
+  - found no payslips
+  - no payslips are on file
+  - no payslips were on file
+  - no payslips are found
+  - no payslips were found
+  kind: tuple
+turn/zero_llm.py::_PAYROLL_FOLLOWUP_PHRASES:
+  items:
+  - take-home
+  - take home
+  - take_home
+  - net pay
+  - loan amount
+  - total deductions
+  - after gosi
+  kind: tuple
+turn/zero_llm.py::_PAYROLL_FOLLOWUP_WORDS:
+  items:
+  - deduction
+  - deductions
+  - gosi
+  kind: tuple
+turn/zero_llm.py::_PAYROLL_SCHEDULE_PHRASES:
+  items:
+  - when will payroll be processed
+  - when will next month's payroll be processed
+  - when will next months payroll be processed
+  - when is payroll run
+  - when is the payroll run
+  - when does payroll run
+  - when does the payroll run
+  - when does payroll get processed
+  - when is payroll get processed
+  kind: tuple
+turn/zero_llm.py::_PAYSLIP_DOWNLOAD_PHRASES:
+  items:
+  - can i download my payslip
+  - can i download my payslips
+  - can i download payslip
+  - can i download payslips
+  - download my payslip
+  - download my payslips
+  - download payslip
+  - download payslips
+  kind: tuple
+turn/zero_llm.py::_PAYSLIP_LINE_CODES:
+  items:
+  - gross
+  - gosi
+  - loan_installment
+  - net
+  kind: tuple
+turn/zero_llm.py::_PROFILE_ASK_PHRASES:
+  items:
+  - employee number
+  - employee no
+  - what number
+  kind: tuple
+turn/zero_llm_i18n.py::PROFILE_ASK_AR:
+  items:
+  - رقم الموظف
+  - قسم
+  - مدير
+  kind: tuple
+dialogue/deixis.py::_KNOWN_TOOL_IDENTIFIERS:
+  items:
+  - call_host_api
+  - resolve_entity
+  - search_knowledge
+  - export_document
+  - code_execute
+  - web_research
+  - get_my_leave_balance
+  - list_leave_entitlements
+  - list_my_leave
+  - list_my_loans
+  - list_my_payslips
+  - list_attendance
+  - list_my_attendance_permissions
+  kind: frozenset
+turn/catalog_render.py::BALANCE_APIS:
+  items:
+  - get_my_leave_balance
+  - list_leave_entitlements
+  kind: frozenset
+turn/catalog_render.py::PAYSLIP_APIS:
+  items:
+  - list_my_payslips
+  kind: frozenset

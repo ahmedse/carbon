@@ -677,6 +677,11 @@ api_catalog:
     audience: [ess, hr]
     not_for: Org-wide headcount. People who do not report to you.
     empty_render: no_direct_reports
+    returns: [employee_no, full_name, job_title]
+    field_labels:
+      employee_no: {en: Employee number, ar: الرقم الوظيفي}
+      full_name: {en: Name, ar: الاسم}
+      job_title: {en: Job title, ar: المسمى الوظيفي}
     description: Direct reports of the caller. Requires team:access.
     requires_auth: true
     requires_confirmation: false

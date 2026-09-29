@@ -1,4 +1,4 @@
-# Registry: Frontend Components  (auto-generated 2026-09-23 10:44 — DO NOT EDIT)
+# Registry: Frontend Components  (auto-generated 2026-09-27 20:20 — DO NOT EDIT)
 
 > REUSE BEFORE CREATE. Before building any component, search here first.
 
@@ -69,6 +69,7 @@ carbon-frontend//src/components/gradevance/WaveChart.jsx
 carbon-frontend//src/components/graph/AgentTopologyGraph.jsx
 carbon-frontend//src/components/graph/EnterpriseGraph.jsx
 carbon-frontend//src/components/graph/ForceGraph.jsx
+carbon-frontend//src/components/graph/GraphNodeLabel.jsx
 carbon-frontend//src/components/graph/PlanDagGraph.jsx
 carbon-frontend//src/components/graph/PlanMermaidPreview.jsx
 carbon-frontend//src/components/graph/RunTimeline.jsx

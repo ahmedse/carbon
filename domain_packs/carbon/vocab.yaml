@@ -1,0 +1,4 @@
+# Identifiers this pack catalogs. A turn bound here does not receive another pack's names.
+t_rx_id_list_my_capabilities: list_my_capabilities
+t_rx_id_get_calculation_summary: get_calculation_summary
+t_rx_id_list_org_units: list_org_units

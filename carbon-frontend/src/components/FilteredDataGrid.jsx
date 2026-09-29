@@ -50,6 +50,8 @@ export default function FilteredDataGrid({
   getRowId,
   /** When true, omit PageContainer/PageHeader — for master-detail tabs. */
   embedded = false,
+  /** Embedded preview / map grids that are not filterable lists. */
+  hideSearch = false,
   height = 480,
   initialState,
   onRowClick,
@@ -92,8 +94,10 @@ export default function FilteredDataGrid({
         <PageHeader title={title} subtitle={subtitle} description={description} actions={actions} />
       )}
 
+      {(!hideSearch || filterDefs.length > 0) && (
       <Paper sx={{ p: 2, mb: embedded ? 2 : 3, bgcolor: 'background.paper' }}>
         <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+          {!hideSearch && (
           <TextField
             placeholder={searchPlaceholder || t('searchByName')}
             value={searchValue}
@@ -104,6 +108,7 @@ export default function FilteredDataGrid({
               startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />,
             }}
           />
+          )}
 
           {filterDefs.length > 0 && (
             <Button
@@ -165,6 +170,7 @@ export default function FilteredDataGrid({
           </Grid>
         )}
       </Paper>
+      )}
 
       {countLabel && (
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>

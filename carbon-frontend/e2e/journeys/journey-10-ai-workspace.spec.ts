@@ -591,9 +591,8 @@ test.describe.serial('Journey 10: Pulse — extensive-use simulation', () => {
 
     // W3 empty state — appears when there are no conversations; with seeded data
     // the list is non-empty, so assert the workspace renders one of its legitimate
-    // non-loading states: empty state ("Pulse Ready") OR an active conversation
-    // ("Message input" textbox). There are no [role="tab"] elements in this shell.
-    const hasEmpty = await p.getByText('Pulse Ready').isVisible({ timeout: 3000 }).catch(() => false);
+    // non-loading states: coworker intro OR an active conversation.
+    const hasEmpty = await p.getByTestId('pulse-empty-state').isVisible({ timeout: 3000 }).catch(() => false);
     const hasInput = await p
       .getByRole('textbox', { name: 'Message input' })
       .isVisible({ timeout: 3000 })

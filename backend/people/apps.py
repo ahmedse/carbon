@@ -9,3 +9,5 @@ class PeopleConfig(AppConfig):
     def ready(self):
         import people.compliance  # noqa: registers evaluators into regulations.registry
         import people.signals  # noqa: registers correspondence -> Loan/Leave status sync
+        from people.inbound_cartridges import register_people_cartridges
+        register_people_cartridges()

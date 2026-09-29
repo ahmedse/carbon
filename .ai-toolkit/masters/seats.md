@@ -47,6 +47,7 @@ Shared = either Master may read; write only when your track owns the change.
 - Local `./manage.sh` stack (**:8009** / **:5179**) — **stack lease** (`shared/multi-master.md`)
 - Root `TASKS.md` / `TASK-RESULTS.md` — **only your sections**
 - `manage.sh` URL/banner helpers when fixing Nibras QA ops (notify Pulse via INFO)
+- `backend/inbound/**` · `docs/migration/**` · `/people/import` · `/catalog/imports` upgrade — Data Migration Studio pipe (ADR-0060 Accepted). Nibras owns People door + cartridges. Catalog owns Catalog Imports adapter (DMS-2).
 
 ### Must not touch
 - ECF / PEC / Pulse engine phases; `backend/ai/engine/**` internals; Pulse Console/AI workspace product work
@@ -70,7 +71,7 @@ Canonical design: `docs/eduos/GRADEVANCE-DESIGN.md` ·
 - `carbon-frontend/src/apps/learn/**`
 - `carbon-frontend/src/apps/teach/**`
 - `carbon-frontend/src/brands/eduos.js`
-- `backend/ai/engine/instances/eduos/**`
+- `domain_packs/eduos/**`
 - `domain_packs/eduos/**` / GradeVance engine packs
 - ADR-0038, ADR-0042 and future EduOS/GradeVance ADRs
 
@@ -110,6 +111,7 @@ Data Trust Index, glossary, lineage, freshness, Dataset Hub contracts. Domain-ag
 - Pulse `api_catalog` / AI grounding that consumes catalog trust — REQUEST to Pulse
 - Local `./manage.sh` stack — **stack lease**
 - Root `TASKS.md` / `TASK-RESULTS.md` — **only Catalog / Data Trust sections**
+- `backend/inbound/**` · `docs/migration/**` — Data Migration Studio (ADR-0060). Catalog owns kind=`data_product` adapter (DMS-2). `inbound` is installed; do not start DMS-2 from the Nibras seat.
 
 ### Must not touch
 - Pulse engine/host AI phases (`backend/ai/engine/**`) except COMMS ACK for grounding

@@ -40,6 +40,13 @@ describe('PlanProposalForm', () => {
     expect(onCreate).toHaveBeenCalledTimes(1);
   });
 
+  it('drops the draft only from Cancel', () => {
+    const onCancel = vi.fn();
+    render(<PlanProposalForm proposal={proposal()} onCancel={onCancel} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
   it('sends the user own words as a change', () => {
     const onChange = vi.fn();
     render(<PlanProposalForm proposal={proposal()} onCreate={vi.fn()} onChange={onChange} />);

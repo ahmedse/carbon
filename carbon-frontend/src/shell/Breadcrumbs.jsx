@@ -7,6 +7,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../auth/AuthContext';
 import { shellLabel } from '../i18n/shellLabels';
+import { getInboundCrumb } from '../components/inbound/inboundAccess';
 import HomeIcon from '@mui/icons-material/Home';
 import { ChevronEnd } from '../i18n/DirectionalIcons';
 import DashboardIcon from '@mui/icons-material/Dashboard';
@@ -93,6 +94,11 @@ const ROUTE_CONFIG = {
   },
   '/carbon/chairman': {
     label: 'Chairman Overview',
+    icon: DashboardIcon,
+    parent: '/carbon/console',
+  },
+  '/carbon/onboarding': {
+    label: 'Inventory onboarding',
     icon: DashboardIcon,
     parent: '/carbon/console',
   },
@@ -262,6 +268,16 @@ const ROUTE_CONFIG = {
     icon: AdminPanelSettingsIcon,
     parent: '/admin',
   },
+  '/admin/migration/cartridges': {
+    label: 'Cartridges',
+    icon: AdminPanelSettingsIcon,
+    parent: '/admin',
+  },
+  '/admin/migration/cartridges/:id': {
+    label: 'Cartridge',
+    icon: AdminPanelSettingsIcon,
+    parent: '/admin/migration/cartridges',
+  },
   '/admin/apps': {
     label: 'Registered Apps',
     icon: AdminPanelSettingsIcon,
@@ -273,7 +289,7 @@ const ROUTE_CONFIG = {
     parent: '/admin',
   },
   '/admin/excellence': {
-    label: 'Excellence',
+    label: 'Readiness & Excellence',
     icon: AdminPanelSettingsIcon,
     parent: '/admin',
   },
@@ -311,6 +327,16 @@ const ROUTE_CONFIG = {
     label: 'Context',
     icon: AdminPanelSettingsIcon,
     parent: '/admin/excellence',
+  },
+  '/admin/excellence/:context/cells/:board/:row/:column': {
+    label: 'Cell',
+    icon: AdminPanelSettingsIcon,
+    parent: '/admin/excellence/:context',
+  },
+  '/admin/excellence/:context/definitions/:definitionId': {
+    label: 'Definition',
+    icon: AdminPanelSettingsIcon,
+    parent: '/admin/excellence/:context',
   },
   '/admin/excellence/:context/:app': {
     label: 'App',
@@ -427,6 +453,11 @@ const ROUTE_CONFIG = {
     icon: CloudUploadIcon,
     parent: '/catalog',
   },
+  '/catalog/imports/:id': {
+    label: 'Import batch',
+    icon: CloudUploadIcon,
+    parent: '/catalog/imports',
+  },
   '/catalog/governance': {
     label: 'Audit Log',
     icon: VerifiedUserIcon,
@@ -534,6 +565,16 @@ const ROUTE_CONFIG = {
     label: 'Policy Detail',
     icon: PolicyIcon,
     parent: '/people/policies',
+  },
+  '/people/import': {
+    label: 'Import',
+    icon: CloudUploadIcon,
+    parent: '/people',
+  },
+  '/people/import/:id': {
+    label: 'Import batch',
+    icon: CloudUploadIcon,
+    parent: '/people/import',
   },
 
   // My (employee self-service) — NSR-5C breadcrumb honesty
@@ -828,6 +869,18 @@ function resolveCrumbLabel(crumb, modules, tablesByModule) {
       const t = (arr || []).find((x) => String(x.id) === String(last));
       if (t) return t.title || t.name || crumb.label;
     }
+  }
+
+  if (segs[0] === 'people' && segs[1] === 'import' && segs[2]) {
+    return getInboundCrumb(segs[2]) || crumb.label;
+  }
+
+  if (segs[0] === 'catalog' && segs[1] === 'imports' && segs[2]) {
+    return getInboundCrumb(segs[2]) || crumb.label;
+  }
+
+  if (segs[0] === 'admin' && segs[1] === 'excellence' && (segs[3] === 'cells' || segs[3] === 'definitions')) {
+    return crumb.label;
   }
 
   if (segs[0] === 'admin' && segs[1] === 'excellence' && segs.length >= 3) {

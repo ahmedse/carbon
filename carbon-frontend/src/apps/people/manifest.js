@@ -61,6 +61,7 @@ export default {
       { type: 'group', label: 'Configuration' },
       { label: 'Policies', path: '/people/policies', role: '*' },
       { label: 'App Config', path: '/people/config', role: '*' },
+      { label: 'Import', path: '/people/import', role: '*' },
     ],
   },
 

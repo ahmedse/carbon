@@ -1,6 +1,6 @@
 from __future__ import annotations
-from ai.engine.pack_vocab import V
-V("t_parse_planner_demo_period_aliases_into")
+from ai.engine.pack_vocab import LV, V
+LV("t_parse_planner_demo_period_aliases_into")
 
 
 import re

@@ -25,6 +25,7 @@ import types
 import uuid
 from typing import Any
 
+from ai.engine.cognition.phrase_tables import bound_to_pack
 from ai.engine.core.resolution import payload_status
 from ai.instance_registry import default_app_for_instance, resolve_instance_id
 
@@ -72,6 +73,7 @@ def _run_async(coro):
         return pool.submit(asyncio.run, coro).result()
 
 
+@bound_to_pack
 async def _run_chat(
     instance_id: str, payload: dict[str, Any], task_id: str, *, stream_callback=None, progress_callback=None
 ) -> dict[str, Any]:
@@ -210,6 +212,7 @@ async def _run_chat(
             conversation_id=conversation_id,
             host_user_id=host_user_id,
             process_mode=str(payload.get("process_mode") or "ask"),
+            page_context=str(payload.get("page_context") or ""),
             dense_thinking=bool(payload.get("dense_thinking")),
             conversation_history=history_messages,
             instance_config=instance_config,
@@ -221,6 +224,8 @@ async def _run_chat(
             knowledge_items=knowledge_items,
             scope=knowledge_scope,
         )
+        runner._plan_change = bool(payload.get("plan_change"))
+        runner._plan_cancel = bool(payload.get("plan_cancel"))
         response, ledger = await runner.run(user_message=message, **_run_kwargs)
 
         # Deterministic backstop: the user asked for a write. On Chat we must
@@ -662,8 +667,9 @@ def _instance_config(
 ) -> dict[str, Any]:
     """Load the per-instance config (persona/api_catalog/domain_topics).
 
-    All domain knowledge lives in ``instances/<instance_id>/instance.yaml`` —
-    the engine core (cognition/, memory/, learning/) never imports from here.
+    All domain knowledge lives in ``domain_packs/<instance_id>/instance.yaml``
+    (via that pack's ``pack.yaml``) — the engine core (cognition/, memory/,
+    learning/) never imports from here.
     This loader is brand-aware: ``instance_id`` is the resolved engine instance
     (``carbon`` for AASTMT, ``nibras`` for People & Payroll, …) so each brand's
     persona, domain topics, and host API catalog are strictly its own.
@@ -673,35 +679,43 @@ def _instance_config(
     falls back to ``carbon`` so an unknown instance never crashes the turn —
     host RBAC remains the backstop.
     """
-    from asgiref.sync import sync_to_async
-
-    def _resolve_user_access() -> dict:
-        from ai.access_manifest import build_user_access_manifest
-
-        return build_user_access_manifest(host_user_id)
-
-    try:
-        user_access = _run_async(sync_to_async(_resolve_user_access, thread_sensitive=True)())
-    except Exception:  # noqa: BLE001 - inventory is best-effort; never fatal
-        logger.exception("Could not resolve user access manifest; using empty inventory")
-        user_access = {
-            "platform_name": _platform_display_name(),
-            "access_level": "unknown",
-            "platform_wide": False,
-            "is_read_only": True,
-            "apps": [],
-            "capabilities": [],
-            "modules": [],
-            "routes": [],
-        }
-
     from ai.engine.core.archetypes import load_instance_config
+    from ai.engine.cognition.turn.capability import inventory_provider
 
     config: dict[str, Any] = load_instance_config(instance_id)
     if not config and instance_id != "carbon":
         # Unknown/new instance: fall back to the Carbon config rather than
         # failing the turn (host RBAC still gates execution).
         config = load_instance_config("carbon") or {}
+
+    # The requested pack decides. A fallen-back config must not inherit
+    # another world's inventory. Absence means empty.
+    provider = inventory_provider(instance_id)
+    config["inventory"] = provider
+    if not provider:
+        user_access: dict[str, Any] = {}
+    else:
+        from asgiref.sync import sync_to_async
+
+        def _resolve_user_access() -> dict:
+            from ai.access_manifest import build_user_access_manifest
+
+            return build_user_access_manifest(host_user_id)
+
+        try:
+            user_access = _run_async(sync_to_async(_resolve_user_access, thread_sensitive=True)())
+        except Exception:  # noqa: BLE001 - inventory is best-effort; never fatal
+            logger.exception("Could not resolve user access manifest; using empty inventory")
+            user_access = {
+                "platform_name": _platform_display_name(),
+                "access_level": "unknown",
+                "platform_wide": False,
+                "is_read_only": True,
+                "apps": [],
+                "capabilities": [],
+                "modules": [],
+                "routes": [],
+            }
 
     # Runtime-only fields that cannot live in a static file.
     config["instance_id"] = instance_id
@@ -1427,14 +1441,24 @@ def _extract_tool_actions(completed_tools: list[dict]) -> tuple[list[dict], list
                             "summary": str(nav.get("summary") or ""),
                         })
                     elif nav.get("type") == "open_panel":
-                        actions.append({
+                        row = {
                             "type": "open_panel",
                             "panel": str(nav.get("panel") or "tasks"),
                             "plan_id": str(nav.get("plan_id") or ""),
                             "label": str(nav.get("label") or "Open in Agent"),
                             "summary": str(nav.get("summary") or ""),
                             "process_hint": str(nav.get("process_hint") or ""),
-                        })
+                        }
+                        brief = str(nav.get("brief") or "").strip()
+                        if brief:
+                            row["brief"] = brief
+                        draft = nav.get("draft")
+                        if not isinstance(draft, dict) or not draft:
+                            if row["panel"] == "plan" and isinstance(data.get("draft"), dict):
+                                draft = data.get("draft")
+                        if isinstance(draft, dict) and draft:
+                            row["draft"] = draft
+                        actions.append(row)
             # Never treat as pending_exec.
             continue
 

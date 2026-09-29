@@ -111,3 +111,7 @@ mkdir -p ai/engine/instances/<project>
 |------|--------|
 | `backend/ai/engine/instances/carbon/instance.yaml` | Created — all Carbon domain config |
 | `backend/ai/engine_runtime.py::_carbon_instance_config()` | Replaced 80-line dict with 10-line loader |
+
+---
+
+**Note (2026-09-29 · ADR-0050):** the YAML seam is now `domain_packs/<id>/instance.yaml` (declared by that pack’s `pack.yaml`), not `engine/instances/<id>/instance.yaml`. The original decision above still holds: domain config stays out of Python.

@@ -179,6 +179,7 @@ def main(argv: list[str] | None = None) -> int:
     ctx = {
         "run_apps": run_apps, "run_vitest": run_vitest, "run_playwright": run_playwright,
         "run_runtime": run_runtime,
+        "no_db": bool(args.no_db),
     }
     only = {s.strip() for s in args.only.split(",")} if args.only else None
     if not args.collect and (run_apps or run_vitest or run_playwright or run_runtime):

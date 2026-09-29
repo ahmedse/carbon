@@ -139,9 +139,20 @@ The generic `/payroll|salary|gosi/` hint in `presentationPlane.js` was matching 
 
 `GET /people/payroll-runs/` as emp_1067 stayed 403. No role was granted.
 
+## Personas (R6) — 2026-09-27 17:36 UTC
+
+`PV2-tasks-prod-2026-09-27-173634.json`. Persona observes only. Other KPIs were not re-run. R6 is reached.
+
+| User | Plan | What the stored answer said |
+|---|---|---|
+| emp_1067 | e451ae44, host user 13, completed | Bilagot Panta Suerte, employee 1067, Heavy Duty Driver, Coiled Tubing, manager Mohammad Bolto Ali. Annual remaining 18. |
+| emp_1712 | ee2c2a04, host user 97, completed | One direct report: employee 1067, Bilagot Panta Suerte, Heavy Duty Driver. |
+
+`GET /people/payroll-runs/` as emp_1067 stayed 403. The 12:49 file is not overwritten.
+
 ## Still not done
 
-- R6 fail: My restated the HR profile; Team’s direct-reports step did not restate employee 1067.
+- R6 reached on the 17:36 recheck. The 12:49 miss stays in file 124921.
 - Mutating ESS still needs STACK-HOLD + `PULSE_NIGHTLY_LIVE=1` + emp_1067 (R7).
 - API bench still prints R4 partial (it does not open Taskso). The browser check above is the dated look.
 - Night 2026-09-23 FAIL stays (R8).

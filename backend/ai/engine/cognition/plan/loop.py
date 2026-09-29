@@ -1,10 +1,19 @@
+from ai.engine.host_ids import (
+    ID_ATTENDANCE_PERMISSION,
+    ID_LEAVE_REQUEST,
+    ID_LIST_MY_CAPABILITIES,
+    ID_LOAN_REQUEST,
+    ID_SUBMIT_MY_ATTENDANCE_PERMISSION,
+    ID_SUBMIT_MY_LEAVE,
+    ID_SUBMIT_MY_LOAN,
+)
 """
 ReActLoop — Iterates a Plan step-by-step with critic gating + re-plan on failure.
 
 PR-20: Executes each PlanStep through draft → critic → execute → observe,
 with mutation confirmation gates, dry-run previews, and up to 2 replans.
 """
-from ai.engine.cognition.phrase_tables import T
+from ai.engine.cognition.phrase_tables import T, bound_to_pack
 from ai.engine.pack_vocab import V
 import asyncio
 import inspect
@@ -258,6 +267,22 @@ _ALLOWED_FOLLOWUP_TOOLS = T("plan/loop.py::_ALLOWED_FOLLOWUP_TOOLS")
 _MAX_AUTO_FOLLOWUPS = 2
 
 
+def downgrade_empty_completion(
+    final_status: str,
+    final_response: str | None,
+    step_results: list,
+    succeeded: bool,
+) -> tuple[str, bool]:
+    """A finished run with no shown text is a failure, not a completion."""
+    if final_status != "completed":
+        return final_status, succeeded
+    if any((getattr(row, "draft_text", "") or "").strip() for row in step_results):
+        return final_status, succeeded
+    if "I wasn't able to complete the requested plan" not in (final_response or ""):
+        return final_status, succeeded
+    return "failed", False
+
+
 def _followup_is_readonly(tool_name: str | None, tool_args: dict | None) -> bool:
     """True when an allow-listed follow-up cannot trigger RULE_21 consent."""
     if not tool_name:
@@ -421,6 +446,7 @@ class ReActLoop:
         self.db = db
         self.flight_director = flight_director
 
+    @bound_to_pack
     async def run(
         self,
         plan: Plan,
@@ -1271,6 +1297,18 @@ class ReActLoop:
                     step, result, plan_source=plan.source,
                 )
                 step_results.append(result)
+                from ai.engine.cognition.plan.export_bind import show_or_fail_read
+
+                show_or_fail_read(
+                    result,
+                    step.tool_args if isinstance(step.tool_args, dict) else {},
+                    language=str((user_info or {}).get("language") or "en"),
+                    catalog=(
+                        (instance_config or {}).get("api_catalog")
+                        if isinstance(instance_config, dict) else None
+                    ),
+                    is_mutation=bool(getattr(step, "is_mutation", False)),
+                )
                 _step_llm = int(getattr(result, "llm_calls", 0) or 0)
                 total_llm_calls += _step_llm
                 total_tokens += int(getattr(result, "tokens_used", 0) or 0)
@@ -1718,6 +1756,9 @@ class ReActLoop:
                     for r in step_results
                 )
                 final_status = "completed" if succeeded else "failed"
+                final_status, succeeded = downgrade_empty_completion(
+                    final_status, final_response, step_results, succeeded,
+                )
 
         # ── P1.1: Update Run row with final status ────────────────────────
         if _db is not None and run_id is not None:
@@ -2049,7 +2090,7 @@ class ReActLoop:
                     "search_knowledge",
                     "get_entity_details",
                     "call_host_api",
-                    "list_my_capabilities",
+                    ID_LIST_MY_CAPABILITIES,
                     "plan_task",
                     "resolve_entity",
                     "aggregate_entity",
@@ -3743,28 +3784,28 @@ class ReActLoop:
                     or status in ("submitted", "in_review", "approved")
                 )
                 if host_ok and (
-                    api == "submit_my_leave" or ctype == "leave_request"
+                    api == ID_SUBMIT_MY_LEAVE or ctype == ID_LEAVE_REQUEST
                 ):
                     leave_submit_done = True
                     break
                 if host_ok and (
-                    api == "submit_my_loan" or ctype == "loan_request"
+                    api == ID_SUBMIT_MY_LOAN or ctype == ID_LOAN_REQUEST
                 ):
                     loan_submit_done = True
                     break
                 if host_ok and (
-                    api == "submit_my_attendance_permission"
-                    or ctype == "attendance_permission"
+                    api == ID_SUBMIT_MY_ATTENDANCE_PERMISSION
+                    or ctype == ID_ATTENDANCE_PERMISSION
                 ):
                     attendance_submit_done = True
                     break
-                if out.get("confirmed") and ctype == "leave_request":
+                if out.get("confirmed") and ctype == ID_LEAVE_REQUEST:
                     leave_submit_done = True
                     break
-                if out.get("confirmed") and ctype == "loan_request":
+                if out.get("confirmed") and ctype == ID_LOAN_REQUEST:
                     loan_submit_done = True
                     break
-                if out.get("confirmed") and ctype == "attendance_permission":
+                if out.get("confirmed") and ctype == ID_ATTENDANCE_PERMISSION:
                     attendance_submit_done = True
                     break
             if leave_submit_done or loan_submit_done or attendance_submit_done:

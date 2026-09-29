@@ -11,7 +11,8 @@ PRIOR_CLARIFY_AR = T("turn/report_clarify_i18n.py::PRIOR_CLARIFY_AR")
 
 def any_needle(text: str, needles: tuple[str, ...]) -> bool:
     raw = text or ""
-    return any(n in raw for n in needles)
+    # Empty is not a match. A pack that lacks the needle must not hit every utterance.
+    return any(n and str(n) in raw for n in needles)
 
 
 def broad_report_ar(text: str) -> bool:

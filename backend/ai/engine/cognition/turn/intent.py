@@ -18,9 +18,22 @@ pipeline degrades gracefully to the pre-existing behaviour — intent resolution
 must never be able to break a turn.
 """
 from __future__ import annotations
+
+from ai.engine.host_ids import (
+    ID_ANALYZE_EMPLOYEES,
+    ID_GET_CALCULATION_SUMMARY,
+    ID_GET_EMPLOYEE,
+    ID_GET_MY_LEAVE_BALANCE,
+    ID_GET_MY_PROFILE,
+    ID_LIST_EMPLOYEES,
+    ID_LIST_LEAVE_ENTITLEMENTS,
+    ID_LIST_LEAVE_RECORDS,
+    ID_LIST_MY_LEAVE,
+    ID_LIST_ORG_UNITS,
+)
 from ai.engine.cognition.phrase_tables import T
 
-from ai.engine.pack_vocab import V
+from ai.engine.pack_vocab import LV, V, live_pattern, present_id_list
 
 import json
 import logging
@@ -59,11 +72,11 @@ _MUTATION_PHRASES = T("turn/intent.py::_MUTATION_PHRASES")
 
 # First-person  / time-off submission (EN + AR) — owned by the full
 # pipeline (``submit_my_leave`` / RULE_21), never the read-only intent resolver.
-_LEAVE_MUTATION_RE = re.compile(
-    r"(?i)("
-    + V("t_b_request_apply_s_for_take")
-    + V("t_b_leave_vacation_s_request_application")
-    + r")"
+_LEAVE_MUTATION_RE = live_pattern(
+    r"(?i)(",
+    LV("t_b_request_apply_s_for_take"),
+    LV("t_b_leave_vacation_s_request_application"),
+    r")",
 )
 _NEW_THING_PHRASES = T("turn/intent.py::_NEW_THING_PHRASES")
 
@@ -214,12 +227,12 @@ def _build_system_prompt(
         "  \"analyze\" or \"summarize\" — do NOT clarify just because a branch "
         "  name is present.",
         V("t_compensation_salary_basic_pay_راتب_أجر")
-        + "  `get_employee` (named coworker) or `get_my_profile` (first-person "
+        + V("t_rx_copy_intent_profile")
         + V("t_my_salary_راتبي_do_not_match")
         + V("t_contractual_salary_figure_empty_payslips_are")
-        + "  data\". DO match `list_my_payslips` for net pay / take-home / "
+        + V("t_rx_copy_intent_payslip")
         + V("t_last_month_s_pay_deductions_gosi_2")
-        + "  صافي الراتب.",
+        + V("t_rx_copy_intent_net_ar"),
         "- If exactly one endpoint clearly matches, action = \"answer\" and set "
         "  `endpoint` to its name.",
         "- If two or more endpoints are nearly as likely and the user could mean "
@@ -392,11 +405,11 @@ def _apply_tenant_org_override(
     if not _message_mentions_tenant_org(user_message, tenant_org):
         return resolution
 
-    preferred_names = (
-        "analyze_employees",
-        "list_employees",
-        "get_calculation_summary",
-        "list_org_units",
+    preferred_names = present_id_list(
+        ID_ANALYZE_EMPLOYEES,
+        ID_LIST_EMPLOYEES,
+        ID_GET_CALCULATION_SUMMARY,
+        ID_LIST_ORG_UNITS,
     )
     label_names = {lbl["name"] for lbl in labels}
     pick = next((n for n in preferred_names if n in label_names), None)
@@ -418,15 +431,15 @@ def _apply_tenant_org_override(
 
 
 #: C1 — control-instruction fragments that are never  names.
-_INSTRUCTION_SHAPED = re.compile(
+_INSTRUCTION_SHAPED = live_pattern(
     r"(?is)"
     r"(ignore\s+(all\s+)?(previous|prior|above)|"
     r"disregard\s+(all\s+)?(previous|prior|instructions?)|"
-    r"system\s+prompt|"
-    + V("t_show_s_all_s_salaries")
-    + V("t_reveal_s_all_s_salaries")
-    + r"you\s+are\s+now|"
-    r"override\s+(all\s+)?(rules|instructions?|guards?))"
+    r"system\s+prompt|",
+    LV("t_show_s_all_s_salaries"),
+    LV("t_reveal_s_all_s_salaries"),
+    r"you\s+are\s+now|"
+    r"override\s+(all\s+)?(rules|instructions?|guards?))",
 )
 
 
@@ -505,9 +518,9 @@ def _apply_compensation_override(
 
     label_names = {lbl["name"] for lbl in labels}
     if first_person_compensation_ask(user_message):
-        preferred = ("get_my_profile", "get_employee")
+        preferred = (ID_GET_MY_PROFILE, ID_GET_EMPLOYEE)
     else:
-        preferred = ("get_employee", "get_my_profile")
+        preferred = (ID_GET_EMPLOYEE, ID_GET_MY_PROFILE)
     pick = next((n for n in preferred if n in label_names), None)
     if pick is None:
         return resolution
@@ -530,7 +543,7 @@ def _apply_compensation_override(
         )
     ]
     resolution.confidence = max(resolution.confidence, 0.9)
-    resolution.intent = resolution.intent or "compensation lookup"
+    resolution.intent = resolution.intent or V("t_rx_copy_comp_lookup")
     return resolution
 
 
@@ -588,13 +601,13 @@ def _apply_named_leave_override(
     # «عن الإجازات» historically missed first_person and preferred list_my_leave
     # (records) → empty → invented remaining/used/pending = 0.
     if named_leave_balance_ask(user_message):
-        preferred = ("list_leave_entitlements", "list_leave_records")
+        preferred = (ID_LIST_LEAVE_ENTITLEMENTS, ID_LIST_LEAVE_RECORDS)
     elif domain_history_asked(V("t_leave"), user_message):
-        preferred = ("list_my_leave", "get_my_leave_balance")
+        preferred = (ID_LIST_MY_LEAVE, ID_GET_MY_LEAVE_BALANCE)
     elif first_person_leave_ask(user_message) or not named_leave_balance_ask(
         user_message
     ):
-        preferred = ("get_my_leave_balance", "list_my_leave")
+        preferred = (ID_GET_MY_LEAVE_BALANCE, ID_LIST_MY_LEAVE)
     else:
         return resolution
 
@@ -637,7 +650,7 @@ def _apply_ess_self_read_override(
     if pick is None:
         return resolution
     #  *balance* already handled by ``_apply_named_leave_override``.
-    if pick == "get_my_leave_balance":
+    if pick == ID_GET_MY_LEAVE_BALANCE:
         return resolution
 
     label_names = {lbl["name"] for lbl in labels}

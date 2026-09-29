@@ -257,6 +257,9 @@ class WorkspaceConversationViewSet(viewsets.GenericViewSet):
                     dense_thinking=bool(
                         serializer.validated_data.get("dense_thinking")
                     ),
+                    plan_change=bool(serializer.validated_data.get("plan_change")),
+                    plan_cancel=bool(serializer.validated_data.get("plan_cancel")),
+                    page_context=serializer.validated_data.get("page_context") or "",
                 ):
                     yield f"data: {json.dumps(frame)}\n\n"
             except ValueError as e:
@@ -1308,6 +1311,9 @@ class WorkspaceArtifactViewSet(viewsets.GenericViewSet):
                     dense_thinking=bool(
                         serializer.validated_data.get("dense_thinking")
                     ),
+                    plan_change=bool(serializer.validated_data.get("plan_change")),
+                    plan_cancel=bool(serializer.validated_data.get("plan_cancel")),
+                    page_context=serializer.validated_data.get("page_context") or "",
                 ):
                     yield f"data: {json.dumps(frame)}\n\n"
             except ValueError as e:

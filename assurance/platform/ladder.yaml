@@ -50,6 +50,14 @@ subjects:
     paths: [backend/importexport]
     tests: [backend/importexport/tests]
     app: importexport
+  - id: platform.module.inbound
+    kind: module
+    title: inbound (Data Migration Studio pipe)
+    owner: owner
+    paths: [backend/inbound]
+    tests: [backend/inbound/tests]
+    adr: [.ai-toolkit/decisions/0060-data-migration-studio.md]
+    app: inbound
   - id: platform.module.evidence
     kind: module
     title: evidence (attachments)
@@ -148,6 +156,737 @@ checks:
     applies_to: [module, process, journey, ai_pack]
     solution: Replace hex colors and raw MUI Table with theme tokens and FilteredDataGrid.
     source: design-system RULE 1 and RULE 14
+
+  # inbound rank 1 — subject-scoped. Do not inherit onto other modules.
+  - id: INBOUND-SPC-01
+    title: Inbound subject states its purpose in one line
+    dimension: specified
+    rank: 1
+    collector: repo
+    probe: { type: field_nonempty, field: title, subjects: [platform.module.inbound] }
+    applies_to: [module]
+    solution: Set title on platform.module.inbound.
+    source: assurance/standard/standard.yaml specified.1
+  - id: INBOUND-COR-01
+    title: Inbound test location is declared
+    dimension: correct
+    rank: 1
+    collector: repo
+    probe: { type: field_nonempty, field: tests, subjects: [platform.module.inbound] }
+    applies_to: [module]
+    solution: "Set tests to backend/inbound/tests."
+    source: assurance/standard/standard.yaml correct.1
+  - id: INBOUND-REL-01
+    title: Inbound names a failure owner
+    dimension: reliable
+    rank: 1
+    collector: repo
+    probe: { type: field_nonempty, field: owner, subjects: [platform.module.inbound] }
+    applies_to: [module]
+    solution: Set owner on platform.module.inbound.
+    source: assurance/standard/standard.yaml reliable.1
+  - id: INBOUND-MNT-01
+    title: Inbound paths exist
+    dimension: maintainable
+    rank: 1
+    collector: repo
+    probe: { type: paths_exist, field: paths, subjects: [platform.module.inbound] }
+    applies_to: [module]
+    solution: Point paths at backend/inbound.
+    source: assurance/standard/standard.yaml maintainable.1
+  - id: INBOUND-OBS-01
+    title: Inbound signal document is named
+    dimension: observed
+    rank: 1
+    collector: repo
+    probe:
+      type: file_exists
+      file: docs/migration/DATA-MIGRATION-STUDIO.md
+      subjects: [platform.module.inbound]
+    applies_to: [module]
+    solution: Keep docs/migration/DATA-MIGRATION-STUDIO.md.
+    source: assurance/standard/standard.yaml observed.1
+
+  # inbound rank 2 — markers must exist in the studio spec. Scoped.
+  - id: INBOUND-COR-02
+    title: Inbound spec has a test plan
+    dimension: correct
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: docs/migration/DATA-MIGRATION-STUDIO.md
+      text: "## Test plan"
+      subjects: [platform.module.inbound]
+    applies_to: [module]
+    solution: Keep the Test plan section, with suite names.
+    source: assurance/standard/standard.yaml correct.2
+  - id: INBOUND-SEC-02
+    title: Inbound spec lists capabilities and roles
+    dimension: secure
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: docs/migration/DATA-MIGRATION-STUDIO.md
+      text: "## Capabilities and roles"
+      subjects: [platform.module.inbound]
+    applies_to: [module]
+    solution: Keep the Capabilities and roles section.
+    source: assurance/standard/standard.yaml secure.2
+  - id: INBOUND-REL-02
+    title: Inbound spec lists failure modes
+    dimension: reliable
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: docs/migration/DATA-MIGRATION-STUDIO.md
+      text: "## Failure modes"
+      subjects: [platform.module.inbound]
+    applies_to: [module]
+    solution: Keep the Failure modes table.
+    source: assurance/standard/standard.yaml reliable.2
+  - id: INBOUND-PRF-02
+    title: Inbound spec states the v1 budget
+    dimension: performant
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: docs/migration/DATA-MIGRATION-STUDIO.md
+      text: "## Budget"
+      subjects: [platform.module.inbound]
+    applies_to: [module]
+    solution: Keep the Budget section. Do not invent a latency number.
+    source: assurance/standard/standard.yaml performant.2
+  - id: INBOUND-USE-02
+    title: Inbound screen spec is present
+    dimension: usable
+    rank: 2
+    collector: repo
+    probe:
+      type: file_exists
+      file: docs/migration/SCREEN-SPEC-DMS.md
+      subjects: [platform.module.inbound]
+    applies_to: [module]
+    solution: Keep docs/migration/SCREEN-SPEC-DMS.md.
+    source: assurance/standard/standard.yaml usable.2
+  - id: INBOUND-MNT-02
+    title: Inbound module boundary is declared
+    dimension: maintainable
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: docs/migration/DATA-MIGRATION-STUDIO.md
+      text: "## Module boundary"
+      subjects: [platform.module.inbound]
+    applies_to: [module]
+    solution: Keep the Module boundary section.
+    source: assurance/standard/standard.yaml maintainable.2
+  - id: INBOUND-OBS-02
+    title: Inbound signal threshold is defined
+    dimension: observed
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: docs/migration/DATA-MIGRATION-STUDIO.md
+      text: "## Signal threshold"
+      subjects: [platform.module.inbound]
+    applies_to: [module]
+    solution: Keep the Signal threshold section.
+    source: assurance/standard/standard.yaml observed.2
+  - id: INBOUND-GOV-02
+    title: Inbound ADR is linked on the subject
+    dimension: governed
+    rank: 2
+    collector: repo
+    probe: { type: paths_exist, field: adr, subjects: [platform.module.inbound] }
+    applies_to: [module]
+    solution: Link ADR-0060 under adr.
+    source: assurance/standard/standard.yaml governed.2
+
+  # inbound rank 3 — each probe reads a real test, scan, or screen. Scoped.
+  - id: INBOUND-SPC-03
+    title: Pipe tests cite DMS-COR-PIPE
+    dimension: specified
+    rank: 3
+    collector: repo
+    probe:
+      type: def_contains
+      file: backend/inbound/tests/test_pipe.py
+      def: test_parse_csv_headers_and_count
+      texts: [DMS-COR-PIPE, "assert parsed[\"row_count\"] == 25"]
+      subjects: [platform.module.inbound]
+    applies_to: [module]
+    solution: Keep the DMS-COR-PIPE citation in test_pipe.py.
+    source: assurance/standard/standard.yaml specified.3
+  - id: INBOUND-SPC-04
+    title: Boundary test cites DMS-COR-BOUND
+    dimension: specified
+    rank: 3
+    collector: repo
+    probe:
+      type: def_contains
+      file: backend/inbound/tests/test_boundary.py
+      def: test_inbound_never_imports_people
+      texts: [DMS-COR-BOUND, "assert not offenders"]
+      subjects: [platform.module.inbound]
+    applies_to: [module]
+    solution: Keep the DMS-COR-BOUND citation in test_boundary.py.
+    source: assurance/standard/standard.yaml specified.3
+  - id: INBOUND-SPC-05
+    title: Product adapter tests cite DMS-COR-PRODUCT
+    dimension: specified
+    rank: 3
+    collector: repo
+    probe:
+      type: def_contains
+      file: backend/inbound/tests/test_data_product_adapter.py
+      def: test_smoke_writes_zero_datarows
+      texts: [DMS-COR-PRODUCT, "DataRow.objects.filter(data_table=product_table).count() == 0"]
+      subjects: [platform.module.inbound]
+    applies_to: [module]
+    solution: Keep the DMS-COR-PRODUCT citation in test_data_product_adapter.py.
+    source: assurance/standard/standard.yaml specified.3
+  - id: INBOUND-SPC-06
+    title: Leave cartridge tests cite DMS-COR-LEAVE
+    dimension: specified
+    rank: 3
+    collector: repo
+    probe:
+      type: def_contains
+      file: backend/people/tests/test_inbound_cartridges.py
+      def: test_leave_history_does_not_add_used_days
+      texts: [DMS-COR-LEAVE, "assert ent.used_days == Decimal('5')"]
+      subjects: [platform.module.inbound]
+    applies_to: [module]
+    solution: Keep the DMS-COR-LEAVE citation in test_inbound_cartridges.py.
+    source: assurance/standard/standard.yaml specified.3
+  - id: INBOUND-SPC-07
+    title: Recovery test cites DMS-REL-03
+    dimension: specified
+    rank: 3
+    collector: repo
+    probe:
+      type: def_contains
+      file: backend/inbound/tests/test_pipe.py
+      def: test_unmapped_required_blocks_smoke
+      texts: [DMS-REL-03, "assert res.status_code == 400", "InboundBatch.STATUS_SMOKED"]
+      subjects: [platform.module.inbound]
+    applies_to: [module]
+    solution: Keep the DMS-REL-03 citation next to the remap-and-smoke assertions.
+    source: assurance/standard/standard.yaml specified.3
+  - id: INBOUND-SPC-08
+    title: Sample-cap test cites DMS-PRF-03
+    dimension: specified
+    rank: 3
+    collector: repo
+    probe:
+      type: def_contains
+      file: backend/inbound/tests/test_pipe.py
+      def: test_parse_csv_headers_and_count
+      texts: [DMS-PRF-03, "assert len(parsed[\"sample\"]) == 20"]
+      subjects: [platform.module.inbound]
+    applies_to: [module]
+    solution: Keep the DMS-PRF-03 citation next to the sample-length assertion.
+    source: assurance/standard/standard.yaml specified.3
+  - id: INBOUND-SEC-03
+    title: People owner is refused a product batch
+    dimension: secure
+    rank: 3
+    collector: repo
+    probe:
+      type: def_contains
+      file: backend/inbound/tests/test_data_product_adapter.py
+      def: test_people_owner_cannot_create_data_product
+      texts: ["assert res.status_code == 403", "data_product"]
+      subjects: [platform.module.inbound]
+    applies_to: [module]
+    solution: Keep the 403 test for people:manage on kind data_product.
+    source: assurance/standard/standard.yaml secure.3
+  - id: INBOUND-REL-03
+    title: A rejected map can be corrected and smoked
+    dimension: reliable
+    rank: 3
+    collector: repo
+    probe:
+      type: def_contains
+      file: backend/inbound/tests/test_pipe.py
+      def: test_unmapped_required_blocks_smoke
+      texts: ["assert res.status_code == 400", "InboundBatch.STATUS_SMOKED"]
+      subjects: [platform.module.inbound]
+    applies_to: [module]
+    solution: Keep the remap-after-400 smoke assertions. Do not add an automatic retry.
+    source: assurance/standard/standard.yaml reliable.3
+  - id: INBOUND-PRF-03
+    title: Parser sample cap is 20 rows
+    dimension: performant
+    rank: 3
+    collector: repo
+    probe:
+      type: file_contains
+      file: backend/inbound/parse.py
+      text: "'sample': rows[:20]"
+      skip_comments: true
+      subjects: [platform.module.inbound]
+    applies_to: [module]
+    solution: Keep rows[:20] in parse.py. Do not invent a latency number.
+    source: assurance/standard/standard.yaml performant.3
+  - id: INBOUND-PRF-04
+    title: The 25-row test asserts the sample cap
+    dimension: performant
+    rank: 3
+    collector: repo
+    probe:
+      type: def_contains
+      file: backend/inbound/tests/test_pipe.py
+      def: test_parse_csv_headers_and_count
+      texts: ["assert len(parsed[\"sample\"]) == 20", "assert parsed[\"row_count\"] == 25"]
+      subjects: [platform.module.inbound]
+    applies_to: [module]
+    solution: Keep both assertions in test_parse_csv_headers_and_count.
+    source: assurance/standard/standard.yaml performant.3
+  - id: INBOUND-USE-03
+    title: Inbound chrome has no hex and no raw table
+    dimension: usable
+    rank: 3
+    collector: design_lint
+    probe:
+      type: no_hex_or_raw_table
+      files:
+        - carbon-frontend/src/components/inbound/InboundList.jsx
+        - carbon-frontend/src/components/inbound/InboundStudio.jsx
+        - carbon-frontend/src/components/inbound/InboundStatRow.jsx
+        - carbon-frontend/src/pages/admin/migration/CartridgeListPage.jsx
+        - carbon-frontend/src/pages/admin/migration/CartridgeDetailPage.jsx
+      subjects: [platform.module.inbound]
+    applies_to: [module]
+    solution: Keep inbound chrome on theme tokens and FilteredDataGrid.
+    source: assurance/standard/standard.yaml usable.3
+  - id: INBOUND-USE-04
+    title: Inbound list has the data states and the shared primitives
+    dimension: usable
+    rank: 3
+    collector: repo
+    probe:
+      type: file_contains
+      file: carbon-frontend/src/components/inbound/InboundList.jsx
+      texts:
+        - "<LoadingSkeleton"
+        - "error === 'forbidden'"
+        - importEmpty
+        - importNoResults
+        - "<ErrorAlert"
+        - "<FilteredDataGrid"
+        - "<SystemDialog"
+        - "<SearchSelect"
+      skip_comments: true
+      subjects: [platform.module.inbound]
+    applies_to: [module]
+    solution: Keep loading, empty, no-results, error, and forbidden on the shared components.
+    source: assurance/standard/standard.yaml usable.3
+  - id: INBOUND-MNT-03
+    title: Inbound import boundary is clean
+    dimension: maintainable
+    rank: 3
+    collector: repo
+    probe:
+      type: forbidden_import
+      root: backend/inbound
+      names: [people, emissions, gradevance]
+      skip_tests: true
+      subjects: [platform.module.inbound]
+    applies_to: [module]
+    solution: Remove the hosted-app import. Cartridges register from the app.
+    source: assurance/standard/standard.yaml maintainable.3
+  - id: INBOUND-OBS-03
+    title: Smoke stores the envelope on the batch
+    dimension: observed
+    rank: 3
+    collector: repo
+    probe:
+      type: file_contains
+      file: backend/inbound/services.py
+      text: "batch.smoke = envelope"
+      skip_comments: true
+      subjects: [platform.module.inbound]
+    applies_to: [module]
+    solution: Keep the smoke assignment. Do not add a log line to pass this rung.
+    source: assurance/standard/standard.yaml observed.3
+  - id: INBOUND-GOV-03
+    title: The import-boundary test is the contract gate
+    dimension: governed
+    rank: 3
+    collector: repo
+    probe:
+      type: def_contains
+      file: backend/inbound/tests/test_boundary.py
+      def: test_inbound_never_imports_people
+      texts: ["assert not offenders", "for name in BANNED"]
+      subjects: [platform.module.inbound]
+    applies_to: [module]
+    solution: Keep test_inbound_never_imports_people.
+    source: assurance/standard/standard.yaml governed.3
+
+  - id: INBOUND-SPC-10
+    title: Cartridge tests cite DMS-COR-CART
+    dimension: specified
+    rank: 3
+    collector: repo
+    probe:
+      type: def_contains
+      file: backend/inbound/tests/test_cartridges.py
+      def: test_studio_label_survives_reregister
+      texts: [DMS-COR-CART, "assert row.label == 'Studio name'"]
+      subjects: [platform.module.inbound]
+    applies_to: [module]
+    solution: Keep the studio-label assertion in test_studio_label_survives_reregister.
+    source: assurance/standard/standard.yaml specified.3
+
+  # inbound rank 4 — each check runs its own nodes. Scoped.
+  # usable rank 4 is the People-door journey. observed rank 4 is the series writer.
+  - id: INBOUND-SPC-09
+    title: Every inbound criterion suite is green
+    dimension: specified
+    rank: 4
+    collector: pytest
+    probe:
+      type: pytest_app
+      app: inbound-criteria
+      nodes:
+        - inbound/tests/test_pipe.py
+        - inbound/tests/test_boundary.py
+        - inbound/tests/test_data_product_adapter.py
+        - inbound/tests/test_cartridges.py
+        - people/tests/test_inbound_cartridges.py
+      subjects: [platform.module.inbound]
+    applies_to: [module]
+    solution: "python -m excellence.gauge --run pytest:inbound-criteria"
+    source: assurance/standard/standard.yaml specified.4
+  - id: INBOUND-SEC-04
+    title: Forbidden-path tests are green
+    dimension: secure
+    rank: 4
+    collector: pytest
+    probe:
+      type: pytest_app
+      app: inbound-secure
+      nodes:
+        - inbound/tests/test_data_product_adapter.py::test_people_owner_cannot_create_data_product
+        - inbound/tests/test_pipe.py::test_same_user_commit_403
+      subjects: [platform.module.inbound]
+    applies_to: [module]
+    solution: "python -m excellence.gauge --run pytest:inbound-secure"
+    source: assurance/standard/standard.yaml secure.4
+  - id: INBOUND-REL-04
+    title: Remap-after-reject and snapshot idempotency are green
+    dimension: reliable
+    rank: 4
+    collector: pytest
+    probe:
+      type: pytest_app
+      app: inbound-reliable
+      nodes:
+        - inbound/tests/test_pipe.py::test_unmapped_required_blocks_smoke
+        - people/tests/test_inbound_cartridges.py::test_employee_snapshot_commit_idempotent
+      subjects: [platform.module.inbound]
+    applies_to: [module]
+    solution: "python -m excellence.gauge --run pytest:inbound-reliable"
+    source: assurance/standard/standard.yaml reliable.4
+  - id: INBOUND-PRF-05
+    title: Sample-cap test is green
+    dimension: performant
+    rank: 4
+    collector: pytest
+    probe:
+      type: pytest_app
+      app: inbound-performant
+      nodes:
+        - inbound/tests/test_pipe.py::test_parse_csv_headers_and_count
+      subjects: [platform.module.inbound]
+    applies_to: [module]
+    solution: "python -m excellence.gauge --run pytest:inbound-performant"
+    source: assurance/standard/standard.yaml performant.4
+  - id: INBOUND-MNT-04
+    title: Import-boundary test is green
+    dimension: maintainable
+    rank: 4
+    collector: pytest
+    probe:
+      type: pytest_app
+      app: inbound-boundary
+      nodes:
+        - inbound/tests/test_boundary.py::test_inbound_never_imports_people
+      subjects: [platform.module.inbound]
+    applies_to: [module]
+    solution: "python -m excellence.gauge --run pytest:inbound-boundary"
+    source: assurance/standard/standard.yaml maintainable.4
+  - id: INBOUND-GOV-04
+    title: Contract-gate test is green
+    dimension: governed
+    rank: 4
+    collector: pytest
+    probe:
+      type: pytest_app
+      app: inbound-boundary
+      nodes:
+        - inbound/tests/test_boundary.py::test_inbound_never_imports_people
+      subjects: [platform.module.inbound]
+    applies_to: [module]
+    solution: "python -m excellence.gauge --run pytest:inbound-boundary"
+    source: assurance/standard/standard.yaml governed.4
+  - id: INBOUND-USE-05
+    title: People door journey is green on HEAD
+    dimension: usable
+    rank: 4
+    collector: playwright
+    probe:
+      type: journey
+      file: carbon-frontend/e2e/journeys/journey-dms-people-door.spec.ts
+      subjects: [platform.module.inbound]
+    applies_to: [module]
+    solution: "python -m excellence.gauge --run playwright:carbon-frontend/e2e/journeys/journey-dms-people-door.spec.ts"
+    source: assurance/standard/standard.yaml usable.4
+  - id: INBOUND-OBS-04
+    title: Smoke series matches the envelope stored on the batch
+    dimension: observed
+    rank: 4
+    collector: pytest
+    probe:
+      type: pytest_app
+      app: inbound-observed
+      nodes:
+        - inbound/tests/test_observe_series.py::test_smoke_series_matches_the_saved_envelope
+      subjects: [platform.module.inbound]
+    applies_to: [module]
+    solution: "python -m excellence.gauge --run pytest:inbound-observed"
+    source: assurance/standard/standard.yaml observed.4
+
+  # Rank 5 is defined and unmet. inbound_operated is registered and
+  # fail-closed: a missing file or GitHub run is unknown, never a pass.
+  # These probes must not be satisfied by repo, observe, or GET /api/health/.
+  # Evidence floor is enforcement-verified. The collector does not re-run
+  # pytest, does not run Playwright, and does not write the series file.
+  - id: INBOUND-SPC-11
+    title: Inbound code changes ship with the studio contract
+    dimension: specified
+    rank: 5
+    collector: inbound_operated
+    probe:
+      type: spec_same_merge
+      paths:
+        - docs/migration/DATA-MIGRATION-STUDIO.md
+        - .ai-toolkit/decisions/0060-data-migration-studio.md
+      code:
+        - backend/inbound
+        - carbon-frontend/src/components/inbound
+      base_env: GITHUB_BASE_SHA
+      base_default: HEAD~1
+      diff: three_dot
+      git_failure: unknown
+      no_code_diff: pass
+      missing: unknown
+      subjects: [platform.module.inbound]
+    applies_to: [module]
+    solution: Same merge as the studio doc or ADR-0060. Do not score a file read.
+    source: assurance/standard/standard.yaml specified.5
+  - id: INBOUND-COR-05
+    title: People-door journey is green on the inbound nightly
+    dimension: correct
+    rank: 5
+    collector: inbound_operated
+    probe:
+      type: workflow_journey_green
+      workflow: .github/workflows/inbound-nightly.yml
+      cron: "30 3 * * *"
+      file: carbon-frontend/e2e/journeys/journey-dms-people-door.spec.ts
+      command: "CI=1 npx playwright test e2e/journeys/journey-dms-people-door.spec.ts --config e2e/playwright.config.ts"
+      persona: emp_2378
+      evidence: gh run list event=schedule conclusion=success headSha
+      local_playwright: reject
+      cron_mismatch: fail
+      command_mismatch: fail
+      forbid_in_workflow:
+        - manage.sh
+      batch_id: not a constant
+      hosted_github: reject
+      missing: unknown
+      subjects: [platform.module.inbound]
+    applies_to: [module]
+    solution: Add the workflow. Do not reuse the Pulse 02:00 cron. Do not start the stack from the gauge.
+    source: assurance/standard/standard.yaml correct.5
+  - id: INBOUND-SEC-06
+    title: Forbidden-path tests fail the CI job
+    dimension: secure
+    rank: 5
+    collector: inbound_operated
+    probe:
+      type: ci_node_red
+      workflow: .github/workflows/ci.yml
+      step: Run tests
+      nodes:
+        - inbound/tests/test_pipe.py::test_same_user_commit_403
+        - inbound/tests/test_data_product_adapter.py::test_people_owner_cannot_create_data_product
+      conclusion: success
+      pytest: python -m pytest
+      forbid_ignore: inbound
+      missing_run: unknown
+      rerun_pytest: reject
+      node_proof: def in file
+      subjects: [platform.module.inbound]
+    applies_to: [module]
+    solution: The pytest step must fail the job when these nodes fail. The collector does not re-run pytest. A YAML read is not enough.
+    source: assurance/standard/standard.yaml secure.5
+  - id: INBOUND-REL-06
+    title: One scheduled People-door run exits 0
+    dimension: reliable
+    rank: 5
+    collector: inbound_operated
+    probe:
+      type: scheduled_run_green
+      workflow: .github/workflows/inbound-nightly.yml
+      runs: 1
+      event: schedule
+      conclusion: success
+      head_sha: not required
+      missing: unknown
+      subjects: [platform.module.inbound]
+    applies_to: [module]
+    solution: One green scheduled run. Do not copy the Pulse five-night streak.
+    source: assurance/standard/standard.yaml reliable.5
+  - id: INBOUND-PRF-06
+    title: Live batch sample stays within 20
+    dimension: performant
+    rank: 5
+    collector: inbound_operated
+    probe:
+      type: live_sample_cap
+      path: /carbon-api/inbound/batches/{id}/
+      list_path: /carbon-api/inbound/batches/?kind=typed_object
+      origin_env: CARBON_API_URL
+      origin_default: http://127.0.0.1:8009
+      username: emp_2378
+      password_env:
+        - NIBRAS_HR_PASSWORD
+        - EMPLOYEE_DEFAULT_PASSWORD
+      status:
+        - smoked
+        - committed
+      max_sample: 20
+      samples: 1
+      missing: unknown
+      subjects: [platform.module.inbound]
+    applies_to: [module]
+    solution: Read one smoked or committed batch. Do not set p95_ms. Do not call /api/health/.
+    source: assurance/standard/standard.yaml performant.5
+  - id: INBOUND-USE-06
+    title: People door is RTL and the eye name is Arabic
+    dimension: usable
+    rank: 5
+    collector: inbound_operated
+    probe:
+      type: rtl_i18n_a11y
+      script: npm run i18n:check
+      path: /people/import
+      persona: emp_2378
+      storage_key: carbon.lang
+      preferences: accounts/me/preferences/
+      server_language_wins: true
+      dir: rtl
+      eye_name: "فتح الدفعة"
+      primary_name: "استيراد جديد"
+      search_placeholder: "بحث الدفعات"
+      i18n_alone: reject
+      test_seam: inbound_rtl
+      production_observation: browser
+      spec: carbon-frontend/e2e/journeys/journey-dms-people-door-ar.spec.ts
+      restore_language: en
+      restore: "PATCH accounts/me/preferences/ {language: en}"
+      rank4_search: Search batches
+      rank4_eye: Open batch
+      clicks: none
+      run: "--run playwright:carbon-frontend/e2e/journeys/journey-dms-people-door-ar.spec.ts"
+      stack: do not start
+      subjects: [platform.module.inbound]
+    applies_to: [module]
+    solution: i18n parity plus Arabic locale on the People door. i18n:check alone does not pass.
+    source: assurance/standard/standard.yaml usable.5
+  - id: INBOUND-MNT-05
+    title: Changed-subject ratchet covers inbound
+    dimension: maintainable
+    rank: 5
+    collector: inbound_operated
+    probe:
+      type: ratchet_gate
+      workflow: .github/workflows/ci.yml
+      step: Excellence ledger tests + changed-subject ratchet (ADR-0051)
+      command: "python -m excellence.gauge --gate --changed"
+      match: substrings
+      contiguous_shorthand: reject
+      substrings:
+        - github.event.pull_request.base.sha
+        - HEAD~1
+        - "python -m excellence.gauge --collect --only repo,observe --write --gate --changed"
+        - "python -m excellence.gauge --collect --only repo,observe --no-db --gate --changed"
+      only: repo,observe
+      base: pull_request.base.sha else HEAD~1
+      yaml_only: reject
+      subjects: [platform.module.inbound]
+    applies_to: [module]
+    solution: The job must fail when this subject's level drops. Do not pass on the YAML text.
+    source: assurance/standard/standard.yaml maintainable.5
+  - id: INBOUND-OBS-05
+    title: Smoke series is fresh and written by write_smoke_series
+    dimension: observed
+    rank: 5
+    collector: inbound_operated
+    probe:
+      type: smoke_series_fresh
+      file: docs/migration/evidence/inbound-smoke-series.json
+      days: 14
+      schema: 1
+      match: InboundBatch.smoke
+      mtime_only: reject
+      writer: write_smoke_series
+      command: python manage.py write_inbound_smoke_series
+      statuses: [smoked, committed]
+      smoke: dict
+      order: "-id"
+      limit: 10
+      empty: do not write
+      commit_file: reject
+      collector_writes: reject
+      no_db: unknown
+      missing: unknown
+      subjects: [platform.module.inbound]
+    applies_to: [module]
+    solution: write_smoke_series must produce the file. Do not hand-write it. Mtime alone does not pass.
+    source: assurance/standard/standard.yaml observed.5
+  - id: INBOUND-GOV-05
+    title: Import-boundary test fails the CI job
+    dimension: governed
+    rank: 5
+    collector: inbound_operated
+    probe:
+      type: ci_node_red
+      workflow: .github/workflows/ci.yml
+      step: Run tests
+      nodes:
+        - inbound/tests/test_boundary.py::test_inbound_never_imports_people
+      conclusion: success
+      pytest: python -m pytest
+      forbid_ignore: inbound
+      missing_run: unknown
+      rerun_pytest: reject
+      node_proof: def in file
+      subjects: [platform.module.inbound]
+    applies_to: [module]
+    solution: The pytest step must fail the job when the boundary test fails. The collector does not re-run pytest.
+    source: assurance/standard/standard.yaml governed.5
+
   - id: PLAT-USE-04
     title: One Playwright journey executed green on HEAD
     dimension: usable

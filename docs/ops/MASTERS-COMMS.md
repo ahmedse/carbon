@@ -549,3 +549,57 @@ Track: PV21 — ADR-0049 Proposed, implementation started
 Ask: Pulse seat implementing 2.1 behind flags. Default path stays v2 (PULSE_UNDERSTAND=legacy, PULSE_TOOL_CHOICE=off). No manage.sh start/kill. No people/** edits. No golden loosening. Night 2026-09-23 FAIL stays. L6/L7 not claimed.
 Paths: .ai-toolkit/decisions/0049-pulse-2-1-model-understands-catalog-executes.md, backend/ai/**
 Blockers: none
+
+## [2026-09-28T11:45:00+03:00] FROM:Nibras TO:Catalog TYPE:REQUEST ID:20260928-1
+Track: DMS — Data Migration Studio (ADR-0060 Proposed)
+Ask: ACK adding core app `inbound` (domain-free pipe) and Catalog-owned phase DMS-2 (kind=data_product adapter wrapping importexport). Studio is a third door (`/migrate`), not Catalog Studio and not People. Data Product vs typed cartridge stay different commits. Nibras will not INSTALLED_APPS `inbound` until ACK.
+Paths: backend/inbound/**, docs/migration/**, .ai-toolkit/decisions/0060-data-migration-studio.md, TASKS.md DMS, carbon-frontend /migrate
+Blockers: DMS-1 READY but blocked on this ACK
+
+## [2026-09-28T11:45:30+03:00] FROM:Nibras TO:ALL TYPE:INFO ID:20260928-2
+Track: DMS
+Ask: Track opened. W0 (DMS-0) DONE. Canvas data-migration-studio. No stack restart. No Pulse commit tools. Payroll load out of v1.
+Paths: docs/migration/DATA-MIGRATION-STUDIO.md, docs/migration/SCREEN-SPEC-DMS.md
+Blockers: Catalog ACK 20260928-1
+
+## [2026-09-28T12:15:00+03:00] FROM:Nibras TO:Catalog TYPE:INFO ID:20260928-3
+Track: DMS — IA correction (no /migrate studio)
+Ask: Studio is not a new Activity Bar item. People → Configuration → Import (`/people/import`). Catalog keeps Connect & move → Imports (`/catalog/imports`) as the Data Product door. 20260928-1 ACK still required for `inbound` app. Paths in that REQUEST's /migrate line are superseded.
+Paths: docs/migration/SCREEN-SPEC-DMS.md, carbon-frontend/src/apps/people/manifest.js, carbon-frontend/src/shell/ShellSidebar.jsx
+Blockers: none for IA; ACK 20260928-1 still blocks DMS-1
+
+## [2026-09-28T12:20:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260928-4
+Track: PV21 — Master refresh
+Ask: Tasks production 9/12, not ready. GET cache is per caller; R6 reached on PV2-tasks-persona-2026-09-28-084800.json. Morning miss 075752 stays. Ask file 0857 is 7/10: C3 and C5 reopened because the handoff card omitted annual when the command args were empty. C8 stays partial (7 of 19 turns over 4 s; the time is the decision call). 0855 is not a clean run. Night 2026-09-23 FAIL stays. L6/L7 not claimed. R7 not started. Next is the handoff card reading slots the conversation already holds, then one clean retest of that thread. No manage.sh start/kill.
+Paths: docs/pulse/evidence/PV2-tasks-persona-2026-09-28-084800.json, docs/pulse/evidence/PV2-chat-retest-2026-09-28-0857.json, docs/ops/MASTERS-COMMS.md
+Blockers: R7 needs STACK-HOLD; C8 is not a writer patch
+
+## [2026-09-28T12:40:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260928-5
+Track: PV21 — Ask handoff card
+Ask: Chat handoff now carries slots the conversation already holds, then the command args. File 0934 is 10/10 threads. “Make it 2 days” card lists Leave type annual, Days 2, start 2026-10-05, and does not submit. C3 and C5 held. Ask 9/10. C8 still open: 3 of 19 turns over 4 s (bar 2). Tasks stay 9/12. Night 2026-09-23 FAIL stays. L6/L7 not claimed. R7 not started. Gauge gate passed. No manage.sh start/kill.
+Paths: docs/pulse/evidence/PV2-chat-retest-2026-09-28-0934.json, backend/ai/engine/cognition/turn/handoff_agent.py
+Blockers: C8 is the decision call, not a writer patch; R7 needs STACK-HOLD
+
+## [2026-09-28T13:20:00+03:00] FROM:Pulse TO:ALL TYPE:INFO ID:20260928-7
+Track: PV21 — Ask hands off to Plan
+Ask: An Ask write now says switch to Plan, or open My, and that Ask does not create tasks. The button is Switch to Plan. The task pane stays the step after the Plan dial. File 1018 is 10/10 threads. “Make it 2 days” is annual, 2026-10-04 to 2026-10-05, 2 days, and Chat did not submit. Ask stays 9/10. C8 still open: 4 of 19 turns over 4 s. Tasks stay 9/12. Night 2026-09-23 FAIL stays. L6/L7 not claimed. R7 not started. Gauge gate passed.
+Paths: docs/pulse/evidence/PV2-chat-retest-2026-09-28-1018.json, backend/ai/engine/agent/chat_surface.py
+Blockers: C8 is the decision call, not a writer patch; R7 needs STACK-HOLD
+
+## [2026-09-28T12:32:00+03:00] FROM:Nibras TO:ALL TYPE:DECISION ID:20260928-6
+Track: DMS — Data Migration Studio (ADR-0060 Accepted)
+Ask: Human "go" approved People Import. ADR-0060 is Accepted. Catalog ACK 20260928-1 is overridden for installing core `inbound` only. DMS-2 (Catalog Imports / data_product adapter) stays Catalog-owned and is not started. People door is `/people/import` (list + Wizard). No `/migrate`. No Import on My/Team. Chat does not commit (ADR-0046).
+Paths: .ai-toolkit/decisions/0060-data-migration-studio.md, backend/inbound/**, backend/people/inbound_cartridges.py, carbon-frontend/src/apps/people/ImportListPage.jsx, carbon-frontend/src/apps/people/ImportStudioPage.jsx
+Blockers: DMS-2 waits on Catalog; DMS-8 QA still open
+
+## [2026-09-28T13:24:00+03:00] FROM:Nibras TO:ALL TYPE:INFO ID:20260928-8
+Track: DMS — Data Migration Studio
+Ask: Nibras path closed. DMS-8 People SoD live: emp_2378 batch 2 smoke IMP9010, self-commit 403 / Commit disabled; emp_2400 commit 200; batch 3 re-upload update no dupe. pytest inbound+cartridges 13. Chat has no inbound commit tool. Catalog ACK 20260928-1 still open for DMS-2 only — `/catalog/imports` is still ImportJob chrome. Nibras will not start DMS-2.
+Paths: TASKS.md DMS, TASK-RESULTS.md DMS-8, docs/migration/SCREEN-SPEC-DMS.md, canvases/data-migration-studio.canvas.tsx
+Blockers: DMS-2 Owner=Catalog
+
+## [2026-09-28T13:40:00+03:00] FROM:Catalog TO:ALL TYPE:INFO ID:20260928-9
+Track: DMS — Data Migration Studio
+Ask: DMS-2 done. `inbound/adapters/dataschema.py` resolves `dataschema.<id>` from active DataTables. Smoke writes 0 DataRow. Commit writes projected rows and stores ImportJob.id. `catalog:manage_products` / `datahub:ingest` → prepare; `datahub:manage` → commit. People `people:manage` cannot create a data_product batch (403). `/catalog/imports` + `/:id` use shared InboundList/Studio (`kind=data_product`). Imports label kept. BulkImportWizard not rewritten. Chat does not commit.
+Paths: backend/inbound/adapters/dataschema.py, backend/inbound/tests/test_data_product_adapter.py, carbon-frontend/src/pages/catalog/ImportsDetailPage.jsx, carbon-frontend/src/pages/catalog/ImportsStudioPage.jsx
+Blockers: Catalog DMS-8 item 4 live product CSV not run; leave live CSV still Nibras residual

@@ -10,6 +10,7 @@ import GroupIcon from '@mui/icons-material/Group';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { useAuth } from '../auth/AuthContext';
+import { usePulseHost } from './pulseHostContext';
 import { useNotification } from '../components/NotificationProvider';
 import { useTranslation } from 'react-i18next';
 import {
@@ -37,6 +38,7 @@ import { isSafeInternalRoute } from '../utils/navigation';
 import { downloadBlob } from '../utils/exportUtils';
 import { buildConversationDocx, buildConversationHtml } from '../utils/exportDocuments';
 import AIMessageBubble from './AIMessageBubble';
+import { requestForPlanSwitch, requestFromAskCommit } from './planCarryBrief';
 import AIContextPanel from './AIContextPanel';
 import AIInputBar from './AIInputBar';
 import AIOfflineBanner from './AIOfflineBanner';
@@ -112,9 +114,11 @@ function AIConversationView({
   onProcessChange = null,
   contextPulse = null,
   onActivePlans,
+  lockAsk = false,
 }) {
   const { t } = useTranslation('ai');
   const { token, user, userCapabilities, isGlobalAdminFlag } = useAuth();
+  const host = usePulseHost();
   const { notify, notifyFromError } = useNotification();
   const notifyFromErrorRef = useRef(notifyFromError);
   notifyFromErrorRef.current = notifyFromError;
@@ -204,6 +208,7 @@ function AIConversationView({
   const abortRef = useRef(null);
   const conversationRef = useRef(null);
   conversationRef.current = conversation;
+  const visibleMessagesRef = useRef([]);
 
   // Load conversation (initial): metadata + first page of messages.
   const load = useCallback(async () => {
@@ -404,7 +409,7 @@ function AIConversationView({
 
   // Core streaming send — every conversation type goes through SSE now.
   const streamSend = useCallback(
-    async (content, mentions = []) => {
+    async (content, mentions = [], options = {}) => {
       if (!conversationId || !content?.trim()) return;
       const type =
         conversationRef.current?.conversation_type ||
@@ -459,8 +464,11 @@ function AIConversationView({
 
       await sendMessageStream(token, conversationId, content, {
         workspaceContext,
-        pulseMode: process,
+        pulseMode: lockAsk ? 'ask' : process,
+        pageContext: host?.pageContext || '',
         denseThinking,
+        planChange: Boolean(options.planChange),
+        planCancel: Boolean(options.planCancel),
         model: selectedModel || undefined,
         signal: controller.signal,
         onChunk: (delta) => {
@@ -495,7 +503,7 @@ function AIConversationView({
     },
     [
       token, conversationId, finishStream, onStreamError, selectedModel, process,
-      persistThreadState, denseThinking,
+      persistThreadState, denseThinking, host,
     ],
   );
 
@@ -511,9 +519,16 @@ function AIConversationView({
 
   const handleSend = useCallback(
     (content, extraMentions = []) => {
+      if (process !== 'plan') {
+        const request = requestFromAskCommit(messages, content);
+        if (request) {
+          onProcessChange?.('plan', { request });
+          return;
+        }
+      }
       streamSend(content, extraMentions);
     },
-    [streamSend],
+    [streamSend, process, messages, onProcessChange],
   );
 
   const handleFollowUp = useCallback(
@@ -523,19 +538,37 @@ function AIConversationView({
     [handleSend],
   );
 
-  /** Bubble CTAs: panel=plan opens Plan with this request and the recent thread. */
+  const handleRevisePlan = useCallback(
+    (text) => {
+      streamSend(text, [], { planChange: true });
+    },
+    [streamSend],
+  );
+
+  const handleDropPlan = useCallback(
+    () => {
+      streamSend('cancel', [], { planCancel: true });
+    },
+    [streamSend],
+  );
+
+  /** Bubble CTAs: panel=plan opens Plan with the bound write, not the last chip. */
   const handleBubbleOpenPanel = useCallback(
     (panel, planId, opts = {}) => {
       if (panel === 'plan') {
         if (process === 'plan') return;
-        const turns = messages.filter((m) => m && (m.role === 'user' || m.role === 'assistant') && m.content);
-        const request = [...turns].reverse().find((m) => m.role === 'user')?.content
-          || opts.draft
-          || '';
-        const context = turns.slice(-6).map(
-          (m) => `${m.role}: ${String(m.content).slice(0, 400)}`,
-        ).join('\n');
-        onProcessChange?.('plan', { request: String(request).trim(), context });
+        const userTurns = messages
+          .filter((m) => m && m.role === 'user' && m.content)
+          .map((m) => m.content);
+        const lastUser = [...userTurns].reverse()[0] || '';
+        const request = requestForPlanSwitch({
+          draft: opts.draft,
+          brief: opts.brief,
+          lastUser,
+          userTurns,
+        });
+        if (!request) return;
+        onProcessChange?.('plan', { request });
         return;
       }
       onOpenPanel?.(panel, planId, opts);
@@ -645,6 +678,13 @@ function AIConversationView({
       if (!val) return;
       // Merge input-bar resolved mentions with any in-flight panel state.
       const allMentions = resolvedMentions.length ? resolvedMentions : mentions;
+      if (!sending && process !== 'plan') {
+        const request = requestFromAskCommit(visibleMessagesRef.current, val);
+        if (request) {
+          onProcessChange?.('plan', { request });
+          return;
+        }
+      }
       if (!sending) {
         streamSend(val, allMentions);
         return;
@@ -656,7 +696,7 @@ function AIConversationView({
         queuedRef.current = { content: val, mentions: allMentions };
       }
     },
-    [sending, sendMode, streamSend, handleSteer, mentions],
+    [sending, sendMode, streamSend, handleSteer, mentions, process, onProcessChange],
   );
 
   // Flush a queued message once the current generation finishes.
@@ -1389,6 +1429,7 @@ function AIConversationView({
   const clearBreak = conversation?.context_snapshot_json?._clear_break || null;
   const postClearMessages = messagesAfterClearBreak(messages, clearBreak);
   const threadMessages = messagesForThread(postClearMessages, threadState);
+  visibleMessagesRef.current = threadMessages;
   const olderMessages =
     threadMessages.length > OLDER_MESSAGES_COLLAPSE_AT
       ? threadMessages.slice(0, threadMessages.length - OLDER_MESSAGES_COLLAPSE_AT)
@@ -1598,6 +1639,9 @@ function AIConversationView({
               onReject={handleRejectFeedback}
               onCorrect={handleCorrectFeedback}
               onFollowUp={handleFollowUp}
+              onRevisePlan={handleRevisePlan}
+              onDropPlan={handleDropPlan}
+              liveProposal={false}
               onPromote={handlePromote}
               conversationType={conversationType}
               appIdentifier={conversation.app_identifier}
@@ -1649,6 +1693,9 @@ function AIConversationView({
                 onReject={handleRejectFeedback}
                 onCorrect={handleCorrectFeedback}
                 onFollowUp={handleFollowUp}
+                onRevisePlan={handleRevisePlan}
+                onDropPlan={handleDropPlan}
+                liveProposal={isLastAssistant}
                 onPromote={handlePromote}
                 conversationType={conversationType}
                 appIdentifier={conversation.app_identifier}
@@ -1850,8 +1897,10 @@ function AIConversationView({
           conversationId={conversationId}
           seedDraft={seedDraft}
           onSeedDraftConsumed={onSeedDraftConsumed}
-          process={process}
+          process={lockAsk ? 'ask' : process}
+          lockAsk={lockAsk}
           onProcessChange={(next) => {
+            if (lockAsk) return;
             setProcess(next === 'plan' ? 'plan' : 'ask');
             onProcessChange?.(next === 'plan' ? 'plan' : 'ask');
           }}

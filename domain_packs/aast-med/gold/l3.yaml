@@ -1,0 +1,12 @@
+# Frozen L3 gold. Two asks for each of the four reasons. No other person's name.
+version: 1
+other_person: "Bilagot Panta"
+cases:
+  - {access: hidden, message: "Why can't I see this?"}
+  - {access: hidden, message: "Why is this missing?"}
+  - {access: not_enrolled, message: "Why can't I open this?"}
+  - {access: not_enrolled, message: "Why don't I have access?"}
+  - {access: wrong_group, message: "Why can't I see this activity?"}
+  - {access: wrong_group, message: "Why am I blocked?"}
+  - {access: course_list, message: "Why can't I see this?"}
+  - {access: course_list, message: "Why is this missing?"}

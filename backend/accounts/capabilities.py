@@ -397,6 +397,33 @@ IMPORTEXPORT_MANAGE = Capability(
     category="admin",
 )
 
+INBOUND_PREPARE = Capability(
+    key="inbound:prepare",
+    domain="inbound",
+    action="prepare",
+    label="Prepare import",
+    description="Upload, map, and smoke a CSV batch (ADR-0060)",
+    category="data",
+)
+
+INBOUND_COMMIT = Capability(
+    key="inbound:commit",
+    domain="inbound",
+    action="commit",
+    label="Commit import",
+    description="Commit a smoked batch into the target store (ADR-0060)",
+    category="admin",
+)
+
+INBOUND_DEFINE = Capability(
+    key="inbound:define",
+    domain="inbound",
+    action="define",
+    label="Define cartridges",
+    description="Create and edit cartridge declarations. Handlers stay in the owning app (ADR-0060).",
+    category="admin",
+)
+
 # ── Dataschema capabilities ────────────────────────────────────────
 
 DATASCHEMA_VIEW = Capability(
@@ -834,6 +861,9 @@ ALL_CAPABILITIES: Dict[str, Capability] = {
     # Import/Export
     IMPORTEXPORT_VIEW.key: IMPORTEXPORT_VIEW,
     IMPORTEXPORT_MANAGE.key: IMPORTEXPORT_MANAGE,
+    INBOUND_PREPARE.key: INBOUND_PREPARE,
+    INBOUND_COMMIT.key: INBOUND_COMMIT,
+    INBOUND_DEFINE.key: INBOUND_DEFINE,
     # Dataschema
     DATASCHEMA_VIEW.key: DATASCHEMA_VIEW,
     DATASCHEMA_MANAGE.key: DATASCHEMA_MANAGE,
@@ -930,7 +960,7 @@ IMPLIES: Dict[str, Set[str]] = {
     CARBON_VIEW_ANALYTICS.key: {CARBON_VIEW_CONSOLE.key, CARBON_VIEW_DASHBOARD.key},
 
     # ── Catalog admin → view ──
-    CATALOG_MANAGE_PRODUCTS.key: {CATALOG_VIEW.key},
+    CATALOG_MANAGE_PRODUCTS.key: {CATALOG_VIEW.key, INBOUND_PREPARE.key},
     CATALOG_MANAGE_METADATA.key: {CATALOG_VIEW.key},
     CATALOG_MANAGE_POLICIES.key: {CATALOG_VIEW.key, CATALOG_VIEW_GOVERNANCE.key},
 
@@ -953,8 +983,8 @@ IMPLIES: Dict[str, Set[str]] = {
     EVIDENCE_MANAGE.key: {EVIDENCE_VIEW.key},
 
     # ── Dataset Hub manage/ingest/approve → view ──
-    DATAHUB_MANAGE.key: {DATAHUB_VIEW.key},
-    DATAHUB_INGEST.key: {DATAHUB_VIEW.key},
+    DATAHUB_MANAGE.key: {DATAHUB_VIEW.key, DATAHUB_INGEST.key, INBOUND_COMMIT.key},
+    DATAHUB_INGEST.key: {DATAHUB_VIEW.key, INBOUND_PREPARE.key},
     DATAHUB_APPROVE.key: {DATAHUB_VIEW.key},
 
     # ── TurnKey Bridge manage → view ──
@@ -967,7 +997,8 @@ IMPLIES: Dict[str, Set[str]] = {
     HEALTHY_MANAGE.key: {HEALTHY_VIEW.key},
 
     # ── People manage → view (+ compensation) ──
-    PEOPLE_MANAGE.key: {PEOPLE_VIEW.key, PEOPLE_VIEW_COMPENSATION.key},
+    PEOPLE_MANAGE.key: {PEOPLE_VIEW.key, PEOPLE_VIEW_COMPENSATION.key, INBOUND_PREPARE.key},
+    INBOUND_COMMIT.key: {INBOUND_PREPARE.key},
 
     # ── GradeVance manage/mark → view (+ persona tiles) ──
     GRADEVANCE_MANAGE.key: {
@@ -1061,6 +1092,7 @@ GROUP_CAPABILITIES: Dict[str, Set[str]] = {
     "people_lead": {
         PEOPLE_MANAGE.key,
         CORRESPONDENCE_ADMIN.key,
+        INBOUND_COMMIT.key,
     },
     "people_data_owners_group": {
         PEOPLE_MANAGE.key,

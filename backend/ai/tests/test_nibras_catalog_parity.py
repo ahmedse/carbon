@@ -8,7 +8,7 @@ import yaml
 
 REPO = Path(__file__).resolve().parents[3]
 PACK = REPO / "domain_packs" / "nibras" / "api_catalog.yaml"
-INSTANCE = REPO / "backend" / "ai" / "engine" / "instances" / "nibras" / "instance.yaml"
+INSTANCE = REPO / "domain_packs" / "nibras" / "instance.yaml"
 
 # Nav-only / self-service entries in instance that packs need not declare as tools.
 INSTANCE_ONLY_OK = {

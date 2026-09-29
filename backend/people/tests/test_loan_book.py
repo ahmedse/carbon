@@ -21,7 +21,7 @@ def test_list_loans_catalog_returns_match_serializer():
     from people.serializers import LoanSerializer
 
     inst = yaml.safe_load(
-        (Path(__file__).resolve().parents[2] / "ai" / "engine" / "instances"
+        (Path(__file__).resolve().parents[3] / "domain_packs"
          / "nibras" / "instance.yaml").read_text(encoding="utf-8")
     )
     entry = next(

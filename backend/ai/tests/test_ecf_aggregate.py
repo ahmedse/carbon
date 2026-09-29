@@ -24,7 +24,7 @@ from ai.engine.agent.tools import (
     get_tool_definitions,
 )
 
-NIBRAS_YAML = Path(__file__).parent.parent / "engine/instances/nibras/instance.yaml"
+NIBRAS_YAML = Path(__file__).resolve().parents[3] / "domain_packs" / "nibras" / "instance.yaml"
 
 # Mixed population: active/inactive × KWT / non-KWT / kuwaitization flag mismatch.
 _POPULATION = [

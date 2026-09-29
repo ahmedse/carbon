@@ -8,6 +8,76 @@ from excellence.catalogue import load_catalogue
 from excellence.collectors import run_collectors
 
 
+def test_file_contains_fails_when_the_marker_is_absent() -> None:
+    from excellence.catalogue import Check, Subject
+    from excellence.collectors import collect_repo
+
+    check = Check(
+        id="T-CONTAINS", title="marker", dimension="correct", rank=2, collector="repo",
+        probe={
+            "type": "file_contains",
+            "file": "docs/migration/DATA-MIGRATION-STUDIO.md",
+            "text": "NOT-A-REAL-MARKER",
+        },
+    )
+    subject = Subject(id="platform.module.inbound", kind="module", title="inbound", tier="platform")
+    drafts = collect_repo(None, [(check, subject)], {})
+    assert drafts[0].result == "failed"
+    assert drafts[0].detail["missing"] == "NOT-A-REAL-MARKER"
+
+
+def test_def_contains_does_not_see_another_function() -> None:
+    from excellence.catalogue import Check, Subject
+    from excellence.collectors import collect_repo
+
+    check = Check(
+        id="T-DEF", title="body", dimension="reliable", rank=3, collector="repo",
+        probe={
+            "type": "def_contains",
+            "file": "backend/inbound/tests/test_pipe.py",
+            "def": "test_unknown_target_400",
+            "text": "STATUS_SMOKED",
+        },
+    )
+    subject = Subject(id="platform.module.inbound", kind="module", title="inbound", tier="platform")
+    drafts = collect_repo(None, [(check, subject)], {})
+    assert drafts[0].result == "failed"
+    assert drafts[0].detail["missing"] == "STATUS_SMOKED"
+
+
+def test_pytest_nodes_reject_a_parent_path() -> None:
+    from excellence.catalogue import Check, Subject
+    from excellence.collectors import collect_pytest
+
+    check = Check(
+        id="T-NODE", title="nodes", dimension="specified", rank=4, collector="pytest",
+        probe={"type": "pytest_app", "app": "inbound-criteria", "nodes": ["../outside.py"]},
+    )
+    subject = Subject(id="platform.module.inbound", kind="module", title="inbound", tier="platform")
+    drafts = collect_pytest(None, [(check, subject)], {"run_apps": {"inbound-criteria"}})
+    assert drafts[0].result == "failed"
+    assert "relative" in drafts[0].detail["why"]
+
+
+def test_forbidden_import_fails_when_the_name_is_imported() -> None:
+    from excellence.catalogue import Check, Subject
+    from excellence.collectors import collect_repo
+
+    check = Check(
+        id="T-BAN", title="ban", dimension="maintainable", rank=3, collector="repo",
+        probe={
+            "type": "forbidden_import",
+            "root": "backend/inbound/tests",
+            "names": ["pytest"],
+            "skip_tests": False,
+        },
+    )
+    subject = Subject(id="platform.module.inbound", kind="module", title="inbound", tier="platform")
+    drafts = collect_repo(None, [(check, subject)], {})
+    assert drafts[0].result == "failed"
+    assert drafts[0].detail["offenders"]
+
+
 def test_repo_collector_declares_platform_modules(capsys) -> None:
     cat = load_catalogue()
     drafts = run_collectors(cat, cat.subjects_in("platform"), only={"repo"})

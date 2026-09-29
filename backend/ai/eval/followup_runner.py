@@ -54,24 +54,28 @@ def _cases() -> list[tuple[str, Callable[[], bool]]]:
 
 def score() -> dict[str, Any]:
     """Run the bank under v21. Restores ``PULSE_UNDERSTAND`` afterward."""
+    from ai.engine.pack_vocab import bind_pack
+
     previous = os.environ.get("PULSE_UNDERSTAND")
     os.environ["PULSE_UNDERSTAND"] = "v21"
     misses: list[dict[str, str]] = []
     passed = 0
     try:
-        cases = _cases()
-        for case_id, check in cases:
-            try:
-                ok = bool(check())
-            except Exception as exc:  # noqa: BLE001 — one case must not hide the rest
-                ok = False
-                misses.append({"id": case_id, "error": str(exc)})
-                continue
-            if ok:
-                passed += 1
-            else:
-                misses.append({"id": case_id})
-        n = len(cases)
+        # This bank is the Nibras ESS column. Vocabulary is that pack's.
+        with bind_pack("nibras"):
+            cases = _cases()
+            for case_id, check in cases:
+                try:
+                    ok = bool(check())
+                except Exception as exc:  # noqa: BLE001 — one case must not hide the rest
+                    ok = False
+                    misses.append({"id": case_id, "error": str(exc)})
+                    continue
+                if ok:
+                    passed += 1
+                else:
+                    misses.append({"id": case_id})
+            n = len(cases)
     finally:
         if previous is None:
             os.environ.pop("PULSE_UNDERSTAND", None)

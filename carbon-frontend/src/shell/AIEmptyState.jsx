@@ -1,21 +1,34 @@
-// src/shell/AIEmptyState.jsx
+// Empty Ask — a coworker introduction, not a domain-app catalog.
 import React from 'react';
 import PropTypes from 'prop-types';
-import { Box, Button, Chip, Typography } from '@mui/material';
-import ChatIcon from '@mui/icons-material/Chat';
+import { Box, Button, Chip, Stack, Typography } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import PulseLogo from './PulseLogo';
 
-const ILLUSTRATION_SIZE = 56;
-
-function AIEmptyState({ onStartChat, manifests = [], onStartStarter }) {
-  const hasDefaultStarters = manifests.some(
-    (manifest) =>
-      Array.isArray(manifest?.starter_prompts?.default) &&
-      manifest.starter_prompts.default.length > 0,
-  );
+function AIEmptyState({ onStartChat, onStartStarter, intro, suggestions: suggestionOverride }) {
+  const { t } = useTranslation('ai');
+  // Domain manifests are every registered app, not this user's. Their first
+  // chips (budget variance, attrition) are another brand's catalog, and the
+  // prompt still contains @{entity_name}. These two questions work for whoever
+  // is signed in.
+  const suggestions = suggestionOverride || [
+    {
+      appId: '',
+      taskType: 'chat',
+      label: t('emptyTryCapabilities'),
+      prompt: t('emptyTryCapabilitiesPrompt'),
+    },
+    {
+      appId: '',
+      taskType: 'chat',
+      label: t('emptyTryCatchUp'),
+      prompt: t('emptyTryCatchUpPrompt'),
+    },
+  ];
 
   return (
     <Box
+      data-testid="pulse-empty-state"
       sx={{
         display: 'flex',
         flexDirection: 'column',
@@ -23,100 +36,87 @@ function AIEmptyState({ onStartChat, manifests = [], onStartStarter }) {
         justifyContent: 'center',
         height: '100%',
         px: 3,
-        textAlign: 'center',
-        gap: 2,
+        py: 4,
         color: 'text.secondary',
       }}
     >
-      <PulseLogo size={ILLUSTRATION_SIZE} />
+      <Stack
+        spacing={2}
+        sx={{
+          width: '100%',
+          maxWidth: '36rem',
+          alignItems: 'flex-start',
+          textAlign: 'start',
+        }}
+      >
+        <PulseLogo size={36} />
 
-      <Box>
-        <Typography variant="subtitle2" color="text.primary" gutterBottom>
-          Pulse Ready
-        </Typography>
-        <Typography variant="caption" color="text.disabled">
-          Start a chat or transfer a task from the main workspace.
-        </Typography>
-      </Box>
-
-      {hasDefaultStarters && (
-        <Box
-          sx={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 1,
-          }}
-        >
-          <Typography variant="caption" color="text.disabled">
-            Start with a domain app
+        <Box>
+          <Typography
+            variant="h6"
+            color="text.primary"
+            sx={{ fontWeight: 600, letterSpacing: '-0.02em', mb: 0.75 }}
+          >
+            {t('emptyHello')}
           </Typography>
-          {manifests.map((manifest) => {
-            const starters = manifest?.starter_prompts?.default;
-            if (!Array.isArray(starters) || starters.length === 0) return null;
-            return (
-              <Box
-                key={manifest.app_identifier}
-                sx={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: 1,
-                }}
-              >
-                <Typography variant="overline" color="text.secondary">
-                  {manifest.display_name}
-                </Typography>
-                <Box
-                  sx={{
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    justifyContent: 'center',
-                    gap: 1,
-                  }}
-                >
-                  {starters.map((item, index) => (
-                    <Chip
-                      key={`${manifest.app_identifier}:${index}`}
-                      size="small"
-                      variant="outlined"
-                      clickable
-                      label={item.label}
-                      onClick={() =>
-                        onStartStarter?.(
-                          manifest.app_identifier,
-                          item.task_type,
-                          item.label,
-                          item.prompt,
-                        )
-                      }
-                    />
-                  ))}
-                </Box>
-              </Box>
-            );
-          })}
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{ fontSize: '0.875rem', lineHeight: 1.55, maxWidth: '40ch' }}
+          >
+            {intro || t('emptyIntro')}
+          </Typography>
         </Box>
-      )}
 
-      {onStartChat && (
-        <Button
-          variant="outlined"
-          size="small"
-          startIcon={<ChatIcon />}
-          onClick={onStartChat}
-        >
-          Start a Chat
-        </Button>
-      )}
+        {onStartChat ? (
+          <Button
+            variant="contained"
+            size="small"
+            onClick={onStartChat}
+            sx={{ textTransform: 'none', fontWeight: 600 }}
+          >
+            {t('emptyStart')}
+          </Button>
+        ) : null}
+
+        <Box>
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ display: 'block', mb: 0.75, fontWeight: 600, letterSpacing: '0.02em' }}
+          >
+            {t('emptyTry')}
+          </Typography>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+            {suggestions.map((item) => (
+              <Chip
+                key={`${item.appId}:${item.label}`}
+                size="small"
+                variant="outlined"
+                clickable
+                label={item.label}
+                onClick={() =>
+                  onStartStarter?.(item.appId, item.taskType, item.label, item.prompt)
+                }
+              />
+            ))}
+          </Box>
+        </Box>
+      </Stack>
     </Box>
   );
 }
 
 AIEmptyState.propTypes = {
   onStartChat: PropTypes.func,
-  manifests: PropTypes.array,
   onStartStarter: PropTypes.func,
+  intro: PropTypes.string,
+  suggestions: PropTypes.arrayOf(PropTypes.shape({
+    appId: PropTypes.string,
+    taskType: PropTypes.string,
+    label: PropTypes.string,
+    prompt: PropTypes.string,
+  })),
 };
 
 export default AIEmptyState;

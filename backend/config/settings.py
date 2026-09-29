@@ -83,6 +83,8 @@ logger.debug("DEBUG = %s", repr(DEBUG))
 
 # Path for API (configurable, e.g. /api/v1/, /carbon/api/)
 API_PREFIX = get_env("DJANGO_API_PREFIX", "/api/v1/")
+# Shared with Moodle local_pulse. Empty disables the bridge (401).
+MOODLE_PULSE_HMAC_SECRET = get_env("MOODLE_PULSE_HMAC_SECRET", "")
 
 # ── TurnKey Bridge (Phase P2) ─────────────────────────────────
 # Never hardcode these — they come from the environment (.env / .env.production).
@@ -166,6 +168,21 @@ APP_REGISTRY = [
         "version": "1.0.0",
         "description": "Data import and export job management",
         "roles": [],
+    },
+    {
+        "id": "inbound",
+        "kind": "core",
+        "name": "Data Migration Studio",
+        "version": "0.1.0",
+        "description": "File receive, map, smoke, commit (ADR-0060)",
+        "roles": [
+            {"key": "inbound:prepare", "label": "Prepare import", "scoped": False,
+             "description": "Upload, map, and smoke a CSV batch"},
+            {"key": "inbound:commit", "label": "Commit import", "scoped": False,
+             "description": "Commit a smoked batch into the target store"},
+            {"key": "inbound:define", "label": "Define cartridges", "scoped": False,
+             "description": "Declare a cartridge. The owning app still registers smoke and commit."},
+        ],
     },
     {
         "id": "dataschema",
@@ -269,6 +286,7 @@ INSTALLED_APPS = [
     'appregistry',
     'connections',
     'importexport',
+    'inbound',
     'evidence',
     'healthy',
     'people',

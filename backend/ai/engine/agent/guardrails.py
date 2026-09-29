@@ -212,7 +212,7 @@ async def chat_surface_hook(ctx: HookContext) -> HookResult:
     dial = surface.dial_label_en
     if tool in {"plan_task", "approve_plan", "edit_plan"}:
         reason = (
-            "Plans are approved in Agent — open the Tasks panel."
+            "Nothing is approved yet. Review the draft, then approve it in Tasks."
             if surface is Surface.CHAT_PLAN
             else "Ask mode doesn’t create tasks — switch to Plan to draft one."
         )

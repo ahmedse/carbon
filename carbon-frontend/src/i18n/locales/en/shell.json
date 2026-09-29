@@ -164,6 +164,7 @@
     "payslips": "Payslips",
     "people": "People",
     "policies": "Policies",
+    "import": "Import",
     "positions": "Positions",
     "referenceData": "Reference Data",
     "rotation": "Rotation",
@@ -198,6 +199,7 @@
     "engine": "Engine",
     "expertise": "Expertise",
     "chairmanOverview": "Chairman Overview",
+    "inventoryOnboarding": "Inventory onboarding",
     "inventoryCoverage": "Inventory Coverage",
     "stems": "Stems",
     "calibration": "Calibration",
@@ -232,6 +234,7 @@
     "payrollBenefits": "Payroll & Benefits",
     "workforce": "Workforce",
     "executive": "Executive",
+    "onboarding": "Onboarding",
     "biAnalytics": "BI & Analytics"
   },
   "ui": {

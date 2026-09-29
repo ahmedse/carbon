@@ -97,7 +97,7 @@ def test_switch_to_plan_is_dropped_when_already_on_the_plan_dial():
     panels = {a.get("panel") for a in result["actions"]}
     assert "plan" not in panels
     assert panels == {"tasks"}
-    assert "Agent" in (result["envelope"]["headline"] or "")
+    assert result["envelope"]["headline"] == "Nothing is approved yet"
 
 
 def test_handoff_that_advises_its_own_surface_is_a_hard_error():
@@ -151,6 +151,24 @@ def test_ask_dial_copy_still_names_chat():
     )
     assert "from Chat" in result["envelope"]["headline"]
     assert "Chat does not submit" in result["message"]
+    assert "switch the dial to Plan" in result["message"]
+    assert "does not create tasks" in result["envelope"]["prose"][0]
+    assert "Use Agent" not in result["envelope"]["prose"][0]
+    panels = [a.get("panel") for a in result["actions"]]
+    assert panels[0] == "plan"
+    assert "tasks" not in panels
+    assert result["actions"][0]["label"] == "Switch to Plan"
+
+
+def test_plan_dial_write_still_opens_the_task_pane():
+    result = build_chat_handoff_result(
+        "call_host_api",
+        {"api_name": "submit_my_leave", "body": {"days": 1}},
+        surface=Surface.CHAT_PLAN,
+    )
+    assert result["actions"][0]["panel"] == "tasks"
+    assert result["actions"][0]["label"] == "Open in Agent"
+    assert "Use Agent or My" in result["envelope"]["prose"][0]
 
 
 def test_handoff_copy_never_leaks_engine_jargon_on_any_surface():
