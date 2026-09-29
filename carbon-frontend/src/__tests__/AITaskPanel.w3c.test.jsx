@@ -479,7 +479,7 @@ describe('AITaskPanel — W5-D Results tab', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Results' }));
 
     expect(await screen.findByTestId('outcome-receipt')).toBeInTheDocument();
-    expect(screen.getAllByText(/Found 3 duplicate rows and created rule no_dupes/).length).toBeGreaterThanOrEqual(1);
+    expect((await screen.findAllByText(/Found 3 duplicate rows and created rule no_dupes/)).length).toBeGreaterThanOrEqual(1);
     await waitFor(() => expect(listPlanArtifacts).toHaveBeenCalledWith('test-token', 'plan-1'));
     expect(await screen.findByText('report.csv')).toBeInTheDocument();
     expect(screen.getByText('summary.json')).toBeInTheDocument();

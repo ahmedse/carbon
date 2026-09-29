@@ -326,7 +326,7 @@ def _fallback_prompt(ctx: dict) -> str:
         if header
         else [body, RENDERING_CAPABILITIES_SUMMARY]
     )
-    return "\n\n".join(parts)
+    return "\n\n".join(str(part) for part in parts)
 
 
 # ── Module-level singleton ───────────────────────────────────────────────────
