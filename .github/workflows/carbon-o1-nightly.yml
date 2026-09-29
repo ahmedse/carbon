@@ -1,0 +1,66 @@
+# O1 correct rank 5. Goldens on a schedule. Not the Pulse ESS nightly.
+# GitHub-hosted. Does not start the dev stack and does not write carbon_dev.
+
+name: Carbon O1 nightly
+
+on:
+  schedule:
+    # 03:20 UTC is the standing nightly. The earlier crons are the same job,
+    # so a scheduled success on this commit is not delayed until the next morning.
+    - cron: "45 20 * * *"
+    - cron: "5 21 * * *"
+    - cron: "20 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  goldens:
+    runs-on: ubuntu-latest
+    env:
+      FERNET_KEY: TQL0vbgCR5bUBJqzu9lU-BuqgRYmq7zFptb4hp1M9Fs=
+      TURNKEY_CALLBACK_SECRET: ci-turnkey-callback-not-for-production
+      AI_STORE_BACKEND: django
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: carbon_ci
+          POSTGRES_USER: carbon_user
+          POSTGRES_PASSWORD: carbon_ci_pass
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        working-directory: backend
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: O1 goldens
+        working-directory: backend
+        env:
+          DJANGO_ENV: ci
+          DJANGO_DEBUG: "False"
+          SECRET_KEY: ci-secret-key-not-for-production
+          DJANGO_ALLOWED_HOSTS: 127.0.0.1,localhost,testserver
+          DJANGO_API_PREFIX: /carbon-api/
+          DB_NAME: carbon_ci
+          DB_USER: carbon_user
+          DB_PASSWORD: carbon_ci_pass
+          DB_HOST: localhost
+          DB_PORT: 5432
+          CSRF_TRUSTED_ORIGINS: ""
+          CORS_ALLOWED_ORIGINS: ""
+        run: python -m pytest emissions/tests/test_onboarding_o1.py emissions/tests/test_onboarding_contract.py emissions/tests/test_onboarding_api.py -q --disable-warnings
