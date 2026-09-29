@@ -13,7 +13,7 @@ const appSrc = readFileSync(resolve(process.cwd(), 'src/App.jsx'), 'utf8');
 
 /** Extract `path` -> `to` pairs from `<Route path="..." element={<Navigate to="..." .../>} />`. */
 function navigateRedirects(src) {
-  const re = /<Route\s+path=\{?["']([^"']+)["']\}?\s+element=\{\s*<Navigate\s+to=\{?["']([^"']+)["']\}?\s+replace\s*\/>\s*\}/g;
+  const re = /<Route\s+path=\{?["']([^"']+)["']\}?\s+element=\{(?:<(?!Navigate\b)[^>]+>)?\s*<Navigate\s+to=\{?["']([^"']+)["']\}?\s+replace\s*\/>/g;
   const map = new Map();
   let m;
   while ((m = re.exec(src)) !== null) map.set(m[1], m[2]);

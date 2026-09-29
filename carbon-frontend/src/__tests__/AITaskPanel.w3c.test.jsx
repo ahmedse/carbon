@@ -267,11 +267,11 @@ describe('AITaskPanel — pause, resume (W3-C endpoints)', () => {
     await openPlanForReview();
     fireEvent.click(screen.getByRole('button', { name: 'Approve plan' }));
     fireEvent.click(await screen.findByTestId('agent-run-play'));
-    await waitFor(() => expect(streamHandlers.run).toBeDefined());
+    await waitFor(() => expect(streamHandlers.resume).toBeDefined());
 
     fireEvent.click(screen.getByTestId('agent-run-pause'));
     await waitFor(() => expect(pausePlan).toHaveBeenCalledWith('test-token', 'plan-1'));
-    expect(await screen.findByTestId('agent-run-play')).toBeInTheDocument();
+    expect(await screen.findByTestId('agent-run-resume')).toBeInTheDocument();
   });
 
   it('does not expose Fork on the plan card', async () => {
@@ -283,7 +283,7 @@ describe('AITaskPanel — pause, resume (W3-C endpoints)', () => {
     currentPlan = { ...PLAN, status: 'paused' };
 
     await openPlanForReview();
-    fireEvent.click(await screen.findByTestId('agent-run-play'));
+    fireEvent.click(await screen.findByTestId('agent-run-resume'));
 
     await waitFor(() =>
       expect(resumePlanStream).toHaveBeenCalledWith(
@@ -424,7 +424,8 @@ describe('AITaskPanel — W5-D Results tab', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: 'Results' }));
 
-    expect(screen.getByText('Approve the plan, then run it to see results here.')).toBeInTheDocument();
+    expect(screen.getByTestId('outcome-receipt')).toBeInTheDocument();
+    expect(screen.getByText('Approved')).toBeInTheDocument();
   });
 
   it('shows paused consent hero on Output instead of empty placeholder', async () => {
@@ -447,8 +448,8 @@ describe('AITaskPanel — W5-D Results tab', () => {
     await ensureClassicRunTab();
     fireEvent.click(screen.getByRole('tab', { name: 'Results' }));
 
-    expect(await screen.findByTestId('output-lifecycle-card')).toBeInTheDocument();
-    expect(screen.getByTestId('consent-hero-card')).toBeInTheDocument();
+    expect(await screen.findByTestId('outcome-receipt')).toBeInTheDocument();
+    expect(screen.getAllByText('Needs approval').length).toBeGreaterThan(0);
     expect(screen.queryByText(/RULE_21/)).not.toBeInTheDocument();
     expect(screen.queryByText('Run the plan to see results.')).not.toBeInTheDocument();
   });
@@ -604,7 +605,7 @@ describe('AITaskPanel — F-28 steer a paused run', () => {
     currentPlan = PAUSED_PLAN;
     await openPlanForReview();
 
-    fireEvent.click(await screen.findByTestId('agent-run-play'));
+    fireEvent.click(await screen.findByTestId('agent-run-resume'));
     await waitFor(() =>
       expect(resumePlanStream).toHaveBeenCalledWith(
         'test-token',

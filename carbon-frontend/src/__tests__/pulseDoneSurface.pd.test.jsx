@@ -40,6 +40,7 @@ const forkPlan = vi.fn();
 const rerunPlan = vi.fn();
 const listPlanTemplates = vi.fn();
 const listSchedules = vi.fn();
+const listModels = vi.fn().mockResolvedValue({ models: [] });
 
 vi.mock('../api/aiWorkspace', () => ({
   listPlans: (...a) => listPlans(...a),
@@ -65,6 +66,7 @@ vi.mock('../api/aiWorkspace', () => ({
   discardPlanEdit: vi.fn().mockResolvedValue({}),
   listPlanTemplates: (...a) => listPlanTemplates(...a),
   listSchedules: (...a) => listSchedules(...a),
+  listModels: (...a) => listModels(...a),
   instantiatePlanTemplate: vi.fn(),
   promotePlanTemplate: vi.fn(),
   pausePlan: vi.fn(),

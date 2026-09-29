@@ -69,7 +69,7 @@ describe('TeamInbox smoke (NSR-9)', () => {
 
     expect(await screen.findByText('LR-2026-0001')).toBeInTheDocument();
     expect(screen.getByText('Alice')).toBeInTheDocument();
-    expect(screen.getByText(/Leave Request/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Leave Request/i).length).toBeGreaterThan(0);
   });
 
   it('opens detail via eye icon, not row click', async () => {

@@ -26,7 +26,7 @@ describe('AIWorkspaceHeader mode toggle + safety contract (W5-A / ADR-0014)', ()
 
   it('renders the plan-pending contract text (nothing runs until approval)', () => {
     render(<AIWorkspaceHeader onClose={vi.fn()} mode="agent" agentLifecycleState="plan_pending" />);
-    expect(screen.getByText(/Review the picture\. Nothing runs until you approve/i)).toBeInTheDocument();
+    expect(screen.getByText(/Review the plan\. Nothing runs until you approve/i)).toBeInTheDocument();
   });
 
   it('renders the running contract text with the pause affordance note', () => {

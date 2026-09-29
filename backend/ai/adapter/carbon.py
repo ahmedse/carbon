@@ -527,9 +527,7 @@ class CarbonHostAdapter(HostAdapterContract):
         if user is None or getattr(user, "pk", None) is None:
             return True
 
-        try:
-            return AIUserProfile.objects.values_list(
-                "memory_enabled", flat=True,
-            ).get(user=user)
-        except AIUserProfile.DoesNotExist:
-            return True
+        enabled = AIUserProfile.objects.filter(user=user).values_list(
+            "memory_enabled", flat=True,
+        ).first()
+        return True if enabled is None else enabled

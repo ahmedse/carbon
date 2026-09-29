@@ -145,8 +145,9 @@ describe('AIMessageBubble AI-driven actions', () => {
     // No Edit & confirm for a memory write (not a JSON-editable rule body).
     expect(screen.queryByRole('button', { name: /Edit and confirm/i })).not.toBeInTheDocument();
 
-    // Details show the fact, not a fabricated empty rule JSON.
-    fireEvent.click(screen.getByRole('button', { name: /Show details/i }));
+    // Preparation, then technical details, show the fact — not a rule JSON card.
+    fireEvent.click(screen.getByRole('button', { name: /How this was prepared/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Technical details/i }));
     expect(screen.getByText('Fact')).toBeInTheDocument();
     expect(screen.queryByText('Proposed rule (definition JSON)')).not.toBeInTheDocument();
     expect(screen.queryByText('Body that will be POSTed')).not.toBeInTheDocument();
@@ -178,7 +179,8 @@ describe('AIMessageBubble AI-driven actions', () => {
     });
     expect(screen.getByRole('button', { name: /Confirm and remember/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Edit and confirm/i })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /Show details/i }));
+    fireEvent.click(screen.getByRole('button', { name: /How this was prepared/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Technical details/i }));
     expect(screen.getByText('Fact')).toBeInTheDocument();
     expect(screen.queryByText('Proposed rule (definition JSON)')).not.toBeInTheDocument();
     expect(screen.queryByText('Body that will be POSTed')).not.toBeInTheDocument();
@@ -253,7 +255,7 @@ describe('AIMessageBubble AI-driven actions', () => {
     expect(screen.queryByRole('button', { name: /Decline/i })).not.toBeInTheDocument();
     expect(screen.getByText(/Agent mode is OFF/i)).toBeInTheDocument();
     // Details & JSON stays available for review.
-    expect(screen.getByRole('button', { name: /Show details/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /How this was prepared/i })).toBeInTheDocument();
   });
 
   it('shows Confirm & remember in Chat mode (memory is not gated by Agent mode)', () => {
@@ -295,7 +297,8 @@ describe('AIMessageBubble AI-driven actions', () => {
     expect(screen.queryByText('Proposed rule (definition JSON)')).not.toBeInTheDocument();
     expect(screen.queryByText('Body that will be POSTed')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Show details/i }));
+    fireEvent.click(screen.getByRole('button', { name: /How this was prepared/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Technical details/i }));
 
     expect(screen.getByText('Proposed rule (definition JSON)')).toBeInTheDocument();
     expect(screen.getByText('Body that will be POSTed')).toBeInTheDocument();

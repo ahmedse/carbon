@@ -287,6 +287,8 @@ describe('ROUTE_CAPABILITIES', () => {
           // Field policies live under the admin catalog but are governed by the
           // dataschema capability (not a platform capability).
           expect(cap).toBe(caps.DATASCHEMA_MANAGE);
+        } else if (route.startsWith('/admin/migration/')) {
+          expect(cap).toBe(caps.INBOUND_DEFINE);
         } else {
           expect(cap.startsWith('platform:')).toBe(true);
         }
@@ -304,7 +306,9 @@ describe('ROUTE_CAPABILITIES', () => {
 
   it('catalog routes require catalog capabilities', () => {
     for (const [route, cap] of Object.entries(caps.ROUTE_CAPABILITIES)) {
-      if (route.startsWith('/catalog/')) {
+      if (route.startsWith('/catalog/imports')) {
+        expect(cap).toBe(caps.INBOUND_PREPARE);
+      } else if (route.startsWith('/catalog/')) {
         expect(cap.startsWith('catalog:')).toBe(true);
       }
     }

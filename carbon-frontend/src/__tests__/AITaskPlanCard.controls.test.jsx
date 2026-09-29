@@ -105,6 +105,6 @@ describe('AITaskPlanCard — W3-F controls', () => {
     renderCard({
       plan: { ...PLAN, status: 'completed', final_response: 'Done.', steps: [] },
     });
-    expect(screen.getByText('Completed — see the audit ledger for the outcome.')).toBeInTheDocument();
+    expect(screen.getByText('Completed — open Output for the answer and downloads.')).toBeInTheDocument();
   });
 });

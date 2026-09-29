@@ -28,7 +28,7 @@ describe('ReasoningTrace panel', () => {
       createdAt: '2026-08-16T10:00:00Z',
     });
 
-    expect(screen.getByText('Sources')).toBeInTheDocument();
+    expect(screen.getByText('Based on')).toBeInTheDocument();
     expect(screen.getByText('Knowledge Graph: monthly_electricity, emission_factors')).toBeInTheDocument();
     expect(screen.getByText('Tools used')).toBeInTheDocument();
     expect(screen.getByText('Open rule detail')).toBeInTheDocument();
@@ -96,8 +96,8 @@ describe('ReasoningTrace panel', () => {
       ],
     });
 
-    expect(screen.getByText('Sources')).toBeInTheDocument();
-    expect(screen.getByText(/people_query/)).toBeInTheDocument();
+    expect(screen.getByText('Based on')).toBeInTheDocument();
+    expect(screen.getByText(/People records/)).toBeInTheDocument();
     expect(screen.getByText(/1200 rows/)).toBeInTheDocument();
     expect(screen.getByText(/Truncated/)).toBeInTheDocument();
     expect(screen.getByText(/2026/)).toBeInTheDocument();

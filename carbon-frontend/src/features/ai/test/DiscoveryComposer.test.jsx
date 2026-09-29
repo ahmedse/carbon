@@ -97,6 +97,7 @@ describe('DiscoveryComposer — guided discovery (W6-B2)', () => {
       expect(startDiscoveryPlan).toHaveBeenCalledWith('test-token', {
         brief: 'Audit duplicates.',
         conversation_id: 'conv-1',
+        model: '',
       });
     });
 

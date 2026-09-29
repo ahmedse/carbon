@@ -1,16 +1,16 @@
 // src/__tests__/AIGeneratedBadge.test.jsx
-// Wave D3 — quiet AI-authored token: default "AI" copy + icon, custom label,
-// and an aria-label so the meaning never rides on color alone.
+// Attribution tick: the visible word is Pulse, with the Pulse mark. Never "AI".
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import AIGeneratedBadge from '../shell/AIGeneratedBadge';
 
 describe('AIGeneratedBadge', () => {
-  it('renders the default "AI" copy with a smart-toy icon', () => {
+  it('renders the Pulse mark and the word Pulse', () => {
     render(<AIGeneratedBadge />);
 
-    expect(screen.getByText('AI')).toBeInTheDocument();
-    expect(screen.getByTestId('SmartToyOutlinedIcon')).toBeInTheDocument();
+    const badge = screen.getByTestId('ai-generated-badge');
+    expect(screen.getByText('Pulse')).toBeInTheDocument();
+    expect(badge.querySelector('svg')).toBeTruthy();
   });
 
   it('renders a custom label', () => {
@@ -19,9 +19,10 @@ describe('AIGeneratedBadge', () => {
     expect(screen.getByText('AI-generated')).toBeInTheDocument();
   });
 
-  it('exposes an aria-label for accessibility (text + icon, not color-only)', () => {
+  it('is not labeled AI', () => {
     render(<AIGeneratedBadge />);
 
-    expect(screen.getByLabelText('AI')).toBeInTheDocument();
+    expect(screen.queryByText('AI')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('AI')).not.toBeInTheDocument();
   });
 });

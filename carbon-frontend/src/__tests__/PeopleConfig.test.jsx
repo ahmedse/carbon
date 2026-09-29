@@ -9,6 +9,34 @@ vi.mock('../auth/AuthContext', () => ({
   useAuth: () => ({ token: 'test-token', isGlobalAdminFlag: true }),
 }));
 
+vi.mock('../hooks/useReferenceOptions', () => ({
+  useReferenceOptions: (setName) => {
+    if (setName === 'compliance_category') {
+      return {
+        options: [
+          { value: 'gosi', label: 'GOSI' },
+          { value: 'leave', label: 'Leave' },
+        ],
+        loading: false,
+        error: null,
+        refetch: vi.fn(),
+      };
+    }
+    if (setName === 'jurisdiction') {
+      return {
+        options: [
+          { value: 'KW', label: 'Kuwait' },
+          { value: 'SA', label: 'Saudi Arabia' },
+        ],
+        loading: false,
+        error: null,
+        refetch: vi.fn(),
+      };
+    }
+    return { options: [], loading: false, error: null, refetch: vi.fn() };
+  },
+}));
+
 vi.mock('../api/people', () => ({
   fetchComplianceRules: vi.fn().mockResolvedValue({
     count: 1,
@@ -115,6 +143,11 @@ describe('PeopleConfig (NSR-5B)', () => {
     await user.clear(dateField);
     await user.type(dateField, '2026-01-01');
 
+    await user.click(within(dialog).getByLabelText(/jurisdiction/i));
+    await user.click(await screen.findByRole('option', { name: 'Kuwait' }));
+    await user.click(within(dialog).getByLabelText(/^category/i));
+    await user.click(await screen.findByRole('option', { name: 'GOSI' }));
+
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
 
     await waitFor(() => {
@@ -125,6 +158,8 @@ describe('PeopleConfig (NSR-5B)', () => {
     expect(payload.version).toBe('2026.1');
     expect(payload.name).toBe('Test Rule');
     expect(payload.effective_date).toBe('2026-01-01');
+    expect(payload.jurisdiction).toBe('KW');
+    expect(payload.category).toBe('gosi');
   });
 
   it('loads compensation components and plans on Compensation tab', async () => {
@@ -138,7 +173,7 @@ describe('PeopleConfig (NSR-5B)', () => {
     });
     await waitFor(() => {
       expect(screen.getByText('Compensation Components')).toBeInTheDocument();
-      expect(screen.getByText('Compensation Plan')).toBeInTheDocument();
+      expect(screen.getByText('Compensation Plan Matrix')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Add component' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Add plan row' })).toBeInTheDocument();
     });
