@@ -12,7 +12,7 @@ module.exports = defineConfig({
   workers: process.env.CI ? 1 : 4,
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
-    baseURL: 'http://localhost:8009',
+    baseURL: process.env.CARBON_BASE_URL || 'http://127.0.0.1:5179',
     trace: 'on-first-retry',
   },
   projects: [

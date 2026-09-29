@@ -187,7 +187,7 @@ One subject: `platform.module.inbound`. One scored reading: **L4 Proven · 45/54
 
 45/54 is ranks 1–5 declared (9 × 5). The nine L6 cells are open. Declaration is not a pass-rate and is not working-fine.
 
-Lane A (SEC/GOV/MNT) needs a green full `ci.yml` on the scored commit. Local offline G5 is **0.955** after v21 `emit_decision` stubs. Last scored CI `36572010308` is still **0.883**. Do not loosen `G5_ROUTER_MIN`. Lane B (COR/REL) needs a named stack runner and `inbound-nightly.yml` (runners 0). Lane C (SPC/PRF/USE/OBS) passed once in process and does not raise the subject. L6 is not defined.
+Lane A (SEC/GOV/MNT) needs a green full `ci.yml` on the scored commit. Local offline G5 is **0.955** after v21 `emit_decision` stubs. Run `36611340041` on `b03629b1` cleared lint, frontend, and backend (G5 step + full pytest). The workflow still concluded `failure` because e2e `phase1-enterprise` posted to `localhost:8009` (`::1`) while CI `runserver` is `0.0.0.0:8000`. That is an address bug, not a G5 miss. Do not loosen `G5_ROUTER_MIN`. Lane B (COR/REL) needs a named stack runner and `inbound-nightly.yml` (runners 0). Lane C (SPC/PRF/USE/OBS) passed once in process and does not raise the subject. L6 is not defined.
 
 ## Rank 5 contract (operated in process, level unmet)
 
@@ -265,4 +265,4 @@ These probes use collector `inbound_operated`, which is registered and fail-clos
 
 `PASSED ONCE` and `FAILED ONCE` are in-process collector results on 2026-09-29. They are not ledger events. `DEFINED-UNMET` means the nightly workflow is still absent, so correct and reliable stay unknown.
 
-Commit `12d8a73e` run `36563948856` concluded `failure`. Install dependencies passed on Python 3.12. Fail-open lint passed. The failed steps are lint `Import-linter contract` (exit 126, script mode `100644`), the excellence ratchet (`FERNET_KEY` required and unset), and frontend `Run unit tests` (checkpoint title collides with the UTC timestamp; the Monitor steps fraction waits on the ledger). `INBOUND-SEC-06`, `INBOUND-GOV-05`, and `INBOUND-MNT-05` fail because the workflow conclusion is the benchmark. Narrowing the probe to inbound tests alone would be a different rule. The nightly file stays absent until a runner that already has the stack is named.
+Commit `b03629b1` run `36611340041` concluded `failure`. Lint, frontend, and backend (G5 step + full pytest) succeeded. The failed job is e2e: 27 `phase1-enterprise` cases `ECONNREFUSED ::1:8009` because the spec ignored `CARBON_API_URL` and used `localhost:8009`. Five `pilot-governance` cases passed against `127.0.0.1:8000`. `INBOUND-SEC-06`, `INBOUND-GOV-05`, and `INBOUND-MNT-05` fail because the workflow conclusion is the benchmark. Narrowing the probe to inbound tests alone would be a different rule. The nightly file stays absent until a runner that already has the stack is named.

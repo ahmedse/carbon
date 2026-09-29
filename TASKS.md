@@ -60,7 +60,7 @@ evidence → not done.
 | **GradeVance HITL P2** | **EduOS** | **ACTIVE** | Learning loop proven: edit→proposal→accept→bump→repin · `docs/eduos/qa-evidence/HITL-LEARNING-LOOP.json` · next: UI path + Phase C depth |
 | **PV2** (Pulse v2 Intelligence Contract, ADR-0047) | **Pulse** | **ACTIVE** | **20/20 · L0–L5 · 6B DONE 5/5 · ADR-0047 Accepted** · 4A still soaking |
 | **PV21** (Pulse 2.1, ADR-0049 Proposed) | **Pulse** | **ACTIVE** | Understanding defaults to v21. Tasks production 9/12, not ready (R6 reached 084800; R7 missing; night 2026-09-23 FAIL stays). Ask 9/10 on 1018 (Plan handoff; C8 still 4 of 19 over 4 s). L6/L7 not claimed. |
-| **DMS** (Data Migration Studio, ADR-0060 Accepted) | **inbound** (doors: People, Catalog) | **ACTIVE** | **Complete system = L5 ledgered (unmet).** Scored L4 · 45/54 declared. Product DONE. Pilot unsigned. Lane A: local G5 0.955 (v21 stubs). Last scored CI `36572010308` 0.883. Not L5 until green `ci.yml` + named runner. Lane B: runners 0. Canvases: Status boards unified. |
+| **DMS** (Data Migration Studio, ADR-0060 Accepted) | **inbound** (doors: People, Catalog) | **ACTIVE** | **Complete system = L5 ledgered (unmet).** Scored L4 · 45/54 declared. Product DONE. Pilot unsigned. Lane A: `36611340041` G5+pytest green; e2e red on hardcoded `:8009`. Not L5 until green `ci.yml` + named runner. Lane B: runners 0. |
 
 **Multi-Master:** `.ai-toolkit/shared/multi-master.md` · seats · `docs/ops/MASTERS-COMMS.md` · RULE_30. · **This session seat: Nibras.**
 

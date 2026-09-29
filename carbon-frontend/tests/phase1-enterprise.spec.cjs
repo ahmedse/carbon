@@ -14,9 +14,15 @@
 const { test, expect } = require('@playwright/test');
 
 // ─── Configuration ───────────────────────────────────────────────────────────
-const API_BASE = 'http://localhost:8009/carbon-api';
+// CI serves :8000 and sets CARBON_API_URL. Local manage.sh is :8009.
+// Never use hostname "localhost" — GitHub runners resolve it to ::1 first.
+function apiBase() {
+  const raw = (process.env.CARBON_API_URL || 'http://127.0.0.1:8009/carbon-api').replace(/\/+$/, '');
+  return raw.endsWith('/carbon-api') ? raw : `${raw}/carbon-api`;
+}
+const API_BASE = apiBase();
 const ADMIN_USER = 'ahmed';
-const ADMIN_PASS = 'AdminPa_132';
+const ADMIN_PASS = process.env.CARBON_ADMIN_PASSWORD || 'AdminPa_132';
 
 let adminToken = null;
 

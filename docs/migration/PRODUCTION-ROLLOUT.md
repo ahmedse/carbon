@@ -37,7 +37,7 @@ Still open before L5:
 
 | Lane | Probes | Benchmark | Status |
 |------|--------|-----------|--------|
-| A · CI | SEC-06 · GOV-05 · MNT-05 | `ci.yml` conclusion success on the scored commit. Full pytest. No path / `-k` / `-m` / `--deselect` / `--ignore` inbound | Local offline G5 **0.955** (v21 `emit_decision` stubs + `client_for_model` patch). Last scored CI `36572010308` still **0.883**. Not L5 until that SHA's `ci.yml` is green |
+| A · CI | SEC-06 · GOV-05 · MNT-05 | `ci.yml` conclusion success on the scored commit. Full pytest. No path / `-k` / `-m` / `--deselect` / `--ignore` inbound | `b03629b1` run `36611340041`: lint, frontend, backend (G5 step + full pytest) green. Workflow still **failure** — e2e `phase1-enterprise` hardcoded `localhost:8009` while CI serves `127.0.0.1:8000` (27 ECONNREFUSED). Local G5 **0.955**. Not L5 until a later SHA's `ci.yml` is green |
 | B · Nightly | COR-05 · REL-06 | Named runner that already has the stack. `inbound-nightly.yml`. `ubuntu-latest` rejected. COR needs `headSha` | DEFINED-UNMET · runners 0 · Pulse `pulse-nightly-ess.yml` schedule greens do not count |
 | C · In-process | SPC-11 · PRF-06 · USE-06 · OBS-05 | Passed once on `81cbea62`. Not ledger events | PASSED ONCE · does not raise the subject |
 

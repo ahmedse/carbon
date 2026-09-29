@@ -293,6 +293,7 @@ jobs:
           DB_PORT: 5432
           CSRF_TRUSTED_ORIGINS: ""
           CORS_ALLOWED_ORIGINS: ""
+          CARBON_ADMIN_PASSWORD: AdminPa_132
         run: |
           python manage.py migrate --noinput
           python manage.py bootstrap_platform 2>/dev/null || true
@@ -301,7 +302,9 @@ jobs:
           import django; django.setup()
           from django.contrib.auth import get_user_model
           User = get_user_model()
+          admin_pw = os.environ.get('CARBON_ADMIN_PASSWORD', 'AdminPa_132')
           test_users = [
+              ('ahmed', admin_pw, True),
               ('admin', 'admin123', True),
               ('alamien_dataowner', 'data123', False),
               ('sv_dataowner', 'data123', False),
@@ -313,7 +316,12 @@ jobs:
           ]
           for uname, pwd, is_admin in test_users:
               u, created = User.objects.get_or_create(username=uname, defaults={'is_superuser': is_admin, 'is_staff': is_admin})
-              if created: u.set_password(pwd); u.save()
+              if not u.check_password(pwd):
+                  u.set_password(pwd)
+              u.is_superuser = is_admin
+              u.is_staff = is_admin
+              u.is_active = True
+              u.save()
           print(f'Test users ready ({User.objects.count()} total)')
           "
           python manage.py runserver 0.0.0.0:8000 --noreload &
@@ -334,6 +342,7 @@ jobs:
         env:
           CARBON_BASE_URL: http://127.0.0.1:5179
           CARBON_API_URL: http://127.0.0.1:8000/carbon-api/
+          CARBON_ADMIN_PASSWORD: AdminPa_132
         run: npx playwright test --reporter=list
 
   # ── Deploy to VPS (tag push only, after CI passes) ───────────

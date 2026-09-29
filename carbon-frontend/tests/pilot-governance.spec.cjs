@@ -26,8 +26,8 @@
  * every scenario hermetic even when tests run concurrently.
  *
  * Config (env overrides mirror CI .github/workflows/ci.yml e2e job):
- *   CARBON_API_URL    default http://localhost:8009/carbon-api
- *   CARBON_BASE_URL   default http://localhost:8009
+ *   CARBON_API_URL    default http://127.0.0.1:8009/carbon-api
+ *   CARBON_BASE_URL   default http://127.0.0.1:5179
  *   CARBON_ADMIN_USER default admin   (CI seed: admin/admin123)
  *   CARBON_ADMIN_PASS default admin123
  *
@@ -37,8 +37,8 @@
 const { test, expect } = require('@playwright/test');
 
 // ─── Configuration ───────────────────────────────────────────────────────────
-const API_BASE = (process.env.CARBON_API_URL || 'http://localhost:8009/carbon-api').replace(/\/+$/, '');
-const BASE_URL = (process.env.CARBON_BASE_URL || 'http://localhost:8009').replace(/\/+$/, '');
+const API_BASE = (process.env.CARBON_API_URL || 'http://127.0.0.1:8009/carbon-api').replace(/\/+$/, '');
+const BASE_URL = (process.env.CARBON_BASE_URL || 'http://127.0.0.1:5179').replace(/\/+$/, '');
 const ADMIN_USER = process.env.CARBON_ADMIN_USER || 'admin';
 const ADMIN_PASS = process.env.CARBON_ADMIN_PASS || 'admin123';
 
