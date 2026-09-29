@@ -473,8 +473,11 @@ REST_FRAMEWORK = {
         'anon_minute': '1000/min' if IS_DEVELOPMENT else '60/min',
         'ai': '60/min',
         'heavy': '10/min',
-        # Development: allow rapid logins for E2E testing
-        'login': '1000/minute' if IS_DEVELOPMENT else '5/minute',
+        # Development and CI e2e: allow rapid logins. Production stays 5/minute.
+        # DJANGO_ENV=ci is not development (DEBUG off, no silk) but the Playwright
+        # suite logs in many times in one minute; 5/minute 429s Lane A after
+        # phase1-enterprise actually reaches :8000.
+        'login': '1000/minute' if (IS_DEVELOPMENT or DJANGO_ENV == 'ci') else '5/minute',
         # JWT refresh: dedicated generous scope (core.throttling.RefreshRateThrottle)
         'refresh': '1000/minute' if IS_DEVELOPMENT else '120/minute',
     },
