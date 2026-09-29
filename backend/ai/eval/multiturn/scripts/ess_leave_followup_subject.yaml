@@ -15,12 +15,21 @@ language: en
 surface: chat
 persona: emp_1067
 
+stub_host:
+  get_my_leave_balance:
+    - {leave_type: annual, entitled: 30, remaining: 30}
+    - {leave_type: sick, entitled: 15, remaining: 15}
+    - {leave_type: emergency, entitled: 5, remaining: 4}
+    - {leave_type: unpaid, entitled: 90, remaining: 90}
+    - {leave_type: maternity, entitled: 70, remaining: 70}
+    - {leave_type: paternity, entitled: 3, remaining: 3}
+
 _leave_balance_stub: &leave_balance_stub
-  - id: call_leave_balance_1
+  - id: understand_leave_balance
     type: function
     function:
-      name: call_host_api
-      arguments: '{"api_name":"get_my_leave_balance"}'
+      name: emit_decision
+      arguments: '{"commands":[{"op":"call_tool","name":"get_my_leave_balance","render":"text","fields":[]}],"language":"en","confidence":0.9}'
 
 _leave_balance_reply: &leave_balance_reply |
   Your leave balance: annual 30/30, sick 15/15, emergency 4/5, unpaid 90/90,

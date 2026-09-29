@@ -5,10 +5,21 @@ surface: chat
 persona: emp_1067
 # One coherent Plan session. Ask and Plan are separate conversations; this bank
 # must not mix their state in one conversation.
+stub_host:
+  list_my_loans:
+    - {id: 1, loan_type: emergency, principal: 500, status: active}
+  get_my_leave_balance:
+    - {leave_type: annual, entitled: 30, remaining: 30}
 turns:
   - user: "راجع قروضي المفتوحة ورصيد إجازتي في الوقت نفسه. إذا كان لدي قرض مفتوح، توقف. إذا لا، قدّم طلب قرض ٥٠٠ دينار لمدة ١٢ شهراً."
     process_mode: plan
     stub_reply: "خطة مقترحة: ١) قراءة قروضي المفتوحة ورصيد الإجازة معاً. ٢) إن وُجد قرض مفتوح — توقف. ٣) وإلا — مسودة طلب قرض ٥٠٠ دينار لمدة ١٢ شهراً للمراجعة. لا يُرسل شيء قبل موافقتك."
+    stub_tool_calls:
+      - id: understand_plan_reads
+        type: function
+        function:
+          name: emit_decision
+          arguments: '{"commands":[{"op":"call_tool","name":"list_my_loans","fields":[]},{"op":"call_tool","name":"get_my_leave_balance","fields":[]}],"language":"ar","confidence":0.9}'
     expect:
       decision_in: [tool_answer]
       language: ar

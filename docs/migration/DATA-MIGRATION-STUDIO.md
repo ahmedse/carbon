@@ -175,6 +175,20 @@ The studio owns the declaration (`InboundCartridge`: key, labels, fields, enable
 
 The commit signal is the smoke envelope. `reject > 0` refuses commit until `allow_partial` is set. `status != smoked` refuses commit. Those two thresholds are the v1 signal. A latency SLO is not declared because none is measured.
 
+## Complete system — when we may say it is working fine
+
+One subject: `platform.module.inbound`. One scored reading: **L4 Proven · 45/54 declared**. Same board as canvases `data-migration-studio` Status and `dms-production-rollout` Status / Coverage / Ladder.
+
+| Bar | Says | Today |
+|-----|------|-------|
+| Product | DMS-0–DMS-8 + ADR-0060 | DONE |
+| Pilot | P0–P3 signed · operators may run a capped CSV | UNSIGNED |
+| **Complete system** | L5 Operated in the ledger — ranks 1–5 on all nine dimensions, evidence class `enforcement-verified` | **UNMET** |
+
+45/54 is ranks 1–5 declared (9 × 5). The nine L6 cells are open. Declaration is not a pass-rate and is not working-fine.
+
+Lane A (SEC/GOV/MNT) needs a green full `ci.yml` on the scored commit. Local offline G5 is **0.955** after v21 `emit_decision` stubs. Last scored CI `36572010308` is still **0.883**. Do not loosen `G5_ROUTER_MIN`. Lane B (COR/REL) needs a named stack runner and `inbound-nightly.yml` (runners 0). Lane C (SPC/PRF/USE/OBS) passed once in process and does not raise the subject. L6 is not defined.
+
 ## Rank 5 contract (operated in process, level unmet)
 
 Inbound is L4 Proven (coverage 45/54, in memory, 2026-09-29, before `inbound_operated` events). The probes below have since been collected in process on commit `81cbea62`. Those results are not in the ledger, so the scored level stays L4. A single-probe pass does not raise the subject. Collector `inbound_operated` is registered and fail-closed. A missing artifact stays unknown.

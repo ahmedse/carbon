@@ -128,6 +128,26 @@ def _openai_tool_calls(raw: list | None) -> list | None:
     return out or None
 
 
+@contextlib.contextmanager
+def stub_llm_clients(stub_factory):
+    """Pin every offline LLM open to the script stub.
+
+    ``route_chat`` calls ``client_for_model``. That function returns a live
+    DeepSeek client when ``DEEPSEEK_API_KEY`` is set and never touches
+    ``get_llm_client``. Patching only ``get_llm_client`` lets a local key
+    escape the harness (CI has no key, so the old patch looked green).
+    """
+    client = stub_factory()
+    with (
+        patch("ai.engine.llm.provider.get_llm_client", return_value=client),
+        patch(
+            "ai.engine.llm.provider.client_for_model",
+            return_value=(client, "stub", "http://stub.local"),
+        ),
+    ):
+        yield
+
+
 def _make_stub_llm_factory(turns: list[Turn]):
     """Factory that returns a stub LLM client.
 
@@ -362,19 +382,17 @@ def run_script(
     stub_factory = _make_stub_llm_factory(stub_llm_turns)
 
     # PV2-0C live tier: real provider (LLM_API_KEY from .env), no stub patch.
-    if live:
-        llm_ctx = contextlib.nullcontext()
-    else:
-        llm_ctx = patch("ai.engine.llm.provider.get_llm_client")
-    
+    llm_ctx = (
+        contextlib.nullcontext()
+        if live
+        else stub_llm_clients(stub_factory)
+    )
+
     host_stub = None if live else getattr(script, "stub_host", None)
     with override_settings(AI_STORE_BACKEND="django"), engine_single_pass(), stub_host_api(host_stub):
         reset_store()
-        
-        with llm_ctx as mock_client:
-            if mock_client is not None:
-                mock_client.return_value = stub_factory()
-            
+
+        with llm_ctx:
             for turn_idx, turn in enumerate(script.turns):
                 set_turn = getattr(stub_factory, "set_turn", None)
                 if callable(set_turn):

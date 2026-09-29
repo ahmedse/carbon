@@ -21,6 +21,12 @@ turns:
   
   - user: "5000 SAR"
     stub_reply: "Got it. You're requesting an emergency loan for 5000 SAR. I'll now proceed with your request."
+    stub_tool_calls:
+      - id: understand_handoff_5000
+        type: function
+        function:
+          name: emit_decision
+          arguments: '{"commands":[{"op":"handoff_agent","fields":[]}],"language":"en","confidence":0.9}'
     expect:
       decision_in: [handoff_agent]
       language: en

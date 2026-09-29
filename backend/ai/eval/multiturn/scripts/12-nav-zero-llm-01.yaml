@@ -30,6 +30,12 @@ turns:
   
   - user: "Go to the payroll section"
     stub_reply: "I'm navigating you to the payroll section now."
+    stub_tool_calls:
+      - id: understand_nav_payroll
+        type: function
+        function:
+          name: emit_decision
+          arguments: '{"commands":[{"op":"navigate","target_id":"payroll","fields":[]}],"language":"en","confidence":0.9}'
     expect:
       decision_in: [navigate]
       language: en
@@ -44,6 +50,12 @@ turns:
   
   - user: "Go back to home"
     stub_reply: "Taking you back to the home page."
+    stub_tool_calls:
+      - id: understand_nav_home
+        type: function
+        function:
+          name: emit_decision
+          arguments: '{"commands":[{"op":"navigate","target_id":"my_home","fields":[]}],"language":"en","confidence":0.9}'
     expect:
       decision_in: [navigate]
       language: en

@@ -20,6 +20,21 @@ from ai.eval.multiturn.runner import (
 pytestmark = pytest.mark.eval_multiturn
 
 
+def test_offline_patches_client_for_model_so_a_local_deepseek_key_cannot_escape():
+    import ai.engine.llm.provider as provider
+    from ai.eval.multiturn.runner import stub_llm_clients
+
+    factory = _make_stub_llm_factory([Turn(user="u", stub_reply="STUB")])
+    with stub_llm_clients(factory):
+        via_get = provider.get_llm_client()
+        via_model, wire, base = provider.client_for_model("deepseek-v4-pro")
+        assert wire == "stub"
+        assert base == "http://stub.local"
+        assert via_model is via_get
+        content = asyncio.run(via_model.chat.completions.create()).choices[0].message.content
+        assert content == "STUB"
+
+
 def test_stub_stays_on_the_same_turn_across_llm_calls():
     turns = [
         Turn(user="one", stub_reply="FIRST"),
