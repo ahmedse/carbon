@@ -61,7 +61,7 @@ scan_api() {
     echo "## DRF Routers & url paths" >> "$REG_DIR/api.md"
     echo '```' >> "$REG_DIR/api.md"
     _out="$(grep -rn $GREP_EX "router.register\|path(\|re_path(" "$BACKEND_DIR" --include="urls.py" 2>/dev/null \
-      | sed "s|$ROOT/||" | head -300 || true)"
+      | sed "s|$ROOT/||" | LC_ALL=C sort | head -300 || true)"
     require_nonempty "api routes" "$_out"
     printf '%s\n' "$_out" >> "$REG_DIR/api.md"
     echo '```' >> "$REG_DIR/api.md"
@@ -69,7 +69,7 @@ scan_api() {
     echo "## @action custom endpoints (ViewSet extra routes)" >> "$REG_DIR/api.md"
     echo '```' >> "$REG_DIR/api.md"
     _out="$(grep -rn $GREP_EX "@action" "$BACKEND_DIR" --include="*.py" -A1 2>/dev/null \
-      | grep -E "@action|def " | sed "s|$ROOT/||" | head -200 || true)"
+      | grep -E "@action|def " | sed "s|$ROOT/||" | LC_ALL=C sort | head -200 || true)"
     require_nonempty "api @actions" "$_out"
     printf '%s\n' "$_out" >> "$REG_DIR/api.md"
     echo '```' >> "$REG_DIR/api.md"

@@ -46,10 +46,10 @@ trap 'rm -rf "$tmp"' EXIT
 {
   echo "## DRF Routers & url paths"
   grep -rn $GREP_EX "router.register\|path(\|re_path(" "$BACKEND_DIR" --include="urls.py" 2>/dev/null \
-    | sed "s|$ROOT/||" | head -300
+    | sed "s|$ROOT/||" | LC_ALL=C sort | head -300 || true
   echo "## @action custom endpoints (ViewSet extra routes)"
   grep -rn $GREP_EX "@action" "$BACKEND_DIR" --include="*.py" -A1 2>/dev/null \
-    | grep -E "@action|def " | sed "s|$ROOT/||" | head -200
+    | grep -E "@action|def " | sed "s|$ROOT/||" | LC_ALL=C sort | head -200 || true
 } > "$tmp/live"
 
 # 2. Committed inventory — strip the timestamp header, the note, code fences, and blanks.
