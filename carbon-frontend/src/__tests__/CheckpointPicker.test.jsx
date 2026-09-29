@@ -56,8 +56,8 @@ describe('CheckpointPicker — list rendering', () => {
   it('renders checkpoint names after loading', async () => {
     renderPicker();
 
-    expect(await screen.findByText('Sep 1 · 10:00')).toBeInTheDocument();
-    expect(screen.getByText('Sep 2 · 14:30')).toBeInTheDocument();
+    expect((await screen.findAllByText('Sep 1 · 10:00')).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Sep 2 · 14:30').length).toBeGreaterThan(0);
     expect(screen.getByText('Before refactor')).toBeInTheDocument();
   });
 
@@ -81,7 +81,7 @@ describe('CheckpointPicker — Restore', () => {
   it('clicking Restore button shows confirmation dialog', async () => {
     renderPicker();
 
-    await screen.findByText('Sep 1 · 10:00');
+    await screen.findAllByText('Sep 1 · 10:00');
     const restoreButtons = screen.getAllByRole('button', { name: /Restore checkpoint/ });
     fireEvent.click(restoreButtons[0]);
 
@@ -94,7 +94,7 @@ describe('CheckpointPicker — Restore', () => {
     const onClose = vi.fn();
     renderPicker({ onClose });
 
-    await screen.findByText('Sep 1 · 10:00');
+    await screen.findAllByText('Sep 1 · 10:00');
     // Newest first — Sep 2 is first in the drawer (reversed)
     const restoreButtons = screen.getAllByRole('button', { name: /Restore checkpoint/ });
     fireEvent.click(restoreButtons[0]);
@@ -112,7 +112,7 @@ describe('CheckpointPicker — Restore', () => {
   it('Cancel on confirmation dialog does not call API', async () => {
     renderPicker();
 
-    await screen.findByText('Sep 1 · 10:00');
+    await screen.findAllByText('Sep 1 · 10:00');
     fireEvent.click(screen.getAllByRole('button', { name: /Restore checkpoint/ })[0]);
     await screen.findByText(/Restoring will replace/i);
 
@@ -131,7 +131,7 @@ describe('CheckpointPicker — Fork', () => {
     const onClose = vi.fn();
     renderPicker({ onFork, onClose });
 
-    await screen.findByText('Sep 1 · 10:00');
+    await screen.findAllByText('Sep 1 · 10:00');
     const forkButtons = screen.getAllByRole('button', { name: /Fork from checkpoint/ });
     fireEvent.click(forkButtons[0]);
 

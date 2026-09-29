@@ -49,10 +49,10 @@ jobs:
         run: python3 .ai-toolkit/scripts/forbidden-term-lint.py
 
       - name: Import-linter contract (P2-11)
-        run: ./.ai-toolkit/scripts/audit-imports.sh
+        run: bash .ai-toolkit/scripts/audit-imports.sh
 
       - name: Registry drift check (P2-11)
-        run: ./.ai-toolkit/scripts/audit-routes.sh
+        run: bash .ai-toolkit/scripts/audit-routes.sh
 
       - name: Vulture dead-code (report-only, P2-11)
         run: |
@@ -62,6 +62,9 @@ jobs:
   # ── Backend tests ────────────────────────────────────────────
   backend:
     runs-on: ubuntu-latest
+    env:
+      FERNET_KEY: TQL0vbgCR5bUBJqzu9lU-BuqgRYmq7zFptb4hp1M9Fs=
+      TURNKEY_CALLBACK_SECRET: ci-turnkey-callback-not-for-production
     services:
       postgres:
         image: postgres:17
@@ -227,6 +230,9 @@ jobs:
   # ── E2E tests (Playwright) ───────────────────────────────────
   e2e:
     runs-on: ubuntu-latest
+    env:
+      FERNET_KEY: TQL0vbgCR5bUBJqzu9lU-BuqgRYmq7zFptb4hp1M9Fs=
+      TURNKEY_CALLBACK_SECRET: ci-turnkey-callback-not-for-production
     needs: [backend, frontend]
     services:
       postgres:

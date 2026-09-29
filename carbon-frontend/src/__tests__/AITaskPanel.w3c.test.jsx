@@ -398,7 +398,7 @@ describe('AITaskPanel — W5-D Monitor tab', () => {
     // Plan status chip + Duration metric from the ledger provenance.
     expect(await screen.findByText('Duration')).toBeInTheDocument();
     // Steps metric: completed/total.
-    expect(screen.getByText('2/2')).toBeInTheDocument();
+    expect(await screen.findByText('2/2')).toBeInTheDocument();
     // Per-step timeline rows: latency + status chip per ledger step.
     expect(await screen.findByText('400 ms')).toBeInTheDocument();
     expect(screen.getByText('800 ms')).toBeInTheDocument();
