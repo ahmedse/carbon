@@ -1,4 +1,4 @@
-# Registry: API Endpoints  (auto-generated 2026-09-27 20:20 — DO NOT EDIT)
+# Registry: API Endpoints  (auto-generated 2026-09-29 15:12 — DO NOT EDIT)
 
 > Before adding an endpoint, search here. Reuse or extend — never duplicate a route.
 
@@ -16,59 +16,63 @@ backend/core/urls.py:7:router.register(r'modules', ModuleViewSet)
 backend/core/urls.py:8:router.register(r'feedback', FeedbackViewSet, basename='feedback')
 backend/core/urls.py:9:router.register(r'notifications', NotificationViewSet, basename='notification')
 backend/core/urls.py:10:router.register(r'audit-logs', RequestAuditLogViewSet, basename='requestauditlog')
-backend/config/urls.py:26:    path(f'{api_prefix}/health/', health_check),
-backend/config/urls.py:27:    path(f'{api_prefix}/health/metrics/', metrics_view),
-backend/config/urls.py:29:    path(f'{api_prefix}/health/prometheus/', prometheus_metrics_view),
-backend/config/urls.py:32:    path(f'{api_prefix}/token/', ThrottledTokenObtainPairView.as_view(), name='token_obtain_pair'),
-backend/config/urls.py:33:    path(f'{api_prefix}/token/refresh/', ThrottledTokenRefreshView.as_view(), name='token_refresh'),
-backend/config/urls.py:36:    path(
-backend/config/urls.py:49:    path(
-backend/config/urls.py:54:    path(
-backend/config/urls.py:61:    path(
-backend/config/urls.py:68:    path(f'{api_prefix}/email/test/', include('accounts.email_urls')),
-backend/config/urls.py:71:    path(f'{api_prefix}/system/logs/', include('config.log_urls')),
-backend/config/urls.py:74:    path(f'{api_prefix}/accounts/', include('accounts.urls')),
-backend/config/urls.py:75:    path(f'{api_prefix}/core/', include('core.urls')),
-backend/config/urls.py:76:    path(f'{api_prefix}/assurance/', include('core.assurance_urls')),
-backend/config/urls.py:77:    path(f'{api_prefix}/excellence/', include('excellence.urls')),
-backend/config/urls.py:78:    path(f'{api_prefix}/dataschema/', include('dataschema.urls')),
-backend/config/urls.py:79:    path(f'{api_prefix}/carbon/', include(('emissions.urls', 'carbon'), namespace='carbon')),
-backend/config/urls.py:80:    path(f'{api_prefix}/catalog/', include('catalog.urls')),
-backend/config/urls.py:81:    path(f'{api_prefix}/mdm/', include('mdm.urls')),
-backend/config/urls.py:82:    path(f'{api_prefix}/connections/', include('connections.urls')),
-backend/config/urls.py:83:    path(f'{api_prefix}/importexport/', include('importexport.urls')),
-backend/config/urls.py:84:    path(f'{api_prefix}/dq/', include('dq.urls')),
-backend/config/urls.py:85:    path(f'{api_prefix}/apps/', include('appregistry.urls')),
-backend/config/urls.py:86:    path(f'{api_prefix}/integrations/turnkey/', include('integrations.turnkey.urls')),
-backend/config/urls.py:87:    path(f'{api_prefix}/healthy/', include('healthy.urls')),
-backend/config/urls.py:88:    path(f'{api_prefix}/people/', include('people.urls')),
-backend/config/urls.py:89:    path(f'{api_prefix}/gradevance/', include('gradevance.urls')),
-backend/config/urls.py:90:    path(f'{api_prefix}/correspondence/', include('correspondence.urls')),
-backend/config/urls.py:91:    path(f'{api_prefix}/ai/workspace/', include('ai.workspace_urls')),
-backend/config/urls.py:92:    path(f'{api_prefix}/ai/work-objectives/', include('ai.work_objectives_urls')),
-backend/config/urls.py:93:    path(f'{api_prefix}/ai/plans/', include('ai.plans_urls')),
-backend/config/urls.py:94:    path(f'{api_prefix}/ai/catalog/', include('ai.catalog_urls')),
-backend/config/urls.py:95:    path(f'{api_prefix}/ai/registry/', include('ai.registry_urls')),
-backend/config/urls.py:96:    path(f'{api_prefix}/ai/skills/', include('ai.skills_decision_urls')),
-backend/config/urls.py:97:    path(f'{api_prefix}/ai/inbox/', include('ai.task_inbox_urls')),
-backend/config/urls.py:98:    path(f'{api_prefix}/ai/runs/', include('ai.durable_urls')),
-backend/config/urls.py:99:    path(f'{api_prefix}/ai/usage/', include('ai.usage_urls')),
-backend/config/urls.py:100:    path(f'{api_prefix}/ai/profile/', ai_workspace_views.UserProfileView.as_view(), name='ai-user-profile'),
-backend/config/urls.py:101:    path(f'{api_prefix}/ai/memory/', include('ai.memory_urls')),
-backend/config/urls.py:102:    path(f'{api_prefix}/ai/knowledge/', include('ai.knowledge_urls')),
-backend/config/urls.py:103:    path(f'{api_prefix}/ai/pulse/', include('ai.ops_urls')),
-backend/config/urls.py:104:    path(f'{api_prefix}/ai/insights/', include('ai.insights_urls')),
-backend/config/urls.py:105:    path(f'{api_prefix}/ai/operations/', include('ai.progress_urls')),
-backend/config/urls.py:106:    path(f'{api_prefix}/ai/audit/', include('ai.audit_urls')),
-backend/config/urls.py:107:    path(f'{api_prefix}/ai/watches/', include('ai.watches_urls')),
-backend/config/urls.py:108:    path(f'{api_prefix}/mcp/', include('ai.mcp.server_urls')),
-backend/config/urls.py:109:    path(f'{api_prefix}/', include('evidence.urls')),
-backend/config/urls.py:119:    urlpatterns.insert(0, path('admin/', admin.site.urls))
-backend/config/urls.py:125:    path(f'{api_prefix}/schema/', SpectacularAPIView.as_view(permission_classes=[AdminOrSuperuserOnly]), name='schema'),
-backend/config/urls.py:126:    path(f'{api_prefix}/schema/swagger-ui/', SpectacularSwaggerView.as_view(url_name='schema'), name='schema-swagger-ui'),
-backend/config/urls.py:127:    path(f'{api_prefix}/schema/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='schema-redoc'),
-backend/config/urls.py:135:        path('__debug__/', include(debug_toolbar.urls)),
-backend/config/urls.py:136:        path('silk/', include('silk.urls', namespace='silk')),
+backend/config/urls.py:27:    path(f'{api_prefix}/health/', health_check),
+backend/config/urls.py:28:    path(f'{api_prefix}/health/metrics/', metrics_view),
+backend/config/urls.py:30:    path(f'{api_prefix}/health/prometheus/', prometheus_metrics_view),
+backend/config/urls.py:33:    path(f'{api_prefix}/token/', ThrottledTokenObtainPairView.as_view(), name='token_obtain_pair'),
+backend/config/urls.py:34:    path(f'{api_prefix}/token/refresh/', ThrottledTokenRefreshView.as_view(), name='token_refresh'),
+backend/config/urls.py:37:    path(
+backend/config/urls.py:50:    path(
+backend/config/urls.py:55:    path(
+backend/config/urls.py:62:    path(
+backend/config/urls.py:69:    path(f'{api_prefix}/email/test/', include('accounts.email_urls')),
+backend/config/urls.py:72:    path(f'{api_prefix}/system/logs/', include('config.log_urls')),
+backend/config/urls.py:75:    path(f'{api_prefix}/accounts/', include('accounts.urls')),
+backend/config/urls.py:76:    path(f'{api_prefix}/core/', include('core.urls')),
+backend/config/urls.py:77:    path(f'{api_prefix}/assurance/', include('core.assurance_urls')),
+backend/config/urls.py:78:    path(f'{api_prefix}/excellence/', include('excellence.urls')),
+backend/config/urls.py:79:    path(f'{api_prefix}/dataschema/', include('dataschema.urls')),
+backend/config/urls.py:80:    path(f'{api_prefix}/carbon/', include(('emissions.urls', 'carbon'), namespace='carbon')),
+backend/config/urls.py:81:    path(f'{api_prefix}/catalog/', include('catalog.urls')),
+backend/config/urls.py:82:    path(f'{api_prefix}/mdm/', include('mdm.urls')),
+backend/config/urls.py:83:    path(f'{api_prefix}/connections/', include('connections.urls')),
+backend/config/urls.py:84:    path(f'{api_prefix}/importexport/', include('importexport.urls')),
+backend/config/urls.py:85:    path(f'{api_prefix}/inbound/', include('inbound.urls')),
+backend/config/urls.py:86:    path(f'{api_prefix}/dq/', include('dq.urls')),
+backend/config/urls.py:87:    path(f'{api_prefix}/apps/', include('appregistry.urls')),
+backend/config/urls.py:88:    path(f'{api_prefix}/integrations/turnkey/', include('integrations.turnkey.urls')),
+backend/config/urls.py:89:    path(f'{api_prefix}/healthy/', include('healthy.urls')),
+backend/config/urls.py:90:    path(f'{api_prefix}/people/', include('people.urls')),
+backend/config/urls.py:91:    path(f'{api_prefix}/gradevance/', include('gradevance.urls')),
+backend/config/urls.py:92:    path(f'{api_prefix}/correspondence/', include('correspondence.urls')),
+backend/config/urls.py:93:    path(f'{api_prefix}/ai/workspace/', include('ai.workspace_urls')),
+backend/config/urls.py:94:    path(f'{api_prefix}/ai/moodle/ask/', MoodleAskView.as_view(), name='ai-moodle-ask'),
+backend/config/urls.py:95:    path(f'{api_prefix}/ai/moodle/embed/', MoodleEmbedView.as_view(), name='ai-moodle-embed'),
+backend/config/urls.py:96:    path(f'{api_prefix}/ai/moodle/embed/session/', MoodleEmbedSessionView.as_view(), name='ai-moodle-embed-session'),
+backend/config/urls.py:97:    path(f'{api_prefix}/ai/work-objectives/', include('ai.work_objectives_urls')),
+backend/config/urls.py:98:    path(f'{api_prefix}/ai/plans/', include('ai.plans_urls')),
+backend/config/urls.py:99:    path(f'{api_prefix}/ai/catalog/', include('ai.catalog_urls')),
+backend/config/urls.py:100:    path(f'{api_prefix}/ai/registry/', include('ai.registry_urls')),
+backend/config/urls.py:101:    path(f'{api_prefix}/ai/skills/', include('ai.skills_decision_urls')),
+backend/config/urls.py:102:    path(f'{api_prefix}/ai/inbox/', include('ai.task_inbox_urls')),
+backend/config/urls.py:103:    path(f'{api_prefix}/ai/runs/', include('ai.durable_urls')),
+backend/config/urls.py:104:    path(f'{api_prefix}/ai/usage/', include('ai.usage_urls')),
+backend/config/urls.py:105:    path(f'{api_prefix}/ai/profile/', ai_workspace_views.UserProfileView.as_view(), name='ai-user-profile'),
+backend/config/urls.py:106:    path(f'{api_prefix}/ai/memory/', include('ai.memory_urls')),
+backend/config/urls.py:107:    path(f'{api_prefix}/ai/knowledge/', include('ai.knowledge_urls')),
+backend/config/urls.py:108:    path(f'{api_prefix}/ai/pulse/', include('ai.ops_urls')),
+backend/config/urls.py:109:    path(f'{api_prefix}/ai/insights/', include('ai.insights_urls')),
+backend/config/urls.py:110:    path(f'{api_prefix}/ai/operations/', include('ai.progress_urls')),
+backend/config/urls.py:111:    path(f'{api_prefix}/ai/audit/', include('ai.audit_urls')),
+backend/config/urls.py:112:    path(f'{api_prefix}/ai/watches/', include('ai.watches_urls')),
+backend/config/urls.py:113:    path(f'{api_prefix}/mcp/', include('ai.mcp.server_urls')),
+backend/config/urls.py:114:    path(f'{api_prefix}/', include('evidence.urls')),
+backend/config/urls.py:124:    urlpatterns.insert(0, path('admin/', admin.site.urls))
+backend/config/urls.py:130:    path(f'{api_prefix}/schema/', SpectacularAPIView.as_view(permission_classes=[AdminOrSuperuserOnly]), name='schema'),
+backend/config/urls.py:131:    path(f'{api_prefix}/schema/swagger-ui/', SpectacularSwaggerView.as_view(url_name='schema'), name='schema-swagger-ui'),
+backend/config/urls.py:132:    path(f'{api_prefix}/schema/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='schema-redoc'),
+backend/config/urls.py:140:        path('__debug__/', include(debug_toolbar.urls)),
+backend/config/urls.py:141:        path('silk/', include('silk.urls', namespace='silk')),
 backend/evidence/urls.py:9:router.register(r'evidence', EvidenceViewSet, basename='evidence')
 backend/evidence/urls.py:12:    path('', include(router.urls)),
 backend/accounts/urls.py:16:router.register(r'users', UserViewSet)
@@ -255,17 +259,21 @@ backend/dq/urls.py:40:    path('suggest/', DQSuggestView.as_view(), name='dq-sug
 backend/dq/urls.py:42:    path('tables/<int:table_id>/profile/', TableProfileView.as_view(), name='dq-table-profile'),
 backend/dq/urls.py:43:    path('tables/<int:table_id>/profile/run/', RunProfileView.as_view(), name='dq-table-profile-run'),
 backend/dq/urls.py:44:    path('tables/<int:table_id>/scorecard/', TableScorecardView.as_view(), name='dq-table-scorecard'),
-backend/excellence/urls.py:18:    path('overview/', OverviewView.as_view(), name='excellence-overview'),
-backend/excellence/urls.py:19:    path('standard/', StandardView.as_view(), name='excellence-standard'),
-backend/excellence/urls.py:20:    path('apps/<str:app_id>/', AppView.as_view(), name='excellence-app'),
-backend/excellence/urls.py:21:    path('ladder/', LadderView.as_view(), name='excellence-ladder'),
-backend/excellence/urls.py:22:    path('subjects/<str:subject_id>/', SubjectView.as_view(), name='excellence-subject'),
-backend/excellence/urls.py:23:    path('stream/', StreamView.as_view(), name='excellence-stream'),
-backend/excellence/urls.py:24:    path('runs/', RunListCreateView.as_view(), name='excellence-runs'),
-backend/excellence/urls.py:25:    path('initiatives/', InitiativeListCreateView.as_view(), name='excellence-initiatives'),
-backend/excellence/urls.py:26:    path('initiatives/<int:initiative_id>/close/', InitiativeCloseView.as_view(), name='excellence-initiative-close'),
-backend/excellence/urls.py:27:    path('exemptions/', ExemptionListCreateView.as_view(), name='excellence-exemptions'),
-backend/excellence/urls.py:28:    path('exemptions/<int:exemption_id>/', ExemptionDeleteView.as_view(), name='excellence-exemption-delete'),
+backend/inbound/urls.py:6:router.register(r'batches', InboundBatchViewSet, basename='inbound-batch')
+backend/inbound/urls.py:7:router.register(r'cartridges', InboundCartridgeViewSet, basename='inbound-cartridge')
+backend/inbound/urls.py:8:router.register(r'templates', InboundTemplateViewSet, basename='inbound-template')
+backend/excellence/urls.py:19:    path('overview/', OverviewView.as_view(), name='excellence-overview'),
+backend/excellence/urls.py:20:    path('control-room/', ControlRoomView.as_view(), name='excellence-control-room'),
+backend/excellence/urls.py:21:    path('standard/', StandardView.as_view(), name='excellence-standard'),
+backend/excellence/urls.py:22:    path('apps/<str:app_id>/', AppView.as_view(), name='excellence-app'),
+backend/excellence/urls.py:23:    path('ladder/', LadderView.as_view(), name='excellence-ladder'),
+backend/excellence/urls.py:24:    path('subjects/<str:subject_id>/', SubjectView.as_view(), name='excellence-subject'),
+backend/excellence/urls.py:25:    path('stream/', StreamView.as_view(), name='excellence-stream'),
+backend/excellence/urls.py:26:    path('runs/', RunListCreateView.as_view(), name='excellence-runs'),
+backend/excellence/urls.py:27:    path('initiatives/', InitiativeListCreateView.as_view(), name='excellence-initiatives'),
+backend/excellence/urls.py:28:    path('initiatives/<int:initiative_id>/close/', InitiativeCloseView.as_view(), name='excellence-initiative-close'),
+backend/excellence/urls.py:29:    path('exemptions/', ExemptionListCreateView.as_view(), name='excellence-exemptions'),
+backend/excellence/urls.py:30:    path('exemptions/<int:exemption_id>/', ExemptionDeleteView.as_view(), name='excellence-exemption-delete'),
 backend/dataschema/urls.py:15:router.register(r'tables', DataTableViewSet, basename='dataschema-table')
 backend/dataschema/urls.py:16:router.register(r'fields', DataFieldViewSet, basename='dataschema-field')
 backend/dataschema/urls.py:17:router.register(r'rows', DataRowViewSet, basename='dataschema-row')
@@ -296,14 +304,6 @@ backend/correspondence/urls.py:40:    path('<int:pk>/reopen/', CorrespondenceVie
 backend/correspondence/urls.py:42:    path('notifications/', NotificationViewSet.as_view({'get': 'list'}),
 backend/correspondence/urls.py:44:    path('notifications/read-all/', NotificationViewSet.as_view({'post': 'read_all'}),
 backend/correspondence/urls.py:46:    path('notifications/<int:pk>/read/', NotificationViewSet.as_view({'post': 'read'}),
-backend/correspondence/urls.py:48:    path('policies/', WorkflowPolicyViewSet.as_view({'get': 'list'}),
-backend/correspondence/urls.py:50:    path('policies/<int:pk>/', WorkflowPolicyViewSet.as_view({'get': 'retrieve'}),
-backend/catalog/urls.py:18:router.register(r'domains', DataDomainViewSet, basename='datadomain')
-backend/catalog/urls.py:19:router.register(r'glossary', GlossaryTermViewSet, basename='glossaryterm')
-backend/catalog/urls.py:20:router.register(r'tags', TagViewSet, basename='tag')
-backend/catalog/urls.py:21:router.register(r'assets', AssetProfileViewSet, basename='assetprofile')
-backend/catalog/urls.py:22:router.register(r'governance-events', GovernanceEventViewSet, basename='governanceevent')
-backend/catalog/urls.py:23:router.register(r'governance-policies', GovernancePolicyViewSet, basename='governancepolicy')
 ```
 
 ## @action custom endpoints (ViewSet extra routes)
@@ -320,10 +320,10 @@ backend/evidence/views.py:51:    @action(detail=True, methods=['get'], url_path=
 backend/evidence/views.py-52-    def download(self, request, pk=None):
 backend/evidence/views.py:82:    @action(detail=False, methods=['post'], url_path='bulk-upload')
 backend/evidence/views.py-83-    def bulk_upload(self, request):
-backend/accounts/views.py:321:    @action(detail=True, methods=['get'])
-backend/accounts/views.py-322-    def members(self, request, pk=None):
-backend/accounts/views.py:347:    @action(detail=True, methods=['get'])
-backend/accounts/views.py-348-    def scoped_assignments(self, request, pk=None):
+backend/accounts/views.py:324:    @action(detail=True, methods=['get'])
+backend/accounts/views.py-325-    def members(self, request, pk=None):
+backend/accounts/views.py:350:    @action(detail=True, methods=['get'])
+backend/accounts/views.py-351-    def scoped_assignments(self, request, pk=None):
 backend/accounts/notification_views.py:22:    @action(detail=False, methods=['post'])
 backend/accounts/notification_views.py-23-    def mark_all_read(self, request):
 backend/accounts/notification_views.py:28:    @action(detail=True, methods=['post'])
@@ -372,6 +372,18 @@ backend/dq/views.py:1659:    @action(detail=True, methods=['post'])
 backend/dq/views.py-1660-    def accept(self, request, pk=None):
 backend/dq/views.py:1757:    @action(detail=True, methods=['post'])
 backend/dq/views.py-1758-    def reject(self, request, pk=None):
+backend/inbound/views.py:47:    @action(detail=False, methods=['get'])
+backend/inbound/views.py-48-    def targets(self, request):
+backend/inbound/views.py:62:    @action(detail=True, methods=['post'], parser_classes=[MultiPartParser, FormParser])
+backend/inbound/views.py-63-    def file(self, request, pk=None):
+backend/inbound/views.py:75:    @action(detail=True, methods=['put'])
+backend/inbound/views.py-76-    def mapping(self, request, pk=None):
+backend/inbound/views.py:84:    @action(detail=True, methods=['post'])
+backend/inbound/views.py-85-    def smoke(self, request, pk=None):
+backend/inbound/views.py:93:    @action(detail=True, methods=['get'])
+backend/inbound/views.py-94-    def rejects(self, request, pk=None):
+backend/inbound/views.py:106:    @action(detail=True, methods=['post'])
+backend/inbound/views.py-107-    def commit(self, request, pk=None):
 backend/dataschema/views.py:529:    @action(detail=False, methods=['post'], url_path='bulk-import')
 backend/dataschema/views.py-530-    def bulk_import(self, request):
 backend/dataschema/views.py:590:    @action(detail=False, methods=['get'], url_path='download-template')
@@ -432,80 +444,68 @@ backend/ai/workspace_api.py:218:    @action(detail=True, methods=["post"], url_p
 backend/ai/workspace_api.py-219-    def message_feedback(self, request, pk=None, message_id=None):
 backend/ai/workspace_api.py:238:    @action(detail=True, methods=["post"], url_path="messages/stream", url_name="send-message-stream")
 backend/ai/workspace_api.py-239-    def send_message_stream(self, request, pk=None):
-backend/ai/workspace_api.py:270:    @action(detail=True, methods=["post"], url_path="actions/stream", url_name="run-action-stream")
-backend/ai/workspace_api.py-271-    def run_action_stream(self, request, pk=None):
-backend/ai/workspace_api.py:309:    @action(detail=True, methods=["post"], url_path="stop", url_name="stop-generation")
-backend/ai/workspace_api.py-310-    def stop_generation(self, request, pk=None):
-backend/ai/workspace_api.py:324:    @action(
-backend/ai/workspace_api.py:345:    @action(
-backend/ai/workspace_api.py:396:    @action(
-backend/ai/workspace_api.py:429:    @action(detail=True, methods=["post"], url_path="summary", url_name="summarize")
-backend/ai/workspace_api.py-430-    def summarize(self, request, pk=None):
-backend/ai/workspace_api.py:447:    @action(
-backend/ai/workspace_api.py:634:    @action(
-backend/ai/workspace_api.py:733:    @action(detail=True, methods=["get", "post"], url_path="subagents", url_name="subagents")
-backend/ai/workspace_api.py-734-    def subagents(self, request, pk=None):
-backend/ai/workspace_api.py:737:        Combined into a single ``@action`` — two actions sharing ``url_path``
-backend/ai/workspace_api.py:751:    @action(detail=True, methods=["get"], url_path=r"subagents/(?P<sub_id>[^/.]+)", url_name="subagent-detail")
-backend/ai/workspace_api.py-752-    def subagent_detail(self, request, pk=None, sub_id=None):
-backend/ai/workspace_api.py:762:    @action(detail=True, methods=["get"], url_path="export", url_name="export")
-backend/ai/workspace_api.py-763-    def export(self, request, pk=None):
-backend/ai/workspace_api.py:790:    @action(detail=True, methods=["get"], url_path="suggestions", url_name="suggestions")
-backend/ai/workspace_api.py-791-    def suggestions(self, request, pk=None):
-backend/ai/workspace_api.py:817:    @action(detail=True, methods=["post"], url_path="resume", url_name="resume")
-backend/ai/workspace_api.py-818-    def resume(self, request, pk=None):
-backend/ai/workspace_api.py:832:    @action(detail=True, methods=["post"], url_path="suggestions/(?P<suggestion_id>[^/.]+)/accept", url_name="suggestion-accept")
-backend/ai/workspace_api.py-833-    def accept_suggestion(self, request, pk=None, suggestion_id=None):
-backend/ai/workspace_api.py:846:    @action(detail=True, methods=["post"], url_path="suggestions/(?P<suggestion_id>[^/.]+)/dismiss", url_name="suggestion-dismiss")
-backend/ai/workspace_api.py-847-    def dismiss_suggestion(self, request, pk=None, suggestion_id=None):
-backend/ai/workspace_api.py:861:    @action(detail=False, methods=["get"], url_path="suggestions", url_name="workspace-suggestions")
-backend/ai/workspace_api.py-862-    def workspace_suggestions(self, request):
-backend/ai/workspace_api.py:877:    @action(detail=True, methods=["post"], url_path="checkpoint", url_name="checkpoint-conversation")
-backend/ai/workspace_api.py-878-    def checkpoint(self, request, pk=None):
-backend/ai/workspace_api.py:903:    @action(detail=True, methods=["get"], url_path="checkpoints", url_name="checkpoints")
-backend/ai/workspace_api.py-904-    def checkpoints(self, request, pk=None):
-backend/ai/workspace_api.py:923:    @action(detail=True, methods=["post"], url_path="restore", url_name="restore-conversation")
-backend/ai/workspace_api.py-924-    def restore(self, request, pk=None):
-backend/ai/workspace_api.py:948:    @action(detail=True, methods=["post"], url_path="fork", url_name="fork-conversation")
-backend/ai/workspace_api.py-949-    def fork(self, request, pk=None):
-backend/ai/workspace_api.py:975:    @action(detail=True, methods=["post"], url_path="clear-context", url_name="clear-context")
-backend/ai/workspace_api.py-976-    def clear_context(self, request, pk=None):
-backend/ai/workspace_api.py:995:    @action(
-backend/ai/workspace_api.py:1081:    @action(detail=True, methods=["post"], url_path="share", url_name="artifact-share")
-backend/ai/workspace_api.py-1082-    def share(self, request, pk=None):
-backend/ai/workspace_api.py:1130:    @action(detail=False, methods=["get"], url_path="shared/(?P<token>[^/.]+)", url_name="artifact-shared")
-backend/ai/workspace_api.py-1131-    def shared_snapshot(self, request, token=None):
-backend/ai/workspace_api.py:1140:    @action(detail=False, methods=["post"], url_path="job-maps", url_name="create-job-map")
-backend/ai/workspace_api.py-1141-    def create_job_map(self, request):
-backend/ai/workspace_api.py:1219:    @action(detail=True, methods=["get", "post"], url_path="messages", url_name="send-message")
-backend/ai/workspace_api.py-1220-    def send_message(self, request, pk=None):
-backend/ai/workspace_api.py:1224:        register two ``@action`` methods on the same ``url_path`` without one
-backend/ai/workspace_api.py:1269:    @action(detail=True, methods=["post"], url_path="messages/(?P<message_id>[^/.]+)/feedback", url_name="message-feedback")
-backend/ai/workspace_api.py-1270-    def message_feedback(self, request, pk=None, message_id=None):
-backend/ai/workspace_api.py:1289:    @action(detail=True, methods=["post"], url_path="messages/stream", url_name="send-message-stream")
-backend/ai/workspace_api.py-1290-    def send_message_stream(self, request, pk=None):
-backend/ai/workspace_api.py:1321:    @action(detail=True, methods=["post"], url_path="stop", url_name="stop-generation")
-backend/ai/workspace_api.py-1322-    def stop_generation(self, request, pk=None):
-backend/ai/workspace_api.py:1336:    @action(
-backend/ai/workspace_api.py:1357:    @action(
-backend/ai/workspace_api.py:1388:    @action(detail=True, methods=["post"], url_path="summary", url_name="summarize")
-backend/ai/workspace_api.py-1389-    def summarize(self, request, pk=None):
-backend/ai/workspace_api.py:1406:    @action(detail=True, methods=["get"], url_path="export", url_name="export")
-backend/ai/workspace_api.py-1407-    def export(self, request, pk=None):
+backend/ai/workspace_api.py:273:    @action(detail=True, methods=["post"], url_path="actions/stream", url_name="run-action-stream")
+backend/ai/workspace_api.py-274-    def run_action_stream(self, request, pk=None):
+backend/ai/workspace_api.py:312:    @action(detail=True, methods=["post"], url_path="stop", url_name="stop-generation")
+backend/ai/workspace_api.py-313-    def stop_generation(self, request, pk=None):
+backend/ai/workspace_api.py:327:    @action(
+backend/ai/workspace_api.py:348:    @action(
+backend/ai/workspace_api.py:399:    @action(
+backend/ai/workspace_api.py:432:    @action(detail=True, methods=["post"], url_path="summary", url_name="summarize")
+backend/ai/workspace_api.py-433-    def summarize(self, request, pk=None):
+backend/ai/workspace_api.py:450:    @action(
+backend/ai/workspace_api.py:637:    @action(
+backend/ai/workspace_api.py:736:    @action(detail=True, methods=["get", "post"], url_path="subagents", url_name="subagents")
+backend/ai/workspace_api.py-737-    def subagents(self, request, pk=None):
+backend/ai/workspace_api.py:740:        Combined into a single ``@action`` — two actions sharing ``url_path``
+backend/ai/workspace_api.py:754:    @action(detail=True, methods=["get"], url_path=r"subagents/(?P<sub_id>[^/.]+)", url_name="subagent-detail")
+backend/ai/workspace_api.py-755-    def subagent_detail(self, request, pk=None, sub_id=None):
+backend/ai/workspace_api.py:765:    @action(detail=True, methods=["get"], url_path="export", url_name="export")
+backend/ai/workspace_api.py-766-    def export(self, request, pk=None):
+backend/ai/workspace_api.py:793:    @action(detail=True, methods=["get"], url_path="suggestions", url_name="suggestions")
+backend/ai/workspace_api.py-794-    def suggestions(self, request, pk=None):
+backend/ai/workspace_api.py:820:    @action(detail=True, methods=["post"], url_path="resume", url_name="resume")
+backend/ai/workspace_api.py-821-    def resume(self, request, pk=None):
+backend/ai/workspace_api.py:835:    @action(detail=True, methods=["post"], url_path="suggestions/(?P<suggestion_id>[^/.]+)/accept", url_name="suggestion-accept")
+backend/ai/workspace_api.py-836-    def accept_suggestion(self, request, pk=None, suggestion_id=None):
+backend/ai/workspace_api.py:849:    @action(detail=True, methods=["post"], url_path="suggestions/(?P<suggestion_id>[^/.]+)/dismiss", url_name="suggestion-dismiss")
+backend/ai/workspace_api.py-850-    def dismiss_suggestion(self, request, pk=None, suggestion_id=None):
+backend/ai/workspace_api.py:864:    @action(detail=False, methods=["get"], url_path="suggestions", url_name="workspace-suggestions")
+backend/ai/workspace_api.py-865-    def workspace_suggestions(self, request):
+backend/ai/workspace_api.py:880:    @action(detail=True, methods=["post"], url_path="checkpoint", url_name="checkpoint-conversation")
+backend/ai/workspace_api.py-881-    def checkpoint(self, request, pk=None):
+backend/ai/workspace_api.py:906:    @action(detail=True, methods=["get"], url_path="checkpoints", url_name="checkpoints")
+backend/ai/workspace_api.py-907-    def checkpoints(self, request, pk=None):
+backend/ai/workspace_api.py:926:    @action(detail=True, methods=["post"], url_path="restore", url_name="restore-conversation")
+backend/ai/workspace_api.py-927-    def restore(self, request, pk=None):
+backend/ai/workspace_api.py:951:    @action(detail=True, methods=["post"], url_path="fork", url_name="fork-conversation")
+backend/ai/workspace_api.py-952-    def fork(self, request, pk=None):
+backend/ai/workspace_api.py:978:    @action(detail=True, methods=["post"], url_path="clear-context", url_name="clear-context")
+backend/ai/workspace_api.py-979-    def clear_context(self, request, pk=None):
+backend/ai/workspace_api.py:998:    @action(
+backend/ai/workspace_api.py:1084:    @action(detail=True, methods=["post"], url_path="share", url_name="artifact-share")
+backend/ai/workspace_api.py-1085-    def share(self, request, pk=None):
+backend/ai/workspace_api.py:1133:    @action(detail=False, methods=["get"], url_path="shared/(?P<token>[^/.]+)", url_name="artifact-shared")
+backend/ai/workspace_api.py-1134-    def shared_snapshot(self, request, token=None):
+backend/ai/workspace_api.py:1143:    @action(detail=False, methods=["post"], url_path="job-maps", url_name="create-job-map")
+backend/ai/workspace_api.py-1144-    def create_job_map(self, request):
+backend/ai/workspace_api.py:1222:    @action(detail=True, methods=["get", "post"], url_path="messages", url_name="send-message")
+backend/ai/workspace_api.py-1223-    def send_message(self, request, pk=None):
+backend/ai/workspace_api.py:1227:        register two ``@action`` methods on the same ``url_path`` without one
+backend/ai/workspace_api.py:1272:    @action(detail=True, methods=["post"], url_path="messages/(?P<message_id>[^/.]+)/feedback", url_name="message-feedback")
+backend/ai/workspace_api.py-1273-    def message_feedback(self, request, pk=None, message_id=None):
+backend/ai/workspace_api.py:1292:    @action(detail=True, methods=["post"], url_path="messages/stream", url_name="send-message-stream")
+backend/ai/workspace_api.py-1293-    def send_message_stream(self, request, pk=None):
+backend/ai/workspace_api.py:1327:    @action(detail=True, methods=["post"], url_path="stop", url_name="stop-generation")
+backend/ai/workspace_api.py-1328-    def stop_generation(self, request, pk=None):
+backend/ai/workspace_api.py:1342:    @action(
+backend/ai/workspace_api.py:1363:    @action(
+backend/ai/workspace_api.py:1394:    @action(detail=True, methods=["post"], url_path="summary", url_name="summarize")
+backend/ai/workspace_api.py-1395-    def summarize(self, request, pk=None):
+backend/ai/workspace_api.py:1412:    @action(detail=True, methods=["get"], url_path="export", url_name="export")
+backend/ai/workspace_api.py-1413-    def export(self, request, pk=None):
 backend/correspondence/views.py:310:    @action(detail=False, methods=['get'], url_path='inbox')
 backend/correspondence/views.py-311-    def inbox(self, request):
 backend/correspondence/views.py:345:    @action(detail=False, methods=['get'], url_path='history')
 backend/correspondence/views.py-346-    def history(self, request):
-backend/correspondence/views.py:367:    @action(detail=True, methods=['post'], url_path='approve')
-backend/correspondence/views.py-368-    def approve(self, request, pk=None):
-backend/correspondence/views.py:375:    @action(detail=True, methods=['post'], url_path='acknowledge')
-backend/correspondence/views.py-376-    def acknowledge(self, request, pk=None):
-backend/correspondence/views.py:384:    @action(detail=True, methods=['post'], url_path='review')
-backend/correspondence/views.py-385-    def review(self, request, pk=None):
-backend/correspondence/views.py:393:    @action(detail=True, methods=['post'], url_path='reject')
-backend/correspondence/views.py-394-    def reject(self, request, pk=None):
-backend/correspondence/views.py:406:    @action(detail=True, methods=['post'], url_path='send-back')
-backend/correspondence/views.py-407-    def send_back(self, request, pk=None):
-backend/correspondence/views.py:420:    @action(detail=True, methods=['post'], url_path='cancel')
-backend/correspondence/views.py-421-    def cancel(self, request, pk=None):
 ```
