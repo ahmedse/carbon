@@ -82,6 +82,38 @@ def test_green_ci_with_full_pytest_passes() -> None:
     assert draft.evidence_class == "enforcement-verified"
 
 
+def test_pytest_path_selector_fails_before_github(tmp_path: Path) -> None:
+    workflow = _write_workflow(tmp_path, "python -m pytest inbound/tests --tb=short -q")
+
+    def _gh(_args: list[str]) -> tuple[int, str]:
+        raise AssertionError("gh must not run when pytest selects a path")
+
+    draft = _one("INBOUND-SEC-06", {"head": "abc", "inbound_gh": _gh}, workflow=str(workflow))
+    assert draft.result == "failed"
+    assert "path" in draft.detail["why"]
+
+
+def test_pytest_keyword_selector_fails(tmp_path: Path) -> None:
+    workflow = _write_workflow(tmp_path, "python -m pytest -k test_pipe -q")
+    draft = _one(
+        "INBOUND-GOV-05",
+        {"head": "abc", "inbound_gh": lambda args: (0, "[]")},
+        workflow=str(workflow),
+    )
+    assert draft.result == "failed"
+    assert "-k" in draft.detail["why"]
+
+
+def test_real_run_tests_step_is_not_a_subset() -> None:
+    from excellence.inbound_operated import _pytest_selector, _step_run
+    from excellence.catalogue import REPO_ROOT
+
+    script = _step_run(REPO_ROOT / ".github/workflows/ci.yml", "Run tests")
+    assert script is not None
+    assert _pytest_selector(script) is None
+    assert "python -m pytest --tb=short -x -q" in script
+
+
 def test_pytest_ignore_inbound_fails_even_when_ci_is_green(tmp_path: Path) -> None:
     workflow = _write_workflow(tmp_path, "python -m pytest --ignore=inbound")
     draft = _one(
@@ -295,6 +327,22 @@ def test_ratchet_shorthand_without_the_real_lines_fails(tmp_path: Path) -> None:
     )
     assert draft.result == "failed"
     assert "substrings" in draft.detail["why"]
+
+
+def test_age_window_is_not_implemented(tmp_path: Path) -> None:
+    workflow = _write_workflow(tmp_path, "nightly")
+
+    def _gh(_args: list[str]) -> tuple[int, str]:
+        raise AssertionError("gh must not run when an age window is set")
+
+    draft = _one(
+        "INBOUND-REL-06",
+        {"inbound_gh": _gh},
+        workflow=str(workflow),
+        window=14,
+    )
+    assert draft.result == "unknown"
+    assert draft.detail["why"] == "age window is not implemented"
 
 
 def test_missing_scheduled_run_is_unknown(tmp_path: Path) -> None:

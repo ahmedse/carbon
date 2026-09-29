@@ -28,7 +28,10 @@ principles:
       Onboarding has exactly one ReportingPeriod with status open.
       start_date is strictly before end_date. A second open period fails CR-PER-01.
     binds: [CR-PER-01]
-    violation: Two periods are open, or the open period has start_date >= end_date.
+    violation: >
+      Two periods are open, or the open period has start_date >= end_date.
+      A count with no period id, name, start_date, and end_date is an incomplete
+      failure record.
 
   - id: P-03
     name: Declared denominator
@@ -87,7 +90,7 @@ principles:
       factor_unit, activity_unit, scope, and source. The activity unit on the
       data row matches the factor. Chat does not invent a factor.
     binds: [CR-FAC-01, CR-DQ-01]
-    violation: A factor number appears in chat or in a note with no EmissionFactor row.
+    violation: A factor number appears in chat, in the onboarding checklist, or in a note with no EmissionFactor row.
 
   - id: P-09
     name: Pulse quotes the tool

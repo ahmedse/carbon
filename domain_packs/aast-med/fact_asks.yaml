@@ -1,0 +1,6 @@
+# A fact question about the open activity. Every term must be present.
+# The quote itself is not listed here. It has to occur in the passage.
+version: 1
+min_span: 24
+all_of_any:
+  - ["according to the handout"]

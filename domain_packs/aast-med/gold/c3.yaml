@@ -1,0 +1,10 @@
+# Frozen C3 gate for NMD1103. A new page in the export fails this until the gold moves with it.
+course: NMD1103
+count: 5
+miss: "This is not in this lecture."
+passages:
+  - NMD1103:page:1008
+  - NMD1103:label:1017
+  - NMD1103:label:1021
+  - NMD1103:page:1022
+  - NMD1103:label:1023

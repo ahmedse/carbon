@@ -13,6 +13,35 @@ validation: >
   Status excluded requires exclusion_reason. Reason other requires notes.
   Status declared has a null exclusion_reason. O1 does not require the other
   campuses to be excluded; declared is allowed.
+other_campuses:
+  names: [South Valley, Abu Qir, Alamein]
+  match: source_name contains the campus string, case-sensitive
+  one_check_each: true
+  when_several_sources: lowest source id
+  codes:
+    - code: other_campus_absent
+      when: no matching source
+      met: false
+      status: absent
+    - code: other_campus_no_status
+      when: source exists and this period has no status row
+      met: false
+    - code: other_campus_declared
+      when: status is declared and exclusion_reason is null
+      met: true
+    - code: other_campus_excluded
+      when: status is excluded and reason is insufficient_data or out_of_boundary, or reason is other with notes that are not blank after strip
+      met: true
+    - code: other_campus_excluded_notes
+      when: status is excluded, reason is other, and notes are blank
+      met: false
+    - code: other_campus_not_material
+      when: status is excluded and reason is not_material
+      met: false
+    - code: other_campus_covered
+      when: status is covered
+      met: false
+      limit: Covered here does not pass O1 and does not open O2, O3, or O4.
 implementation: >
   Process step cover_or_exclude is human_only, with campus_data_owner and
   inventory_lead as distinct roles. Host screen inventory coverage.

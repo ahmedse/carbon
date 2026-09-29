@@ -23,25 +23,41 @@ def _split_datetime_t(blob: str) -> str:
     return "".join(chars)
 
 
+def _as_payload(payload: Any) -> Any:
+    """Tool rows are often a JSON string of the same host wrap."""
+    if not isinstance(payload, str):
+        return payload
+    stripped = payload.strip()
+    if not stripped or stripped[0] not in "{[":
+        return payload
+    try:
+        return json.loads(stripped)
+    except (TypeError, ValueError):
+        return payload
+
+
 def _flatten_numbers(payload: Any) -> set[str]:
+    parsed = _as_payload(payload)
     found: set[str] = set()
     try:
-        blob = json.dumps(payload, ensure_ascii=False, default=str)
+        blob = json.dumps(parsed, ensure_ascii=False, default=str)
     except (TypeError, ValueError):
-        blob = str(payload)
+        blob = str(parsed)
     blob = _split_datetime_t(blob)
     for match in re.finditer(r"(?<![\w.])(\d+(?:\.\d+)?)(?!\w|\.\d)", blob):
         found.add(match.group(1))
         if "." in match.group(1):
             found.add(match.group(1).split(".", 1)[0])
-    if isinstance(payload, list):
-        found.add(str(len(payload)))
-    if isinstance(payload, dict):
-        for key in ("results", "items", "rows", "breakdown"):
-            rows = payload.get(key)
+    if isinstance(parsed, list):
+        found.add(str(len(parsed)))
+    if isinstance(parsed, dict):
+        # Host GET wrap is {status_code, data}. A restatement that prints
+        # the row count is still grounded (module docstring: counts allowed).
+        for key in ("results", "items", "rows", "breakdown", "data"):
+            rows = parsed.get(key)
             if isinstance(rows, list):
                 found.add(str(len(rows)))
-        count = payload.get("count")
+        count = parsed.get("count")
         if count is not None:
             found.add(str(count))
     return found

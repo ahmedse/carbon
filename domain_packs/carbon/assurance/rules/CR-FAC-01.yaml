@@ -1,18 +1,50 @@
 id: CR-FAC-01
 journey: INV
 meaning: >
-  O1 electricity uses an EmissionFactor with scope 2, activity_unit kWh, and
-  a non-empty source. O1 diesel uses an EmissionFactor with scope 1,
-  activity_unit litre, and a non-empty source. factor_value and factor_unit
-  come from that row. Country is EG or the factor's global row. Chat does
-  not type a factor.
+  O1 electricity uses an active EmissionFactor with scope 2 and activity unit
+  kWh. O1 diesel uses an active EmissionFactor with scope 1 and activity unit
+  litre. country_code is EGY or blank. Blank means a global row. EG is not a
+  stored code; the model field is ISO alpha-3. source is non-empty after
+  strip. factor_value stays on the row and is not copied into the checklist.
 source: backend/emissions/models.py EmissionFactor; instance tool list_emission_factors
 owner: carbon-factor-steward
 failure: Activity is multiplied by a number that is not on an EmissionFactor row, or the activity unit does not match the factor.
 validation: >
-  The calculation for each O1 source references a factor whose scope and
-  activity_unit match the benchmark. Fail when source is blank or factor_value
-  is null.
+  While catalogue is planned, this rule reports. It does not reject a save.
+  Run only when exactly one ReportingPeriod is open. Ignore is_active false
+  until no active row matches. Unit match is case-insensitive: kwh is kWh;
+  litre and liter are litre. Among active rows with the right scope and unit,
+  accept country_code EGY or blank. Several eligible rows use the lowest id.
+  A row whose country_code is anything else is factor_country, not a match.
+codes:
+  - code: factor_missing
+    when: no row has that scope and unit
+    met: false
+    fields: [name, scope, unit]
+  - code: factor_inactive
+    when: rows match but none are active
+    met: false
+    fields: [record_id, name, scope, unit]
+  - code: factor_country
+    when: active rows match and none have country_code EGY or blank
+    met: false
+    fields: [record_id, name, country_code]
+  - code: factor_source_blank
+    when: the chosen row has a blank source
+    met: false
+    fields: [record_id, name]
+  - code: factor_met
+    when: the chosen row is active, cited, and EGY or blank
+    met: true
+    fields: [record_id, name, scope, unit, country_code]
+    omit: [factor_value, factor_unit, co2e_kg, tonnes]
+streams:
+  - name: Smart Village electricity
+    scope: 2
+    unit: kWh
+  - name: Smart Village diesel
+    scope: 1
+    unit: litre
 implementation: >
   Host screen /carbon/admin/factors. Process step bind_factors is human_only.
   list_emission_factors is the read Pulse may call.

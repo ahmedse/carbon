@@ -19,4 +19,7 @@ confidence: medium
 catalogue: planned
 residual: >
   The physical activity table is chosen by the data owner when they link it.
-  This rule does not create a DataTable.
+  This rule does not create a DataTable. evaluate_o1 emits no CR-DQ-01 code.
+  A missing month is not visible until that table is linked, and scanning
+  every DataTable would invent a zero. Quantity rules apply on the host
+  screen when the row is entered.

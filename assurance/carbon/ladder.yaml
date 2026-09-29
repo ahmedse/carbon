@@ -17,8 +17,11 @@ subjects:
     kind: journey
     title: Carbon frontend app
     owner: owner
-    paths: [carbon-frontend/src/apps/carbon]
+    paths:
+      - carbon-frontend/src/apps/carbon
+      - docs/carbon/CARBON-UI-SHELL-SPEC.md
     tests: [carbon-frontend/src/apps/carbon]
+    adr: [.ai-toolkit/decisions/0016-domain-app-ai-contract.md]
   - id: carbon.pack
     kind: ai_pack
     title: Carbon Pulse pack (O1 onboarding contract)
@@ -29,6 +32,7 @@ subjects:
       - domain_packs/carbon/vocabulary.yaml
       - domain_packs/carbon/assurance/principles.yaml
       - domain_packs/carbon/processes/inventory.onboarding.lifecycle.yaml
+      - docs/carbon/CARBON-PACK-SPEC.md
     adr: [.ai-toolkit/decisions/0050-pulse-core-domain-free-versioned-packs.md]
   - id: carbon.journey.onboarding
     kind: journey
@@ -38,10 +42,19 @@ subjects:
       - domain_packs/carbon/assurance/benchmarks/O1-smart-village.yaml
       - domain_packs/carbon/assurance/principles.yaml
       - domain_packs/carbon/processes/inventory.onboarding.lifecycle.yaml
+      - docs/carbon/O1-ONBOARDING-SPEC.md
+      - docs/carbon/SCREEN-SPEC-O1-ONBOARDING.md
     spec:
       - domain_packs/carbon/assurance/principles.yaml
       - domain_packs/carbon/assurance/benchmarks/O1-smart-village.yaml
+      - docs/carbon/O1-ONBOARDING-SPEC.md
+      - docs/carbon/SCREEN-SPEC-O1-ONBOARDING.md
     adr: [.ai-toolkit/decisions/0020-inventory-coverage.md]
+    tests:
+      - backend/emissions/tests/test_onboarding_o1.py
+      - backend/emissions/tests/test_onboarding_contract.py
+      - backend/emissions/tests/test_onboarding_api.py
+      - carbon-frontend/src/pages/carbon/__tests__/OnboardingPage.test.jsx
 
 checks:
   - id: CARBON-SPC-01
@@ -90,7 +103,503 @@ checks:
     solution: Declare paths that exist in the tree.
     source: ADR-0020
 
+  # Pack and Carbon UI rank 1 — subject-scoped. Do not inherit onto onboarding.
+  - id: CARBON-PACK-SPC-01
+    title: Carbon pack names its id and version
+    dimension: specified
+    rank: 1
+    collector: repo
+    probe:
+      type: file_contains
+      file: domain_packs/carbon/pack.yaml
+      texts: ["id: carbon", "version: 4"]
+      subjects: [carbon.pack]
+    applies_to: [ai_pack]
+    solution: Keep pack.yaml id carbon and version 4.
+    source: O1-ONBOARDING-SPEC pack rank 1
+  - id: CARBON-PACK-COR-01
+    title: Carbon pack principles are P-01 through P-12
+    dimension: correct
+    rank: 1
+    collector: repo
+    probe:
+      type: file_contains
+      file: domain_packs/carbon/assurance/principles.yaml
+      texts: [P-01, P-02, P-03, P-04, P-05, P-06, P-07, P-08, P-09, P-10, P-11, P-12]
+      subjects: [carbon.pack]
+    applies_to: [ai_pack]
+    solution: Keep the twelve principles in the pack.
+    source: O1-ONBOARDING-SPEC pack rank 1
+  - id: CARBON-PACK-REL-01
+    title: Carbon pack subject has an owner
+    dimension: reliable
+    rank: 1
+    collector: repo
+    probe:
+      type: field_nonempty
+      field: owner
+      subjects: [carbon.pack]
+    applies_to: [ai_pack]
+    solution: Keep owner on carbon.pack.
+    source: O1-ONBOARDING-SPEC pack rank 1
+  - id: CARBON-PACK-MNT-01
+    title: Carbon pack paths exist
+    dimension: maintainable
+    rank: 1
+    collector: repo
+    probe:
+      type: paths_exist
+      field: paths
+      subjects: [carbon.pack]
+    applies_to: [ai_pack]
+    solution: Keep pack paths that exist in the tree.
+    source: O1-ONBOARDING-SPEC pack rank 1
+  - id: CARBON-PACK-OBS-01
+    title: Carbon pack does not block release
+    dimension: observed
+    rank: 1
+    collector: repo
+    probe:
+      type: file_contains
+      file: domain_packs/carbon/assurance/pack.yaml
+      texts: ["blocks_release: []"]
+      subjects: [carbon.pack]
+    applies_to: [ai_pack]
+    solution: Do not add a planned rule to blocks_release.
+    source: O1-ONBOARDING-SPEC pack rank 1
+  - id: CARBON-UI-COR-01
+    title: Carbon app manifest exists
+    dimension: correct
+    rank: 1
+    collector: repo
+    probe:
+      type: file_exists
+      file: carbon-frontend/src/apps/carbon/manifest.js
+      subjects: [carbon.ui]
+    applies_to: [journey]
+    solution: Keep the Carbon app manifest. Do not treat this as a test tree.
+    source: O1-ONBOARDING-SPEC pack rank 1
+
+  # Pack rank 2 — subject-scoped. Reads CARBON-PACK-SPEC.md. Does not run pack_contract.
+  - id: CARBON-PACK-COR-02
+    title: Pack spec has a test plan
+    dimension: correct
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: docs/carbon/CARBON-PACK-SPEC.md
+      text: "## Test plan"
+      subjects: [carbon.pack]
+    applies_to: [ai_pack]
+    solution: Keep the Test plan section. Do not claim the gate ran.
+    source: docs/carbon/CARBON-PACK-SPEC.md
+  - id: CARBON-PACK-SEC-02
+    title: Pack spec lists capabilities and roles
+    dimension: secure
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: docs/carbon/CARBON-PACK-SPEC.md
+      text: "## Capabilities and roles"
+      subjects: [carbon.pack]
+    applies_to: [ai_pack]
+    solution: Keep Chat reads and confirmation on non-GET tools.
+    source: docs/carbon/CARBON-PACK-SPEC.md
+  - id: CARBON-PACK-REL-02
+    title: Pack spec lists failure modes
+    dimension: reliable
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: docs/carbon/CARBON-PACK-SPEC.md
+      text: "## Failure modes"
+      subjects: [carbon.pack]
+    applies_to: [ai_pack]
+    solution: Keep the failure-mode table.
+    source: docs/carbon/CARBON-PACK-SPEC.md
+  - id: CARBON-PACK-PRF-02
+    title: Pack spec states the budget
+    dimension: performant
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: docs/carbon/CARBON-PACK-SPEC.md
+      text: "## Budget"
+      subjects: [carbon.pack]
+    applies_to: [ai_pack]
+    solution: Keep version 4 and no invented latency.
+    source: docs/carbon/CARBON-PACK-SPEC.md
+  - id: CARBON-PACK-USE-02
+    title: Pack staff surface has a screen spec
+    dimension: usable
+    rank: 2
+    collector: repo
+    probe:
+      type: file_exists
+      file: docs/carbon/SCREEN-SPEC-O1-ONBOARDING.md
+      subjects: [carbon.pack]
+    applies_to: [ai_pack]
+    solution: Keep the O1 screen spec. Do not add a second onboarding page.
+    source: docs/carbon/SCREEN-SPEC-O1-ONBOARDING.md
+  - id: CARBON-PACK-MNT-02
+    title: Pack module boundary is declared
+    dimension: maintainable
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: docs/carbon/CARBON-PACK-SPEC.md
+      text: "## Module boundary"
+      subjects: [carbon.pack]
+    applies_to: [ai_pack]
+    solution: Keep domain words in the pack.
+    source: docs/carbon/CARBON-PACK-SPEC.md
+  - id: CARBON-PACK-OBS-02
+    title: Pack signal threshold is defined
+    dimension: observed
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: docs/carbon/CARBON-PACK-SPEC.md
+      text: "## Signal threshold"
+      subjects: [carbon.pack]
+    applies_to: [ai_pack]
+    solution: Keep version 4 and empty blocks_release as the signal.
+    source: docs/carbon/CARBON-PACK-SPEC.md
+
+  # Carbon UI shell rank 2 — subject-scoped. Does not grade every Carbon page.
+  - id: CARBON-UI-SPC-02
+    title: Carbon shell spec is present
+    dimension: specified
+    rank: 2
+    collector: repo
+    probe:
+      type: file_exists
+      file: docs/carbon/CARBON-UI-SHELL-SPEC.md
+      subjects: [carbon.ui]
+    applies_to: [journey]
+    solution: Keep the shell spec. Do not treat it as the onboarding screen spec.
+    source: docs/carbon/CARBON-UI-SHELL-SPEC.md
+  - id: CARBON-UI-COR-02
+    title: Shell spec has a test plan
+    dimension: correct
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: docs/carbon/CARBON-UI-SHELL-SPEC.md
+      text: "## Test plan"
+      subjects: [carbon.ui]
+    applies_to: [journey]
+    solution: Keep the statement that apps/carbon has no test file.
+    source: docs/carbon/CARBON-UI-SHELL-SPEC.md
+  - id: CARBON-UI-SEC-02
+    title: Shell spec lists capabilities and roles
+    dimension: secure
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: docs/carbon/CARBON-UI-SHELL-SPEC.md
+      text: "## Capabilities and roles"
+      subjects: [carbon.ui]
+    applies_to: [journey]
+    solution: Keep role * on Inventory onboarding.
+    source: docs/carbon/CARBON-UI-SHELL-SPEC.md
+  - id: CARBON-UI-REL-02
+    title: Shell spec lists failure modes
+    dimension: reliable
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: docs/carbon/CARBON-UI-SHELL-SPEC.md
+      text: "## Failure modes"
+      subjects: [carbon.ui]
+    applies_to: [journey]
+    solution: Keep the brand-hide and hex-seed rows.
+    source: docs/carbon/CARBON-UI-SHELL-SPEC.md
+  - id: CARBON-UI-PRF-02
+    title: Shell spec states the budget
+    dimension: performant
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: docs/carbon/CARBON-UI-SHELL-SPEC.md
+      text: "## Budget"
+      subjects: [carbon.ui]
+    applies_to: [journey]
+    solution: Do not treat manifest version 1.0.0 as a latency budget.
+    source: docs/carbon/CARBON-UI-SHELL-SPEC.md
+  - id: CARBON-UI-USE-02
+    title: Shell spec names the onboarding path
+    dimension: usable
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: docs/carbon/CARBON-UI-SHELL-SPEC.md
+      texts: ["/carbon/onboarding", "Inventory onboarding"]
+      subjects: [carbon.ui]
+    applies_to: [journey]
+    solution: Keep the onboarding nav row.
+    source: docs/carbon/CARBON-UI-SHELL-SPEC.md
+  - id: CARBON-UI-MNT-02
+    title: Shell module boundary is declared
+    dimension: maintainable
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: docs/carbon/CARBON-UI-SHELL-SPEC.md
+      text: "## Module boundary"
+      subjects: [carbon.ui]
+    applies_to: [journey]
+    solution: Keep people and the engine out of this subject.
+    source: docs/carbon/CARBON-UI-SHELL-SPEC.md
+  - id: CARBON-UI-OBS-02
+    title: Shell signal threshold is defined
+    dimension: observed
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: docs/carbon/CARBON-UI-SHELL-SPEC.md
+      text: "## Signal threshold"
+      subjects: [carbon.ui]
+    applies_to: [journey]
+    solution: Keep the manifest path as the signal.
+    source: docs/carbon/CARBON-UI-SHELL-SPEC.md
+  - id: CARBON-UI-GOV-02
+    title: Shell ADR is linked on the subject
+    dimension: governed
+    rank: 2
+    collector: repo
+    probe:
+      type: paths_exist
+      field: adr
+      subjects: [carbon.ui]
+    applies_to: [journey]
+    solution: Keep ADR-0016 on carbon.ui.
+    source: ADR-0016
+
   # O1 onboarding — subject-scoped. Do not inherit onto carbon.ui.
+  - id: CARBON-ONB-COR-01
+    title: Onboarding test location is declared
+    dimension: correct
+    rank: 1
+    collector: repo
+    probe:
+      type: tests_present
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: Keep tests pointed at the O1 evaluator, the contract test, and OnboardingPage.test.jsx.
+    source: assurance/standard/standard.yaml correct.1
+  - id: CARBON-ONB-COR-02
+    title: Onboarding spec has a test plan
+    dimension: correct
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: docs/carbon/O1-ONBOARDING-SPEC.md
+      text: "## Test plan"
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: Keep the Test plan section, with the four named suites.
+    source: assurance/standard/standard.yaml correct.2
+  - id: CARBON-ONB-SEC-02
+    title: Onboarding spec lists capabilities and roles
+    dimension: secure
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: docs/carbon/O1-ONBOARDING-SPEC.md
+      text: "## Capabilities and roles"
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: Keep the Capabilities and roles section.
+    source: assurance/standard/standard.yaml secure.2
+  - id: CARBON-ONB-REL-02
+    title: Onboarding spec lists failure modes
+    dimension: reliable
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: docs/carbon/O1-ONBOARDING-SPEC.md
+      text: "## Failure modes"
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: Keep the Failure modes table, including two open periods.
+    source: assurance/standard/standard.yaml reliable.2
+  - id: CARBON-ONB-PRF-02
+    title: Onboarding spec states the budget
+    dimension: performant
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: docs/carbon/O1-ONBOARDING-SPEC.md
+      text: "## Budget"
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: Keep the Budget section. Do not invent a latency number.
+    source: assurance/standard/standard.yaml performant.2
+  - id: CARBON-ONB-USE-02
+    title: Onboarding screen spec is present
+    dimension: usable
+    rank: 2
+    collector: repo
+    probe:
+      type: file_exists
+      file: docs/carbon/SCREEN-SPEC-O1-ONBOARDING.md
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: Keep docs/carbon/SCREEN-SPEC-O1-ONBOARDING.md.
+    source: assurance/standard/standard.yaml usable.2
+  - id: CARBON-ONB-MNT-02
+    title: Onboarding module boundary is declared
+    dimension: maintainable
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: docs/carbon/O1-ONBOARDING-SPEC.md
+      text: "## Module boundary"
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: Keep the Module boundary section.
+    source: assurance/standard/standard.yaml maintainable.2
+  - id: CARBON-ONB-OBS-02
+    title: Onboarding signal threshold is defined
+    dimension: observed
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: docs/carbon/O1-ONBOARDING-SPEC.md
+      text: "## Signal threshold"
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: Keep the Signal threshold section.
+    source: assurance/standard/standard.yaml observed.2
+  - id: CARBON-ONB-GOV-03
+    title: Onboarding ADR is linked on the subject
+    dimension: governed
+    rank: 2
+    collector: repo
+    probe:
+      type: paths_exist
+      field: adr
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: Keep ADR-0020 under adr on carbon.journey.onboarding.
+    source: assurance/standard/standard.yaml governed.2
+  - id: CARBON-ONB-SPC-10
+    title: Evaluator test cites O1-COR-EVAL
+    dimension: specified
+    rank: 3
+    collector: repo
+    probe:
+      type: def_contains
+      file: backend/emissions/tests/test_onboarding_o1.py
+      def: test_two_open_periods_fail_closed
+      texts: [O1-COR-EVAL, "open_period_count", "summary_kg"]
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: Keep the O1-COR-EVAL citation in test_two_open_periods_fail_closed.
+    source: assurance/standard/standard.yaml specified.3
+  - id: CARBON-ONB-SEC-03
+    title: Nibras is refused the onboarding GET
+    dimension: secure
+    rank: 3
+    collector: repo
+    probe:
+      type: def_contains
+      file: backend/emissions/tests/test_onboarding_api.py
+      def: test_nibras_brand_is_forbidden
+      texts: [O1-SEC-BRAND, "assert resp.status_code == 403", "nibras"]
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: Keep the 403 test for DJANGO_BRAND nibras. Do not grant carbon on Nibras.
+    source: assurance/standard/standard.yaml secure.3
+  - id: CARBON-ONB-REL-03
+    title: A failed checklist load can be retried
+    dimension: reliable
+    rank: 3
+    collector: repo
+    probe:
+      type: file_contains
+      file: carbon-frontend/src/pages/carbon/__tests__/OnboardingPage.test.jsx
+      texts: [O1-REL-RETRY, "Retry", "checklist unavailable"]
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: Keep the Retry assertion. Do not add an automatic retry timer.
+    source: assurance/standard/standard.yaml reliable.3
+  - id: CARBON-ONB-PRF-03
+    title: Two open periods stop the rest of the checklist
+    dimension: performant
+    rank: 3
+    collector: repo
+    probe:
+      type: def_contains
+      file: backend/emissions/tests/test_onboarding_o1.py
+      def: test_two_open_periods_ignores_factors_and_summary_kg
+      texts: [O1-PRF-STOP, "factor_met", "summary_kg"]
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: Keep the early-stop assertions. Do not invent a latency number.
+    source: assurance/standard/standard.yaml performant.3
+  - id: CARBON-ONB-MNT-03
+    title: Onboarding evaluator does not import people or the engine
+    dimension: maintainable
+    rank: 3
+    collector: repo
+    probe:
+      type: def_contains
+      file: backend/emissions/tests/test_onboarding_o1.py
+      def: test_onboarding_o1_module_does_not_import_people_or_engine
+      texts: [O1-MNT-BOUND, "from people", "from ai.engine"]
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: Keep the import-boundary test on onboarding_o1.py only.
+    source: assurance/standard/standard.yaml maintainable.3
+  - id: CARBON-ONB-OBS-03
+    title: Checklist shape is asserted
+    dimension: observed
+    rank: 3
+    collector: repo
+    probe:
+      type: def_contains
+      file: backend/emissions/tests/test_onboarding_o1.py
+      def: test_zero_open_periods_is_only_a_count
+      texts: [O1-OBS-SHAPE, "result[\"benchmark\"]", "writes"]
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: Keep benchmark O1 and writes false on the empty-period result.
+    source: assurance/standard/standard.yaml observed.3
+  - id: CARBON-ONB-GOV-04
+    title: Contract test cites O1-GOV-CONTRACT
+    dimension: governed
+    rank: 3
+    collector: repo
+    probe:
+      type: def_contains
+      file: backend/emissions/tests/test_onboarding_contract.py
+      def: test_rules_load_and_do_not_block_release
+      texts: [O1-GOV-CONTRACT, "blocks_release", "planned"]
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: Keep the O1-GOV-CONTRACT citation next to planned and blocks_release.
+    source: assurance/standard/standard.yaml governed.3
   - id: CARBON-ONB-SPC-02
     title: Twelve onboarding principles are declared
     dimension: specified
@@ -117,6 +626,58 @@ checks:
     applies_to: [journey]
     solution: Keep the open leaf on Smart Village electricity and diesel.
     source: O1-smart-village.yaml
+  - id: CARBON-ONB-SPC-06
+    title: A failed open-period count names each period
+    dimension: specified
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: domain_packs/carbon/assurance/rules/CR-PER-01.yaml
+      texts: [when_count_is_not_one, open_period_count, start_date, end_date, period_type]
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: Keep the period identity fields on the count-not-one failure. Do not store kilograms there.
+    source: CR-PER-01
+  - id: CARBON-ONB-SPC-07
+    title: Other campuses have one check code each
+    dimension: specified
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: domain_packs/carbon/assurance/rules/CR-EXC-01.yaml
+      texts: [other_campus_absent, other_campus_declared, other_campus_excluded, other_campus_not_material, other_campus_covered, South Valley, Abu Qir, Alamein]
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: Keep one code per campus outcome. Declared and insufficient_data are met. not_material and covered are not.
+    source: CR-EXC-01
+  - id: CARBON-ONB-SPC-08
+    title: O1 factor checks name the row and omit the factor number
+    dimension: specified
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: domain_packs/carbon/assurance/rules/CR-FAC-01.yaml
+      texts: [factor_missing, factor_met, factor_country, EGY, kWh, litre, factor_value]
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: Keep EGY or blank, and keep factor_value off the checklist payload.
+    source: CR-FAC-01
+  - id: CARBON-ONB-SPC-09
+    title: Coverage goal checks omit the percent
+    dimension: specified
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: domain_packs/carbon/assurance/rules/CR-COV-01.yaml
+      texts: [coverage_goal_absent, coverage_goal_met, materiality_bounded, target_coverage_pct]
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: Report scope 1+2, tier 4, and draft. Do not copy the percent into the checklist.
+    source: CR-COV-01
   - id: CARBON-ONB-SPC-05
     title: O1 locks units, tier 4, and the diesel stream
     dimension: specified
@@ -138,7 +699,7 @@ checks:
     probe:
       type: file_contains
       file: backend/emissions/onboarding_o1.py
-      texts: ["def evaluate_o1", diesel_stream_both, summary_kg, not_assured]
+      texts: ["def evaluate_o1", diesel_stream_both, summary_kg, not_assured, other_campus_declared, "periods=period_snapshots"]
       subjects: [carbon.journey.onboarding]
     applies_to: [journey]
     solution: Keep evaluate_o1 as the only checklist. The page renders its codes.
@@ -194,6 +755,120 @@ checks:
     applies_to: [journey]
     solution: Keep the contract test asserting the rule ids and O1.
     source: test_onboarding_contract.py
+  - id: CARBON-ONB-SPC-11
+    title: Onboarding criterion suites are green on HEAD
+    dimension: specified
+    rank: 4
+    collector: pytest
+    probe:
+      type: pytest_app
+      app: onboarding-criteria
+      nodes:
+        - emissions/tests/test_onboarding_o1.py
+        - emissions/tests/test_onboarding_contract.py
+        - emissions/tests/test_onboarding_api.py
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: "python -m excellence.gauge --run pytest:onboarding-criteria"
+    source: assurance/standard/standard.yaml specified.4
+  - id: CARBON-ONB-SEC-04
+    title: Brand-forbidden tests are green on HEAD
+    dimension: secure
+    rank: 4
+    collector: pytest
+    probe:
+      type: pytest_app
+      app: onboarding-secure
+      nodes:
+        - emissions/tests/test_onboarding_api.py::OnboardingO1APITests::test_nibras_brand_is_forbidden
+        - emissions/tests/test_onboarding_api.py::OnboardingO1APITests::test_unauthenticated_is_unauthorized
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: "python -m excellence.gauge --run pytest:onboarding-secure"
+    source: assurance/standard/standard.yaml secure.4
+  - id: CARBON-ONB-REL-04
+    title: Evaluator idempotency is green on HEAD
+    dimension: reliable
+    rank: 4
+    collector: pytest
+    probe:
+      type: pytest_app
+      app: onboarding-reliable
+      nodes:
+        - emissions/tests/test_onboarding_o1.py::EvaluateO1Tests::test_evaluate_o1_is_idempotent
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: "python -m excellence.gauge --run pytest:onboarding-reliable"
+    source: assurance/standard/standard.yaml reliable.4
+  - id: CARBON-ONB-PRF-04
+    title: Early-stop test is green on HEAD
+    dimension: performant
+    rank: 4
+    collector: pytest
+    probe:
+      type: pytest_app
+      app: onboarding-performant
+      nodes:
+        - emissions/tests/test_onboarding_o1.py::EvaluateO1Tests::test_two_open_periods_ignores_factors_and_summary_kg
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: "python -m excellence.gauge --run pytest:onboarding-performant"
+    source: assurance/standard/standard.yaml performant.4
+  - id: CARBON-ONB-USE-04
+    title: Onboarding page vitest is green on HEAD
+    dimension: usable
+    rank: 4
+    collector: vitest
+    probe:
+      type: vitest_file
+      file: src/pages/carbon/__tests__/OnboardingPage.test.jsx
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: "python -m excellence.gauge --run vitest:src/pages/carbon/__tests__/OnboardingPage.test.jsx"
+    source: assurance/standard/standard.yaml usable.4
+  - id: CARBON-ONB-MNT-04
+    title: Import-boundary test is green on HEAD
+    dimension: maintainable
+    rank: 4
+    collector: pytest
+    probe:
+      type: pytest_app
+      app: onboarding-maintainable
+      nodes:
+        - emissions/tests/test_onboarding_o1.py::EvaluateO1Tests::test_onboarding_o1_module_does_not_import_people_or_engine
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: "python -m excellence.gauge --run pytest:onboarding-maintainable"
+    source: assurance/standard/standard.yaml maintainable.4
+  - id: CARBON-ONB-OBS-04
+    title: Checklist-shape tests are green on HEAD
+    dimension: observed
+    rank: 4
+    collector: pytest
+    probe:
+      type: pytest_app
+      app: onboarding-observed
+      nodes:
+        - emissions/tests/test_onboarding_o1.py::EvaluateO1Tests::test_zero_open_periods_is_only_a_count
+        - emissions/tests/test_onboarding_api.py::OnboardingO1APITests::test_aastmt_authenticated_is_read_only
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: "python -m excellence.gauge --run pytest:onboarding-observed"
+    source: assurance/standard/standard.yaml observed.4
+  - id: CARBON-ONB-GOV-05
+    title: Contract suite is green on HEAD
+    dimension: governed
+    rank: 4
+    collector: pytest
+    probe:
+      type: pytest_app
+      app: onboarding-governed
+      nodes:
+        - emissions/tests/test_onboarding_contract.py
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: "python -m excellence.gauge --run pytest:onboarding-governed"
+    source: assurance/standard/standard.yaml governed.4
   - id: CARBON-ONB-OBS-05
     title: O1 live period evidence is recorded
     dimension: observed

@@ -6,7 +6,7 @@ from ai.engine.host_ids import (
     ID_LOAN_TYPE,
     ID_PERMISSION_TYPE,
 )
-from ai.engine.pack_vocab import LV, V
+from ai.engine.pack_vocab import LV, V, same_id
 
 
 LEAVE_INTENT_AR = (
@@ -37,19 +37,28 @@ ESS_TOPIC_AR = (
 )
 ESS_WRITE_VERB_AR = ("أريد", "اريد", "أبغى", "ابغى", "اطلب", "أطلب", "تقديم", "قدّم", "قدm")
 
-FIELD_LABELS = {
-    ID_LEAVE_TYPE: (LV("t_leave_type_2"), LV("t_rx_copy_field_leave_ar")),
-    "start_date": ("Start date", "تاريخ البداية"),
-    "end_date": ("End date", "تاريخ النهاية"),
-    "days": ("Days", "الأيام"),
-    "reason": ("Reason", "السبب"),
-    ID_LOAN_TYPE: (LV("t_loan_type"), LV("t_rx_copy_field_loan_ar")),
-    "principal": ("Principal", "المبلغ"),
-    "term_months": ("Term (months)", "المدة (أشهر)"),
-    "interest_rate": ("Interest rate", "الفائدة"),
-    ID_PERMISSION_TYPE: (LV("t_rx_copy_field_perm_en"), LV("t_rx_copy_field_perm_ar")),
-    "hours": ("Hours", "الساعات"),
-}
+_FIELD_ROWS = (
+    (ID_LEAVE_TYPE, (LV("t_leave_type_2"), LV("t_rx_copy_field_leave_ar"))),
+    ("start_date", ("Start date", "تاريخ البداية")),
+    ("end_date", ("End date", "تاريخ النهاية")),
+    ("days", ("Days", "الأيام")),
+    ("reason", ("Reason", "السبب")),
+    (ID_LOAN_TYPE, (LV("t_loan_type"), LV("t_rx_copy_field_loan_ar"))),
+    ("principal", ("Principal", "المبلغ")),
+    ("term_months", ("Term (months)", "المدة (أشهر)")),
+    ("interest_rate", ("Interest rate", "الفائدة")),
+    (ID_PERMISSION_TYPE, (LV("t_rx_copy_field_perm_en"), LV("t_rx_copy_field_perm_ar"))),
+    ("hours", ("Hours", "الساعات")),
+)
+
+
+def field_labels_for(key: str) -> tuple[str, str]:
+    """Label pair for a slot. An empty pack id does not match a field name."""
+    for name, pair in _FIELD_ROWS:
+        if same_id(key, name):
+            return pair
+    shown = str(key).replace("_", " ")
+    return (shown, shown)
 
 
 def any_needle(text: str, needles: tuple[str, ...]) -> bool:

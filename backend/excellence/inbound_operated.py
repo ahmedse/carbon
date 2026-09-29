@@ -133,6 +133,12 @@ def _ci_node(check: Check, subject: Subject, ctx: dict[str, Any]) -> EventDraft:
             check, subject, "failed", _EVIDENCE, source=workflow,
             detail={"why": f"pytest ignores {banned}"},
         )
+    selected = _pytest_selector(script)
+    if selected:
+        return _draft(
+            check, subject, "failed", _EVIDENCE, source=workflow,
+            detail={"why": selected},
+        )
     missing_nodes = [node for node in (probe.get("nodes") or []) if not _node_present(str(node))]
     if missing_nodes:
         return _draft(
@@ -161,6 +167,8 @@ def _scheduled(check: Check, subject: Subject, ctx: dict[str, Any]) -> EventDraf
     workflow = str(probe.get("workflow") or "")
     if not _abs(workflow).is_file():
         return _unknown(check, subject, f"missing {workflow}")
+    if probe.get("window", "none") != "none":
+        return _unknown(check, subject, "age window is not implemented")
     runs = _gh_runs(ctx, workflow)
     if runs is None:
         return _unknown(check, subject, "gh run list failed")
@@ -501,6 +509,26 @@ def _step_run(path: Path, step_name: str) -> str | None:
 
 def _ignores(script: str, token: str) -> bool:
     return "--ignore" in script and token in script
+
+
+_SELECTOR_FLAGS = frozenset({"-k", "--keyword", "-m", "--markers", "--deselect"})
+
+
+def _pytest_selector(script: str) -> str | None:
+    """A subset selection. ``--tb``, ``-x``, ``-q``, and a pipe to tail are not one."""
+    marker = "python -m pytest"
+    start = script.find(marker)
+    if start < 0:
+        return None
+    line = script[start:].splitlines()[0].split("|", 1)[0]
+    tokens = line.replace("2>&1", " ").split()[3:]
+    for token in tokens:
+        bare = token.split("=", 1)[0]
+        if bare in _SELECTOR_FLAGS:
+            return f"pytest selects a subset ({bare})"
+        if not token.startswith("-"):
+            return f"pytest selects a path ({token})"
+    return None
 
 
 def _node_present(node: str) -> bool:

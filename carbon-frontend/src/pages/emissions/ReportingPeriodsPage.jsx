@@ -269,6 +269,9 @@ export default function ReportingPeriodsPage() {
       .filter(Boolean);
   };
 
+  const openPeriods = periods.filter((p) => p.status === 'open');
+  const showTooManyOpenAlert = !loading && openPeriods.length > 1;
+
   // ── Render ────────────────────────────────────────────────────────────
 
   return (
@@ -305,6 +308,32 @@ export default function ReportingPeriodsPage() {
           </Button>
         </Stack>
       </Stack>
+
+      {showTooManyOpenAlert && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          <Typography component="div" variant="body2">
+            {t('tooManyOpenPeriods')}
+          </Typography>
+          <Typography component="div" variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            {t('tooManyOpenPeriodsHint')}
+          </Typography>
+          <Box component="ul" sx={{ mt: 1, mb: 0, pl: 2.5 }}>
+            {openPeriods.map((period) => (
+              <Box component="li" key={period.id} sx={{ mb: 0.5 }}>
+                <Typography variant="body2" component="span">
+                  {period.name}
+                  {period.start_date && period.end_date && (
+                    <>
+                      {' '}
+                      ({period.start_date} to {period.end_date})
+                    </>
+                  )}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+        </Alert>
+      )}
 
       <Paper sx={{ overflow: 'auto' }}>
         <TableContainer>

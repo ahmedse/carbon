@@ -1,4 +1,5 @@
 # Identifiers this pack catalogs. A turn bound here does not receive another pack's names.
 t_rx_id_list_my_capabilities: list_my_capabilities
 t_rx_id_get_calculation_summary: get_calculation_summary
+t_rx_copy_intent_branch_metrics: "- When the user names a specific branch / campus / module (e.g. \"East Campus\", \"Building 4\", \"Module B\") and asks about its activity / totals / metrics, that is the calculation-summary endpoint (it breaks down totals by module): action = \"answer\" with `endpoint` set to it and delivery = \"analyze\" or \"summarize\" — do NOT clarify just because a branch name is present."
 t_rx_id_list_org_units: list_org_units

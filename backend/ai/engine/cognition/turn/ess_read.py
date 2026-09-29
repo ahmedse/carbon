@@ -386,6 +386,12 @@ def should_skip_module_nav(text: str | None) -> bool:
     t = _norm(text or "")
     if not t or is_bare_place_noun(t):
         return False
+    # A governed-process explanation names a subject inside the process id.
+    # That is a briefing, not a request for the caller's own records.
+    from ai.engine.cognition.turn.process_brief import is_process_briefing
+
+    if is_process_briefing(text or ""):
+        return False
     if preferred_self_api(t) is not None:
         return True
     # Single-domain topic read even when preferred is None ( FAQ).

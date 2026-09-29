@@ -1,7 +1,9 @@
 """O1 evaluator. No database. Kilograms come only from the summary argument."""
 from __future__ import annotations
 
+import json
 import unittest
+from pathlib import Path
 
 from emissions.onboarding_o1 import evaluate_o1
 
@@ -20,18 +22,31 @@ def _period(**extra):
     return row
 
 
+def _boundary():
+    return {"id": 3, "name": "AASTMT operational", "consolidation_approach": "operational_control"}
+
+
+def _both_o1_sources():
+    return [
+        {"id": 1, "source_name": "Smart Village electricity", "scope": 2, "description": ""},
+        {"id": 2, "source_name": "Smart Village diesel", "scope": 1, "description": "Campus generators"},
+    ]
+
+
 class EvaluateO1Tests(unittest.TestCase):
     def test_zero_open_periods_is_only_a_count(self):
+        # O1-OBS-SHAPE
         result = evaluate_o1(periods=[], boundaries=[], sources=[], statuses=[], summary=None)
         self.assertEqual(result["benchmark"], "O1")
         self.assertEqual(result["benchmark_status"], "open")
         self.assertIsNone(result["open_period_id"])
         self.assertFalse(result["writes"])
         self.assertEqual(result["checks"], [
-            {"id": "CR-PER-01", "code": "open_period_count", "met": False, "count": 0},
+            {"id": "CR-PER-01", "code": "open_period_count", "met": False, "count": 0, "periods": []},
         ])
 
     def test_two_open_periods_fail_closed(self):
+        # O1-COR-EVAL
         result = evaluate_o1(
             periods=[_period(), _period(id=8, name="Other")],
             boundaries=[], sources=[], statuses=[], summary={"total_calculations": 9, "by_scope": {"2": {"total_co2e_kg": 1500}}},
@@ -39,6 +54,25 @@ class EvaluateO1Tests(unittest.TestCase):
         self.assertIsNone(result["open_period_id"])
         self.assertEqual(result["checks"][0]["code"], "open_period_count")
         self.assertEqual(result["checks"][0]["count"], 2)
+        self.assertEqual(result["checks"][0]["periods"], [
+            {
+                "id": 7,
+                "name": "AY 2026",
+                "period_type": "annual",
+                "start_date": "2026-01-01",
+                "end_date": "2026-12-31",
+                "status": "open",
+            },
+            {
+                "id": 8,
+                "name": "Other",
+                "period_type": "annual",
+                "start_date": "2026-01-01",
+                "end_date": "2026-12-31",
+                "status": "open",
+            },
+        ])
+        self.assertEqual(len(result["checks"]), 1)
         self.assertFalse(any(row["code"] == "summary_kg" for row in result["checks"]))
 
     def test_missing_sources_and_no_kilograms(self):
@@ -92,6 +126,75 @@ class EvaluateO1Tests(unittest.TestCase):
         self.assertTrue(any(row["code"] == "source_covered_invalid" for row in result["checks"]))
         self.assertTrue(any(row["code"] == "diesel_stream_met" and row["stream"] == "generators" for row in result["checks"]))
 
+    def test_other_campus_declared_excluded_and_not_material(self):
+        result = evaluate_o1(
+            periods=[_period()],
+            boundaries=[{"id": 3, "name": "AASTMT operational", "consolidation_approach": "operational_control"}],
+            sources=[
+                {"id": 10, "source_name": "South Valley electricity", "scope": 2, "description": ""},
+                {"id": 11, "source_name": "Abu Qir diesel", "scope": 1, "description": "generators"},
+                {"id": 12, "source_name": "Alamein electricity", "scope": 2, "description": ""},
+            ],
+            statuses=[
+                {"source_id": 10, "reporting_period_id": 7, "status": "declared"},
+                {
+                    "source_id": 11, "reporting_period_id": 7, "status": "excluded",
+                    "exclusion_reason": "insufficient_data",
+                },
+                {
+                    "source_id": 12, "reporting_period_id": 7, "status": "excluded",
+                    "exclusion_reason": "not_material",
+                },
+            ],
+            summary={"total_calculations": 0, "by_scope": {}},
+        )
+        by_code = {(row["code"], row.get("name")): row for row in result["checks"]}
+        self.assertTrue(by_code[("other_campus_declared", "South Valley")]["met"])
+        self.assertTrue(by_code[("other_campus_excluded", "Abu Qir")]["met"])
+        self.assertEqual(by_code[("other_campus_excluded", "Abu Qir")]["reason"], "insufficient_data")
+        self.assertFalse(by_code[("other_campus_not_material", "Alamein")]["met"])
+
+    def test_declared_with_an_exclusion_reason_is_not_met(self):
+        result = evaluate_o1(
+            periods=[_period()],
+            boundaries=[{"id": 3, "name": "AASTMT operational", "consolidation_approach": "operational_control"}],
+            sources=[{"id": 10, "source_name": "South Valley electricity", "scope": 2, "description": ""}],
+            statuses=[{
+                "source_id": 10, "reporting_period_id": 7, "status": "declared",
+                "exclusion_reason": "insufficient_data",
+            }],
+            summary=None,
+        )
+        south = next(row for row in result["checks"] if row.get("name") == "South Valley")
+        self.assertEqual(south["code"], "other_campus_no_status")
+        self.assertFalse(south["met"])
+        self.assertFalse(any(row["code"] == "summary_kg" for row in result["checks"]))
+
+    def test_other_campus_excluded_other_without_notes(self):
+        result = evaluate_o1(
+            periods=[_period()],
+            boundaries=[{"id": 3, "name": "AASTMT operational", "consolidation_approach": "operational_control"}],
+            sources=[
+                {"id": 10, "source_name": "South Valley electricity", "scope": 2, "description": ""},
+            ],
+            statuses=[
+                {
+                    "source_id": 10, "reporting_period_id": 7, "status": "excluded",
+                    "exclusion_reason": "other", "notes": "",
+                },
+            ],
+            summary={"total_calculations": 0, "by_scope": {}},
+        )
+        campus = [row for row in result["checks"] if row["code"].startswith("other_campus")]
+        self.assertEqual(len(campus), 3)
+        south = next(row for row in campus if row["name"] == "South Valley")
+        self.assertEqual(south["code"], "other_campus_excluded_notes")
+        self.assertFalse(south["met"])
+        abu = next(row for row in campus if row["name"] == "Abu Qir")
+        self.assertEqual(abu["code"], "other_campus_absent")
+        alamein = next(row for row in campus if row["name"] == "Alamein")
+        self.assertEqual(alamein["code"], "other_campus_absent")
+
     def test_covered_with_links_is_met(self):
         result = evaluate_o1(
             periods=[_period()],
@@ -104,3 +207,224 @@ class EvaluateO1Tests(unittest.TestCase):
         self.assertTrue(covered["met"])
         self.assertTrue(any(row["code"] == "not_assured" for row in result["checks"]))
         self.assertFalse(any(row["code"] == "summary_kg" for row in result["checks"]))
+
+    def test_factors_empty_both_missing_no_factor_value_key(self):
+        result = evaluate_o1(
+            periods=[_period()],
+            boundaries=[_boundary()],
+            sources=_both_o1_sources(),
+            statuses=[],
+            summary={"total_calculations": 0, "by_scope": {}},
+            factors=[],
+            goals=[],
+        )
+        missing = [row for row in result["checks"] if row["code"] == "factor_missing"]
+        self.assertEqual(len(missing), 2)
+        self.assertEqual(missing[0]["id"], "CR-FAC-01")
+        self.assertEqual(missing[0]["name"], "Smart Village electricity")
+        self.assertEqual(missing[0]["scope"], 2)
+        self.assertEqual(missing[0]["unit"], "kWh")
+        self.assertEqual(missing[1]["name"], "Smart Village diesel")
+        self.assertEqual(missing[1]["scope"], 1)
+        self.assertEqual(missing[1]["unit"], "litre")
+        blob = json.dumps(result)
+        self.assertNotIn("factor_value", blob)
+
+    def test_electricity_inactive_diesel_still_missing(self):
+        result = evaluate_o1(
+            periods=[_period()],
+            boundaries=[_boundary()],
+            sources=_both_o1_sources(),
+            statuses=[],
+            summary=None,
+            factors=[{
+                "id": 5, "name": "Grid off", "scope": 2, "activity_unit": "kWh",
+                "country_code": "EGY", "source": "EEHC", "is_active": False,
+            }],
+        )
+        inactive = next(row for row in result["checks"] if row["code"] == "factor_inactive")
+        self.assertEqual(inactive["id"], "CR-FAC-01")
+        self.assertEqual(inactive["record_id"], 5)
+        self.assertEqual(inactive["name"], "Grid off")
+        diesel = next(
+            row for row in result["checks"]
+            if row["code"] == "factor_missing" and row["name"] == "Smart Village diesel"
+        )
+        self.assertFalse(diesel["met"])
+
+    def test_electricity_usa_then_egy_met_picks_lowest_eligible(self):
+        result = evaluate_o1(
+            periods=[_period()],
+            boundaries=[_boundary()],
+            sources=_both_o1_sources(),
+            statuses=[],
+            summary=None,
+            factors=[
+                {
+                    "id": 10, "name": "US grid", "scope": 2, "activity_unit": "kWh",
+                    "country_code": "USA", "source": "EPA", "is_active": True,
+                },
+                {
+                    "id": 11, "name": "EEHC Egypt", "scope": 2, "activity_unit": "kWh",
+                    "country_code": "EGY", "source": "EEHC 2024", "is_active": True,
+                },
+            ],
+        )
+        self.assertFalse(any(row["code"] == "factor_country" for row in result["checks"]))
+        met = next(row for row in result["checks"] if row["code"] == "factor_met")
+        self.assertEqual(met["id"], "CR-FAC-01")
+        self.assertEqual(met["record_id"], 11)
+        self.assertEqual(met["name"], "EEHC Egypt")
+        self.assertEqual(met["country_code"], "EGY")
+        self.assertEqual(met["scope"], 2)
+        self.assertEqual(met["unit"], "kWh")
+
+    def test_diesel_liter_blank_source_factor_source_blank(self):
+        result = evaluate_o1(
+            periods=[_period()],
+            boundaries=[_boundary()],
+            sources=_both_o1_sources(),
+            statuses=[],
+            summary=None,
+            factors=[{
+                "id": 20, "name": "Diesel factor", "scope": 1, "activity_unit": "liter",
+                "country_code": "EGY", "source": "  ", "is_active": True,
+            }],
+        )
+        blank = next(row for row in result["checks"] if row["code"] == "factor_source_blank")
+        self.assertEqual(blank["id"], "CR-FAC-01")
+        self.assertEqual(blank["record_id"], 20)
+        self.assertEqual(blank["name"], "Diesel factor")
+
+    def test_both_sources_goals_empty_coverage_goal_absent(self):
+        result = evaluate_o1(
+            periods=[_period()],
+            boundaries=[_boundary()],
+            sources=_both_o1_sources(),
+            statuses=[],
+            summary=None,
+            factors=[],
+            goals=[],
+        )
+        absent = next(row for row in result["checks"] if row["code"] == "coverage_goal_absent")
+        self.assertFalse(absent["met"])
+        self.assertEqual(absent["id"], "CR-COV-01")
+
+    def test_coverage_goal_completeness_strips_target_coverage_pct(self):
+        result = evaluate_o1(
+            periods=[_period()],
+            boundaries=[_boundary()],
+            sources=_both_o1_sources(),
+            statuses=[],
+            summary=None,
+            goals=[{
+                "id": 1, "name": "Org coverage", "scope": "1+2",
+                "completeness_definition": "absolute", "min_quality_tier": 4,
+                "status": "draft", "target_year": 2026, "target_coverage_pct": 95,
+            }],
+        )
+        row = next(row for row in result["checks"] if row["code"] == "coverage_goal_completeness")
+        self.assertEqual(row["completeness"], "absolute")
+        self.assertNotIn("target_coverage_pct", row)
+        self.assertNotIn("target_coverage_pct", json.dumps(result))
+
+    def test_coverage_goal_met_fields(self):
+        result = evaluate_o1(
+            periods=[_period()],
+            boundaries=[_boundary()],
+            sources=_both_o1_sources(),
+            statuses=[],
+            summary=None,
+            goals=[{
+                "id": 2, "name": "Smart Village goal", "scope": "1+2",
+                "completeness_definition": "materiality_bounded", "min_quality_tier": 4,
+                "status": "draft", "target_year": 2026,
+            }],
+        )
+        met = next(row for row in result["checks"] if row["code"] == "coverage_goal_met")
+        self.assertEqual(met["id"], "CR-COV-01")
+        self.assertEqual(met["record_id"], 2)
+        self.assertEqual(met["scope"], "1+2")
+        self.assertEqual(met["completeness"], "materiality_bounded")
+        self.assertEqual(met["tier"], 4)
+        self.assertEqual(met["status"], "draft")
+        self.assertEqual(met["target_year"], 2026)
+
+    def test_two_open_periods_ignores_factors_and_summary_kg(self):
+        # O1-PRF-STOP
+        result = evaluate_o1(
+            periods=[_period(), _period(id=8, name="Other")],
+            boundaries=[],
+            sources=[],
+            statuses=[],
+            summary={"total_calculations": 9, "by_scope": {"2": {"total_co2e_kg": 1500}}},
+            factors=[{"id": 1, "name": "X", "scope": 2, "activity_unit": "kWh", "country_code": "EGY", "source": "S", "is_active": True}],
+            goals=[{"id": 1, "name": "G", "scope": "1+2", "completeness_definition": "materiality_bounded", "min_quality_tier": 4, "status": "draft", "target_year": 2026}],
+        )
+        self.assertEqual(len(result["checks"]), 1)
+        self.assertEqual(result["checks"][0]["code"], "open_period_count")
+        self.assertFalse(any(row["code"] == "factor_met" for row in result["checks"]))
+        self.assertFalse(any(row["code"] == "summary_kg" for row in result["checks"]))
+
+    def test_evaluate_o1_is_idempotent(self):
+        # O1-REL-HEAD
+        kwargs = {
+            "periods": [_period(), _period(id=8, name="Other")],
+            "boundaries": [],
+            "sources": [],
+            "statuses": [],
+            "summary": {"total_calculations": 9, "by_scope": {"2": {"total_co2e_kg": 1500}}},
+            "factors": [
+                {
+                    "id": 1,
+                    "name": "X",
+                    "scope": 2,
+                    "activity_unit": "kWh",
+                    "country_code": "EGY",
+                    "source": "S",
+                    "is_active": True,
+                }
+            ],
+            "goals": [
+                {
+                    "id": 1,
+                    "name": "G",
+                    "scope": "1+2",
+                    "completeness_definition": "materiality_bounded",
+                    "min_quality_tier": 4,
+                    "status": "draft",
+                    "target_year": 2026,
+                }
+            ],
+        }
+        first = evaluate_o1(**kwargs)
+        second = evaluate_o1(**kwargs)
+        self.assertEqual(first, second)
+        self.assertFalse(first["writes"])
+        self.assertEqual(len(first["checks"]), 1)
+        self.assertEqual(first["checks"][0]["code"], "open_period_count")
+
+    def test_neither_o1_source_no_coverage_goal_absent(self):
+        result = evaluate_o1(
+            periods=[_period()],
+            boundaries=[_boundary()],
+            sources=[{"id": 10, "source_name": "South Valley electricity", "scope": 2, "description": ""}],
+            statuses=[],
+            summary=None,
+            goals=[],
+        )
+        self.assertFalse(any(row["code"] == "coverage_goal_absent" for row in result["checks"]))
+
+    def test_onboarding_o1_module_does_not_import_people_or_engine(self):
+        # O1-MNT-BOUND
+        module_path = Path(__file__).resolve().parent.parent / "onboarding_o1.py"
+        for line in module_path.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            if stripped.startswith("from people"):
+                self.fail(stripped)
+            if "from ai.engine" in stripped:
+                self.fail(stripped)
+            if "import people" in stripped:
+                self.fail(stripped)

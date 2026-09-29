@@ -381,16 +381,6 @@ plan/catalog_args.py::WRITE_HELD:
   kind: str
   value: This step is waiting on a read that did not complete. Edit the plan, or run
     again after that read succeeds.
-plan/export_bind.py::_SELF_GET_NO_PATH:
-  items:
-  - get_my_profile
-  - get_my_leave_balance
-  - list_my_leave
-  - list_my_loans
-  - list_my_payslips
-  - list_my_attendance_permissions
-  - list_attendance
-  kind: frozenset
 plan/loop.py::_ALLOWED_FOLLOWUP_TOOLS:
   items:
   - web_research
@@ -421,13 +411,6 @@ plan/process_dial.py::_COMPOSITE_PARALLEL_PHRASES:
   - simultaneously
   - side by side
   kind: tuple
-plan/process_dial_i18n.py::ATTENDANCE_BRIEF_AR:
-  kind: tuple
-  items:
-  - استئذان
-  - ساعات قصيرة
-  - سجل حضوري الآن
-  - سجل حضورى الان
 plan/process_dial_i18n.py::COMPOSITE_CONDITIONAL_AR:
   items:
   - إذا
@@ -497,40 +480,6 @@ scope_route.py::_ADVISORY_PHRASES:
   - what is
   - tell me about
   kind: tuple
-scope_route.py::_BARE_LEAVE_EN:
-  kind: frozenset
-  items:
-  - time off
-  - time-off
-  - pto
-scope_route.py::_LEAVE_COMPLIANCE_PHRASES:
-  kind: tuple
-  items:
-  - absence rate
-scope_route.py::_LEAVE_PERSONAL_PHRASES:
-  kind: tuple
-  items:
-  - i want time off
-  - i want timeoff
-  - i want pto
-  - i want holiday
-  - i need time off
-  - i need pto
-  - i need holiday
-  - i request time off
-  - i request pto
-  - i request holiday
-  - requesting time off
-  - apply for time off
-  - apply for pto
-  - apply for holiday
-  - take time off
-  - take pto
-  - take holiday
-  - reporting an absence
-  - reporting absence
-  - report an absence
-  - report absence
 scope_route.py::_PLAN_SIGNAL_PHRASES:
   items:
   - board pack
@@ -548,13 +497,6 @@ scope_route.py::_PLAN_SIGNAL_WORDS:
   - analyse
   - analyze
   - report
-  kind: tuple
-scope_route_i18n.py::ABSENCE_REPORT_AR:
-  items:
-  - الإبلاغ عن غياب
-  - الابلاغ عن غياب
-  - أبلغ عن غياب
-  - ابلغ عن غياب
   kind: tuple
 scope_route_i18n.py::ADVISORY_AR:
   items:
@@ -615,12 +557,6 @@ state_store_i18n.py::EMPTY_PAYSLIP_AR:
   items:
   - لم أجد قسائم
   kind: tuple
-tool_digest.py::_PAYSLIP_IDENTITY_CODES:
-  kind: tuple
-  items:
-  - gross
-  - loan_installment
-  - net
 tool_digest.py::_PLUMBING_KEYS:
   items:
   - status_code
@@ -839,7 +775,6 @@ turn/execute.py::_CATALOG_PATH_KEYS:
   items:
   - id
   - pk
-  - employee_id
   - run_id
   kind: frozenset
 turn/execute.py::_CATALOG_QUERY_KEYS:
@@ -854,7 +789,6 @@ turn/execute.py::_CATALOG_QUERY_KEYS:
   - q
   - ordering
   - status
-  - employee_no
   - date
   - date_from
   - date_to
@@ -916,15 +850,6 @@ turn/exit_policy.py::V21_SUPERSEDED_GATES:
   - nav_ground
   - plan_dial_process
   kind: frozenset
-turn/force_tool.py::_ESS_SELF_READ_APIS:
-  items:
-  - get_my_leave_balance
-  - list_my_leave
-  - list_my_loans
-  - list_my_payslips
-  - list_my_attendance_permissions
-  - list_attendance
-  kind: frozenset
 turn/handoff_agent.py::_AFFIRM_PHRASES:
   items:
   - that's all
@@ -980,16 +905,8 @@ turn/handoff_agent.py::_PAYROLL_STATUS_PHRASES:
   - what is my
   - how much was
   - when will
-  - net pay
-  - take-home
-  - take home
   - can i download
   kind: tuple
-turn/handoff_agent.py::_PAYROLL_STATUS_WORDS:
-  kind: tuple
-  items:
-  - deduction
-  - deductions
 turn/handoff_agent.py::_PERMISSION_TYPE_WORDS:
   items:
   - official
@@ -1430,23 +1347,8 @@ turn/navigation_i18n.py::NAV_VERB_AR:
 turn/navigation_i18n.py::PLACE_TOPIC_AR:
   kind: tuple
   items:
-  - قسيمة
   - رئيسية
   - إشعار
-turn/navigation_i18n.py::SELF_READ_POSSESSIVE_AR:
-  items:
-  - إجازاتي
-  - اجازاتي
-  - إجازتي
-  - اجازتي
-  - راتبي
-  - مرتبي
-  - قروضي
-  - حضوري
-  - سلفتي
-  - قسيمة راتبي
-  - استئذاناتي
-  kind: tuple
 turn/navigation_i18n.py::SELF_READ_POSSESSIVE_EN:
   items:
   - 'my '
@@ -1473,16 +1375,6 @@ turn/next_step.py::_NEXT_ASK_PHRASES:
   - what's the next step
   - what is the next step
   kind: tuple
-turn/next_step.py::_PAYROLL_PHRASES:
-  items:
-  - net pay
-  - take-home
-  - take home
-  kind: tuple
-turn/next_step.py::_PAYROLL_WORDS:
-  kind: tuple
-  items:
-  - deduction
 turn/next_step.py::_TERMINAL:
   items:
   - completed
@@ -1518,33 +1410,14 @@ turn/next_step_i18n.py::OFFER:
       ar: 'التالي: بدّل إلى الوكيل لإرسال الطلب. الدردشة لا تُرسل.'
       en: 'Next: switch to Agent to submit. Chat will not send it.'
   kind: dict
-turn/next_step_i18n.py::PAYROLL_AR:
-  kind: tuple
-  items:
-  - قسيمة
-  - استقطاع
 turn/plan_dial.py::_AR_SLOT:
   items:
     date: التاريخ
     days: الأيام
     end_date: تاريخ الانتهاء
     hours: الساعات
-    leave_type: نوع الإجازة
-    loan_type: نوع القرض
-    permission_type: نوع الاستئذان
-    principal: المبلغ
     start_date: تاريخ البدء
     term_months: المدة (شهر)
-  kind: dict
-turn/plan_dial.py::_AR_STEP_BY_API:
-  items:
-    get_my_leave_balance: قراءة رصيد إجازتي (قراءة)
-    list_my_attendance_permissions: التحقق من استئذاناتي الحالية (قراءة)
-    list_my_leave: قراءة إجازاتي (قراءة)
-    list_my_loans: التحقق من قروضي الحالية (قراءة)
-    submit_my_attendance_permission: تقديم طلب الاستئذان
-    submit_my_leave: تقديم طلب الإجازة
-    submit_my_loan: تقديم طلب القرض
   kind: dict
 turn/plan_dial.py::_EN_SLOT:
   kind: dict
@@ -1553,8 +1426,6 @@ turn/plan_dial.py::_EN_SLOT:
     days: days
     end_date: end date
     hours: hours
-    permission_type: permission type
-    principal: amount
     start_date: start date
     term_months: term (months)
 turn/plan_dial.py::_NEW_CONTENT_WORDS:
@@ -1611,9 +1482,6 @@ turn/plan_dial.py::_RESTYLE_WORDS:
 turn/plan_dial_i18n.py::NEW_CONTENT_AR:
   kind: tuple
   items:
-  - إجاز
-  - اجاز
-  - استئذان
   - تقرير
   - قدّم
   - قدم
@@ -1784,8 +1652,6 @@ turn/report_clarify.py::_ASPECT_WORDS:
   - committed
   - draft
   - failed
-  - pifss
-  - deduction
   - board
   - executive
   - summary
@@ -1821,9 +1687,6 @@ turn/report_clarify.py::_BROAD_PAY_DOCS:
 turn/report_clarify.py::_PAYROLL_DIGEST_MARKERS:
   kind: tuple
   items:
-  - list_payroll_runs
-  - list_payslip_lines
-  - analyze_employees
   - aggregate_entity
   - headcount
   - metric=headcount
@@ -1832,32 +1695,17 @@ turn/report_clarify.py::_PRIOR_CLARIFY_MARKERS:
   items:
   - what should
   - focus on
-  - بكل سرور أساعد في تقرير الرواتب
   - على ماذا تريد التركيز
 turn/report_clarify.py::_PRIOR_REPORT_ANSWER_MARKERS:
   kind: tuple
   items:
-  - headcount by
-  - pay distribution
-  - pifss
   - committed
   - draft
   - failed
-turn/report_clarify.py::_SALARY_ASPECT_BY_NUM:
-  kind: dict
-  items:
-    '1': Pay distribution by band with charts and tiers
 turn/report_clarify.py::_SCOPED_PHRASES:
   items:
-  - hr lead
-  - by band
-  - by tier
-  - by nationality
-  - by gender
   - by dept
   - by department
-  - by org
-  - by grade
   kind: tuple
 turn/report_clarify.py::_SCOPED_WORDS:
   kind: tuple
@@ -1881,8 +1729,6 @@ turn/report_clarify.py::_SCOPED_WORDS:
   - visual
   - visuals
   - viz
-  - pifss
-  - deduction
   - variance
   - committed
   - draft
@@ -1893,11 +1739,6 @@ turn/report_clarify.py::_SCOPED_WORDS:
   - pptx
   - export
   - pack
-turn/report_clarify.py::_TOPIC_ASPECT_BY_NUM:
-  kind: dict
-  items:
-    both: Headcount and organization structure with charts — departments, roles, employment
-      type
 turn/report_clarify.py::_TOPIC_MENU_MARKERS:
   kind: tuple
   items:
@@ -1908,11 +1749,9 @@ turn/report_clarify_i18n.py::ASPECT_PICK_AR:
   items:
   - توزيع
   - شرائح
-  - مسيرات
   - ملتزم
   - مسودة
   - فشل
-  - تأمينات
   - مجلس
   - ملخص
   - كل
@@ -1925,14 +1764,12 @@ turn/report_clarify_i18n.py::BROAD_REPORT_AR:
   kind: tuple
   items:
   - تقرير
-  - الأجور
   - كامل
   - شامل
   - مفصل
 turn/report_clarify_i18n.py::PRIOR_CLARIFY_AR:
   items:
   - على ماذا تريد التركيز
-  - بكل سرور أساعد في تقرير الرواتب
   kind: tuple
 turn/report_clarify_i18n.py::SCOPED_AR:
   items:
@@ -1940,18 +1777,10 @@ turn/report_clarify_i18n.py::SCOPED_AR:
   - إدارة
   - توزيع
   - شرائح
-  - تأمينات
-  - استقطاع
   - حسب
   - رسوم
   - مخططات
   kind: tuple
-turn/router.py::_REPORT_OPTIONS:
-  kind: tuple
-  items:
-  - id: '1'
-    label: Pay distribution by band
-    value: Pay distribution by band with charts and tiers
 turn/runner_helpers.py::_BACKGROUND_LLM_STAGES:
   items:
   - auto_memory
@@ -2074,15 +1903,6 @@ turn/runner_util.py::_TEXT_TRANSFORM_WORDS:
   - typo
   - translate
   kind: tuple
-turn/runner_util_i18n.py::ESS_TOPIC_AR:
-  kind: tuple
-  items:
-  - إجاز
-  - اجاز
-  - غياب
-  - قسيم
-  - استئذان
-  - سلف
 turn/runner_util_i18n.py::FIRST_PERSON_AR:
   items:
   - أنا
@@ -2092,13 +1912,6 @@ turn/runner_util_i18n.py::FIRST_PERSON_AR:
   - أريد
   - اريد
   - طلبت
-  - راتبي
-  - إجازتي
-  - اجازتي
-  - قرضي
-  - حضوري
-  - رصيدي
-  - قسيمتي
   kind: tuple
 turn/runner_util_i18n.py::SCOPE_BYPASS_AR:
   items:
@@ -2232,19 +2045,6 @@ turn/zero_llm.py::_OTHER_NAME_STOP:
   - role
   - title
   kind: frozenset
-turn/zero_llm.py::_PAYROLL_FOLLOWUP_PHRASES:
-  kind: tuple
-  items:
-  - take-home
-  - take home
-  - take_home
-  - net pay
-  - total deductions
-turn/zero_llm.py::_PAYROLL_FOLLOWUP_WORDS:
-  kind: tuple
-  items:
-  - deduction
-  - deductions
 turn/zero_llm.py::_PAYROLL_POLICY_WORDS:
   items:
   - appeal
@@ -2252,12 +2052,6 @@ turn/zero_llm.py::_PAYROLL_POLICY_WORDS:
   - object
   - certificate
   kind: tuple
-turn/zero_llm.py::_PAYSLIP_LINE_CODES:
-  kind: tuple
-  items:
-  - gross
-  - loan_installment
-  - net
 turn/zero_llm.py::_PROFILE_ASK_PHRASES:
   kind: tuple
   items:
@@ -2311,12 +2105,6 @@ turn/zero_llm_i18n.py::DAY_SPAN_AR:
   items:
   - من الآن
   - من الان
-  - حتى إجاز
-  - حتى اجاز
-  kind: tuple
-turn/zero_llm_i18n.py::EMPTY_PAYSLIP_REPLY_AR:
-  items:
-  - لم أجد قسائم
   kind: tuple
 turn/zero_llm_i18n.py::MONTH_ASK_AR:
   items:
@@ -2328,31 +2116,11 @@ turn/zero_llm_i18n.py::NOTIFICATION_AR:
   - اشعارات
   - تنبيهات
   kind: tuple
-turn/zero_llm_i18n.py::PAYROLL_FOLLOWUP_AR:
-  items:
-  - راتبي
-  - الراتب
-  - صافي
-  - الاستقطاعات
-  - خصومات
-  - قسيمة
-  kind: tuple
 turn/zero_llm_i18n.py::PAYROLL_POLICY_AR:
   items:
   - اعتراض
   - شهادة طبية
   - سياسة
-  kind: tuple
-turn/zero_llm_i18n.py::PAYROLL_SCHEDULE_AR:
-  items:
-  - متى ستتم معالجة الرواتب
-  - متى يتم معالجة الرواتب
-  - متى سيكون الراتب
-  kind: tuple
-turn/zero_llm_i18n.py::PAYSLIP_DOWNLOAD_AR:
-  items:
-  - تحميل قسيمة
-  - تحميل القسيمة
   kind: tuple
 turn/zero_llm_i18n.py::PROFILE_ASK_AR:
   kind: tuple

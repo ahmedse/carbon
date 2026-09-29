@@ -15,7 +15,7 @@ from ai.engine.host_ids import (
     ID_SUBMIT_MY_LOAN,
 )
 from ai.engine.cognition.phrase_tables import T
-from ai.engine.pack_vocab import LV, V, live_pattern
+from ai.engine.pack_vocab import LV, V, live_pattern, present_id_list
 LV("t_process_dial_plan_materialization_hybrid_agent")
 
 
@@ -302,14 +302,9 @@ def materialize_leave_request_plan(
         agent_role="orchestrator",
     )
 
-    grounded = [
-        k for k in (ID_LEAVE_TYPE, "start_date", "end_date", "days")
-        if body.get(k) not in (None, "")
-    ]
-    missing = [
-        k for k in (ID_LEAVE_TYPE, "start_date", "end_date", "days")
-        if k not in grounded
-    ]
+    required = present_id_list(ID_LEAVE_TYPE, "start_date", "end_date", "days")
+    grounded = [k for k in required if body.get(k) not in (None, "")]
+    missing = [k for k in required if k not in grounded]
 
     synthesis = (
         V("t_leave_request_follows_process_dial_leave")
@@ -541,7 +536,7 @@ def materialize_loan_request_plan(
         agent_role="orchestrator",
     )
 
-    required = (ID_LOAN_TYPE, "principal", "term_months", "start_date")
+    required = present_id_list(ID_LOAN_TYPE, "principal", "term_months", "start_date")
     grounded = [k for k in required if body.get(k) not in (None, "")]
     missing = [k for k in required if k not in grounded]
 
@@ -665,7 +660,7 @@ def materialize_attendance_permission_plan(
         agent_role="orchestrator",
     )
 
-    required = (ID_PERMISSION_TYPE, "date", "hours")
+    required = present_id_list(ID_PERMISSION_TYPE, "date", "hours")
     grounded = [k for k in required if body.get(k) not in (None, "")]
     missing = [k for k in required if k not in grounded]
 

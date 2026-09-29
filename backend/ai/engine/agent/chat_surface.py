@@ -37,12 +37,12 @@ from ai.engine.agent.chat_surface_i18n import (
     LEAVE_INTENT_AR,
     LOAN_INTENT_AR,
     MANAGER_REVIEW_AR,
-    FIELD_LABELS,
     PROFILE_CHANGE_AR,
+    field_labels_for,
     any_needle,
 )
 
-_FIELD_LABELS = FIELD_LABELS
+_FIELD_LABELS = field_labels_for
 
 #: Surfaces that may stage host mutations / DQ creates. Kept for callers that
 #: still compare raw strings; :class:`Surface` is the real answer.
@@ -716,9 +716,7 @@ def handoff_copy(
         for key, value in list(draft.items())[:6]:
             if value in (None, "", [], {}):
                 continue
-            en_lab, ar_lab = FIELD_LABELS.get(
-                key, (key.replace("_", " "), key.replace("_", " "))
-            )
+            en_lab, ar_lab = field_labels_for(key)
             lab = str(ar_lab if locale == "ar" else en_lab)
             if not lab:
                 continue
@@ -783,9 +781,7 @@ def build_handoff_envelope(
                 continue
             if isinstance(value, (dict, list)):
                 continue
-            en_lab, ar_lab = FIELD_LABELS.get(
-                key, (str(key).replace("_", " "), str(key).replace("_", " "))
-            )
+            en_lab, ar_lab = field_labels_for(key)
             rows.append([ar_lab if locale == "ar" else en_lab, str(value)])
         if rows:
             tables.append({

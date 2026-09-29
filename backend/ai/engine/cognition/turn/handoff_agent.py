@@ -40,7 +40,7 @@ from ai.engine.cognition.turn.handoff_agent_i18n import (
     AFFIRM_AR,
     AMOUNT_CURRENCY_AR,
     AMOUNT_PREFIX_AR,
-    CLARIFY_TEXT,
+    clarify_pack,
     DAYS_AR,
     HOURS_AR,
     JAILBREAK_AR,
@@ -273,7 +273,7 @@ def build_chat_write_clarify(
     else:
         missing = missing_slots_for_chat(api, body)
         key = missing[0] if missing else ID_LOAN_TYPE
-        pack = (CLARIFY_TEXT.get(api) or {}).get(key) or {}
+        pack = clarify_pack(api, str(key))
         text = str(pack.get(locale) or pack.get("en") or "")
         if not text:
             text = "What else do I need to know?"
@@ -318,9 +318,7 @@ def _understood_prefix(
             continue
         if key == "interest_rate" and value in (0, 0.0, "0"):
             continue
-        en_lab, ar_lab = _FIELD_LABELS.get(
-            key, (key.replace("_", " "), key.replace("_", " "))
-        )
+        en_lab, ar_lab = _FIELD_LABELS(key)
         lab = ar_lab if locale == "ar" else en_lab
         bits.append(f"{lab}: {_display_slot_value(value, user_message)}")
     if not bits:
@@ -563,9 +561,7 @@ def _carryover_handoff_copy(
             # Default zero interest is noise in the carry-over summary.
             if key == "interest_rate" and value in (0, 0.0, "0"):
                 continue
-            en_lab, ar_lab = _FIELD_LABELS.get(
-                key, (key.replace("_", " "), key.replace("_", " "))
-            )
+            en_lab, ar_lab = _FIELD_LABELS(key)
             lab = ar_lab if locale == "ar" else en_lab
             bits.append(f"{lab}: {_display_slot_value(value, user_message)}")
 
@@ -1311,8 +1307,12 @@ def _agent_grounding_rules_block() -> str:
 
 
 def _ask_grounding_rules_block() -> str:
-    """Ask dial: answer reads. A reviewable plan belongs on the Plan dial."""
-    return (
+    """Ask dial: answer reads. A reviewable plan belongs on the Plan dial.
+
+    Host sentences are included only when the bound pack has both halves.
+    A missing half is omitted. The write ban stays, without a foreign tool name.
+    """
+    head = (
         "GROUNDING RULES — follow them exactly:\n"
         "- You have tools available. For READS (balances, lists, profile, "
         "distributions, analytics), call the matching read tool and answer — "
@@ -1322,18 +1322,49 @@ def _ask_grounding_rules_block() -> str:
         "multi-step or reviewable plan, tell them to switch the dial to Plan "
         "(same conversation) — do not invent Open-in-Agent or Open-My for "
         "read questions.\n"
-        + V("t_distribution_analytics_for_salary_or_headcount")
-        + "return aggregates, buckets, and a chart or summary table — NEVER paste "
-        + V("t_raw_employee_by_employee_salary_rows")
-        + "- BROAD REPORT BRIEFS: if the user asks for a 'full' / 'complete' "
-        + V("t_salary_or_payroll_report_without_saying")
-        + "ONE short clarifying question with options (distribution, run health, "
-        + V("t_gosi_board_summary_before_calling_tools")
-        + V("t_host_writes_leave_loan_attendance_payroll")
-        + "stages or submits them. Do NOT call submit_my_* / mutation "
-        "call_host_api / create_dq_rule. When the user wants to submit and you "
-        "have the details, tell them to switch to Agent (you will carry the "
-        "details over) or open My — one clear next step.\n"
+    )
+    distribution = V("t_distribution_analytics_for_salary_or_headcount")
+    raw_rows = V("t_raw_employee_by_employee_salary_rows")
+    if distribution and raw_rows:
+        analytics = (
+            distribution
+            + "return aggregates, buckets, and a chart or summary table — NEVER paste "
+            + raw_rows
+        )
+    else:
+        analytics = ""
+    report = V("t_salary_or_payroll_report_without_saying")
+    board = V("t_gosi_board_summary_before_calling_tools")
+    if report and board:
+        broad = (
+            "- BROAD REPORT BRIEFS: if the user asks for a 'full' / 'complete' "
+            + report
+            + "ONE short clarifying question with options (distribution, run health, "
+            + board
+        )
+    else:
+        broad = ""
+    writes = V("t_host_writes_leave_loan_attendance_payroll")
+    submit = V("t_rx_copy_ask_no_submit")
+    if writes and submit:
+        host = (
+            writes
+            + "stages or submits them. Do NOT call "
+            + submit
+            + " / mutation "
+            "call_host_api / create_dq_rule. When the user wants to submit and you "
+            "have the details, tell them to switch to Agent (you will carry the "
+            "details over) or open My — one clear next step.\n"
+        )
+    else:
+        host = (
+            "- HOST WRITES: Chat never stages or submits them. Do not call a "
+            "mutation through call_host_api or create_dq_rule. When the user "
+            "wants to submit and you have the details, tell them to switch to "
+            "Agent (you will carry the details over) or open My — one clear "
+            "next step.\n"
+        )
+    tail = (
         "- If required details are missing, ask ONE short clarifying question "
         "for the missing piece only; never re-ask slots already known.\n"
         "- NEVER claim an action succeeded unless a tool result confirms it.\n"
@@ -1348,3 +1379,4 @@ def _ask_grounding_rules_block() -> str:
         "- TENANT-ORG EXCEPTION: the platform's own organisation name is NEVER "
         "an ambiguous object — answer with live read tools immediately."
     )
+    return head + analytics + broad + host + tail

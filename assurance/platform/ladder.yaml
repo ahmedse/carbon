@@ -665,11 +665,13 @@ checks:
     solution: "python -m excellence.gauge --run pytest:inbound-observed"
     source: assurance/standard/standard.yaml observed.4
 
-  # Rank 5 is defined and unmet. inbound_operated is registered and
-  # fail-closed: a missing file or GitHub run is unknown, never a pass.
-  # These probes must not be satisfied by repo, observe, or GET /api/health/.
-  # Evidence floor is enforcement-verified. The collector does not re-run
-  # pytest, does not run Playwright, and does not write the series file.
+  # Rank 5 is operated in process. The scored level stays L4 until a full
+  # gauge records these events. inbound_operated is fail-closed: a missing
+  # file or GitHub run is unknown, never a pass. These probes must not be
+  # satisfied by repo, observe, or GET /api/health/. Evidence floor is
+  # enforcement-verified. The collector does not re-run pytest and does not
+  # write the series file. Playwright runs only when gauge --run names the
+  # Arabic People-door spec.
   - id: INBOUND-SPC-11
     title: Inbound code changes ship with the studio contract
     dimension: specified
@@ -733,12 +735,14 @@ checks:
       conclusion: success
       pytest: python -m pytest
       forbid_ignore: inbound
+      selectors: reject
+      allowed_flags: ["--tb", "-x", "-q", "tail"]
       missing_run: unknown
       rerun_pytest: reject
       node_proof: def in file
       subjects: [platform.module.inbound]
     applies_to: [module]
-    solution: The pytest step must fail the job when these nodes fail. The collector does not re-run pytest. A YAML read is not enough.
+    solution: The pytest step must fail the job when these nodes fail. A path, -k, or marker selection is not the full suite. The collector does not re-run pytest and does not read the log. A YAML read is not enough.
     source: assurance/standard/standard.yaml secure.5
   - id: INBOUND-REL-06
     title: One scheduled People-door run exits 0
@@ -752,10 +756,11 @@ checks:
       event: schedule
       conclusion: success
       head_sha: not required
+      window: none
       missing: unknown
       subjects: [platform.module.inbound]
     applies_to: [module]
-    solution: One green scheduled run. Do not copy the Pulse five-night streak.
+    solution: One green scheduled run, any commit, no age window. Do not copy the Pulse five-night streak.
     source: assurance/standard/standard.yaml reliable.5
   - id: INBOUND-PRF-06
     title: Live batch sample stays within 20
@@ -812,7 +817,7 @@ checks:
       stack: do not start
       subjects: [platform.module.inbound]
     applies_to: [module]
-    solution: i18n parity plus Arabic locale on the People door. i18n:check alone does not pass.
+    solution: npm run i18n:check exits 0, and the Arabic spec exits 0. i18n:check alone does not pass. The spec asserts the eye, primary, search, and English restore. The collector does not scrape the DOM.
     source: assurance/standard/standard.yaml usable.5
   - id: INBOUND-MNT-05
     title: Changed-subject ratchet covers inbound
@@ -879,12 +884,14 @@ checks:
       conclusion: success
       pytest: python -m pytest
       forbid_ignore: inbound
+      selectors: reject
+      allowed_flags: ["--tb", "-x", "-q", "tail"]
       missing_run: unknown
       rerun_pytest: reject
       node_proof: def in file
       subjects: [platform.module.inbound]
     applies_to: [module]
-    solution: The pytest step must fail the job when the boundary test fails. The collector does not re-run pytest.
+    solution: The pytest step must fail the job when the boundary test fails. Same full-suite rule as INBOUND-SEC-06. The collector does not re-run pytest and does not read the log.
     source: assurance/standard/standard.yaml governed.5
 
   - id: PLAT-USE-04

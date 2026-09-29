@@ -1,6 +1,6 @@
 from __future__ import annotations
 from ai.engine.cognition.phrase_tables import T
-from ai.engine.pack_vocab import LV, V
+from ai.engine.pack_vocab import LV, V, _active_pack
 LV("t_governed_process_briefing_chat_concept_answers")
 
 
@@ -17,12 +17,31 @@ from ai.engine.cognition.turn.process_brief_i18n import (
     has_arabic_script,
 )
 
+def _pack_id() -> str:
+    """The pack bound on this turn. A path segment only."""
+    pack_id = _active_pack.get() or ""
+    if not pack_id or pack_id in {".", ".."} or pack_id != Path(pack_id).name:
+        return ""
+    return pack_id
+
+
+def _safe_stem(process_id: str) -> str:
+    """A process file stem. A slash or .. is not a stem."""
+    stem = str(process_id or "").strip()
+    if not stem or stem in {".", ".."} or stem != Path(stem).name:
+        return ""
+    return stem
+
+
 def process_ids() -> tuple[str, ...]:
-    """Process ids shipped by any pack, read from ``domain_packs/*/processes``."""
-    root = Path(__file__).resolve().parents[5] / "domain_packs"
+    """Process file stems shipped by the pack bound on this turn."""
+    pack_id = _pack_id()
+    if not pack_id:
+        return ()
+    root = Path(__file__).resolve().parents[5] / "domain_packs" / pack_id / "processes"
     if not root.is_dir():
         return ()
-    return tuple(sorted(path.stem for path in root.glob("*/processes/*.yaml")))
+    return tuple(sorted(path.stem for path in root.glob("*.yaml")))
 
 
 _BRIEFING_WORDS = T("turn/process_brief.py::_BRIEFING_WORDS")
@@ -108,23 +127,34 @@ def detect_brief_lang(text: str) -> str:
 
 
 def _load_definition(process_id: str) -> dict[str, Any] | None:
-    """Load process document from DB (active) else pack YAML."""
+    """Load the process from the bound pack. Another pack's file is not opened."""
+    stem = _safe_stem(process_id)
+    if not stem or stem not in process_ids():
+        return None
     try:
         from ai.engine.host_services import active_process_definition
 
-        definition = active_process_definition(process_id)
+        definition = active_process_definition(stem)
         if isinstance(definition, dict):
             return definition
     except Exception:  # noqa: BLE001 — briefing must not depend on ORM health
         pass
-    root = Path(__file__).resolve().parents[5] / "domain_packs"
-    matches = sorted(root.glob(f"*/processes/{process_id}.yaml")) if root.is_dir() else []
-    if not matches:
+    pack_id = _pack_id()
+    if not pack_id:
+        return None
+    path = (
+        Path(__file__).resolve().parents[5]
+        / "domain_packs"
+        / pack_id
+        / "processes"
+        / f"{stem}.yaml"
+    )
+    if not path.is_file():
         return None
     try:
         import yaml
 
-        with matches[0].open(encoding="utf-8") as fh:
+        with path.open(encoding="utf-8") as fh:
             doc = yaml.safe_load(fh)
         return doc if isinstance(doc, dict) else None
     except Exception:  # noqa: BLE001

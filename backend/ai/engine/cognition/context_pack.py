@@ -331,19 +331,36 @@ def _user_identity_lines(user_info: dict[str, Any] | None) -> list[str]:
     if aud_txt:
         bits.append(f"audience={aud_txt}")
     lines.append(" · ".join(bits))
-    person_row = user_info.get(V("t_employee_4")) or None
-    if isinstance(person_row, dict) and person_row:
-        emp_bits = [
-            str(person_row[k])
-            for k in ("full_name", "job_title", "org_unit")
-            if person_row.get(k)
-        ]
-        emp_no = person_row.get("employee_no")
-        if emp_no:
-            emp_bits.insert(0 if not emp_bits else 1, f"employee_no={emp_no}")
-        if emp_bits:
-            lines.append(V("t_employee_3") + ", ".join(emp_bits))
+    person_row = person_row_from_user(user_info)
+    emp_bits = person_identity_bits(person_row)
+    if emp_bits:
+        lines.append(V("t_employee_3") + ", ".join(emp_bits))
     return lines
+
+
+def person_row_from_user(user_info: dict[str, Any] | None) -> dict[str, Any] | None:
+    """The person row for the pack bound now. An empty type selects nothing."""
+    kind = V("t_employee_4")
+    if not kind or not user_info:
+        return None
+    row = user_info.get(kind)
+    return row if isinstance(row, dict) and row else None
+
+
+def person_identity_bits(person_row: dict[str, Any] | None) -> list[str]:
+    """Name, person number, title, unit. The number field is pack-owned."""
+    if not isinstance(person_row, dict) or not person_row:
+        return []
+    bits = [
+        str(person_row[k])
+        for k in ("full_name", "job_title", "org_unit")
+        if person_row.get(k)
+    ]
+    field = V("t_rx_id_person_no")
+    number = person_row.get(field) if field else None
+    if field and number:
+        bits.insert(0 if not bits else 1, f"{field}={number}")
+    return bits
 
 
 @dataclass

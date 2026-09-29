@@ -1,48 +1,123 @@
-"""ESS read copy and needles, loaded from each pack's ``ess_read.yaml``.
+"""ESS read copy and needles from the pack bound on this turn.
 
-The engine does not own the words. ``any_needle`` is the only code here.
+The engine does not own the words. A pack with no ess_read.yaml contributes
+nothing. Import does not copy another pack's strings into these names.
 """
 from __future__ import annotations
-from ai.engine.cognition.phrase_tables import T
 
 from pathlib import Path
 
 import yaml
 
+from ai.engine.cognition.phrase_tables import T
+from ai.engine.pack_vocab import _active_pack
+
 _TUPLES = T("turn/ess_read_i18n.py::_TUPLES")
 _SETS = T("turn/ess_read_i18n.py::_SETS")
+_ROOT = Path(__file__).resolve().parents[5] / "domain_packs"
+_CACHE: dict[str, dict] = {}
 
 
-def _load() -> dict:
-    root = Path(__file__).resolve().parents[5] / "domain_packs"
-    merged: dict = {}
-    if not root.is_dir():
-        return merged
-    for path in sorted(root.glob("*/ess_read.yaml")):
-        doc = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        if isinstance(doc, dict):
-            merged.update(doc)
-    return merged
+def _pack_doc() -> dict:
+    """The bound pack's ess_read.yaml. Another pack's file is not read."""
+    pack_id = _active_pack.get() or ""
+    if not pack_id or pack_id in {".", ".."} or pack_id != Path(pack_id).name:
+        return {}
+    if pack_id in _CACHE:
+        return _CACHE[pack_id]
+    path = _ROOT / pack_id / "ess_read.yaml"
+    doc: dict = {}
+    if path.is_file():
+        loaded = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        if isinstance(loaded, dict):
+            doc = loaded
+    _CACHE[pack_id] = doc
+    return doc
 
 
-_DOC = _load()
+class _LiveSeq:
+    """A needle list that resolves when it is used."""
+
+    def __init__(self, key: str, factory) -> None:
+        self._key = key
+        self._factory = factory
+
+    def _value(self):
+        raw = _pack_doc().get(self._key) or ()
+        return self._factory(raw)
+
+    def __iter__(self):
+        return iter(self._value())
+
+    def __contains__(self, item: object) -> bool:
+        return item in self._value()
+
+    def __len__(self) -> int:
+        return len(self._value())
+
+    def __bool__(self) -> bool:
+        return bool(self._value())
+
+    def __eq__(self, other: object) -> bool:
+        return self._value() == other
+
+    def __getitem__(self, item):
+        return self._value()[item]
 
 
-def _as_tuple(key: str) -> tuple[str, ...]:
-    return tuple(_DOC.get(key) or ())
+class _Blank(dict):
+    """A missing map matches nothing and yields no sentence."""
+
+    def __getitem__(self, item):
+        return ""
+
+    def get(self, item, default=None):
+        return default
+
+    def __contains__(self, item: object) -> bool:
+        return False
 
 
-for _key in _TUPLES:
-    globals()[_key] = _as_tuple(_key)
-for _key in _SETS:
-    globals()[_key] = frozenset(_DOC.get(_key) or ())
+class _LiveMap:
+    """A dict from the bound pack. A missing pack is an empty map."""
 
-HONEST_EMPTY = _DOC.get("HONEST_EMPTY") or {}
-UNAUTHORIZED_TEXT = _DOC.get("UNAUTHORIZED_TEXT") or {}
-EMPTY_BALANCE_TEXT = _DOC.get("EMPTY_BALANCE_TEXT") or {}
-RENDER_SCOPE = _DOC.get("RENDER_SCOPE") or {}
-UNSUMMARIZED_FALLBACK = _DOC.get("UNSUMMARIZED_FALLBACK") or {}
-EMPTY_RENDER = _DOC.get("EMPTY_RENDER") or {}
+    def __init__(self, key: str, *, nested: bool = False) -> None:
+        self._key = key
+        self._nested = nested
+
+    def _value(self) -> dict:
+        raw = _pack_doc().get(self._key) or {}
+        return raw if isinstance(raw, dict) else {}
+
+    def __getitem__(self, item):
+        value = self._value()
+        if item in value:
+            return value[item]
+        if self._nested:
+            return _Blank()
+        return ""
+
+    def get(self, item, default=None):
+        return self._value().get(item, default)
+
+    def __contains__(self, item: object) -> bool:
+        return item in self._value()
+
+    def __bool__(self) -> bool:
+        return bool(self._value())
+
+
+for _key in list(_TUPLES):
+    globals()[_key] = _LiveSeq(_key, tuple)
+for _key in list(_SETS):
+    globals()[_key] = _LiveSeq(_key, frozenset)
+
+HONEST_EMPTY = _LiveMap("HONEST_EMPTY", nested=True)
+UNAUTHORIZED_TEXT = _LiveMap("UNAUTHORIZED_TEXT")
+EMPTY_BALANCE_TEXT = _LiveMap("EMPTY_BALANCE_TEXT")
+RENDER_SCOPE = _LiveMap("RENDER_SCOPE")
+UNSUMMARIZED_FALLBACK = _LiveMap("UNSUMMARIZED_FALLBACK")
+EMPTY_RENDER = _LiveMap("EMPTY_RENDER")
 
 
 def any_needle(text: str, needles: tuple[str, ...]) -> bool:

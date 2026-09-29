@@ -6,6 +6,10 @@ Prompts are now synthesized at runtime by llm.prompt_synthesizer — no
 hardcoded per-instance template. The SYSTEM_PROMPT_INTROSPECT templates
 below are the only remaining static prompts (schema analysis, not chat).
 """
+from ai.engine.cognition.context_pack import (
+    person_identity_bits,
+    person_row_from_user,
+)
 from ai.engine.pack_vocab import LV, V
 
 # ── Note: SYSTEM_PROMPT_CHAT removed 2026-08-09 ──
@@ -114,14 +118,9 @@ async def build_chat_prompt(
         # Domain subject binding: lets the model resolve first-person requests
         # ("my") to THIS person and steers it to self-scoped
         # endpoints instead of the org-wide lists (which would leak others' data).
-        person_row = user_info.get(V("t_employee_4")) or None
-        if person_row:
-            emp_bits = [
-                str(person_row[k]) for k in ("full_name", "job_title", "org_unit")
-                if person_row.get(k)
-            ]
-            if person_row.get("employee_no"):
-                emp_bits.insert(1, f"{V("t_employee_4")} #{person_row['employee_no']}")
+        person_row = person_row_from_user(user_info)
+        emp_bits = person_identity_bits(person_row)
+        if emp_bits:
             emp_line = ", ".join(emp_bits)
             user_context = f"{user_context}\n**{V("t_employee")} identity**: {emp_line}"
             identity_directive = (
@@ -207,12 +206,9 @@ async def build_chat_prompt(
 
     # Compact rendering summary when fallback did not already include it.
     # Filesystem domain-pack skill injection REMOVED(F1a) — do not re-wire.
-    if str(RENDERING_CAPABILITIES_SUMMARY) not in (result or ""):
-        result = (
-            f"{result}\n\n{RENDERING_CAPABILITIES_SUMMARY}"
-            if result
-            else RENDERING_CAPABILITIES_SUMMARY
-        )
+    rendering = str(RENDERING_CAPABILITIES_SUMMARY)
+    if rendering and rendering not in (result or ""):
+        result = f"{result}\n\n{rendering}" if result else rendering
 
     return result
 
@@ -286,6 +282,26 @@ def _build_tenant_org_directive(instance_config: dict | None) -> str:
     alias_line = ", ".join(f'"{a}"' for a in aliases) if aliases else f'"{name}"'
     summary = (tenant.get("summary") or "").strip()
     summary_line = f"\n{summary}\n" if summary else "\n"
+    sub_entity = V("t_filterable_sub_entity_not_an_employee") or "single record inside it.\n\n"
+    tool_examples = V("t_rx_copy_tenant_data_tools")
+    if tool_examples:
+        data_line = "3. For data-in-system: call live tools right away " + tool_examples
+    else:
+        data_line = (
+            "3. For data-in-system: call the live read tools in the catalog "
+            "and answer from the results.\n"
+        )
+    specific = V("t_payroll_run_leave_record_or_other")
+    if specific:
+        clarify_line = (
+            "4. Only ask a clarifying question when they name a specific person, "
+            + specific
+        )
+    else:
+        clarify_line = (
+            "4. Only ask a clarifying question when they name a specific person "
+            "or a specific record that is still ambiguous."
+        )
 
     return (
         "## Tenant organisation (non-negotiable)\n\n"
@@ -293,7 +309,7 @@ def _build_tenant_org_directive(instance_config: dict | None) -> str:
         + (f" (short name: **{short}**)" if short else "")
         + f". Aliases: {alias_line}. "
         "This is the WHOLE organisation / company / institution — NOT a "
-        + V("t_filterable_sub_entity_not_an_employee")
+        + sub_entity
         + f"{summary_line}"
         "When the user asks about this organisation, \"the company\", \"our "
         "company\", \"the organisation\", or \"data in the system\" / \"what "
@@ -302,11 +318,8 @@ def _build_tenant_org_directive(instance_config: dict | None) -> str:
         "(\"What specifically would you like to know…?\").\n"
         "2. For identity (\"what is the company\"): use the summary above plus "
         "persona/domain facts — never invent external corporate trivia.\n"
-        "3. For data-in-system: call live tools right away "
-        "(`aggregate_entity` metric=headcount, and when useful "
-        "`analyze_employees` or list endpoints) and answer from the results.\n"
-        "4. Only ask a clarifying question when they name a specific person, "
-        + V("t_payroll_run_leave_record_or_other")
+        + data_line
+        + clarify_line
     )
 
 

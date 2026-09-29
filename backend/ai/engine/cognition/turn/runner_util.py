@@ -95,7 +95,7 @@ def _history_has_active_process(conversation_history: list[dict] | None) -> bool
 
     for msg in (conversation_history or [])[-6:]:
         content = str((msg or {}).get("content") or "")
-        if any(pid in content for pid in process_ids()):
+        if any(pid and pid in content for pid in process_ids()):
             return True
     return False
 

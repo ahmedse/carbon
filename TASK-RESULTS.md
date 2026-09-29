@@ -1,3 +1,74 @@
+## [2026-09-29] platform — ci.yml on 12d8a73e failed after the Python 3.12 fix
+
+- **Run:** `36563948856` on `12d8a73e` concluded `failure`. Install dependencies passed (Python 3.12.14). Fail-open lint passed.
+- **Failed steps:** lint `Import-linter contract (P2-11)` exit 126 (`audit-imports.sh` git mode `100644`); backend ratchet `migrate --database=excellence` (`FERNET_KEY` required, unset); frontend `Run unit tests` (checkpoint title equals the UTC timestamp `Sep 1 · 10:00`; Monitor `2/2` is absent until the ledger resolves).
+- **Next commit:** invoke the audit scripts with `bash`, set CI-only `FERNET_KEY` and `TURNKEY_CALLBACK_SECRET` on the backend and e2e jobs, and query the duplicate texts with `*AllBy*` / `findByText`.
+- **Still blocked:** `INBOUND-SEC-06`, `INBOUND-GOV-05`, and `INBOUND-MNT-05` stay failed until a full `ci.yml` run concludes success. `INBOUND-COR-05` and `INBOUND-REL-06` stay unknown. Actions runners `0`. No nightly file.
+- **Level:** scored gauge remains L4 · 45/54. Not persisted.
+
+---
+
+## [2026-09-29] platform — ADR-0060 v1 has no open product row
+
+- **Audit:** [ADR-0060 leftovers](e00a04e7-5154-4cc3-badd-24e7a857fe3e). Decision items map to DMS-0 through DMS-8, all DONE. Payroll history / YTD stays out of v1. Pulse Agent commit stays later.
+- **Rechecked:** HEAD `81cbea62`. Run `36547589523` still `failure`. Actions runners `0`. Nightly file absent.
+- **Level:** scored gauge remains L4 · 45/54.
+
+---
+
+## [2026-09-29] platform — product plan done, rank 5 rechecked
+
+- **Audit:** [Plan completion gate](87f794f7-140f-4405-81bb-23ff3010ccb1). DMS-0 through DMS-8 are DONE. No open product task remains in `backend/inbound` or `carbon-frontend/src/components/inbound`.
+- **Rechecked:** HEAD `81cbea62`. `ci.yml` run `36547589523` still `failure`. Actions runners `total_count: 0`. No `inbound-nightly.yml`.
+- **Level:** scored gauge remains L4 · 45/54. SEC, GOV, and MNT stay failed on that run. COR and REL stay unknown until a runner that already has the stack is named.
+
+---
+
+## [2026-09-29] platform — rank 5 contract has no remaining dual reading
+
+- **Audit:** [Remaining contract gaps](8c118181-5bf7-44e0-bccf-bbbcb37bdb12). Principles 1–11 and the nine rank-5 cells now have one reading each. The collector matches those sentences.
+- **Rechecked live:** HEAD `81cbea62`. `ci.yml` run `36547589523` still `failure`. `gh api repos/ahmedse/carbon/actions/runners` returned `total_count: 0`. Workflow files are `ci.yml` and `pulse-nightly-ess.yml` only.
+- **Still blocked:** `INBOUND-SEC-06`, `INBOUND-GOV-05`, and `INBOUND-MNT-05` stay failed until a full `ci.yml` run on this commit concludes success. `INBOUND-COR-05` and `INBOUND-REL-06` stay unknown until a runner that already has the stack is named. No nightly file was added.
+- **Level:** scored gauge remains L4 · 45/54. Not persisted.
+
+---
+
+## [2026-09-29] platform — full pytest is defined
+
+- **Audit:** [Next rank-5 slice](14222ac5-5489-46ef-b23a-0dd51b16fd79). Principle 7 said “full” pytest. The cells only required the substring `python -m pytest`. A path or `-k` could have passed.
+- **Rule:** Full means no test path, no `-k`, no `--keyword`, no `-m`, no `--markers`, no `--deselect`, and no `--ignore` of inbound. `--tb`, `-x`, `-q`, and a pipe to `tail` are allowed. The collector does not re-run pytest and does not read the log. Ledger write stays off.
+- **Proof:** The real `Run tests` step is `python -m pytest --tb=short -x -q` and is not a subset. A path selector fails before `gh`. Collector tests 30 passed. `INBOUND-SEC-06` and `INBOUND-GOV-05` still fail on run `36547589523`, detail `conclusion: failure`.
+- **Level:** scored gauge remains L4 · 45/54. Nightly file is still absent.
+
+---
+
+## [2026-09-29] platform — USE-06 passed in process
+
+- **Audit:** [Ladder specificity](a52064b9-7a2f-4175-8ead-06742baed48c). Two sentences could be scored two ways. They are now pinned to the collector.
+- **Reliable:** `INBOUND-REL-06` has `window: none`. One scheduled success on any commit counts. An age window is not implemented; setting one returns unknown and does not call `gh`. Collector tests 27 passed.
+- **Usable:** `INBOUND-USE-06` passed, `enforcement-verified`, detail `dir: rtl`. The collector ran `npm run i18n:check` and `journey-dms-people-door-ar.spec.ts` with `CI=1` against the stack that was already up. Not written to the ledger.
+- **Level:** scored gauge remains L4 · 45/54. Correct and reliable stay unknown until a stack runner is named. Secure, governed, and maintainable stay failed on run `36547589523`.
+
+---
+
+## [2026-09-29] platform — probes rescored on 81cbea62
+
+- **Audit:** [Rank-5 gaps](57375794-9bff-4e4e-8d0c-384ce272f0a7). The studio still said every cell was unmet. HEAD is no longer `0a66aa44`.
+- **Collect, not persisted:** `INBOUND-SPC-11` passed (`HEAD~1` includes inbound and the studio doc). `INBOUND-OBS-05` passed (`rows: 6`, file untracked). `INBOUND-SEC-06`, `INBOUND-GOV-05`, and `INBOUND-MNT-05` failed, evidence `enforcement-verified`, detail `conclusion: failure`. `INBOUND-COR-05` and `INBOUND-REL-06` unknown (nightly file absent).
+- **CI:** run `36547589523` on `81cbea62` failed at backend `Install dependencies` (`numpy==2.5.3` requires Python ≥ 3.12; CI is 3.11), frontend `Run unit tests`, and lint `Fail-open lint (P1-13)`. Same three jobs as `36320936245`. Outside inbound. The workflow conclusion stays the benchmark.
+- **Level:** scored gauge remains L4 · 45/54.
+
+---
+
+## [2026-09-29] platform — series file written, untracked, matched once
+
+- **Audit:** [Next authorized step](e5bc30b5-cc2d-4a85-aa3f-ad36e0cc17c3). DMS-0 through DMS-8 are done. No further product build is authorized. The series command was the remaining named operation.
+- **Writer:** `write_smoke_series` now creates the parent directory. `python manage.py write_inbound_smoke_series` wrote 6 rows to `docs/migration/evidence/inbound-smoke-series.json`. Git status is untracked. It was not added.
+- **Probe:** `INBOUND-OBS-05` passed, `enforcement-verified`, `rows: 6`, against the Nibras database. Not written to the ledger. `--no-db` would still be unknown.
+- **Level:** scored gauge remains L4 · 45/54.
+
+---
+
 ## [2026-09-29] platform — red CI jobs named, outside inbound
 
 - **Audit:** [CI failure scope](8e08d6fc-d505-4f3e-9388-8ffb5181842e). Confirmed with the Actions API: run `36320936245` failed at backend `Install dependencies`, frontend `Run unit tests`, and lint `Fail-open lint (P1-13)`. The excellence ratchet was skipped. CI Python is `3.11`. `requirements.txt` pins `numpy==2.5.3`. None of the failed steps are inbound tests.

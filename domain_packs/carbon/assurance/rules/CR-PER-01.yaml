@@ -11,6 +11,17 @@ failure: Two open periods, a zero-length period, or activity posted against a pe
 validation: >
   Filter ReportingPeriod.status == open. Fail when the count is not 1.
   Fail when start_date >= end_date. O1 fails when period_type is not annual.
+when_count_is_not_one:
+  code: open_period_count
+  met: false
+  stops_checklist: true
+  fields: [count, periods]
+  periods_sorted_by: id ascending
+  period_fields: [id, name, period_type, start_date, end_date, status]
+  status_value: open
+  empty_name: the period id, as text
+  omit: [closed periods, draft periods, kilograms, tonnes, calculation summary]
+  lead_chooses: which period to close. The checklist does not pick one.
 implementation: >
   Host screen for periods. Process step open_period is human_only and depends
   on name_boundary. This rule does not insert a period.

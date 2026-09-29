@@ -1,0 +1,20 @@
+# NMD2101 on local Moodle after a production backup. Users stay out.
+version: 1
+shortname: NMD2101
+source: medicinemoodle.aast.online
+local_course_id: 6
+users: 0
+modules:
+  page: 30
+  label: 42
+  url: 61
+  resource: 142
+hidden_section_names:
+  - Revisions
+  - Exams
+fail_if:
+  - extracted-text pages instead of resource files
+  - shortname other than NMD2101
+  - a new student account
+  - course id 6 required
+  - new Pulse settings page

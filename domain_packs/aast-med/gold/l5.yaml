@@ -1,0 +1,20 @@
+# L5 is not passable. Eight fact questions are frozen. Ninety-two are not gold.
+version: 1
+status: not_passable
+curriculum_benchmark:
+  sample_size: 100
+  min_passage_cite: 95
+  max_extra_fact: 2
+  frozen_n: 8
+  deferred_n: 92
+enabled_courses_gold_covers:
+  - NMD1103
+includes:
+  - gold/c6.yaml
+r11_draft:
+  required_n: 4
+  frozen_n: 0
+r12_same_lecture_two_students:
+  required_n: 2
+  frozen_n: 0
+  blocked_by: student_cohorts_empty

@@ -27,9 +27,8 @@ from ai.engine.cognition.turn.navigation import resolve_navigation
 
 def _nibras_cfg() -> dict:
     path = (
-        Path(__file__).resolve().parents[1]
-        / "engine"
-        / "instances"
+        Path(__file__).resolve().parents[3]
+        / "domain_packs"
         / "nibras"
         / "instance.yaml"
     )
@@ -300,7 +299,7 @@ def test_arabic_typo_اجازلت_is_leave_balance():
         set(),
     )
     assert out.tool_calls
-    assert LEAVE_BALANCE_API in str(out.tool_calls)
+    assert str(LEAVE_BALANCE_API) in str(out.tool_calls)
 
 
 def test_comprehensive_pick_binds_only_when_single_domain_in_thread(monkeypatch: pytest.MonkeyPatch):

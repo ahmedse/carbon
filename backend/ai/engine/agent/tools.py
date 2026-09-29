@@ -14,7 +14,7 @@ from ai.engine.host_ids import (
     ID_LIST_MY_PAYSLIPS,
     ID_LIST_PAYSLIP_LINES,
 )
-from ai.engine.pack_vocab import LV, V, copy_text, live_alt, live_pattern, present_ids, same_id
+from ai.engine.pack_vocab import LV, V, copy_text, live_alt, live_pattern, present_id_list, present_ids, same_id
 import copy
 import json
 import logging
@@ -1186,9 +1186,8 @@ async def execute_call_host_api(
         )
         if not metric:
             return {
-                "error": (
-                    "aggregate_entity requires a metric name "
-                    "(e.g. 'headcount' or 'kuwaiti')."
+                "error": _metric_required_error(
+                    _resolved_ids(*_ECF_METRIC_FALLBACK)
                 )
             }
         return await execute_aggregate_entity(
@@ -2128,8 +2127,21 @@ STATIC_TOOL_EXECUTORS = {
 
 # Fallback wording when instance_config / descriptors are unavailable at
 # catalog assembly time. Prefer dynamic names from load_descriptors().
-_ECF_ENTITY_TYPE_FALLBACK = (LV("t_employee_4"), "leave_record")
-_ECF_METRIC_FALLBACK = ("headcount", "kuwaiti")
+_ECF_ENTITY_TYPE_FALLBACK = (LV("t_employee_4"), LV("t_rx_id_leave_record"))
+_ECF_METRIC_FALLBACK = (LV("t_rx_id_metric_headcount"), LV("t_rx_id_metric_kuwaiti"))
+
+def _resolved_ids(*needles: object) -> list[str]:
+    """Non-empty ids for the pack bound now. An empty string is not a member."""
+    return list(present_id_list(*needles))
+
+
+def _metric_required_error(examples: list[str]) -> str:
+    """Missing-metric error. Examples are the pack's metric ids, or nothing."""
+    names = [name for name in examples if name]
+    if not names:
+        return "aggregate_entity requires a metric name."
+    shown = " or ".join(f"'{name}'" for name in names)
+    return f"aggregate_entity requires a metric name (e.g. {shown})."
 
 _ECF_RESOLVE_ENTITY_DEFINITION = {
     "type": "function",
@@ -2137,28 +2149,21 @@ _ECF_RESOLVE_ENTITY_DEFINITION = {
         "name": "resolve_entity",
         "description": (
             "Find a specific record by name, number, or identifier. "
-            + LV("t_use_this_for_find_employee_x")
-            + LV("t_من_هو_x_ابحث_عن_x")
-            + "Performs a COMPLETE scan (not capped at 100 rows) across all records, "
+            "Performs a COMPLETE scan (not capped at 100 rows) across all records, "
             "in Arabic and English. Returns a single match, a disambiguation list, "
-            "or a grounded 'not found' that includes how many records were searched. "
-            "ALWAYS use this instead of list_employees for name/number lookup. "
-            "Set entity_type to a registered HRMS instance descriptor name."
+            "or a grounded 'not found' that includes how many records were searched."
         ),
         "parameters": {
             "type": "object",
             "properties": {
                 "entity_type": {
                     "type": "string",
-                    "description": (
-                        "Registered entity type from HRMS instance descriptors "
-                        + LV("t_e_g_employee_leave_record_must")
-                    ),
-                    "enum": list(_ECF_ENTITY_TYPE_FALLBACK),
+                    "description": "Registered entity type. Must match a descriptor name.",
+                    "enum": [],
                 },
                 "query": {
                     "type": "string",
-                    "description": LV("t_name_employee_number_id_date_or"),
+                    "description": "Name, number, id, or date.",
                 },
                 "explanation": {
                     "type": "string",
@@ -2181,33 +2186,20 @@ _ECF_AGGREGATE_ENTITY_DEFINITION = {
         "name": "aggregate_entity",
         "description": (
             "Return a CANONICAL named metric count for an entity type. "
-            + LV("t_use_for_total_headcount_كم_عدد")
-            + LV("t_كم_كويتي_موظف_and_for_leave")
-            + "registered. Metrics are descriptor-defined — "
-            "'headcount' ALWAYS means is_active=True; 'kuwaiti' ALWAYS means "
-            "nationality_code=KW (never the kuwaitization boolean). "
-            "Cite the filter fields in your answer. "
-            "For breakdowns BY dimension (gender, nationality, org_unit, …) "
-            "keep using analyze_employees — do NOT invent alternate filters."
+            "Metrics are descriptor-defined. Cite the filter fields in your answer."
         ),
         "parameters": {
             "type": "object",
             "properties": {
                 "entity_type": {
                     "type": "string",
-                    "description": (
-                        "Registered entity type from HRMS instance descriptors "
-                        + LV("t_e_g_employee_leave_record_must")
-                    ),
-                    "enum": list(_ECF_ENTITY_TYPE_FALLBACK),
+                    "description": "Registered entity type. Must match a descriptor name.",
+                    "enum": [],
                 },
                 "metric": {
                     "type": "string",
-                    "description": (
-                        "Canonical metric name from the entity descriptor "
-                        "(e.g. 'headcount', 'kuwaiti', 'open_leave_count')."
-                    ),
-                    "enum": list(_ECF_METRIC_FALLBACK),
+                    "description": "Canonical metric name from the entity descriptor.",
+                    "enum": [],
                 },
                 "explanation": {
                     "type": "string",
@@ -2249,6 +2241,11 @@ def _descriptor_metric_names(instance_config: dict | None) -> list[str]:
         return []
 
 
+def _pack_clause(*keys: str) -> str:
+    """Host clauses for the pack bound now. A missing clause is omitted."""
+    return "".join(part for key in keys if (part := V(key)))
+
+
 def _enrich_ecf_tool_definitions(
     definitions: list[dict],
     instance_config: dict | None,
@@ -2256,12 +2253,15 @@ def _enrich_ecf_tool_definitions(
     V("t_advertise_registered_descriptor_entity_types_and")
     entity_names = _descriptor_entity_names(instance_config)
     metric_names = _descriptor_metric_names(instance_config)
-    advertised_entities = entity_names or list(_ECF_ENTITY_TYPE_FALLBACK)
-    entity_desc = (
-        "Registered entity type from HRMS instance descriptors: "
-        + ", ".join(advertised_entities)
-        + ". Must match a descriptor name."
-    )
+    advertised_entities = entity_names or _resolved_ids(*_ECF_ENTITY_TYPE_FALLBACK)
+    if advertised_entities:
+        entity_desc = (
+            "Registered entity type: "
+            + ", ".join(advertised_entities)
+            + ". Must match a descriptor name."
+        )
+    else:
+        entity_desc = "Registered entity type. Must match a descriptor name."
 
     enriched: list[dict] = []
     for tool in definitions:
@@ -2270,15 +2270,42 @@ def _enrich_ecf_tool_definitions(
             enriched.append(tool)
             continue
         clone = copy.deepcopy(tool)
-        props = clone["function"]["parameters"]["properties"]
+        fn = clone["function"]
+        props = fn["parameters"]["properties"]
         props["entity_type"]["enum"] = list(advertised_entities)
-        props["entity_type"]["description"] = entity_desc
+        props["entity_type"]["description"] = _pack_clause("t_rx_copy_ecf_hrms") + entity_desc
+        if name == "resolve_entity":
+            fn["description"] = (
+                fn["description"]
+                + _pack_clause(
+                    "t_use_this_for_find_employee_x",
+                    "t_من_هو_x_ابحث_عن_x",
+                    "t_rx_copy_ecf_instead_of_list",
+                )
+            )
+            props["query"]["description"] = (
+                V("t_name_employee_number_id_date_or") or props["query"]["description"]
+            )
         if name == "aggregate_entity":
-            advertised_metrics = metric_names or list(_ECF_METRIC_FALLBACK)
+            advertised_metrics = metric_names or _resolved_ids(*_ECF_METRIC_FALLBACK)
             props["metric"]["enum"] = list(advertised_metrics)
+            available = (
+                f" (available: {', '.join(advertised_metrics)})."
+                if advertised_metrics
+                else "."
+            )
             props["metric"]["description"] = (
-                "Canonical metric name from the entity descriptor "
-                f"(available: {', '.join(advertised_metrics)})."
+                "Canonical metric name from the entity descriptor" + available
+            )
+            fn["description"] = (
+                fn["description"]
+                + _pack_clause(
+                    "t_use_for_total_headcount_كم_عدد",
+                    "t_كم_كويتي_موظف_and_for_leave",
+                    "t_rx_copy_ecf_metric_rules",
+                    "t_rx_copy_ecf_analyze",
+                    "t_rx_copy_ecf_metric_hint",
+                )
             )
         enriched.append(clone)
     return enriched

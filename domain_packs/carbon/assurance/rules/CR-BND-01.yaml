@@ -3,9 +3,9 @@ journey: INV
 meaning: >
   The open ReportingPeriod (status open) has organizational_boundary set.
   That boundary's consolidation_approach is equity_share, financial_control,
-  or operational_control. The boundary name states which of Smart Village,
-  South Valley, Abu Qir, and Alamein are inside. A campus left out is not
-  silently inside.
+  or operational_control. The boundary name and description are free text.
+  Campus words in that text are not a pass and not a fail. Which campuses
+  are inside is CR-SRC-01 and CR-EXC-01.
 source: backend/emissions/models.py OrganizationalBoundary.consolidation_approach; ReportingPeriod.organizational_boundary
 owner: carbon-inventory-lead
 failure: Staff quote a footprint while the open period has no boundary, or the approach is a free-text value outside the three choices.

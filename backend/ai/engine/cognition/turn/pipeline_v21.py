@@ -202,7 +202,15 @@ async def _execute_bound_read(
         text = render_resolve_grounded(user_message, payload)
     # A restatement with a number the payload lacks is not edited: it is
     # withheld, and the writer speaks from the payload instead (ADR-0056).
-    if ungrounded_numbers(text, [payload]):
+    # ExecuteWitness stores the wrap as JSON. The wrap and `data` are the
+    # same evidence: a printed row count must not trip the writer.
+    from ai.engine.cognition.turn.grounding import _as_payload
+
+    body = _as_payload(payload)
+    bodies: list[Any] = [payload, body]
+    if isinstance(body, dict) and "status_code" in body and "data" in body:
+        bodies.append(body.get("data"))
+    if ungrounded_numbers(text, bodies):
         return None
     return text or None
 

@@ -324,6 +324,44 @@ def test_handoff_copy_en_and_ar_lists_slots():
     assert "أتابع تقديم" not in ar.text
 
 
+_NIBRAS_ASK_GROUNDING = (
+    "GROUNDING RULES — follow them exactly:\n"
+    "- You have tools available. For READS (balances, lists, profile, "
+    "distributions, analytics), call the matching read tool and answer — "
+    "never call plan_task for a question.\n"
+    "- ASK MODE: answers only. Never call plan_task / approve_plan / "
+    "edit_plan. Never invent a Tasks-panel plan. If the user needs a "
+    "multi-step or reviewable plan, tell them to switch the dial to Plan "
+    "(same conversation) — do not invent Open-in-Agent or Open-My for "
+    "read questions.\n"
+    "- DISTRIBUTION / ANALYTICS: for salary or headcount distributions, "
+    "return aggregates, buckets, and a chart or summary table — NEVER paste "
+    "raw employee-by-employee salary rows into the chat.\n"
+    "- BROAD REPORT BRIEFS: if the user asks for a 'full' / 'complete' "
+    "salary or payroll report without saying the angle or audience, ask "
+    "ONE short clarifying question with options (distribution, run health, "
+    "GOSI, board summary) before calling tools.\n"
+    "- HOST WRITES (leave, loan, attendance, payroll, DQ create): Chat never "
+    "stages or submits them. Do NOT call submit_my_* / mutation "
+    "call_host_api / create_dq_rule. When the user wants to submit and you "
+    "have the details, tell them to switch to Agent (you will carry the "
+    "details over) or open My — one clear next step.\n"
+    "- If required details are missing, ask ONE short clarifying question "
+    "for the missing piece only; never re-ask slots already known.\n"
+    "- NEVER claim an action succeeded unless a tool result confirms it.\n"
+    "- Memory (learn_fact / forget_fact) may stage a confirm card — that is "
+    "the only Chat write exception.\n"
+    "- PLAN FIRST for multi-step analytical work: propose numbered steps in "
+    "prose when helpful; only when the user is in Plan mode (or explicitly "
+    "asks to convert to a task) may plan_task run.\n"
+    "- If a tool errors, report the error plainly.\n"
+    "- CLARIFICATION POLICY: if the object is ambiguous, ask one clarifying "
+    "question instead of guessing.\n"
+    "- TENANT-ORG EXCEPTION: the platform's own organisation name is NEVER "
+    "an ambiguous object — answer with live read tools immediately."
+)
+
+
 def test_chat_grounding_never_says_call_the_tool_for_writes():
     block = chat_grounding_rules_block()
     assert "CALL THE TOOL" not in block
@@ -331,6 +369,36 @@ def test_chat_grounding_never_says_call_the_tool_for_writes():
     assert "HOST WRITES" in block
     assert "switch to Agent" in block
     assert "learn_fact" in block
+    assert block == _NIBRAS_ASK_GROUNDING
+
+
+def test_medicine_ask_grounding_omits_people_writes():
+    from ai.engine.pack_vocab import bind_pack
+
+    with bind_pack("aast-med"):
+        block = chat_grounding_rules_block()
+    for fragment in (
+        "submit_my_",
+        "salary",
+        "headcount",
+        "GOSI",
+        "leave",
+        "payroll",
+        "employee-by-employee",
+        "BROAD REPORT",
+    ):
+        assert fragment not in block, fragment
+    assert "HOST WRITES" in block
+    assert "switch to Agent" in block
+    assert "call_host_api" in block
+    assert "create_dq_rule" in block
+    assert "learn_fact" in block
+
+
+def test_plan_grounding_does_not_name_a_people_write():
+    block = chat_grounding_rules_block(process_mode="plan")
+    assert "Never write a plan of your own" in block
+    assert "submit_my_" not in block
 
 
 def test_plan_grounding_never_lets_the_draft_invent_steps():

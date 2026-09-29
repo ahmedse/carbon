@@ -60,7 +60,7 @@ evidence → not done.
 | **GradeVance HITL P2** | **EduOS** | **ACTIVE** | Learning loop proven: edit→proposal→accept→bump→repin · `docs/eduos/qa-evidence/HITL-LEARNING-LOOP.json` · next: UI path + Phase C depth |
 | **PV2** (Pulse v2 Intelligence Contract, ADR-0047) | **Pulse** | **ACTIVE** | **20/20 · L0–L5 · 6B DONE 5/5 · ADR-0047 Accepted** · 4A still soaking |
 | **PV21** (Pulse 2.1, ADR-0049 Proposed) | **Pulse** | **ACTIVE** | Understanding defaults to v21. Tasks production 9/12, not ready (R6 reached 084800; R7 missing; night 2026-09-23 FAIL stays). Ask 9/10 on 1018 (Plan handoff; C8 still 4 of 19 over 4 s). L6/L7 not claimed. |
-| **DMS** (Data Migration Studio, ADR-0060 Accepted) | **inbound** (doors: People, Catalog) | **ACTIVE** | L4 Proven · 45/54 (last full `--no-db`). Rank 5 not a new level. `0a66aa44` CI run 36320936245 failed at Install dependencies, Run unit tests, and Fail-open lint. Ratchet skipped. Nightly runner unnamed. Series file absent. |
+| **DMS** (Data Migration Studio, ADR-0060 Accepted) | **inbound** (doors: People, Catalog) | **ACTIVE** | L4 Proven · 45/54. DMS-0–DMS-8 done. Rank 5 contract has one reading per cell. SEC, GOV, and MNT failed on CI run 36563948856 (`12d8a73e`: import script exit 126, missing FERNET_KEY, UTC checkpoint titles). Actions runners: 0. Nightly file absent. |
 
 **Multi-Master:** `.ai-toolkit/shared/multi-master.md` · seats · `docs/ops/MASTERS-COMMS.md` · RULE_30. · **This session seat: Nibras.**
 

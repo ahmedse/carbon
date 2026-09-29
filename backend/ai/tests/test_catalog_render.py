@@ -500,3 +500,77 @@ def test_agent_bound_read_restates_breakdown_totals():
     assert "9863.126" in rendered
     assert "1200.000" in rendered
     assert "KWT" in rendered
+
+
+def test_history_row_count_is_grounded_against_status_wrap():
+    """Eval stub_host wraps rows as {status_code, data}. History restates
+    ``(n)``. That count is a row count, not an invented figure (ADR-0056)."""
+    from ai.engine.cognition.turn.grounding import _flatten_numbers, ungrounded_numbers
+    from ai.engine.pack_vocab import bind_pack
+
+    payslip = [
+        {"line_type": "gross", "amount": 6500},
+        {"line_type": "GOSI", "amount": 1200},
+        {"line_type": "loan_installment", "amount": 800},
+        {"line_type": "net", "amount": 4500},
+    ]
+    loan = [{"id": 7, "loan_type": "emergency", "principal": 9600,
+             "term_months": 12, "status": "active"}]
+    wrap_pay = {"status_code": 200, "data": payslip}
+    wrap_loan = {"status_code": 200, "data": loan}
+
+    assert "4" in _flatten_numbers(wrap_pay)
+    assert "1" in _flatten_numbers(wrap_loan)
+    assert "4" in _flatten_numbers(json.dumps(wrap_pay))
+    assert "1" in _flatten_numbers(json.dumps(wrap_loan))
+
+    with bind_pack("nibras"):
+        pay_text = render_catalog_read(
+            {"result": wrap_pay},
+            "list_my_payslips",
+            "en",
+            catalog_entry={"name": "list_my_payslips", "kind": "history"},
+        )
+        loan_text = render_catalog_read(
+            {"result": wrap_loan},
+            "list_my_loans",
+            "en",
+            catalog_entry={"name": "list_my_loans", "kind": "history"},
+        )
+    assert pay_text and "payslip lines" in pay_text.casefold() and "(4)" in pay_text
+    assert ungrounded_numbers(pay_text, [wrap_pay]) == []
+    assert ungrounded_numbers(pay_text, [json.dumps(wrap_pay)]) == []
+    assert loan_text and "emergency" in loan_text and "9600" in loan_text
+    assert "(1)" in loan_text
+    assert ungrounded_numbers(loan_text, [wrap_loan]) == []
+    assert ungrounded_numbers(loan_text, [json.dumps(wrap_loan)]) == []
+
+
+def test_execute_bound_read_keeps_wrapped_loan_restatement():
+    """Withhold must not send a named host GET to the draft writer."""
+    import asyncio
+
+    from ai.engine.cognition.turn.pipeline_v21 import _execute_bound_read
+    from ai.engine.pack_vocab import bind_pack
+
+    async def execute_tool(name, args):
+        assert name == "list_my_loans"
+        # ExecuteWitness JSON-stringifies the host wrap.
+        return json.dumps({"status_code": 200, "data": [
+            {"id": 7, "loan_type": "emergency", "principal": 9600,
+             "term_months": 12, "status": "active"},
+        ]})
+
+    async def run():
+        with bind_pack("nibras"):
+            return await _execute_bound_read(
+                "list_my_loans",
+                execute_tool=execute_tool,
+                user_message="what about my loans?",
+                catalog=[{"name": "list_my_loans", "kind": "history", "method": "GET"}],
+            )
+
+    text = asyncio.run(run())
+    assert text
+    assert "emergency" in text
+    assert "9600" in text

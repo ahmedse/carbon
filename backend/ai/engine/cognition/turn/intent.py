@@ -33,7 +33,7 @@ from ai.engine.host_ids import (
 )
 from ai.engine.cognition.phrase_tables import T
 
-from ai.engine.pack_vocab import LV, V, live_pattern, present_id_list
+from ai.engine.pack_vocab import LV, V, live_pattern, present_id_list, same_id
 
 import json
 import logging
@@ -188,6 +188,37 @@ def _build_nav_targets(navigation_routes: list[dict] | None) -> list[dict]:
     return out
 
 
+def _safe_example_name(rows: list[dict] | None) -> str:
+    """First listed name that can sit inside a JSON string. Empty is not an example."""
+    for row in rows or []:
+        name = str((row or {}).get("name") or "").strip()
+        if not name or name in {".", ".."}:
+            continue
+        if any(ch in name for ch in '/\\"\' \t\n\r'):
+            continue
+        body = name[1:] if name[:1] in {"_",} else name
+        if not body or not body.replace("_", "").isalnum() or body[:1].isdigit():
+            continue
+        return name
+    return ""
+
+
+def _nav_example_target(nav_targets: list[dict] | None) -> str:
+    """First listed destination name. An empty or unsafe name is not an example."""
+    return _safe_example_name(nav_targets)
+
+
+def _answer_example_line(labels: list[dict] | None) -> str:
+    """Closed-label endpoint in the answer shape. No usable name writes null."""
+    name = _safe_example_name(labels)
+    endpoint = f'"{name}"' if name else "null"
+    return (
+        '{"action":"answer","endpoint":' + endpoint + ',"confidence":0.95,'
+        '"delivery":"explain","zone":"platform","needs_live_evidence":false,'
+        '"clarification":null,"options":null}'
+    )
+
+
 def _build_system_prompt(
     labels: list[dict],
     nav_targets: list[dict] | None = None,
@@ -219,13 +250,14 @@ def _build_system_prompt(
         "  \"all about it\", \"everything\", \"more\", \"tell me more\", "
         "  \"yes\", \"ok\" continue the PREVIOUS topic — return the SAME "
         "  endpoint at high confidence (action = \"answer\"), never clarify.",
-        "- When the user names a specific branch / campus / module (e.g. "
-        "  \"East Campus\", \"Building 4\", \"Module B\") and "
-        "  asks about its activity / totals / metrics, that is the "
-        "  calculation-summary endpoint (it breaks down totals by module): "
-        "  action = \"answer\" with `endpoint` set to it and delivery = "
-        "  \"analyze\" or \"summarize\" — do NOT clarify just because a branch "
-        "  name is present.",
+    ]
+    branch_rule = V("t_rx_copy_intent_branch_metrics")
+    summary_id = V("t_rx_id_get_calculation_summary")
+    if branch_rule and summary_id and any(
+        same_id(label.get("name"), summary_id) for label in labels
+    ):
+        lines.append(branch_rule)
+    lines += [
         V("t_compensation_salary_basic_pay_راتب_أجر")
         + V("t_rx_copy_intent_profile")
         + V("t_my_salary_راتبي_do_not_match")
@@ -308,14 +340,18 @@ def _build_system_prompt(
             "never an invented URL, route, or a person/entity name.",
             "- NEVER use navigate when the user asks to explain a governed process / "
             "lifecycle / steps / human approval gates — that is concept answer.",
-            'For navigation respond: {"action":"navigate","target":"people","confidence":0.9}',
         ]
+        example = _nav_example_target(nav_targets)
+        if example:
+            lines.append(
+                'For navigation respond: {"action":"navigate","target":"'
+                + example
+                + '","confidence":0.9}'
+            )
     lines += [
         "",
         "Respond with ONLY valid JSON matching exactly this shape:",
-        '{"action":"answer","endpoint":"list_gwp_gases","confidence":0.95,'
-        '"delivery":"explain","zone":"platform","needs_live_evidence":false,'
-        '"clarification":null,"options":null}',
+        _answer_example_line(labels),
     ]
     return "\n".join(lines)
 

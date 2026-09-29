@@ -1433,3 +1433,14 @@ t_rx_id_enum_car: car
 t_rx_id_enum_personal: personal
 t_rx_id_enum_official: official
 t_rx_id_enum_medical: medical
+t_rx_id_leave_record: leave_record
+t_rx_id_metric_headcount: headcount
+t_rx_id_metric_kuwaiti: kuwaiti
+t_rx_copy_ecf_instead_of_list: ' ALWAYS use this instead of list_employees for name/number lookup.'
+t_rx_copy_ecf_hrms: ' Set entity_type to a registered HRMS instance descriptor name.'
+t_rx_copy_ecf_analyze: ' For breakdowns BY dimension (gender, nationality, org_unit) keep using analyze_employees — do not invent alternate filters.'
+t_rx_copy_ecf_metric_hint: ' Examples include headcount, kuwaiti, and open_leave_count.'
+t_rx_copy_ecf_metric_rules: " 'headcount' ALWAYS means is_active=True; 'kuwaiti' ALWAYS means nationality_code=KW (never the kuwaitization boolean)."
+t_rx_copy_tenant_data_tools: "(`aggregate_entity` metric=headcount, and when useful `analyze_employees` or list endpoints) and answer from the results.\n"
+t_rx_copy_ask_no_submit: "submit_my_*"
+t_rx_id_person_no: employee_no

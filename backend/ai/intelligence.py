@@ -701,6 +701,19 @@ class CarbonIntelligence:
                     plan_cancel=bool(plan_cancel),
                     page_context=str(page_context or ""),
                 )
+                if (conversation.app_identifier or "") == "moodle":
+                    from ai.moodle_host import door_answer, snapshot_from_page_context
+
+                    cited = door_answer(content, snapshot_from_page_context(str(page_context or "")))
+                    if cited:
+                        self._build_ai_message(conversation, "completed", cited, [])
+                        _finalize_generation("completed")
+                        yield {"type": "chunk", "content": cited}
+                        yield {
+                            "type": "done",
+                            "conversation": self.get_conversation(user, conv_id),
+                        }
+                        return
 
                 partial_parts: list[str] = []
                 for frame in self.provider.chat_stream(chat_request):

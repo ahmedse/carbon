@@ -639,3 +639,226 @@ turn/catalog_render.py::PAYSLIP_APIS:
   items:
   - list_my_payslips
   kind: frozenset
+plan/export_bind.py::_SELF_GET_NO_PATH:
+  items:
+  - get_my_profile
+  - get_my_leave_balance
+  - list_my_leave
+  - list_my_loans
+  - list_my_payslips
+  - list_my_attendance_permissions
+  - list_attendance
+  kind: frozenset
+turn/force_tool.py::_ESS_SELF_READ_APIS:
+  items:
+  - get_my_leave_balance
+  - list_my_leave
+  - list_my_loans
+  - list_my_payslips
+  - list_my_attendance_permissions
+  - list_attendance
+  kind: frozenset
+turn/plan_dial.py::_AR_SLOT:
+  items:
+    date: التاريخ
+    days: الأيام
+    end_date: تاريخ الانتهاء
+    hours: الساعات
+    leave_type: نوع الإجازة
+    loan_type: نوع القرض
+    permission_type: نوع الاستئذان
+    principal: المبلغ
+    start_date: تاريخ البدء
+    term_months: المدة (شهر)
+  kind: dict
+turn/plan_dial.py::_AR_STEP_BY_API:
+  items:
+    get_my_leave_balance: قراءة رصيد إجازتي (قراءة)
+    list_my_attendance_permissions: التحقق من استئذاناتي الحالية (قراءة)
+    list_my_leave: قراءة إجازاتي (قراءة)
+    list_my_loans: التحقق من قروضي الحالية (قراءة)
+    submit_my_attendance_permission: تقديم طلب الاستئذان
+    submit_my_leave: تقديم طلب الإجازة
+    submit_my_loan: تقديم طلب القرض
+  kind: dict
+turn/plan_dial.py::_EN_SLOT:
+  kind: dict
+  items:
+    date: date
+    days: days
+    end_date: end date
+    hours: hours
+    permission_type: permission type
+    principal: amount
+    start_date: start date
+    term_months: term (months)
+turn/report_clarify.py::_PAYROLL_DIGEST_MARKERS:
+  kind: tuple
+  items:
+  - list_payroll_runs
+  - list_payslip_lines
+  - analyze_employees
+  - aggregate_entity
+  - headcount
+  - metric=headcount
+
+scope_route_i18n.py::ABSENCE_REPORT_AR:
+  items:
+  - الإبلاغ عن غياب
+  - الابلاغ عن غياب
+  - أبلغ عن غياب
+  - ابلغ عن غياب
+  kind: tuple
+turn/execute.py::_CATALOG_PATH_KEYS:
+  items:
+  - id
+  - pk
+  - employee_id
+  - run_id
+  kind: frozenset
+turn/execute.py::_CATALOG_QUERY_KEYS:
+  items:
+  - dimension
+  - is_active
+  - page
+  - page_size
+  - limit
+  - offset
+  - search
+  - q
+  - ordering
+  - status
+  - employee_no
+  - date
+  - date_from
+  - date_to
+  - period
+  - year
+  - month
+  kind: frozenset
+turn/handoff_agent.py::_PAYROLL_STATUS_PHRASES:
+  items:
+  - what was
+  - what were
+  - what is my
+  - how much was
+  - when will
+  - net pay
+  - take-home
+  - take home
+  - can i download
+  kind: tuple
+turn/navigation_i18n.py::SELF_READ_POSSESSIVE_AR:
+  items:
+  - إجازاتي
+  - اجازاتي
+  - إجازتي
+  - اجازتي
+  - راتبي
+  - مرتبي
+  - قروضي
+  - حضوري
+  - سلفتي
+  - قسيمة راتبي
+  - استئذاناتي
+  kind: tuple
+turn/next_step.py::_PAYROLL_PHRASES:
+  items:
+  - net pay
+  - take-home
+  - take home
+  kind: tuple
+turn/report_clarify.py::_SCOPED_PHRASES:
+  items:
+  - hr lead
+  - by band
+  - by tier
+  - by nationality
+  - by gender
+  - by dept
+  - by department
+  - by org
+  - by grade
+  kind: tuple
+turn/report_clarify_i18n.py::ASPECT_PICK_AR:
+  items:
+  - توزيع
+  - شرائح
+  - مسيرات
+  - ملتزم
+  - مسودة
+  - فشل
+  - تأمينات
+  - مجلس
+  - ملخص
+  - كل
+  - أربعة
+  - الجوانب
+  - الخيارات
+  - ما سبق
+  kind: tuple
+turn/report_clarify_i18n.py::PRIOR_CLARIFY_AR:
+  items:
+  - على ماذا تريد التركيز
+  - بكل سرور أساعد في تقرير الرواتب
+  kind: tuple
+turn/report_clarify_i18n.py::SCOPED_AR:
+  items:
+  - مجلس
+  - إدارة
+  - توزيع
+  - شرائح
+  - تأمينات
+  - استقطاع
+  - حسب
+  - رسوم
+  - مخططات
+  kind: tuple
+turn/runner_util_i18n.py::FIRST_PERSON_AR:
+  items:
+  - أنا
+  - انا
+  - عندي
+  - لدي
+  - أريد
+  - اريد
+  - طلبت
+  - راتبي
+  - إجازتي
+  - اجازتي
+  - قرضي
+  - حضوري
+  - رصيدي
+  - قسيمتي
+  kind: tuple
+turn/zero_llm_i18n.py::DAY_SPAN_AR:
+  items:
+  - من الآن
+  - من الان
+  - حتى إجاز
+  - حتى اجاز
+  kind: tuple
+turn/zero_llm_i18n.py::EMPTY_PAYSLIP_REPLY_AR:
+  items:
+  - لم أجد قسائم
+  kind: tuple
+turn/zero_llm_i18n.py::PAYROLL_FOLLOWUP_AR:
+  items:
+  - راتبي
+  - الراتب
+  - صافي
+  - الاستقطاعات
+  - خصومات
+  - قسيمة
+  kind: tuple
+turn/zero_llm_i18n.py::PAYROLL_SCHEDULE_AR:
+  items:
+  - متى ستتم معالجة الرواتب
+  - متى يتم معالجة الرواتب
+  - متى سيكون الراتب
+  kind: tuple
+turn/zero_llm_i18n.py::PAYSLIP_DOWNLOAD_AR:
+  items:
+  - تحميل قسيمة
+  - تحميل القسيمة
+  kind: tuple

@@ -1,0 +1,20 @@
+# L4. A fact is passage text. Isolation is the world field, not a word search.
+version: 1
+world: aast-mbbs
+marker: AHFAD-FACT-8841
+other_world_miss: "This is not in this lecture."
+unlisted_answer: "This is not on the course list."
+mbbs:
+  - {activity: 1008, keep: "NMD1103:page:1008", poison_course: AHFAD-PED, poison_world: ahfad}
+  - {activity: 1017, keep: "NMD1103:label:1017", poison_course: NMD1103, poison_world: ahfad}
+  - {activity: 1009, keep: "NMD1103:file:1009:Hand Hygiene Skill lab (Academy) 2021-2022 (2).pptx", poison_course: AHFAD-PED, poison_world: ahfad}
+  - {activity: 4242, keep: "", poison_course: NMD1103, poison_world: ahfad}
+control:
+  activity: 7777
+  course: NMD1103
+  world: aast-mbbs
+unlisted:
+  - NMD1601
+  - NMD2603
+  - NMD3405
+  - MED5309

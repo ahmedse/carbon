@@ -12,10 +12,34 @@ source: backend/emissions/models.py CoverageGoal; InventorySourceStatus; ADR-002
 owner: carbon-inventory-lead
 failure: A coverage percent with an empty source list, status covered carried from another year, or min_quality_tier left null so proxy counts as the goal.
 validation: >
-  Reject CoverageGoal create when no InventorySource exists for the open
-  period. Reject status covered when linked_tables is empty or no Calculation
-  matches reporting_period. Goal scope must be 1+2 and min_quality_tier must
-  be 4 while benchmark O1 status is open.
+  While catalogue is planned, this rule reports. It does not reject a save.
+  Status covered still fails the checklist when linked_tables is empty or no
+  Calculation matches the open reporting_period. A CoverageGoal has no
+  reporting_period field. It is org unit, scope, target year, and tier.
+  Emit a goal check only when both O1 source names exist and exactly one
+  period is open. Scope must be the string 1+2. Several 1+2 goals use the
+  lowest id. Do not copy target_coverage_pct onto the checklist.
+codes:
+  - code: coverage_goal_absent
+    when: no CoverageGoal has scope 1+2
+    met: false
+  - code: coverage_goal_completeness
+    when: completeness_definition is not materiality_bounded
+    met: false
+    fields: [record_id, name, completeness]
+  - code: coverage_goal_tier
+    when: min_quality_tier is not 4
+    met: false
+    fields: [record_id, name, tier]
+  - code: coverage_goal_status
+    when: status is not draft
+    met: false
+    fields: [record_id, name, status]
+  - code: coverage_goal_met
+    when: scope 1+2, materiality_bounded, tier 4, status draft
+    met: true
+    fields: [record_id, name, scope, completeness, tier, status, target_year]
+    omit: [target_coverage_pct]
 implementation: >
   compute_coverage on GET /carbon-api/carbon/coverage/?reporting_period=<id>.
   The onboarding page reads. It does not POST a goal.

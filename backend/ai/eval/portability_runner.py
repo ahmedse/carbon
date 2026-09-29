@@ -17,11 +17,24 @@ def _cases() -> list[tuple[str, Callable[[], bool]]]:
     )
 
     def both_packs_are_discovered() -> bool:
-        ids = set(process_ids())
-        return _EDUOS_PROCESS in ids and _NIBRAS_PROCESS in ids
+        from ai.engine.pack_vocab import bind_pack
+
+        with bind_pack("eduos"):
+            education = set(process_ids())
+        with bind_pack("nibras"):
+            people = set(process_ids())
+        return (
+            _EDUOS_PROCESS in education
+            and _NIBRAS_PROCESS not in education
+            and _NIBRAS_PROCESS in people
+            and _EDUOS_PROCESS not in people
+        )
 
     def education_process_briefs() -> bool:
-        text = format_process_briefing(_EDUOS_PROCESS, lang="en") or ""
+        from ai.engine.pack_vocab import bind_pack
+
+        with bind_pack("eduos"):
+            text = format_process_briefing(_EDUOS_PROCESS, lang="en") or ""
         return _EDUOS_PROCESS in text and "human_only" in text and "submit" in text
 
     def missing_process_is_empty() -> bool:

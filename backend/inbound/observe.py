@@ -23,7 +23,9 @@ def smoke_series_row(batch) -> dict:
 
 def write_smoke_series(path, batches) -> None:
     payload = {'schema': 1, 'rows': [smoke_series_row(batch) for batch in batches]}
-    Path(path).write_text(json.dumps(payload, indent=2) + '\n', encoding='utf-8')
+    dest = Path(path)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(json.dumps(payload, indent=2) + '\n', encoding='utf-8')
 
 
 SERIES_LIMIT = 10

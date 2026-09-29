@@ -64,7 +64,25 @@ evaluator:
     - no_calculation
     - summary_kg
     - not_assured
-    - other_campus
+    - other_campus_absent
+    - other_campus_no_status
+    - other_campus_declared
+    - other_campus_excluded
+    - other_campus_excluded_notes
+    - other_campus_not_material
+    - other_campus_covered
+    - factor_missing
+    - factor_inactive
+    - factor_country
+    - factor_source_blank
+    - factor_met
+    - coverage_goal_absent
+    - coverage_goal_completeness
+    - coverage_goal_tier
+    - coverage_goal_status
+    - coverage_goal_met
+  open_period_count_fields: [count, periods]
+  period_fields: [id, name, period_type, start_date, end_date, status]
 
 pulse:
   legal_number_tools:
@@ -82,7 +100,7 @@ pass:
 fail:
   - A tonne figure with no calculation-summary or chairman payload.
   - status covered with empty linked_tables.
-  - A second ReportingPeriod with status open.
+  - A second ReportingPeriod with status open, including a count that omits each period's id, name, start_date, and end_date.
   - O1 marked passed from another campus or from Scope 3.
   - target_coverage_pct stored before any InventorySource exists for the period.
 closed:

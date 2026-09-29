@@ -27,6 +27,7 @@ RULES = (
 
 class OnboardingContractTests(unittest.TestCase):
     def test_rules_load_and_do_not_block_release(self):
+        # O1-GOV-CONTRACT
         pack = load_pack(pack_dir(ROOT, "carbon"))
         by_id = {rule.id: rule for rule in pack.rules}
         missing = [rule_id for rule_id in RULES if rule_id not in by_id]

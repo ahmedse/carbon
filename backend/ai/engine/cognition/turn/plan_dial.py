@@ -8,7 +8,7 @@ from ai.engine.host_ids import (
     ID_SUBMIT_MY_LOAN,
 )
 from ai.engine.cognition.phrase_tables import T
-from ai.engine.pack_vocab import LV, V
+from ai.engine.pack_vocab import LV, V, present_id_list, same_id
 LV("t_plan_dial_personal_ess_brief_deterministic")
 
 
@@ -203,12 +203,12 @@ def _missing_slots(plan: dict) -> list[str]:
         if not api.startswith("submit_"):
             continue
         body = args.get("body") if isinstance(args.get("body"), dict) else {}
-        if api == ID_SUBMIT_MY_LOAN:
-            required = (ID_LOAN_TYPE, "principal", "term_months", "start_date")
-        elif api == ID_SUBMIT_MY_LEAVE:
-            required = (ID_LEAVE_TYPE, "start_date", "end_date", "days")
+        if same_id(api, ID_SUBMIT_MY_LOAN):
+            required = present_id_list(ID_LOAN_TYPE, "principal", "term_months", "start_date")
+        elif same_id(api, ID_SUBMIT_MY_LEAVE):
+            required = present_id_list(ID_LEAVE_TYPE, "start_date", "end_date", "days")
         else:
-            required = (ID_PERMISSION_TYPE, "date", "hours")
+            required = present_id_list(ID_PERMISSION_TYPE, "date", "hours")
         return [k for k in required if body.get(k) in (None, "")]
     return []
 

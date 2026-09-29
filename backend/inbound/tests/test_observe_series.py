@@ -130,3 +130,19 @@ def test_command_writes_tmp_and_skips_when_empty(tmp_path):
     assert payload['rows'][0]['insert'] == 1
     assert payload['rows'][0]['reject'] == 1
     assert dest.is_relative_to(tmp_path)
+
+
+def test_writer_creates_a_missing_parent_directory(tmp_path):
+    """DMS-OBS-05: the declared evidence directory may be absent."""
+    from datetime import datetime, timezone
+    from types import SimpleNamespace
+
+    batch = SimpleNamespace(
+        id=6, status='committed', target_key='people.leave_history',
+        updated_at=datetime(2026, 9, 29, tzinfo=timezone.utc),
+        smoke={'insert': 1, 'update': 0, 'skip': 0, 'reject': 0},
+    )
+    path = tmp_path / 'evidence' / 'inbound-smoke-series.json'
+    write_smoke_series(path, [batch])
+    assert path.is_file()
+    assert json.loads(path.read_text(encoding='utf-8'))['schema'] == 1

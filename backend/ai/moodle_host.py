@@ -118,15 +118,12 @@ def prepare_ask(payload: dict[str, Any] | None) -> AskDecision:
     howto = onboarding_answer(message, snapshot)
     if howto:
         return AskDecision(answer=howto)
-    from ai.moodle_page import access_answer, lecture_answer, section_answer
+    from ai.moodle_page import access_answer
 
     reason = access_answer(message, snapshot)
     if reason:
         return AskDecision(answer=reason, refusal=str(snapshot.get("access") or ""))
-    lecture = lecture_answer(message, snapshot)
-    if lecture:
-        return AskDecision(answer=lecture)
-    cited = section_answer(message, snapshot)
+    cited = door_answer(message, snapshot)
     if cited:
         return AskDecision(answer=cited)
     chat = chat_payload(
@@ -194,6 +191,68 @@ def page_context_from_snapshot(host_context: dict[str, Any], snapshot: dict[str,
         "Teaching outlines are drafts. Not a mentorship caseload."
     )
     return "\n".join(lines)
+
+
+def door_answer(message: str, snapshot: dict[str, Any] | None) -> str | None:
+    """Section, lecture, and fact replies. None means this message is not one of those."""
+    from ai.moodle_page import fact_answer, lecture_answer, section_answer
+
+    for answer_for in (fact_answer, lecture_answer, section_answer):
+        answer = answer_for(message, snapshot)
+        if answer:
+            return answer
+    return None
+
+
+def snapshot_from_page_context(text: str) -> dict[str, Any]:
+    """Rebuild the course, sections, and activity from the page block this host wrote."""
+    course: dict[str, Any] = {}
+    activity: dict[str, Any] = {}
+    sections: list[dict[str, Any]] = []
+    truncated = False
+    in_sections = False
+    for line in (text or "").splitlines():
+        if line.startswith("Open course ") and "(" in line and ")" in line:
+            head = line[len("Open course ") :]
+            fullname, _, rest = head.partition(" (")
+            shortname = rest.split(")", 1)[0].strip()
+            if shortname:
+                course = {
+                    "shortname": shortname,
+                    "fullname": fullname.strip(),
+                    "visible_to_user": True,
+                }
+            in_sections = False
+            continue
+        if line == "Sections:":
+            in_sections = True
+            continue
+        if line == "Sections: (none).":
+            in_sections = False
+            continue
+        if in_sections and line.startswith("- ") and ":" in line:
+            number, _, name = line[2:].partition(":")
+            title = name.strip()
+            visible = True
+            if title.endswith(" [hidden]"):
+                visible = False
+                title = title[: -len(" [hidden]")].strip()
+            if number.strip().isdigit():
+                sections.append({"number": int(number.strip()), "name": title, "visible": visible})
+            continue
+        in_sections = False
+        if line.startswith("Open activity ") and " cmid=" in line:
+            name, _, tail = line[len("Open activity ") :].partition(" cmid=")
+            raw = tail.split()[0].strip().rstrip(".")
+            if raw.isdigit():
+                activity = {"name": name.strip(), "cmid": int(raw)}
+            continue
+        if line == "Further sections exist and were not included.":
+            truncated = True
+    snapshot: dict[str, Any] = {"course": course, "activity": activity, "sections": sections}
+    if truncated:
+        snapshot["sections_truncated"] = True
+    return snapshot
 
 
 def chat_payload(

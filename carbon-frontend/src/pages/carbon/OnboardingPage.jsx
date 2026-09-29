@@ -57,14 +57,82 @@ const COPY = {
   summary_kg: 'onboarding.kgFromSummary',
   not_assured: 'onboarding.notAssured',
   other_campus: 'onboarding.otherCampus',
+  other_campus_absent: 'onboarding.otherCampusAbsent',
+  other_campus_no_status: 'onboarding.otherCampusNoStatus',
+  other_campus_declared: 'onboarding.otherCampusDeclared',
+  other_campus_excluded: 'onboarding.otherCampusExcluded',
+  other_campus_excluded_notes: 'onboarding.otherCampusExcludedNotes',
+  other_campus_not_material: 'onboarding.otherCampusNotMaterial',
+  other_campus_covered: 'onboarding.otherCampusCovered',
+  factor_missing: 'onboarding.factorMissing',
+  factor_inactive: 'onboarding.factorInactive',
+  factor_country: 'onboarding.factorCountry',
+  factor_source_blank: 'onboarding.factorSourceBlank',
+  factor_met: 'onboarding.factorMet',
+  coverage_goal_absent: 'onboarding.coverageGoalAbsent',
+  coverage_goal_completeness: 'onboarding.coverageGoalCompleteness',
+  coverage_goal_tier: 'onboarding.coverageGoalTier',
+  coverage_goal_status: 'onboarding.coverageGoalStatus',
+  coverage_goal_met: 'onboarding.coverageGoalMet',
 };
 
-function checkText(t, check) {
+function blankCountryLabel(language) {
+  return language?.startsWith('ar') ? 'فارغ' : 'blank';
+}
+
+function displayCountryCode(check, language) {
+  const cc = check.country_code;
+  if (cc == null || (typeof cc === 'string' && !cc.trim())) {
+    return blankCountryLabel(language);
+  }
+  return cc;
+}
+
+function openPeriodDisplayName(period) {
+  const name = period?.name;
+  if (typeof name === 'string' && name.trim()) return name.trim();
+  return String(period?.id ?? '');
+}
+
+function checklistItems(checks, t, language) {
+  const items = [];
+  checks.forEach((check, index) => {
+    const keyBase = `${check.id}-${check.code}-${index}`;
+    const color = check.met ? 'success.main' : 'warning.main';
+    items.push({ key: keyBase, color, text: checkText(t, check, language) });
+    if (
+      check.code === 'open_period_count'
+      && Array.isArray(check.periods)
+      && check.periods.length > 0
+    ) {
+      check.periods.forEach((period, periodIndex) => {
+        items.push({
+          key: `${keyBase}-period-${period.id ?? periodIndex}`,
+          color,
+          text: t('onboarding.openPeriodNamed', {
+            name: openPeriodDisplayName(period),
+            id: period.id,
+            period_type: period.period_type,
+            start: period.start_date,
+            end: period.end_date,
+          }),
+        });
+      });
+    }
+  });
+  return items;
+}
+
+function checkText(t, check, language) {
   const key = COPY[check.code];
   if (!key) return check.code;
+  const countryForFactor = (check.code === 'factor_met' || check.code === 'factor_country')
+    ? displayCountryCode(check, language)
+    : check.country_code;
   return t(key, {
     count: check.count,
     name: check.name,
+    id: check.record_id != null && check.record_id !== '' ? check.record_id : check.id,
     start: check.start,
     end: check.end,
     type: check.period_type,
@@ -75,11 +143,16 @@ function checkText(t, check) {
     kg: check.kg,
     stream: check.stream,
     status: check.status,
+    unit: check.unit,
+    country_code: countryForFactor,
+    completeness: check.completeness,
+    tier: check.tier,
+    target_year: check.target_year,
   });
 }
 
 export default function OnboardingPage() {
-  const { t } = useTranslation('emissions');
+  const { t, i18n } = useTranslation('emissions');
   const { token } = useAuth();
   const navigate = useNavigate();
   useDocumentTitle(t('onboarding.title'));
@@ -107,6 +180,11 @@ export default function OnboardingPage() {
   }, [load]);
 
   const checks = Array.isArray(payload?.checks) ? payload.checks : [];
+  const openPeriodCountCheck = checks.find((check) => check.code === 'open_period_count');
+  const tooManyOpenPeriods = phase === 'loaded'
+    && openPeriodCountCheck != null
+    && !openPeriodCountCheck.met
+    && Number(openPeriodCountCheck.count) > 1;
   const noOpenPeriod = phase === 'loaded' && payload?.open_period_id == null
     && checks.length === 1 && checks[0].code === 'open_period_count' && Number(checks[0].count) === 0;
 
@@ -143,15 +221,36 @@ export default function OnboardingPage() {
         <EmptyState title={t('onboarding.emptyTitle')} description={t('onboarding.emptyDescription')} />
       )}
 
+      {tooManyOpenPeriods && (
+        <Alert
+          severity="warning"
+          sx={{ mb: 1.5 }}
+          action={(
+            <Button
+              color="inherit"
+              size="small"
+              onClick={() => navigate('/carbon/reporting/periods')}
+            >
+              {t('onboarding.openPeriods')}
+            </Button>
+          )}
+        >
+          {t('onboarding.tooManyOpen')}
+          <Typography component="div" sx={{ fontSize: '0.8125rem', mt: 0.5 }}>
+            {t('onboarding.tooManyOpenHint')}
+          </Typography>
+        </Alert>
+      )}
+
       {phase === 'loaded' && !noOpenPeriod && (
         <Box component="ul" sx={{ m: 0, pl: 2.5, display: 'grid', gap: 0.75 }}>
-          {checks.map((check, index) => (
+          {checklistItems(checks, t, i18n.language).map((item) => (
             <Typography
-              key={`${check.id}-${check.code}-${index}`}
+              key={item.key}
               component="li"
-              sx={{ fontSize: '0.8125rem', color: check.met ? 'success.main' : 'warning.main' }}
+              sx={{ fontSize: '0.8125rem', color: item.color }}
             >
-              {checkText(t, check)}
+              {item.text}
             </Typography>
           ))}
         </Box>

@@ -30,6 +30,47 @@ describe('Inventory onboarding', () => {
     expect(document.querySelector('.MuiSkeleton-root')).toBeTruthy();
   });
 
+  it('lists each open period with dates and no footprint figure', async () => {
+    // O1-USE-TWO
+    fetchOnboardingO1.mockResolvedValue({
+      benchmark: 'O1',
+      open_period_id: null,
+      checks: [{
+        id: 'CR-PER-01',
+        code: 'open_period_count',
+        met: false,
+        count: 2,
+        periods: [
+          {
+            id: 15,
+            name: 'FY 2023-24',
+            period_type: 'annual',
+            start_date: '2023-07-01',
+            end_date: '2024-06-30',
+            status: 'open',
+          },
+          {
+            id: 16,
+            name: 'FY 2025-26',
+            period_type: 'annual',
+            start_date: '2025-07-01',
+            end_date: '2026-06-30',
+            status: 'open',
+          },
+        ],
+      }],
+    });
+    renderPage();
+    expect(await screen.findByText(/FY 2023-24/)).toBeInTheDocument();
+    expect(screen.getByText(/FY 2025-26/)).toBeInTheDocument();
+    expect(screen.getByText(/2023-07-01 to 2024-06-30/)).toBeInTheDocument();
+    expect(screen.getByText(/2025-07-01 to 2026-06-30/)).toBeInTheDocument();
+    expect(screen.queryByText(/kg CO2e/)).not.toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(/does not lock it/);
+    expect(screen.getByRole('alert')).toHaveTextContent(/Lock, not Close/);
+    expect(screen.getByRole('button', { name: 'Open periods' })).toBeInTheDocument();
+  });
+
   it('says when no period is open', async () => {
     fetchOnboardingO1.mockResolvedValue({
       benchmark: 'O1',
@@ -39,6 +80,7 @@ describe('Inventory onboarding', () => {
     renderPage();
     expect(await screen.findByText('No reporting period is open')).toBeInTheDocument();
     expect(screen.queryByText(/is not in the declared source list/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/does not lock it/)).not.toBeInTheDocument();
   });
 
   it('names both sources as missing and shows no kilogram figure', async () => {
@@ -75,9 +117,46 @@ describe('Inventory onboarding', () => {
   });
 
   it('shows an alert and retry when the checklist load fails', async () => {
+    // O1-REL-RETRY
     fetchOnboardingO1.mockRejectedValue(new Error('checklist unavailable'));
     renderPage();
     expect(await screen.findByRole('alert')).toHaveTextContent('checklist unavailable');
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+  });
+
+  it('renders factor and coverage goal met lines without factor value or percent', async () => {
+    fetchOnboardingO1.mockResolvedValue({
+      benchmark: 'O1',
+      open_period_id: 7,
+      checks: [
+        {
+          code: 'factor_met',
+          met: true,
+          name: 'Grid Egypt',
+          id: 'CR-FAC-01',
+          record_id: 4,
+          scope: 2,
+          unit: 'kWh',
+          country_code: 'EGY',
+          factor_value: '0.42',
+        },
+        {
+          code: 'coverage_goal_met',
+          met: true,
+          name: 'SV goal',
+          id: 'CR-COV-01',
+          record_id: 9,
+          target_year: 2026,
+          tier: 4,
+          status: 'draft',
+        },
+      ],
+    });
+    renderPage();
+    expect(await screen.findByText(/Grid Egypt/)).toBeInTheDocument();
+    expect(screen.getByText(/2026/)).toBeInTheDocument();
+    expect(screen.queryByText(/0\.42/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/CR-FAC-01/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/%/)).not.toBeInTheDocument();
   });
 });

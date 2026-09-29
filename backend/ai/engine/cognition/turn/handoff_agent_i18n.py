@@ -13,7 +13,7 @@ from ai.engine.host_ids import (
     ID_SUBMIT_MY_LOAN,
 )
 from ai.engine.cognition.phrase_tables import T
-from ai.engine.pack_vocab import LV, V
+from ai.engine.pack_vocab import LV, V, row_for, same_id
 
 
 READY_TO_SUBMIT_AR = T("turn/handoff_agent_i18n.py::READY_TO_SUBMIT_AR")
@@ -46,38 +46,49 @@ HOURS_AR = T("turn/handoff_agent_i18n.py::HOURS_AR")
 SLOT_STATUS_AR = T("turn/handoff_agent_i18n.py::SLOT_STATUS_AR")
 RELATIVE_DAY_AR = T("turn/handoff_agent_i18n.py::RELATIVE_DAY_AR")
 
-CLARIFY_TEXT = {
-    ID_SUBMIT_MY_LOAN: {
-        ID_LOAN_TYPE: {
+_CLARIFY_ROWS = (
+    (ID_SUBMIT_MY_LOAN, (
+        (ID_LOAN_TYPE, {
             "en": LV("t_what_type_of_loan_are_you"),
             "ar": LV("t_أي_نوع_قرض_تريد"),
-        },
-        "principal": {
+        }),
+        ("principal", {
             "en": "How much do you need?",
             "ar": "كم المبلغ الذي تحتاجه؟",
-        },
-    },
-    ID_SUBMIT_MY_LEAVE: {
-        ID_LEAVE_TYPE: {
+        }),
+    )),
+    (ID_SUBMIT_MY_LEAVE, (
+        (ID_LEAVE_TYPE, {
             "en": LV("t_what_type_of_leave_do_you"),
             "ar": LV("t_أي_نوع_إجازة_تريد"),
-        },
-        "start_date": {
+        }),
+        ("start_date", {
             "en": LV("t_which_dates_do_you_want_to"),
             "ar": LV("t_rx_copy_leave_dates_ar"),
-        },
-    },
-    ID_SUBMIT_MY_ATTENDANCE_PERMISSION: {
-        ID_PERMISSION_TYPE: {
+        }),
+    )),
+    (ID_SUBMIT_MY_ATTENDANCE_PERMISSION, (
+        (ID_PERMISSION_TYPE, {
             "en": LV("t_rx_copy_perm_type_en"),
             "ar": LV("t_rx_copy_perm_type_ar"),
-        },
-        "hours": {
+        }),
+        ("hours", {
             "en": LV("t_rx_copy_perm_hours_en"),
             "ar": LV("t_rx_copy_perm_hours_ar"),
-        },
-    },
-}
+        }),
+    )),
+)
+
+
+def clarify_pack(api_name: str, slot_key: str) -> dict:
+    """Clarify copy for one slot. An empty id selects nothing."""
+    slots = row_for(_CLARIFY_ROWS, api_name)
+    if not slots:
+        return {}
+    for key, pack in slots:
+        if same_id(slot_key, key):
+            return pack
+    return {}
 
 
 def any_needle(text: str, needles: tuple[str, ...]) -> bool:

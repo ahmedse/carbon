@@ -1,0 +1,14 @@
+# C4-file for NMD1103. Drive bodies are not in this gold.
+course: NMD1103
+count: 4
+passages:
+  - NMD1103:file:1005:Virtual Tour in Hospital Facilities.pdf
+  - NMD1103:file:1009:Hand Hygiene Skill lab (Academy) 2021-2022 (2).pptx
+  - NMD1103:file:1010:PPE skill lab (Academy) 2021-2022 (1).pptx
+  - NMD1103:file:1011:PPE reference (1).pdf
+absent:
+  - google-file:not-on-any-activity
+  - google-presentation:not-on-any-activity
+drive_refs_not_passages:
+  - google-presentation:1_4k2LQC4bfZblcbBRG-NSkepSl5defs8
+  - google-presentation:1FgcDehEV07I_kF-216xAKORX7I4rTXK9

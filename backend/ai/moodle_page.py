@@ -14,6 +14,7 @@ import yaml
 _ROOT = Path(__file__).resolve().parents[2] / "domain_packs" / "aast-med"
 _PACK = _ROOT / "section_asks.yaml"
 _LECTURE = _ROOT / "lecture_asks.yaml"
+_FACT = _ROOT / "fact_asks.yaml"
 _ACCESS = _ROOT / "access_reasons.yaml"
 
 
@@ -47,6 +48,50 @@ def _lecture_groups() -> tuple[tuple[str, ...], ...]:
         if terms:
             groups.append(terms)
     return tuple(groups)
+
+
+@lru_cache(maxsize=1)
+def _fact_spec() -> tuple[tuple[tuple[str, ...], ...], int]:
+    data = yaml.safe_load(_FACT.read_text(encoding="utf-8")) or {}
+    groups = []
+    for group in data.get("all_of_any") or []:
+        terms = tuple(str(term).casefold() for term in group if str(term).strip())
+        if terms:
+            groups.append(terms)
+    return tuple(groups), int(data.get("min_span") or 24)
+
+
+def is_fact_ask(message: str) -> bool:
+    text = (message or "").casefold()
+    if not text.strip():
+        return False
+    groups, _min_span = _fact_spec()
+    return any(all(term in text for term in terms) for terms in groups)
+
+
+def fact_answer(message: str, snapshot: dict[str, Any] | None) -> str | None:
+    """Cite the open activity, or the lecture miss. None when this is not a fact question."""
+    if not is_fact_ask(message):
+        return None
+    from ai.moodle_bank import MISS, cite_open_activity, listed_world, load_c3, load_c4_files
+
+    page = snapshot or {}
+    course = page.get("course") if isinstance(page.get("course"), dict) else {}
+    shortname = str(course.get("shortname") or "")
+    activity = page.get("activity") if isinstance(page.get("activity"), dict) else {}
+    cmid = activity.get("cmid")
+    if not shortname or not cmid:
+        return MISS
+    _groups, min_span = _fact_spec()
+    bank = {**load_c3(shortname), **load_c4_files(shortname)}
+    return cite_open_activity(
+        message,
+        bank,
+        course=shortname,
+        activity_id=int(cmid),
+        world=listed_world(shortname),
+        min_span=min_span,
+    )
 
 
 def is_lecture_ask(message: str) -> bool:
