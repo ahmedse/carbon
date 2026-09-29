@@ -385,7 +385,7 @@ async def narrate_envelope(
     ok_rows = [r for r in evidence or [] if not _is_error(r)]
     if not ok_rows:
         return None
-    from ai.envelope_service import EnvelopeWriteError, synthesize_envelope
+    from ai.engine.host_services import EnvelopeWriteError, synthesize_envelope
     from ai.engine.llm.call_meter import stage
 
     question = user_message
@@ -733,9 +733,9 @@ def rows_envelope(
     """Envelope from exactly these tool rows. Shared by v21 and the bound read."""
     if not executed or render not in {"chart", "table"}:
         return None
-    from ai.envelope_service import _deterministic_fallback_envelope
+    from ai.engine.host_services import fallback_envelope
 
-    envelope = _deterministic_fallback_envelope(list(executed), user_message)
+    envelope = fallback_envelope(list(executed), user_message)
     if envelope is None:
         return None
     if render == "table":

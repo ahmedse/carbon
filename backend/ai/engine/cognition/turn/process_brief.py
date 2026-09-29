@@ -110,17 +110,11 @@ def detect_brief_lang(text: str) -> str:
 def _load_definition(process_id: str) -> dict[str, Any] | None:
     """Load process document from DB (active) else pack YAML."""
     try:
-        from ai.models.process import ProcessDefinition, STATUS_ACTIVE
+        from ai.engine.host_services import active_process_definition
 
-        obj = (
-            ProcessDefinition.objects.filter(
-                process_id=process_id, status=STATUS_ACTIVE,
-            )
-            .order_by("-created_at")
-            .first()
-        )
-        if obj and isinstance(obj.definition, dict):
-            return obj.definition
+        definition = active_process_definition(process_id)
+        if isinstance(definition, dict):
+            return definition
     except Exception:  # noqa: BLE001 — briefing must not depend on ORM health
         pass
     root = Path(__file__).resolve().parents[5] / "domain_packs"

@@ -65,6 +65,7 @@ jobs:
     env:
       FERNET_KEY: TQL0vbgCR5bUBJqzu9lU-BuqgRYmq7zFptb4hp1M9Fs=
       TURNKEY_CALLBACK_SECRET: ci-turnkey-callback-not-for-production
+      AI_STORE_BACKEND: django
     services:
       postgres:
         image: postgres:17
@@ -233,6 +234,7 @@ jobs:
     env:
       FERNET_KEY: TQL0vbgCR5bUBJqzu9lU-BuqgRYmq7zFptb4hp1M9Fs=
       TURNKEY_CALLBACK_SECRET: ci-turnkey-callback-not-for-production
+      AI_STORE_BACKEND: django
     needs: [backend, frontend]
     services:
       postgres:

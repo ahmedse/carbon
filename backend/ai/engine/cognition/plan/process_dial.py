@@ -247,7 +247,7 @@ def materialize_leave_request_plan(
 ):
     V("t_build_a_reviewable_plan_from_leave")
     from ai.engine.cognition.plan.planner import Plan, PlanPhase, PlanStep
-    from ai.write_slots import fill_write_body
+    from ai.engine.host_services import fill_write_body
 
     brief = (utterance or "").strip()
     body = fill_write_body(
@@ -440,7 +440,7 @@ def materialize_loan_request_plan(
 ):
     V("t_build_a_reviewable_plan_from_loan")
     from ai.engine.cognition.plan.planner import Plan, PlanPhase, PlanStep
-    from ai.write_slots import fill_write_body
+    from ai.engine.host_services import fill_write_body
 
     brief = (utterance or "").strip()
     if not brief_requests_loan_submit(brief):
@@ -609,7 +609,7 @@ def materialize_attendance_permission_plan(
 ):
     V("t_build_a_reviewable_plan_from_attendance")
     from ai.engine.cognition.plan.planner import Plan, PlanPhase, PlanStep
-    from ai.write_slots import fill_write_body
+    from ai.engine.host_services import fill_write_body
 
     brief = (utterance or "").strip()
     body = fill_write_body(

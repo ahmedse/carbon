@@ -1415,15 +1415,9 @@ class SoftSurfacesMixin:
                 from ai.engine.cognition.turn.plan_dial import open_tasks_action
 
                 def _commit_sync():
-                    from django.contrib.auth import get_user_model
-                    from ai.plans_service import PlansService
+                    from ai.engine.host_services import commit_proposal
 
-                    User = get_user_model()
-                    try:
-                        user = User.objects.get(pk=host_user_id)
-                    except (User.DoesNotExist, ValueError):
-                        return None
-                    return PlansService().commit_proposal(user, conversation_id or "")
+                    return commit_proposal(host_user_id, conversation_id or "")
 
                 try:
                     stored = await sync_to_async(
@@ -1499,19 +1493,11 @@ class SoftSurfacesMixin:
                 brief = revised_brief(str(open_q.get("brief") or ""), brief)
 
         def _create_plan_sync():
-            from django.contrib.auth import get_user_model
+            from ai.engine.host_services import propose_plan
 
-            from ai.plans_service import PlansService
-
-            User = get_user_model()
-            try:
-                user = User.objects.get(pk=host_user_id)
-            except (User.DoesNotExist, ValueError):
-                return None, None
-            return PlansService().propose_plan(
-                user, brief, conversation_id=conversation_id or "",
+            return propose_plan(
+                host_user_id, brief, conversation_id=conversation_id or "",
                 prior_plan=prior_plan, revision=revision,
-                single_read=True,
             )
 
         try:

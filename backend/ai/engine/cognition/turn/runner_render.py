@@ -853,7 +853,7 @@ def _render_tool_charts(usable: list[dict], *, user_message: str = "") -> str:
                 have_bar = True
 
     if not charts:
-        from ai.envelope_service import labeled_numeric_points
+        from ai.engine.host_services import labeled_numeric_points
 
         for tr in usable:
             data = tr.get("result")
@@ -1318,9 +1318,9 @@ async def _synthesize_tool_results(
         typed = None
         if get_settings().PULSE_ENVELOPE_ENABLED:
             try:
-                from ai.envelope_service import _deterministic_fallback_envelope
+                from ai.engine.host_services import fallback_envelope
 
-                typed = _deterministic_fallback_envelope(chart_usable, user_message)
+                typed = fallback_envelope(chart_usable, user_message)
             except Exception:  # noqa: BLE001 — never break the turn
                 logger.debug("deterministic envelope fast-path failed", exc_info=True)
                 typed = None

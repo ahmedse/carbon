@@ -130,7 +130,7 @@ async def run_s1_intent(
             
             if _last_tool_result:
                 try:
-                    from ai.pulse_ux_telemetry import emit_ux
+                    from ai.engine.host_services import emit_ux
                     emit_ux('chat.deixis_gate', has_topic='**' in _deixis_q)
                 except Exception:
                     pass

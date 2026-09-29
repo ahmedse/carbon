@@ -3677,14 +3677,14 @@ class ReActLoop:
     @staticmethod
     def _host_actions_markdown(step_results: list[StepResult]) -> str:
         """Collect host navigate receipts for Output (Chat-compatible contract)."""
-        from ai.host_receipt import collect_navigate_actions, format_actions_markdown
+        from ai.engine.host_services import format_host_actions
 
         outputs = [
             (r.tool_output if isinstance(r.tool_output, dict) else {})
             for r in (step_results or [])
             if not (r.error and not str(r.error).startswith("[caught]"))
         ]
-        return format_actions_markdown(collect_navigate_actions(outputs))
+        return format_host_actions(outputs)
 
     @staticmethod
     def _has_confirmed_host_write(step_results: list[StepResult]) -> bool:
@@ -3734,13 +3734,13 @@ class ReActLoop:
     @staticmethod
     def _fallback_final_response(step_results: list[StepResult]) -> str:
         """Operator-facing Answer when LLM synthesis is empty (RULE_23)."""
-        from ai.host_receipt import collect_navigate_actions, format_actions_markdown
+        from ai.engine.host_services import format_host_actions
 
         outputs = [
             (r.tool_output if isinstance(r.tool_output, dict) else {})
             for r in (step_results or [])
         ]
-        actions_md = format_actions_markdown(collect_navigate_actions(outputs))
+        actions_md = format_host_actions(outputs)
         leave_submit_done = False
         loan_submit_done = False
         attendance_submit_done = False

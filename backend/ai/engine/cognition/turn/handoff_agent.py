@@ -918,9 +918,9 @@ def _parse_named_weekday(text: str) -> str | None:
     if index is None:
         return None
     try:
-        from django.utils import timezone
+        from ai.engine.host_services import localdate
 
-        today = timezone.localdate()
+        today = localdate()
     except Exception:  # noqa: BLE001
         from datetime import date as _date
 
@@ -954,9 +954,9 @@ def _parse_relative_day(text: str) -> str | None:
     ):
         return None
     try:
-        from django.utils import timezone
+        from ai.engine.host_services import localdate
 
-        return timezone.localdate().isoformat()
+        return localdate().isoformat()
     except Exception:  # noqa: BLE001
         from datetime import date as _date
 

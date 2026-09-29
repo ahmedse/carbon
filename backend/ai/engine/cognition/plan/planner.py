@@ -688,7 +688,7 @@ def resolve_step_write_bodies(
     utterance: str = "",
 ) -> None:
     V("t_fill_the_write_slots_the_brief")
-    from ai.write_slots import fill_write_body, write_slots_for
+    from ai.engine.host_services import fill_write_body, write_slots_for
 
     for step in steps:
         if step.tool_name != "call_host_api":

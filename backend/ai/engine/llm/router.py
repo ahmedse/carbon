@@ -220,14 +220,13 @@ async def _check_budget(instance_id: str, db) -> float | None:
     # Host control-plane override (ADR-0036) — best-effort; never breaks routing.
     try:
         from asgiref.sync import sync_to_async
-        from ai.models.control_state import PulseControlState
+        from ai.engine.host_services import daily_budget_override
 
-        state = await sync_to_async(
-            PulseControlState.objects.filter(instance_id=instance_id).first,
-            thread_sensitive=True,
-        )()
-        if state is not None and state.daily_budget_usd is not None:
-            budget = float(state.daily_budget_usd)
+        override = await sync_to_async(
+            daily_budget_override, thread_sensitive=True,
+        )(instance_id)
+        if override is not None:
+            budget = override
     except Exception:  # noqa: BLE001
         pass
     if budget <= 0:

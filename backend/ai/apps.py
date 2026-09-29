@@ -75,6 +75,10 @@ class AIConfig(AppConfig):
 
         set_default_host_db_url_provider(_host_default_db_url)
 
+        from ai.host_service_bindings import bind_host_services
+
+        bind_host_services()
+
         # Sprint 12 (ARCH_AI_EXTENSIBILITY): register built-in tool/workflow
         # plugins once at startup. Idempotent by name, so safe for ready(),
         # management commands, and the test suite alike.
