@@ -123,25 +123,39 @@ export function fetchTableRelations(token) {
 /**
  * Fetch rows for a table (with filters).
  */
-export function fetchDataRows(token, tableId, filters = {}, project_id, module_id) {
-  const params = new URLSearchParams();
-  params.set("data_table", tableId);
+const ROW_PAGE_SIZE = 200;
+const ROW_PAGE_CAP = 20;
 
-  // Add search and any filter fields
-  if (filters._search) params.set("search", filters._search);
+export async function fetchDataRows(token, tableId, filters = {}, project_id, module_id) {
+  const base = new URLSearchParams();
+  base.set("data_table", tableId);
+  base.set("page_size", String(ROW_PAGE_SIZE));
+  if (filters._search) base.set("search", filters._search);
   Object.entries(filters).forEach(([key, value]) => {
     if (key !== "_search" && value != null && value !== "") {
-      params.set(`field__${key}`, value);
+      base.set(`field__${key}`, value);
     }
   });
 
-  const endpoint = `${API_ROUTES.rows}?${params.toString()}`;
-  return apiFetch(endpoint, { token, project_id, module_id }).then((data) => {
-    // Backend list views are paginated by default (CarbonPageNumberPagination):
-    // { count, page_size, page, total_pages, next, previous, results: [...] }.
-    if (data && Array.isArray(data.results)) return data.results;
-    return Array.isArray(data) ? data : [];
-  });
+  const rows = [];
+  for (let page = 1; page <= ROW_PAGE_CAP; page += 1) {
+    const params = new URLSearchParams(base);
+    params.set("page", String(page));
+    const data = await apiFetch(`${API_ROUTES.rows}?${params.toString()}`, {
+      token,
+      project_id,
+      module_id,
+    });
+    if (Array.isArray(data)) return data;
+    const results = Array.isArray(data?.results) ? data.results : [];
+    rows.push(...results);
+    const count = Number(data?.count);
+    const loaded = Number.isFinite(count) && rows.length >= count;
+    if (!data?.next || loaded || results.length === 0) return rows;
+  }
+  const err = new Error("rows_truncated");
+  err.code = "rows_truncated";
+  throw err;
 }
 
 /**

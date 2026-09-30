@@ -338,7 +338,10 @@ export default function DataTableGrid({
       notify({ message: rowId ? t('dgRowUpdated') : t('dgRowAdded'), type: "success" });
       fetchRows?.();
     } catch (err) {
-      notify({ message: err?.message || t('failedSaveRow'), type: "error" });
+      const message = err?.data?.code === "append_only"
+        ? t("rowAppendOnly")
+        : (err?.message || t("failedSaveRow"));
+      notify({ message, type: "error" });
     }
   };
 

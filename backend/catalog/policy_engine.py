@@ -20,17 +20,42 @@ def check_policy(action, *, org_unit_id=None, module=None, data_table=None):
 def _policy_matches(policy, *, org_unit_id=None, module=None, data_table=None):
     scope_type = policy.scope_type
     if scope_type == 'global':
-        return True
-    if scope_type == 'org_unit' and org_unit_id:
-        return str(policy.org_unit_id) == str(org_unit_id)
-    if scope_type == 'scope' and module:
-        return policy.emission_scope and str(policy.emission_scope) == str(getattr(module, 'scope', None))
-    if scope_type == 'domain' and data_table:
-        from catalog.models import AssetProfile
-        try:
-            asset = AssetProfile.objects.filter(data_table=data_table).first()
-            if asset and asset.domain:
-                return policy.domain_id == asset.domain_id
-        except Exception:
-            pass
-    return False
+        matched = True
+    elif scope_type == 'org_unit' and org_unit_id:
+        matched = str(policy.org_unit_id) == str(org_unit_id)
+    elif scope_type == 'scope' and module:
+        matched = bool(policy.emission_scope) and str(policy.emission_scope) == str(getattr(module, 'scope', None))
+    elif scope_type == 'domain' and data_table:
+        matched = _domain_matches(policy, data_table)
+    else:
+        return False
+    if not matched:
+        return False
+    return _rules_block(policy, module=module, data_table=data_table)
+
+
+def _domain_matches(policy, data_table):
+    from catalog.models import AssetProfile
+    try:
+        asset = AssetProfile.objects.filter(data_table=data_table).first()
+    except Exception:
+        return False
+    return bool(asset and asset.domain_id and policy.domain_id == asset.domain_id)
+
+
+def _rules_block(policy, *, module=None, data_table=None):
+    """A matched policy blocks unless its config says the data is already gone."""
+    config = policy.config if isinstance(policy.config, dict) else {}
+    if config.get('check_row_count'):
+        return _has_active_rows(module=module, data_table=data_table)
+    return True
+
+
+def _has_active_rows(*, module=None, data_table=None):
+    from dataschema.models import DataRow
+    rows = DataRow.objects.filter(is_archived=False)
+    if data_table is not None:
+        return rows.filter(data_table=data_table).exists()
+    if module is not None:
+        return rows.filter(data_table__module=module).exists()
+    return True

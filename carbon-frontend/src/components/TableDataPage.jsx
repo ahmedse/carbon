@@ -109,9 +109,13 @@ export default function TableDataPage({
       })
       .catch((err) => {
         setLoading(false);
+        if (err?.code === "rows_truncated") {
+          notify({ message: t("rowsTruncated"), type: "error" });
+          return;
+        }
         handleError(err, t("failedFetchRows"));
       });
-  }, [token, tableId, filters, project_id, module_id, handleError, t]);
+  }, [token, tableId, filters, project_id, module_id, handleError, notify, t]);
 
   // Fetch schema on mount
   useEffect(() => {
@@ -175,15 +179,13 @@ export default function TableDataPage({
       const rowValues = values.values || values;
       if (!idOrNull) {
         await createDataRow(token, rowValues, data_table, project_id, module_id);
-        notify({ message: t("rowAdded"), type: "success" });
       } else {
         await updateDataRow(token, idOrNull, { values: rowValues }, project_id, module_id, true);
-        notify({ message: t("rowUpdated"), type: "success" });
       }
       fetchRows();
     } catch (err) {
-      handleError(err, t("failedSaveRow"));
       setLoading(false);
+      throw err;
     }
   };
 

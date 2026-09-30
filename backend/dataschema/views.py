@@ -9,12 +9,16 @@ Access: reads are org-scoped (module/org-unit subtree); writes are gated by the
 view's declared required_write_capability (see dataschema/permissions.py).
 """
 
+import re
+
 from rest_framework import viewsets, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from django.db import IntegrityError
+from django.db.models import BooleanField, Prefetch, Q
+from django.db.models.expressions import RawSQL
 from django.http import HttpResponse
-from django.db.models import Prefetch
 from .models import DataTable, DataField, DataRow, SchemaChangeLog, TableRelation
 from .serializers import (
     DataTableSerializer, DataTableDetailSerializer,
@@ -27,6 +31,65 @@ from .permissions import ScopedReadCapabilityWrite
 from core.models import Module
 from core.feedback import AppFeedback
 from .services import BulkImportService
+
+
+_FIELD_FILTER = re.compile(r"^field__([A-Za-z0-9_]+)$")
+
+
+def _append_only_conflict():
+    """A saved activity row is not edited. Callers add a new row."""
+    return Response(
+        {
+            "code": "append_only",
+            "detail": "A saved row is not edited. Add a new row for the correction.",
+        },
+        status=status.HTTP_409_CONFLICT,
+    )
+
+
+def _as_number(text):
+    try:
+        number = float(text)
+    except (TypeError, ValueError):
+        return None
+    if number.is_integer():
+        return int(number)
+    return number
+
+
+def _filter_value_text(qs, term):
+    """Match the term against stored values, not the JSON keys."""
+    like = "%" + term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+    table = DataRow._meta.db_table
+    column = DataRow._meta.get_field("values").column
+    sql = (
+        f'EXISTS (SELECT 1 FROM jsonb_each_text("{table}"."{column}") AS kv '
+        f"WHERE kv.value ILIKE %s ESCAPE '\\')"
+    )
+    return qs.annotate(
+        _de_search=RawSQL(sql, [like], output_field=BooleanField()),
+    ).filter(_de_search=True)
+
+
+def _apply_row_value_filters(qs, params):
+    search = (params.get("search") or "").strip()[:200]
+    if search:
+        qs = _filter_value_text(qs, search)
+    for key in params:
+        match = _FIELD_FILTER.match(key)
+        if not match:
+            continue
+        text = str(params.get(key) or "").strip()[:200]
+        if not text:
+            continue
+        name = match.group(1).lower()
+        lookup = f"values__{name}"
+        number = _as_number(text)
+        if number is None:
+            qs = qs.filter(**{f"{lookup}__icontains": text})
+        else:
+            qs = qs.filter(Q(**{lookup: number}) | Q(**{lookup: text}))
+    return qs
 
 
 def _log_schema_change(user, action, *, data_table=None, data_field=None,
@@ -367,7 +430,7 @@ class DataRowViewSet(ScopedViewSet):
             qs = qs.filter(data_table__module_id=module_id)
         if data_table_id:
             qs = qs.filter(data_table_id=data_table_id)
-        return qs
+        return _apply_row_value_filters(qs, self.request.query_params)
 
     def create(self, request, *args, **kwargs):
         """Guard against writes to locked tables, then delegate to parent."""
@@ -418,6 +481,8 @@ class DataRowViewSet(ScopedViewSet):
             result = super().update(request, *args, **kwargs)
             logger.error(f"✅ UPDATE SUCCESS - Row {row_id}")
             return result
+        except IntegrityError:
+            return _append_only_conflict()
         except Exception as e:
             logger.error(f"""
 ╔════════════════════════════════════════════════════════════════════════╗
@@ -454,6 +519,8 @@ class DataRowViewSet(ScopedViewSet):
             result = super().partial_update(request, *args, **kwargs)
             logger.error(f"✅ PATCH SUCCESS - Row {row_id}")
             return result
+        except IntegrityError:
+            return _append_only_conflict()
         except Exception as e:
             logger.error(f"""
 ╔════════════════════════════════════════════════════════════════════════╗

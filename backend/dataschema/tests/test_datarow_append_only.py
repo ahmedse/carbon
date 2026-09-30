@@ -72,6 +72,81 @@ def test_key_normalisation_on_insert():
     assert 'amount' in row.values
 
 
+def _superuser_request(query):
+    """Request stand-in. The reused test database cannot insert accounts_user."""
+    from types import SimpleNamespace
+    from django.http import QueryDict
+
+    return SimpleNamespace(
+        user=SimpleNamespace(is_authenticated=True, is_superuser=True, pk=1, id=1, username='de'),
+        query_params=QueryDict(query),
+    )
+
+
+@pytest.mark.django_db
+def test_de_search_matches_values_not_keys():
+    """DE-SEARCH: a miss returns nothing; a value token returns that row."""
+    from core.models import Module
+    from dataschema.models import DataRow, DataTable
+    from dataschema.views import DataRowViewSet
+
+    module = Module.objects.create(name='DE-Search-Module')
+    table = DataTable.objects.create(title='Electricity', name='de_kwh', module=module)
+    DataRow.objects.create(data_table=table, values={'month': '7/1/2025', 'kwh': 1027668})
+    DataRow.objects.create(data_table=table, values={'month': '8/1/2025', 'kwh': 993673})
+
+    def listed(query):
+        view = DataRowViewSet()
+        view.request = _superuser_request(query)
+        view.action = 'list'
+        return list(view.get_queryset())
+
+    assert listed(f'data_table={table.pk}&search=zzzz-no-such-month') == []
+    hit = listed(f'data_table={table.pk}&search=1027668')
+    assert len(hit) == 1
+    assert hit[0].values['kwh'] == 1027668
+    narrowed = listed(f'data_table={table.pk}&field__kwh=993673')
+    assert len(narrowed) == 1
+    assert narrowed[0].values['month'] == '8/1/2025'
+
+
+@pytest.mark.django_db
+def test_de_append_patch_is_refused():
+    """DE-APPEND: patching values is a 409 and the stored row stays."""
+    from types import SimpleNamespace
+    from rest_framework.test import APIRequestFactory
+
+    from core.models import Module
+    from dataschema.models import DataRow, DataTable
+    from dataschema.views import DataRowViewSet
+
+    module = Module.objects.create(name='DE-Append-Module')
+    table = DataTable.objects.create(title='Electricity', name='de_append', module=module)
+    row = DataRow.objects.create(data_table=table, values={'kwh': 100})
+
+    factory = APIRequestFactory()
+    django_request = factory.patch(
+        f'/rows/{row.pk}/', {'values': {'kwh': 999}}, format='json',
+    )
+    django_request.user = SimpleNamespace(
+        is_authenticated=True, is_superuser=True, pk=1, id=1, username='de',
+    )
+    view = DataRowViewSet()
+    view.action_map = {'patch': 'partial_update'}
+    view.kwargs = {'pk': row.pk}
+    view.format_kwarg = None
+    request = view.initialize_request(django_request)
+    request.user = django_request.user
+    view.request = request
+    view.get_object = lambda: row
+    response = view.partial_update(request, pk=row.pk)
+
+    assert response.status_code == 409
+    assert response.data['code'] == 'append_only'
+    row.refresh_from_db()
+    assert row.values['kwh'] == 100
+
+
 @pytest.mark.django_db
 def test_indexes_declared_on_meta():
     from dataschema.models import DataRow

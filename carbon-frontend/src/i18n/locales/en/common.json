@@ -187,6 +187,8 @@
   "networkErrorMsg": "Could not connect to the server. Please check your internet connection or try again later.",
   "genericErrorMsg": "An error occurred. Please try again or contact support.",
   "failedFetchRows": "Failed to fetch rows",
+  "rowsTruncated": "This table has more rows than this screen can load. Narrow the search.",
+  "rowAppendOnly": "A saved row is not edited. Add a new row for the correction.",
   "failedFetchSchema": "Failed to fetch schema",
   "rowsDeleted": "Rows deleted.",
   "bulkDeleteFailed": "Bulk delete failed",

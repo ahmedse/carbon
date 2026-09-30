@@ -4,12 +4,14 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Box, Button } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useAuth } from '../auth/AuthContext';
 import { fetchDataSchemaTables, fetchDataSchemaFields } from '../api/dataschema';
 import TableDataPage from '../components/TableDataPage';
 import PageHeader from '../components/Page/PageHeader';
+import PageContainer from '../components/layout/PageContainer';
 import LoadingSkeleton from '../components/Page/LoadingSkeleton';
 import useDocumentTitle from '../hooks/useDocumentTitle';
 import { useNotes } from '../notes/NotesContext';
@@ -18,7 +20,8 @@ import { registerDataEntryInspectorTabs } from '../inspector/tabs/dataEntryTabs'
 /* ── Page component ── */
 
 export default function DataEntryPage() {
-  useDocumentTitle("Data Entry");
+  const { t } = useTranslation('emissions');
+  useDocumentTitle(t('dataEntry.title'));
   const { moduleId, tableId } = useParams();
   const navigate = useNavigate();
   const { token, user, context } = useAuth();
@@ -76,25 +79,23 @@ export default function DataEntryPage() {
   }
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', bgcolor: 'background.default' }}>
-      <Box sx={{ bgcolor: 'white', px: 2, pt: 1.5, pb: 0 }}>
-        <PageHeader
-          title="Data Entry"
-          subtitle={module?.name || `Module ${moduleId}`}
-          description="Enter and edit emission data row by row. Add new records, update values, and attach evidence documents. Use the inspector panel for data quality checks."
-          actions={
-            <Button
-              size="small"
-              startIcon={<ArrowBackIcon />}
-              onClick={() => navigate(`/carbon/my-data/${moduleId}`)}
-              sx={{ color: 'text.secondary' }}
-            >
-              Back to source
-            </Button>
-          }
-        />
-      </Box>
-      <Box sx={{ flex: 1, overflow: 'auto', bgcolor: 'white', borderTop: 1, borderColor: 'divider' }}>
+    <PageContainer>
+      <PageHeader
+        title={t('dataEntry.title')}
+        subtitle={module?.name || `Module ${moduleId}`}
+        description={t('dataEntry.description')}
+        actions={
+          <Button
+            size="small"
+            startIcon={<ArrowBackIcon />}
+            onClick={() => navigate(`/carbon/my-data/${moduleId}`)}
+            sx={{ color: 'text.secondary' }}
+          >
+            {t('dataEntry.backToSource')}
+          </Button>
+        }
+      />
+      <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
         <TableDataPage
           project_id={projectId}
           module_id={moduleId}
@@ -104,6 +105,6 @@ export default function DataEntryPage() {
           token={token}
         />
       </Box>
-    </Box>
+    </PageContainer>
   );
 }

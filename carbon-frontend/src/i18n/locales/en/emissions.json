@@ -394,7 +394,7 @@
   "myData": {
     "title": "My Data",
     "sourceName": "Source name",
-    "description": "Your data owner workspace. Select a source to inspect row counts, data quality scores, and activity. Open the workspace to edit tables row by row.",
+    "description": "Your sources in scope. Open a source to add rows. A saved value stays as it was entered.",
     "search": "Search sources…",
     "scope": "Scope",
     "status": "Status",
@@ -413,6 +413,11 @@
     "never": "Never",
     "dq": "DQ%",
     "refresh": "Refresh"
+  },
+  "dataEntry": {
+    "title": "Data Entry",
+    "description": "Add a row for this table. A saved value is kept as entered. Open a row to review it.",
+    "backToSource": "Back to source"
   },
   "chairman": {
     "notO1Footprint": "These figures are platform-wide. They are not the O1 Smart Village footprint. Quote a kilogram only from this period's calculation summary.",
