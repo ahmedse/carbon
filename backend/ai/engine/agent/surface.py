@@ -123,6 +123,17 @@ _BY_DIAL: dict[str, Surface] = {
 #: tuple so the serializer, the provider, and the store cannot drift.
 PULSE_DIAL_MODES: tuple[str, ...] = ("ask", "plan", "agent")
 
+
+def plan_offered(instance_config: dict | None) -> bool:
+    """True only when this host's config lists the Plan dial.
+
+    A missing list does not assume Plan. The host declares it.
+    """
+    raw = (instance_config or {}).get("dials")
+    if not isinstance(raw, list):
+        return False
+    return "plan" in {str(item) for item in raw}
+
 #: What the user sees on the dial. Presentation only — never a routing input.
 _DIAL_LABELS: dict[Surface, tuple[str, str]] = {
     Surface.CHAT_ASK: ("Chat", "الدردشة"),

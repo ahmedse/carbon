@@ -1,0 +1,308 @@
+# Verbatim sentence from this course bank. It cites one open file, or it is refused.
+version: 1
+course: NMD2403
+world: aast-mbbs
+ask: According to the handout
+miss: This is not in this lecture.
+hits:
+- activity: 732
+  passage: NMD2403:file:732:Students notes.pdf
+  quote: 'Primary research: It presents original data that appear for the first time.'
+- activity: 733
+  passage: NMD2403:file:733:Student Guide Research Skills 3.docx
+  quote: Course Reading and w riting m edical research is directed at medical students and healthcare professionals at all stages of their education .
+- activity: 734
+  passage: NMD2403:file:734:Research III students notes with activity worksheet.ocx.pdf
+  quote: 'Conducting a study in a way that tends to lead to a particular conclusion, regardless of the truth is: a.'
+- activity: 735
+  passage: NMD2403:file:735:Lecture 2_ descriptive studies.pdf
+  quote: A scatter plot usesdotsto represent individual data on a graph.
+- activity: 738
+  passage: NMD2403:file:738:JBI_Critical_Appraisal-Checklist_for_Cohort_Studies.docx
+  quote: A confounder is a difference between the comparison groups and it influences the direction of the study results.
+- activity: 739
+  passage: NMD2403:file:739:Cohort study.pdf
+  quote: 'Cohort studiesAlso called: Longitudinal studies, Prospective studies, and Incidence studies.'
+- activity: 741
+  passage: NMD2403:file:741:Lecture 4_ case control study.pdf
+  quote: A major concern in conducting a case-control study is that cases and controls may differ in characteristics other than the studied exposure.
+- activity: 743
+  passage: NMD2403:file:743:Lecture 5. Intervention studies.pdf
+  quote: EBM Cross –Over designEach participant is given both interventions in successive periods.
+- activity: 745
+  passage: NMD2403:file:745:Critical appraisal of health research.pdf
+  quote: Critical Appraisal of a research paper(Reading a research paper)Dr.
+- activity: 747
+  passage: NMD2403:file:747:Analytic epidemiological studies.pptx
+  quote: Both groups were interviewed to obtain information on history of oral contraceptive pills intake.
+- activity: 748
+  passage: NMD2403:file:748:Revision 1pptx.pptx
+  quote: Both groups were interviewed to obtain information on history of smoking.
+- activity: 749
+  passage: NMD2403:file:749:Checklist for critical appraisal of a research.pdf
+  quote: Are the aims of the study clearly stated? 2.
+- activity: 750
+  passage: NMD2403:file:750:Diabetes Obesity Metabolism - 2016 - Moreira%E2%80%90Lucas - Effect of vitamin D supplementation on oral glucose tolerance in.pdf
+  quote: All participants provided written informed consent prior to participating.
+- activity: 751
+  passage: NMD2403:file:751:impact-of-covid19-vaccination-on-varicella-zoster-virus-reactivation-a-case-control-study-1685 (1).pdf
+  quote: All participants provided informed consent to participate in the study after MOH ethics committee approved it.
+- activity: 752
+  passage: NMD2403:file:752:s13018-020-01753-z.pdf
+  quote: After 15 weeks of follow-up, the PRP group showed significative improvements in al l scores when compared to the CS group.
+- activity: 753
+  passage: NMD2403:file:753:jama_johansen_2017_pc_170003 (1).pdf
+  quote: Further research is needed to assess superiority, as well as generalizability and durability of findings.
+- activity: 732
+  passage: NMD2403:file:732:Students notes.pdf
+  quote: 'Research Skills III 1 Research Skills III Critical appraisal of research Intended learning outcomes: 1.'
+- activity: 733
+  passage: NMD2403:file:733:Student Guide Research Skills 3.docx
+  quote: Principles of Research Methodology A Guide for Clinical Investigators.
+- activity: 734
+  passage: NMD2403:file:734:Research III students notes with activity worksheet.ocx.pdf
+  quote: Preface Reading and writing medical research is directed at medical students and healthcare professionals at all stages of their education.
+- activity: 735
+  passage: NMD2403:file:735:Lecture 2_ descriptive studies.pdf
+  quote: Ecological Fallacy Ecological fallacy •The weakness of ecological approach is that exposure and outcome are measured at the population level.
+- activity: 738
+  passage: NMD2403:file:738:JBI_Critical_Appraisal-Checklist_for_Cohort_Studies.docx
+  quote: A high quality study at the level of cohort design should mention or describe how the exposures were measured.
+- activity: 739
+  passage: NMD2403:file:739:Cohort study.pdf
+  quote: Determining prognosis 12 The Disease incidenceThe rate at which people withouta disease develop the disease during a specific time.
+- activity: 741
+  passage: NMD2403:file:741:Lecture 4_ case control study.pdf
+  quote: Begin with the Presence or Absence of the Outcome of interest (e.
+- activity: 743
+  passage: NMD2403:file:743:Lecture 5. Intervention studies.pdf
+  quote: Each participant acts as his or her own control.
+- activity: 745
+  passage: NMD2403:file:745:Critical appraisal of health research.pdf
+  quote: Critical appraisal is the process of systematically examining the available evidence to judge its:1.
+- activity: 747
+  passage: NMD2403:file:747:Analytic epidemiological studies.pptx
+  quote: Can be calculated For which of the following study designs incomplete records in the developing country is considered as a major limitation?
+- activity: 748
+  passage: NMD2403:file:748:Revision 1pptx.pptx
+  quote: C ase report Brief, objective report of a clinical characteristic or an outcome from a single subject or event , n = 1.
+- activity: 749
+  passage: NMD2403:file:749:Checklist for critical appraisal of a research.pdf
+  quote: Are the methods overall described in enough detail s that you could replicate the study? 11.
+- activity: 750
+  passage: NMD2403:file:750:Diabetes Obesity Metabolism - 2016 - Moreira%E2%80%90Lucas - Effect of vitamin D supplementation on oral glucose tolerance in.pdf
+  quote: 'D status and increased risk for developing type 2 diabetes (EVIDENCE): A double-blind, randomized, placebo-controlled clinical trial Tracy S.'
+- activity: 751
+  passage: NMD2403:file:751:impact-of-covid19-vaccination-on-varicella-zoster-virus-reactivation-a-case-control-study-1685 (1).pdf
+  quote: 'Background: Herpes zoster (HZ) is a medical condition of a significant global impact, with millions of people affected and rising incidence.'
+- activity: 752
+  passage: NMD2403:file:752:s13018-020-01753-z.pdf
+  quote: 'Background: Osteoarthritis is the most prevalent type of arthritis, which significantly impacts the patient ’s mobility and quality of life.'
+- activity: 753
+  passage: NMD2403:file:753:jama_johansen_2017_pc_170003 (1).pdf
+  quote: INTERVENTIONS All participants received standard care with individual counseling and standardized, blinded, target-driven medical therapy.
+- activity: 732
+  passage: NMD2403:file:732:Students notes.pdf
+  quote: 'Research Skills III 3 There are two types of validity for consideration in every study: Threats to internal validity: a.'
+- activity: 733
+  passage: NMD2403:file:733:Student Guide Research Skills 3.docx
+  quote: Research skills for medical students (Becoming tomorrow’s doctor series).
+- activity: 734
+  passage: NMD2403:file:734:Research III students notes with activity worksheet.ocx.pdf
+  quote: 'The extent to which the study findings are generalizable beyond the limits of the study to the whole target population is: a.'
+- activity: 735
+  passage: NMD2403:file:735:Lecture 2_ descriptive studies.pdf
+  quote: Enumerate utilities and limitations of cross-sectional study design5.
+- activity: 738
+  passage: NMD2403:file:738:JBI_Critical_Appraisal-Checklist_for_Cohort_Studies.docx
+  quote: A high quality study at the level of cohort design will identify the potential confounders and measure them (where possible).
+- activity: 739
+  passage: NMD2403:file:739:Cohort study.pdf
+  quote: 'Dynamic population: people enter and exit the population as they wish.'
+- activity: 741
+  passage: NMD2403:file:741:Lecture 4_ case control study.pdf
+  quote: Case -control studies-Provide a relatively simple way to investigate causes of diseases, especially rare diseases.
+- activity: 743
+  passage: NMD2403:file:743:Lecture 5. Intervention studies.pdf
+  quote: Sequential controlled trialsa) Self-Control Trials:are studies in which the same group works as control group.
+- activity: 745
+  passage: NMD2403:file:745:Critical appraisal of health research.pdf
+  quote: Define validity and differentiate between internal and external validity5.
+- activity: 747
+  passage: NMD2403:file:747:Analytic epidemiological studies.pptx
+  quote: He also asked about the total daily studying hours.
+- activity: 748
+  passage: NMD2403:file:748:Revision 1pptx.pptx
+  quote: Case series report Objective report of a clinical characteristic or an outcome from a group of subjects , n >1.
+- activity: 749
+  passage: NMD2403:file:749:Checklist for critical appraisal of a research.pdf
+  quote: 'Critical appraisal checklist: Statement Yes No Not clear Not applicable 1.'
+- activity: 750
+  passage: NMD2403:file:750:Diabetes Obesity Metabolism - 2016 - Moreira%E2%80%90Lucas - Effect of vitamin D supplementation on oral glucose tolerance in.pdf
+  quote: FINDRISC) 15 questionnaire and additional questions related to supplement and medication use, medical history and family history of diabetes.
+- activity: 751
+  passage: NMD2403:file:751:impact-of-covid19-vaccination-on-varicella-zoster-virus-reactivation-a-case-control-study-1685 (1).pdf
+  quote: Cases of HZ was defined by presence of painful, blistering skin eruption in a unilateral dermatomal distribution (Figures 1 - 3).
+- activity: 752
+  passage: NMD2403:file:752:s13018-020-01753-z.pdf
+  quote: Both treatments were effective in relieving pain and improvi ng the knee function in the very short-term follow-up visit (1 week).
+- activity: 753
+  passage: NMD2403:file:753:jama_johansen_2017_pc_170003 (1).pdf
+  quote: Superiority analysis was performed on the secondary outcome reductions in glucose-lowering medication.
+- activity: 732
+  passage: NMD2403:file:732:Students notes.pdf
+  quote: Secondary research includes collection, summary and/or synthesis of an evidence from existing research.
+- activity: 733
+  passage: NMD2403:file:733:Student Guide Research Skills 3.docx
+  quote: 'Welcome Note: Dear students, we are pleased to welcome you to the College of Medicine year 2 , Arab Academy for Science and Technology .'
+- activity: 734
+  passage: NMD2403:file:734:Research III students notes with activity worksheet.ocx.pdf
+  quote: and may also be associated with the incidence of heart disease (the more one drinks the more likely one is to have a heart disease problem).
+- activity: 735
+  passage: NMD2403:file:735:Lecture 2_ descriptive studies.pdf
+  quote: Identify the uses of case series report and limitations4.
+- activity: 738
+  passage: NMD2403:file:738:JBI_Critical_Appraisal-Checklist_for_Cohort_Studies.docx
+  quote: Assessing validity requires that a 'gold standard' is available to which the measure can be compared.
+- activity: 739
+  passage: NMD2403:file:739:Cohort study.pdf
+  quote: In this type of study, the outcome (disease) has occurred before the start of the study.
+- activity: 741
+  passage: NMD2403:file:741:Lecture 4_ case control study.pdf
+  quote: Matching-Number of controls should be equal to cases.
+- activity: 743
+  passage: NMD2403:file:743:Lecture 5. Intervention studies.pdf
+  quote: a) Randomized Controlled Trials b) Non-randomized Controlled Trials 1 EBM 2.
+- activity: 745
+  passage: NMD2403:file:745:Critical appraisal of health research.pdf
+  quote: Down syndrome What help you in critical evaluation:•There are checklists available that enable us to evaluate research papers systematically.
+- activity: 747
+  passage: NMD2403:file:747:Analytic epidemiological studies.pptx
+  quote: Incidence rate Cannot be calculated Can be calculated 13.
+- activity: 748
+  passage: NMD2403:file:748:Revision 1pptx.pptx
+  quote: 'Interpretation: The odds of smoking among IHD cases is six times as compared to control group.'
+- activity: 749
+  passage: NMD2403:file:749:Checklist for critical appraisal of a research.pdf
+  quote: Did the authors state limitations in the article? Comment on the results as regard the difference, its size and precision?
+- activity: 750
+  passage: NMD2403:file:750:Diabetes Obesity Metabolism - 2016 - Moreira%E2%80%90Lucas - Effect of vitamin D supplementation on oral glucose tolerance in.pdf
+  quote: Participants underwent an oral glucose tolerance test to determine 2hPC glucose.
+- activity: 751
+  passage: NMD2403:file:751:impact-of-covid19-vaccination-on-varicella-zoster-virus-reactivation-a-case-control-study-1685 (1).pdf
+  quote: 'Conclusions: Vaccination with COVID-19 had significant statistical association with varicella zoster activation.'
+- activity: 752
+  passage: NMD2403:file:752:s13018-020-01753-z.pdf
+  quote: Currently, no disease-modifying treatment has been ap- proved, which makes joint replacement the only viable solution for these patients.
+- activity: 753
+  passage: NMD2403:file:753:jama_johansen_2017_pc_170003 (1).pdf
+  quote: Supplemental content Author Affiliations:Author affiliations are listed at the end of this article.
+- activity: 732
+  passage: NMD2403:file:732:Students notes.pdf
+  quote: Skills III 6 Study Types in quantitative primary research A study design is the scientific method that a researcher follows in his research.
+- activity: 733
+  passage: NMD2403:file:733:Student Guide Research Skills 3.docx
+  quote: ing resources V ideo-recorded lectures on your student -portal Mini-Lecture notes Designed Practical activity sheets Reference textbooks ANN.
+- activity: 734
+  passage: NMD2403:file:734:Research III students notes with activity worksheet.ocx.pdf
+  quote: appraisal tool is a form of questionnaire which identifies key aspects of a research study which should be present in the high-quality work.
+- activity: 735
+  passage: NMD2403:file:735:Lecture 2_ descriptive studies.pdf
+  quote: If y tends to increase as x increases, then the paired data are said to be a positive correlation.
+- activity: 738
+  passage: NMD2403:file:738:JBI_Critical_Appraisal-Checklist_for_Cohort_Studies.docx
+  quote: BI Systematic Reviews The core of evidence synthesis is the systematic review of literature of a particular intervention, condition or issue.
+- activity: 739
+  passage: NMD2403:file:739:Cohort study.pdf
+  quote: It is better for occupational diseases if there were records for examinations (pre-employment and periodic examinations).
+- activity: 741
+  passage: NMD2403:file:741:Lecture 4_ case control study.pdf
+  quote: Retrospective” focusing on past exposures to detect Possiblecauses or risk factors.
+- activity: 743
+  passage: NMD2403:file:743:Lecture 5. Intervention studies.pdf
+  quote: bias:Loss of more than 20% of the sample during follow up period especially if losses differ significantly between both intervention groups.
+- activity: 745
+  passage: NMD2403:file:745:Critical appraisal of health research.pdf
+  quote: Identify common threats to internal validity of a study.
+- activity: 747
+  passage: NMD2403:file:747:Analytic epidemiological studies.pptx
+  quote: The probability of being a smoker is 'x' times greater among those with lung cancer compared to those without lung cancer.
+- activity: 748
+  passage: NMD2403:file:748:Revision 1pptx.pptx
+  quote: It aims to identify risk factors for developing the outcome of interest.
+- activity: 749
+  passage: NMD2403:file:749:Checklist for critical appraisal of a research.pdf
+  quote: Do the research methods limit the influence of confounding variables? • Matching • Restriction/exclusion 8.
+- activity: 750
+  passage: NMD2403:file:750:Diabetes Obesity Metabolism - 2016 - Moreira%E2%80%90Lucas - Effect of vitamin D supplementation on oral glucose tolerance in.pdf
+  quote: The VitD group exhibited a signiﬁ- cant reduction in LDL cholesterol (−0.
+- activity: 751
+  passage: NMD2403:file:751:impact-of-covid19-vaccination-on-varicella-zoster-virus-reactivation-a-case-control-study-1685 (1).pdf
+  quote: Controls were selected from patients and their relatives attended IDH hospital for reasons other than HZ (etc.
+- activity: 752
+  passage: NMD2403:file:752:s13018-020-01753-z.pdf
+  quote: Open Access This article is licensed under a Creative Commons Attribution 4.
+- activity: 753
+  passage: NMD2403:file:753:jama_johansen_2017_pc_170003 (1).pdf
+  quote: The addi- tion of walking provided no further improvements.
+- activity: 732
+  passage: NMD2403:file:732:Students notes.pdf
+  quote: 'We first can classify the study type into: 1.'
+- activity: 733
+  passage: NMD2403:file:733:Student Guide Research Skills 3.docx
+  quote: onal opportunities Theme Learning objectives Educational Strategy Critical appraisal of heath research Define critical appraisal of research.
+- activity: 734
+  passage: NMD2403:file:734:Research III students notes with activity worksheet.ocx.pdf
+  quote: b) The external validity of a study refers to the appropriateness of the results for non - study patients or populations.
+- activity: 735
+  passage: NMD2403:file:735:Lecture 2_ descriptive studies.pdf
+  quote: In manysituations,scatter plotsfollow patterns that are approximately linear.
+- activity: 738
+  passage: NMD2403:file:738:JBI_Critical_Appraisal-Checklist_for_Cohort_Studies.docx
+  quote: By matching or stratifying sampling of participants, effects of confounding factors can be adjusted for.
+- activity: 739
+  passage: NMD2403:file:739:Cohort study.pdf
+  quote: 'Looking at the causes of diseases: through comparingthe incidenceof outcomes in the exposed and unexposed groups.'
+- activity: 741
+  passage: NMD2403:file:741:Lecture 4_ case control study.pdf
+  quote: The Odds Ratio-Case Control studies can not determine the absolute incidence of disease.
+- activity: 743
+  passage: NMD2403:file:743:Lecture 5. Intervention studies.pdf
+  quote: patients and investigators are blindedTriple blinding:blinding of patients, investigators, and statisticiansSometimes blinding is impossible.
+- activity: 745
+  passage: NMD2403:file:745:Critical appraisal of health research.pdf
+  quote: Identify examples of tools used to critically appraise a research paper4.
+- activity: 747
+  passage: NMD2403:file:747:Analytic epidemiological studies.pptx
+  quote: These are very expensive but still useful as a large proportion of lung cancer among smokers will be eliminated if smoking is stopped.
+- activity: 748
+  passage: NMD2403:file:748:Revision 1pptx.pptx
+  quote: It helps in generating hypothesis limitations Case report is based on experience of a single person; it might be a coincidence.
+- activity: 749
+  passage: NMD2403:file:749:Checklist for critical appraisal of a research.pdf
+  quote: 'Ethical issues: • Was the study approved by an ethical committee?'
+- activity: 750
+  passage: NMD2403:file:750:Diabetes Obesity Metabolism - 2016 - Moreira%E2%80%90Lucas - Effect of vitamin D supplementation on oral glucose tolerance in.pdf
+  quote: The primary out- come was the change in 2hPC glucose.
+- activity: 751
+  passage: NMD2403:file:751:impact-of-covid19-vaccination-on-varicella-zoster-virus-reactivation-a-case-control-study-1685 (1).pdf
+  quote: 'Correspondence: Almunther Alhasawi, Consultant in internal medicine and Infectious diseases, Infectious Diseases hospital, Kuwait, Faiha, P.'
+- activity: 752
+  passage: NMD2403:file:752:s13018-020-01753-z.pdf
+  quote: Overall, the patients who received PRP treatment had better outco mes in a longer follow-up visit (up to 1 year) than those who received CS.
+misses:
+- activity: 733
+  quote: 'Primary research: It presents original data that appear for the first time.'
+  absent: NMD2403:file:732:Students notes.pdf
+- activity: 732
+  quote: Course Reading and w riting m edical research is directed at medical students and healthcare professionals at all stages of their education .
+  absent: NMD2403:file:733:Student Guide Research Skills 3.docx
+- activity: 732
+  quote: 'Conducting a study in a way that tends to lead to a particular conclusion, regardless of the truth is: a.'
+  absent: NMD2403:file:734:Research III students notes with activity worksheet.ocx.pdf
+- activity: 732
+  quote: A scatter plot usesdotsto represent individual data on a graph.
+  absent: NMD2403:file:735:Lecture 2_ descriptive studies.pdf
+- activity: 732
+  quote: A confounder is a difference between the comparison groups and it influences the direction of the study results.
+  absent: NMD2403:file:738:JBI_Critical_Appraisal-Checklist_for_Cohort_Studies.docx

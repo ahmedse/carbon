@@ -73,22 +73,35 @@ def classify(decision: Any, caps: Any, routes: set[str]) -> str:
 
 
 async def _write_checked(decision: Any, turn: dict[str, Any], instance_id: str) -> dict[str, Any]:
-    """One writer call. Numbers must be in the message or its history."""
-    from ai.engine.cognition.turn.finish import write_answer
-    from ai.engine.cognition.turn.grounding import ungrounded_numbers
+    """The reply the runtime shows. Numbers must be in the message or its history.
 
+    A conversation answer that passes its checks is the Decision's own text,
+    as at runtime (ADR-0056 Amendment 1); otherwise one writer call.
+    """
+    from ai.engine.cognition.turn.finish import grounded_reply, write_answer
+    from ai.engine.cognition.turn.grounding import ungrounded_numbers
+    from ai.engine.cognition.turn.pipeline_v21 import lead_command
+
+    lead = lead_command(decision)
+    own = grounded_reply(
+        lead, decision, user_message=turn["text"],
+        conversation_history=turn["history"], state=None,
+    ) if lead is not None else ""
     try:
-        text, _usage = await write_answer(
-            decision,
-            user_message=turn["text"],
-            conversation_history=turn["history"],
-            state=None,
-            user_info=turn["user_info"],
-            instance_config=None,
-            retrieval=None,
-            instance_id=instance_id,
-            conversation_id=turn["conversation"],
-        )
+        if own:
+            text = own
+        else:
+            text, _usage = await write_answer(
+                decision,
+                user_message=turn["text"],
+                conversation_history=turn["history"],
+                state=None,
+                user_info=turn["user_info"],
+                instance_config=None,
+                retrieval=None,
+                instance_id=instance_id,
+                conversation_id=turn["conversation"],
+            )
     except Exception as exc:  # noqa: BLE001 — one bad write does not stop the replay
         return {"reply": "", "ungrounded": [], "write_error": f"{type(exc).__name__}: {exc}"[:200]}
     allowed = [turn["text"], *(m.get("content") or "" for m in turn["history"])]

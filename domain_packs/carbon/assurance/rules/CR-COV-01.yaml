@@ -17,8 +17,11 @@ validation: >
   Calculation matches the open reporting_period. A CoverageGoal has no
   reporting_period field. It is org unit, scope, target year, and tier.
   Emit a goal check only when both O1 source names exist and exactly one
-  period is open. Scope must be the string 1+2. Several 1+2 goals use the
-  lowest id. Do not copy target_coverage_pct onto the checklist.
+  period is open. Scope must be the string 1+2. Several 1+2 goals: use the
+  lowest id among rows that are draft, materiality_bounded, and min_quality_tier
+  4. If none match, use the lowest id 1+2 row and emit that row's failure.
+  An active SBTi goal is not the O1 onboarding row when a matching draft
+  exists. Do not copy target_coverage_pct onto the checklist.
 codes:
   - code: coverage_goal_absent
     when: no CoverageGoal has scope 1+2
@@ -49,3 +52,8 @@ residual: >
   target_coverage_pct is a required decimal on the model, so the goal row
   stays absent until the lead chooses a percent of the declared list. The
   page must not default that percent to 100.
+target: O1
+product: Carbon on AASTMT
+evidence: Codes coverage_goal_absent, coverage_goal_completeness, coverage_goal_tier, coverage_goal_status, coverage_goal_met
+locked: 2026-09-29
+limit: Does not copy target_coverage_pct onto the checklist. An active SBTi goal is not the O1 row when a matching draft exists. Does not open P1.

@@ -81,7 +81,11 @@ export default function Login() {
     setError(""); setBusy(true);
 
     try {
-      const { requireProjectSelection, landingPath } = await login(form);
+      const { requireProjectSelection, landingPath, requirePasswordChange } = await login(form);
+      if (requirePasswordChange) {
+        navigate("/change-password", { replace: true });
+        return;
+      }
       setRequireProject(requireProjectSelection);
       // If single project, login already selected it and set context - navigate now
       if (!requireProjectSelection) {

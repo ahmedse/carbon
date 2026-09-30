@@ -62,6 +62,11 @@ persona: >
 
 default_app: gradevance
 
+dials:
+  - ask
+  - plan
+  - agent
+
 capabilities:
   - gradevance.explain
   - gradevance.coach_draft

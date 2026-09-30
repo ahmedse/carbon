@@ -1,0 +1,308 @@
+# Verbatim sentence from this course bank. It cites one open file, or it is refused.
+version: 1
+course: NMD1402
+world: aast-mbbs
+ask: According to the handout
+miss: This is not in this lecture.
+hits:
+- activity: 758
+  passage: NMD1402:file:758:Research skills step I, Theoretical and practical.pdf
+  quote: It i s most useful for A ratio is a measure in which the value of numerator (x) is not included in the denominator (y).
+- activity: 759
+  passage: NMD1402:file:759:Student Guide Research Skills 1.pdf
+  quote: A researcher conducted a study to compare the effectiveness of two different treatments in controlling the blood pressure.
+- activity: 760
+  passage: NMD1402:file:760:Introduction to health research-first lecture.pdf
+  quote: Do they apply its results in their practice?
+- activity: 762
+  passage: NMD1402:file:762:Know your basics second lecture.pdf
+  quote: Distribution of the disease TIMEPLACE PERSON Where is the disease ocurring? Who is getting the disease? When is the disease ocurring?
+- activity: 763
+  passage: NMD1402:file:763:Lecture notes- Know your basics.pdf
+  quote: Change in the effectiveness of the preventive program (either decrease or increase).
+- activity: 765
+  passage: NMD1402:file:765:First activity worksheet....pptx
+  quote: A new risk factor for a particular disease newly introduced in a community Recovery rate from the disease increased.
+- activity: 766
+  passage: NMD1402:file:766:Classification of health research, Third Lecture.pdf
+  quote: Explain utilities and limitations of ecological studies, case report and case series report WHAT IS A RESEARCH?
+- activity: 768
+  passage: NMD1402:file:768:classification of study design-review.pptx
+  quote: 'Case report Q2: Why it is the best to present this case?'
+- activity: 770
+  passage: NMD1402:file:770:Cross sectional design.pdf
+  quote: Investigating the seroprevalence of hepatitis C infection among blood donors.
+- activity: 774
+  passage: NMD1402:file:774:Analytic studies.pdf
+  quote: An investigator investigates whether smoking causes a blood disorder known as hemophilia.
+- activity: 775
+  passage: NMD1402:file:775:Analytic studies.docx
+  quote: 'Analytic studies: The main char a cteristics of analytic studies are: Presence of comparison group selected from the start of the study .'
+- activity: 777
+  passage: NMD1402:file:777:intervention studies.pptx
+  quote: Each participant acts as his or her own control.
+- activity: 778
+  passage: NMD1402:file:778:Introduction to study designs in  medical research edited.pdf
+  quote: 'Mini-Lecture Notes 5 Measuring disease frequency: Why we need to measure diseases frequency?'
+- activity: 782
+  passage: NMD1402:file:782:MOCK  Exam Research Skills I.docx
+  quote: A researcher wants to prove the relationship between high fat diet and cancer colon.
+- activity: 1034
+  passage: NMD1402:page:1034
+  quote: you a brief introduction about scientific research and its relation to medical careAt the end of this session, the student will be able to:1.
+- activity: 758
+  passage: NMD1402:file:758:Research skills step I, Theoretical and practical.pdf
+  quote: 'Mini-Lecture Notes 5 Measuring disease frequency: Remember Why we need to measure diseases frequency?'
+- activity: 759
+  passage: NMD1402:file:759:Student Guide Research Skills 1.pdf
+  quote: A study conducted to explore attitude of physicians towards COVID 19 vaccine.
+- activity: 760
+  passage: NMD1402:file:760:Introduction to health research-first lecture.pdf
+  quote: Improving Quality of Life Examples of research ideas in medicine?•Whatarethecauses(riskfactors)ofacertaindisease?
+- activity: 762
+  passage: NMD1402:file:762:Know your basics second lecture.pdf
+  quote: Explain what is meant by distribution of the disease3.
+- activity: 763
+  passage: NMD1402:file:763:Lecture notes- Know your basics.pdf
+  quote: Differentiate between exposure and outcome in health research.
+- activity: 765
+  passage: NMD1402:file:765:First activity worksheet....pptx
+  quote: Calculate the incidence rate of diarrhea among guests?
+- activity: 766
+  passage: NMD1402:file:766:Classification of health research, Third Lecture.pdf
+  quote: How many patients are satisfied with the care provided??
+- activity: 768
+  passage: NMD1402:file:768:classification of study design-review.pptx
+  quote: 'Classification of study design Practical activity II QI: Enumerate factors that affect selection of the study design?'
+- activity: 770
+  passage: NMD1402:file:770:Cross sectional design.pdf
+  quote: 'They answer the question: “What is Happening NOW ?”•They are sometimes referred to as “Snapshot studies” 1.'
+- activity: 774
+  passage: NMD1402:file:774:Analytic studies.pdf
+  quote: Based on selection of the study participants they are two main types 1.
+- activity: 775
+  passage: NMD1402:file:775:Analytic studies.docx
+  quote: Both groups were interviewed to obtain information regarding prior history of smoking.
+- activity: 777
+  passage: NMD1402:file:777:intervention studies.pptx
+  quote: Some communities will be selected randomly to receive the vaccine, while other communities will not be vaccinated.
+- activity: 778
+  passage: NMD1402:file:778:Introduction to study designs in  medical research edited.pdf
+  quote: Prevalence is an indication of ho w frequent a specific outcome or disease is present in a specified population.
+- activity: 782
+  passage: NMD1402:file:782:MOCK  Exam Research Skills I.docx
+  quote: Cross-sectional study Prospective Cohort study Ecological study Case control study 10.
+- activity: 758
+  passage: NMD1402:file:758:Research skills step I, Theoretical and practical.pdf
+  quote: X / Y) A Proportion is a ratio in which the numerator (x) is included in the denominator.
+- activity: 759
+  passage: NMD1402:file:759:Student Guide Research Skills 1.pdf
+  quote: An expert in the field of public health is required to estimate the magnitude of a health problem in a country.
+- activity: 760
+  passage: NMD1402:file:760:Introduction to health research-first lecture.pdf
+  quote: Professor of public health Faculty of MedicineAlexandria UniversityEmail:Heba.
+- activity: 762
+  passage: NMD1402:file:762:Know your basics second lecture.pdf
+  quote: 'HebaElweshahiAssociate Professor of Public Health Community Medicine DepartmentFaculty of Medicine, Alexandria UniversityEmail address: Heba.'
+- activity: 763
+  passage: NMD1402:file:763:Lecture notes- Know your basics.pdf
+  quote: Explain what is meant by distribution of the disease 3.
+- activity: 765
+  passage: NMD1402:file:765:First activity worksheet....pptx
+  quote: Calculate the incidence rate of the disease during July?
+- activity: 766
+  passage: NMD1402:file:766:Classification of health research, Third Lecture.pdf
+  quote: Identify factors that affect selection of study design3.
+- activity: 768
+  passage: NMD1402:file:768:classification of study design-review.pptx
+  quote: Cutaneous skin manifestations in the post-viral setting could be an indication of impending multisystem inflammatory syndrome.
+- activity: 770
+  passage: NMD1402:file:770:Cross sectional design.pdf
+  quote: cent of students who score grades A in final exams, obesity, depression) -Prevalence of exposure is measured without reference to outcome (e.
+- activity: 774
+  passage: NMD1402:file:774:Analytic studies.pdf
+  quote: Describe the main characteristics of Case control study2.
+- activity: 775
+  passage: NMD1402:file:775:Analytic studies.docx
+  quote: 'Example 2: An investigator investigates whether smoking causes a rare blood disorder known as hemophilia (an inherited bleeding disorder).'
+- activity: 777
+  passage: NMD1402:file:777:intervention studies.pptx
+  quote: The main question in these experiments “Is this intervention effective and safe ?
+- activity: 778
+  passage: NMD1402:file:778:Introduction to study designs in  medical research edited.pdf
+  quote: Secondary research includes collection, summary and/or synthesis of existing research.
+- activity: 782
+  passage: NMD1402:file:782:MOCK  Exam Research Skills I.docx
+  quote: Cross-sectional study Prospective Cohort study Ecological study Case control study 6.
+- activity: 758
+  passage: NMD1402:file:758:Research skills step I, Theoretical and practical.pdf
+  quote: d Morbidity refers to departure from a state of physical o r psychological well- being, resulting from disease, illness, injury, or sickness.
+- activity: 759
+  passage: NMD1402:file:759:Student Guide Research Skills 1.pdf
+  quote: Analyzing presented research questions to choose the most appropriate study design.
+- activity: 760
+  passage: NMD1402:file:760:Introduction to health research-first lecture.pdf
+  quote: Prolonging life that is of an acceptable quality to the individual i.
+- activity: 762
+  passage: NMD1402:file:762:Know your basics second lecture.pdf
+  quote: In practice, morbidity encompasses disease, injury, and disability.
+- activity: 763
+  passage: NMD1402:file:763:Lecture notes- Know your basics.pdf
+  quote: 'However prevalent cases leave the prevalence pot in one of two ways: recovery or death.'
+- activity: 765
+  passage: NMD1402:file:765:First activity worksheet....pptx
+  quote: Calculate the prevalence rate of the disease during July?
+- activity: 766
+  passage: NMD1402:file:766:Classification of health research, Third Lecture.pdf
+  quote: Public Health & Community Medicine Department13 Study design•A study design is a scientific method that a researcher follows in his research.
+- activity: 768
+  passage: NMD1402:file:768:classification of study design-review.pptx
+  quote: Dear students & What is meant by confounding factor?
+- activity: 770
+  passage: NMD1402:file:770:Cross sectional design.pdf
+  quote: he prevalence at a point of time and doesn’t without reference to a relationship between factors it is considered as “a Descriptive study” 2.
+- activity: 774
+  passage: NMD1402:file:774:Analytic studies.pdf
+  quote: Identify utilities and limitations of case control study design in health research4.
+- activity: 775
+  passage: NMD1402:file:775:Analytic studies.docx
+  quote: Highly subjected to recall bias (occurs when one of the groups recalls exposure to the risk factor more accurately than the other group ) .
+- activity: 777
+  passage: NMD1402:file:777:intervention studies.pptx
+  quote: dence R ecovery rate(cure) S ymptom releif Q uality of life Principles of RCT Randomization P resence of control group B linding (masking) 1.
+- activity: 778
+  passage: NMD1402:file:778:Introduction to study designs in  medical research edited.pdf
+  quote: 'e Notes Research skills step I Part II: Introduction to study designs in medical research Mini-Lecture Notes 2 Intended learning outcomes: 1.'
+- activity: 782
+  passage: NMD1402:file:782:MOCK  Exam Research Skills I.docx
+  quote: Cross-sectional study Prospective Cohort study Ecological study Case control study 9.
+- activity: 758
+  passage: NMD1402:file:758:Research skills step I, Theoretical and practical.pdf
+  quote: new cases Mini-Lecture Notes 6 measuring the burden of chronic diseases such as hypertension, diabetes mellitus and obesity in a population.
+- activity: 759
+  passage: NMD1402:file:759:Student Guide Research Skills 1.pdf
+  quote: Calculate and interpret the most common morbidity indicators 4.
+- activity: 760
+  passage: NMD1402:file:760:Introduction to health research-first lecture.pdf
+  quote: Research is a systematic process based on scientific method to solve problems and create new knowledge that is generally applicable.
+- activity: 762
+  passage: NMD1402:file:762:Know your basics second lecture.pdf
+  quote: cy Measuring disease frequency:•Measuring the rate of occurrence of a disease in a community as well as the disease burden in this community.
+- activity: 763
+  passage: NMD1402:file:763:Lecture notes- Know your basics.pdf
+  quote: Increase in the proportion of population who has the risk factor (who are at risk).
+- activity: 765
+  passage: NMD1402:file:765:First activity worksheet....pptx
+  quote: 'Chronic diseases) Migration of cases or people at risk Exercise 2: What happens to the incidence and prevalence in the following situations?'
+- activity: 766
+  passage: NMD1402:file:766:Classification of health research, Third Lecture.pdf
+  quote: Research is the systematic collection, analysis and interpretation of data to answer a certain question or solve a problem.
+- activity: 768
+  passage: NMD1402:file:768:classification of study design-review.pptx
+  quote: 'Examples: Sex, work-load, family history, social factors, pregnancy and post-partum, ……….'
+- activity: 770
+  passage: NMD1402:file:770:Cross sectional design.pdf
+  quote: in risk factors in the population (Smoking, obesity…)•Assess ‘knowledge, attitude, and practice’ (KAP) of the population or a specific group.
+- activity: 774
+  passage: NMD1402:file:774:Analytic studies.pdf
+  quote: Researchers investigate a potential link between hepatitis B vaccination and the occurrence of multiple sclerosis.
+- activity: 775
+  passage: NMD1402:file:775:Analytic studies.docx
+  quote: 'Present Matching: is the process in which we select the controls in a way that they are similar to cases with regards to certain factors ( e.'
+- activity: 777
+  passage: NMD1402:file:777:intervention studies.pptx
+  quote: 'ents and investigators are blinded Triple blinding: blinding of patients, investigators, and statisticians Sometimes blinding is impossible .'
+- activity: 778
+  passage: NMD1402:file:778:Introduction to study designs in  medical research edited.pdf
+  quote: rd Morbidity refers to departure from a state of physical or psychological well- being, resulting from disease, illness, injury, or sickness.
+- activity: 782
+  passage: NMD1402:file:782:MOCK  Exam Research Skills I.docx
+  quote: The following flowchart matches which of the following study design?
+- activity: 758
+  passage: NMD1402:file:758:Research skills step I, Theoretical and practical.pdf
+  quote: 'ni-Lecture Notes Research skills step I Introduction to study designs in medical research Mini-Lecture Notes 2 Intended learning outcomes: 1.'
+- activity: 759
+  passage: NMD1402:file:759:Student Guide Research Skills 1.pdf
+  quote: Differentiate between different epidemiologic study designs (Observational and intervention studies).
+- activity: 760
+  passage: NMD1402:file:760:Introduction to health research-first lecture.pdf
+  quote: The Purpose of Medical Research is to identify effective ways for:1.
+- activity: 762
+  passage: NMD1402:file:762:Know your basics second lecture.pdf
+  quote: ptive epidemiology Epidemiologic studies that are concerned with characterizing the amount and distributionof the disease withina population.
+- activity: 763
+  passage: NMD1402:file:763:Lecture notes- Know your basics.pdf
+  quote: It demonstrates that new cases join pre -existing cases to make up total prevalence.
+- activity: 765
+  passage: NMD1402:file:765:First activity worksheet....pptx
+  quote: Control of a certain disease risk factor (Smoking) in the population at large.
+- activity: 766
+  passage: NMD1402:file:766:Classification of health research, Third Lecture.pdf
+  quote: The results are mainly words, objects or photos rather than umbers•Subjective •Usually used for studying attitudes, behaviors, perceptions…….
+- activity: 768
+  passage: NMD1402:file:768:classification of study design-review.pptx
+  quote: It is not the variable of interest to the researchers, but it may potentially affect the results of a study/trial.
+- activity: 770
+  passage: NMD1402:file:770:Cross sectional design.pdf
+  quote: ional survey The study sample should be representative to the target population Examples:•Quantify the burden of a disease in the population.
+- activity: 774
+  passage: NMD1402:file:774:Analytic studies.pdf
+  quote: The purpose is to compare the incidenceamong those who were exposed to those who were not exposed.
+- activity: 775
+  passage: NMD1402:file:775:Analytic studies.docx
+  quote: 'Research skills step I Part II: Introduction to study designs in medical research 2.'
+- activity: 777
+  passage: NMD1402:file:777:intervention studies.pptx
+  quote: 'information bias Explaining cause and effect relationship Advantages of RCTs Disadvantages of RCTs: Difficult, time consuming and expensive.'
+- activity: 782
+  passage: NMD1402:file:782:MOCK  Exam Research Skills I.docx
+  quote: What is the best study design for his research?
+- activity: 759
+  passage: NMD1402:file:759:Student Guide Research Skills 1.pdf
+  quote: Doesn’t relate exposure and outcome in the same individual c.
+- activity: 760
+  passage: NMD1402:file:760:Introduction to health research-first lecture.pdf
+  quote: To improve clinical practice and the patient outcome.
+- activity: 762
+  passage: NMD1402:file:762:Know your basics second lecture.pdf
+  quote: y indicators•Morbidity has been defined as any departure, subjective or objective, from a state of physiological or psychological well-being.
+- activity: 763
+  passage: NMD1402:file:763:Lecture notes- Know your basics.pdf
+  quote: Mini-Lecture Notes 2 Exposure and outcome Exposure and outcome are two terms that researchers use when they carry out clinical research.
+- activity: 765
+  passage: NMD1402:file:765:First activity worksheet....pptx
+  quote: Decrease Increase in the number of persons died from the disease.
+- activity: 766
+  passage: NMD1402:file:766:Classification of health research, Third Lecture.pdf
+  quote: e able to classify health research into its main types Students’ learning outcomes•At the end of this session, the student will be able to:1.
+- activity: 768
+  passage: NMD1402:file:768:classification of study design-review.pptx
+  quote: Mainly, it is the method based on which subjects included in the study are selected, observed, followed, and studied .
+- activity: 770
+  passage: NMD1402:file:770:Cross sectional design.pdf
+  quote: ly)•It helps to study the occurrence of a disease with a reference to certain exposure (s)•It can generate hypothesis but can’t test it •ANN.
+- activity: 774
+  passage: NMD1402:file:774:Analytic studies.pdf
+  quote: aving the disease (cases) or not having the disease (controls)•Then compared in relation to the presence or absence of a particular exposure.
+- activity: 775
+  passage: NMD1402:file:775:Analytic studies.docx
+  quote: Researchers investigate a potential link between hepatitis B vaccination and the occurrence of multiple sclerosis (a neurological disease) .
+- activity: 777
+  passage: NMD1402:file:777:intervention studies.pptx
+  quote: intervention (the most common design) 20 RCT Designs Cross – Over design Each participant is given both interventions in successive periods.
+misses:
+- activity: 759
+  quote: It i s most useful for A ratio is a measure in which the value of numerator (x) is not included in the denominator (y).
+  absent: NMD1402:file:758:Research skills step I, Theoretical and practical.pdf
+- activity: 758
+  quote: A researcher conducted a study to compare the effectiveness of two different treatments in controlling the blood pressure.
+  absent: NMD1402:file:759:Student Guide Research Skills 1.pdf
+- activity: 758
+  quote: Do they apply its results in their practice?
+  absent: NMD1402:file:760:Introduction to health research-first lecture.pdf
+- activity: 758
+  quote: Change in the effectiveness of the preventive program (either decrease or increase).
+  absent: NMD1402:file:763:Lecture notes- Know your basics.pdf
+- activity: 758
+  quote: A new risk factor for a particular disease newly introduced in a community Recovery rate from the disease increased.
+  absent: NMD1402:file:765:First activity worksheet....pptx

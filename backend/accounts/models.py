@@ -29,6 +29,10 @@ class User(AbstractUser):
         blank=False,
         help_text='UI language preference (en/ar).',
     )
+    must_change_password = models.BooleanField(
+        default=False,
+        help_text='When true, the account must set a new password before any other request.',
+    )
 
     def __str__(self):
         return self.username
@@ -283,11 +287,11 @@ class EmailConfig(models.Model):
 class PasswordPolicy(models.Model):
     """Singleton — configurable password policy for the platform."""
 
-    min_length = models.IntegerField(default=12, help_text='Minimum password length')
-    require_uppercase = models.BooleanField(default=True, help_text='Require at least one uppercase letter')
-    require_lowercase = models.BooleanField(default=True, help_text='Require at least one lowercase letter')
+    min_length = models.IntegerField(default=10, help_text='Minimum password length')
+    require_uppercase = models.BooleanField(default=False, help_text='Require at least one uppercase letter')
+    require_lowercase = models.BooleanField(default=True, help_text='Require at least one letter')
     require_number = models.BooleanField(default=True, help_text='Require at least one digit')
-    require_special = models.BooleanField(default=True, help_text='Require at least one special character')
+    require_special = models.BooleanField(default=False, help_text='Require at least one special character')
     max_age_days = models.IntegerField(default=90, help_text='Force password change after N days (0 = never)')
     prevent_reuse_n = models.IntegerField(default=5, help_text='Prevent reuse of last N passwords (0 = unlimited)')
     lockout_after_n = models.IntegerField(default=5, help_text='Lock account after N failed attempts (0 = never)')

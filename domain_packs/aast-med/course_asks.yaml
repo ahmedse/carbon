@@ -1,0 +1,5 @@
+# Which course is open. The name comes from the signed snapshot.
+version: 1
+all_of_any:
+  - [which course]
+  - [what course]

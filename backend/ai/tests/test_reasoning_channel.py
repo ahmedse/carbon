@@ -67,3 +67,14 @@ def test_revision_only_when_shown_text_changes():
 def test_step_narration_names_unfinished_dependencies():
     assert step_narration("Count the rows.", []) == "Count the rows."
     assert "Waiting on step 2, 4." in step_narration("Write the file.", ["2", "4"])
+
+
+def test_plan_list_narration_accepts_string_dependencies():
+    from types import SimpleNamespace
+
+    from ai.plans_service import _step_narration
+
+    step = SimpleNamespace(step_index=1, intent="Write the file.", depends_on_json="[0]")
+    earlier = SimpleNamespace(step_index=0, status="pending")
+    text = _step_narration(step, [earlier, step])
+    assert "Waiting on step 0." in text

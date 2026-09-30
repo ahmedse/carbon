@@ -1,0 +1,308 @@
+# Verbatim sentence from this course bank. It cites one open file, or it is refused.
+version: 1
+course: NMD3101
+world: aast-mbbs
+ask: According to the handout
+miss: This is not in this lecture.
+hits:
+- activity: 1514
+  passage: NMD3101:file:1514:L1 Basic concept of infection (activity sheet).pdf
+  quote: Parasites 2 Which of the following contains DNA NOT surrounded by nuclear membrane? A.
+- activity: 1515
+  passage: NMD3101:file:1515:L1 Basic concepts of infection.pdf
+  quote: Analyze the microbiota of different body sites to distinguish normal colonization from findings suggestive of infection.
+- activity: 1516
+  passage: NMD3101:file:1516:L1 Basic concepts of infection (ppt).pdf
+  quote: Classification of medically important microbes 13 • All organisms other than viruses and prions are made up of cells.
+- activity: 1519
+  passage: NMD3101:file:1519:L2 Bacterial structure, classification  growth.pdf
+  quote: Adjacent glycan chains are cross-linked into sheets by peptide amino acids side chains.
+- activity: 1520
+  passage: NMD3101:file:1520:L2 Bacterial structure, classification  growth (ppt).pdf
+  quote: Adjacent glycan chains are cross - linked into sheets by peptide amino acids side chains.
+- activity: 1521
+  passage: NMD3101:file:1521:L2 Bacterial structure, classification  growth (activity sheet).pdf
+  quote: Bacterial structure, classification & growth Activity sheet What is the morphological structure of the organism demonstrated in the figure?
+- activity: 1524
+  passage: NMD3101:file:1524:L3 Pathogenesis of bacterial infection.pdf
+  quote: Adherence The first major interaction between a pathogenic microorganism and its host entails attachment to a eukaryotic cell surface.
+- activity: 1525
+  passage: NMD3101:file:1525:L3 Pathogenesis of bacterial infection (ppt).pdf
+  quote: 'Adherence • Adherence requires the participation of two factors: 1.'
+- activity: 1526
+  passage: NMD3101:file:1526:L3 Pathogenesis of bacterial infection (activity sheet).pdf
+  quote: All of the above Which of the following is a character of endotoxin? A.
+- activity: 1530
+  passage: NMD3101:file:1530:L4 Bacterial genetics.pdf
+  quote: Although plasmids are usually extrachromosomal, they can be integrated into the bacterial chromosome.
+- activity: 1531
+  passage: NMD3101:file:1531:L4 Bacterial genetics (ppt).pdf
+  quote: 'Appraise the role of bacterial genetics in medicine Students’ learning outcomes • At the end of this session, the student will be able to: 1.'
+- activity: 1532
+  passage: NMD3101:file:1532:L4 Bacterial genetics (activity sheet).pdf
+  quote: Catalase 3 What is the type of genetic exchange demonstrated in the figure? A.
+- activity: 1536
+  passage: NMD3101:file:1536:P1 Sample collection for microbiological diagnosis of infection.pptx
+  quote: All samples should be collected in sterile containers.
+- activity: 1539
+  passage: NMD3101:file:1539:L5 Antibacterial agents.pdf
+  quote: Active against many gram-positive and gram-negative bacteria including anaerobes.
+- activity: 1540
+  passage: NMD3101:file:1540:L5 Antibacterial agents.pdf
+  quote: 'Antimicrobials acting on cell wall synthesis • β-lactam antimicrobial agents comprise: 1.'
+- activity: 1541
+  passage: NMD3101:file:1541:L5 Antibacterial agents (activity sheet).pdf
+  quote: All above 2 What is the spectrum of activity of monobactams? a.
+- activity: 1544
+  passage: NMD3101:file:1544:L6 Antibiotic resistance.pdf
+  quote: A single mobile genetic element may carry multiple resistance genes, producing multidrug resistance.
+- activity: 1545
+  passage: NMD3101:file:1545:L6 Antibiotic resistance.pdf
+  quote: A class of gram -negative extended- spectrum β -lactamases (ESBLs) hydrolyses multiple cephalosporins.
+- activity: 1546
+  passage: NMD3101:file:1546:L6 Antibiotic resistance (activity sheet).pdf
+  quote: Enzyme modification of drug In selecting empiric antimicrobial therapy, which of the following should be considered? A.
+- activity: 1548
+  passage: NMD3101:file:1548:L7 Viral structure  classification.pdf
+  quote: Enveloped viruses are much more heat labile, rapidly at 37°C.
+- activity: 1549
+  passage: NMD3101:file:1549:L7 Viral structure  classification.pdf
+  quote: Defective viruses • Viruses which lack a complete genome so that they cannot completely replicate or cannot form a protein coat.
+- activity: 1550
+  passage: NMD3101:file:1550:L7 Viral structure  classification (activity sheet).pdf
+  quote: Defective virus Which of the following best defines “virus”? A.
+- activity: 1554
+  passage: NMD3101:file:1554:L8 Viral replication.pdf
+  quote: Analyse how differences in viral genome type and cellular machinery determine the strategy of DNA and RNA viral replication.
+- activity: 1555
+  passage: NMD3101:file:1555:L8 Viral replication (ppt).pdf
+  quote: Analyze how differences in viral genome type and cellular machinery determine the strategy of DNA and RNA viral replication.
+- activity: 1556
+  passage: NMD3101:file:1556:L8 Viral replication (activity sheet).pdf
+  quote: Adsorption What is the site of insertion of a prophage into the bacterial chromosome? ………………………………….
+- activity: 1559
+  passage: NMD3101:file:1559:L9 Pathogenesis of viral infection.pdf
+  quote: Appraise the contribution of host immune responses to virus-induced immunopathology and immunosuppression in selected viral diseases.
+- activity: 1560
+  passage: NMD3101:file:1560:L9 Pathogenesis of viral infection (ppt).pdf
+  quote: Active virus production is followed by cell death.
+- activity: 1561
+  passage: NMD3101:file:1561:L9 Pathogenesis of viral infection (activity sheet).pdf
+  quote: Acute infection followed by latency What is the type of viral infection presented in the associated figure? A.
+- activity: 1565
+  passage: NMD3101:file:1565:T2 Principles of microbiological diagnosis of viral infections.pptx
+  quote: A 28-year-old patient presents with fever, sore throat, cough, and fatigue.
+- activity: 1568
+  passage: NMD3101:file:1568:L10 Antiviral agents  resistance.pdf
+  quote: Fusion inhibitors HIV fusion inhibitors act by disrupting the fusion of viral envelope with the cell membrane, preventing cellular infection.
+- activity: 1569
+  passage: NMD3101:file:1569:L10 Antiviral agents  resistance (ppt).pdf
+  quote: Lamivudine Lamivudine is a nucleoside reverse transcriptase inhibitor with activity agains t HIV and HBV to disrupt viral DNA synthesis.
+- activity: 1570
+  passage: NMD3101:file:1570:L10 antiviral agents  resistance (activity sheet).pdf
+  quote: Acyclovir Which of the following antiviral drugs is a non-nucleoside polymerase inhibitor? A.
+- activity: 1574
+  passage: NMD3101:file:1574:L11 Introduction to Medical Mycology.pdf
+  quote: Acute disease, such as that produced by many viruses and bacteria, is uncommon with fungal infections.
+- activity: 1575
+  passage: NMD3101:file:1575:L11 Introduction to medical mycology (PPT).pdf
+  quote: Aspergillosis (lung) Rhinocerebral lung Meningitis Skin, mm, UTI Pneumonia Classification by diseases 4.
+- activity: 1576
+  passage: NMD3101:file:1576:L11 Introduction to medical mycology (activity sheet).pdf
+  quote: 'Both sexual and asexual Molds are also known as: a.'
+- activity: 1580
+  passage: NMD3101:file:1580:L12 Antifungal agents and resistance.pdf
+  quote: 'Allylamaines Action: The allylamines act by inhibition of an enzyme (squalene epoxidase) in the early stages of ergosterol synthesis.'
+- activity: 1581
+  passage: NMD3101:file:1581:L12 Antifungal agents  resistance (PPT).pdf
+  quote: Although highly active against many Candida species, the echinocandins tend to be used as second -line agents for invasive aspergillosis.
+- activity: 1582
+  passage: NMD3101:file:1582:L12 Antifungal agents  resistance (activity sheet).pdf
+  quote: Fluconazole 2 Match the appropriate antifungal drug with the type of fungus 1.
+- activity: 1586
+  passage: NMD3101:file:1586:L13 Principles of vaccines.pdf
+  quote: Advantages of inactivated vaccines are that there is no reversion to virulence by the vaccine form.
+- activity: 1587
+  passage: NMD3101:file:1587:L13 Principles of vaccines.pdf
+  quote: Advantages • Acting more like the natural infection with regard to their effect on immunity.
+- activity: 1588
+  passage: NMD3101:file:1588:L13 Principle of vaccines (activity sheet).pdf
+  quote: Conjugate vaccine Match the specific viral or bacterial infection with the appropriate vaccine type 1.
+- activity: 1592
+  passage: NMD3101:file:1592:L14 Gram positive cocci of medical importance.pdf
+  quote: Analyze how major virulence factors of Gram-positive cocci contribute to the development and severity of specific infections.
+- activity: 1593
+  passage: NMD3101:file:1593:L14 Gram positive cocci of medical importance.pdf
+  quote: Interpret method of transmission of Gram-positive cocci to disease process 4.
+- activity: 1594
+  passage: NMD3101:file:1594:L14 Gram positive cocci of medical importance (activity sheet).pdf
+  quote: What are other infections caused by this organism? A.
+- activity: 1598
+  passage: NMD3101:file:1598:L15 Gram negative bacilli of medical importance.pdf
+  quote: Able to utilize a very wide range of carbon and energy sources and to grow over a wide temperature range.
+- activity: 1599
+  passage: NMD3101:file:1599:L15 Gram negative bacilli of medical importance (activity sheet).pdf
+  quote: Degradation of protein Which virulence factor of this pathogen interferes with eukaryotic protein synthesis? A.
+- activity: 1603
+  passage: NMD3101:file:1603:L 16 notes - Introduction to medical Parasitology .pdf
+  quote: Ancylostoma duodenale), the haemoglobin may drop 30% below normal.
+- activity: 1604
+  passage: NMD3101:file:1604:L16 Activity sheet.docx
+  quote: 'L 16 : Introduction to Medical Parasitology Activity sheet True or false: Parasitism is a symbiotic relationship.'
+- activity: 1608
+  passage: NMD3101:file:1608:L 17 notes.pdf
+  quote: A ciliated embryo called miracidium develops from the egg.
+- activity: 1609
+  passage: NMD3101:file:1609:L 17 Activirt sheet.docx
+  quote: 'L 17: what are helminths? What are protozoa? Activity sheet True or false A ll parasitic trematodes are hermaphrodites .'
+- activity: 1613
+  passage: NMD3101:file:1613:L 18 notes.pdf
+  quote: 'Allergic reactions: These reactions may occur due to the injection of the saliva of blood- sucking arthropods into the skin of the host, e.'
+- activity: 1614
+  passage: NMD3101:file:1614:L18 Overview of arthropods Activity sheet.pdf
+  quote: By which of the following arthropods can Plasmodium be transmitted?
+- activity: 1618
+  passage: NMD3101:file:1618:T4 Disinfection  sterilization procedures in healthcare settings.pptx
+  quote: An air-removal test (Bowie-Dick Test) must be performed daily in an empty prevacuum steam sterilizer to ensure air removal.
+- activity: 1620
+  passage: NMD3101:file:1620:T5 Principles of infection prevention  control in healthcare settings (Part 1) 2.pdf
+  quote: A commercial product with adequate quality control is recommended.
+- activity: 1621
+  passage: NMD3101:file:1621:T5 Principles of Infection prevention  control in healthcare settings (part 2).pdf
+  quote: ASEPTIC TECHNIQUES Any time we touch a patient we put them at risk for an infection!
+- activity: 1625
+  passage: NMD3101:file:1625:L 19.pdf
+  quote: A plastic louse comb is much better but may not remove all lice and their eggs.
+- activity: 1626
+  passage: NMD3101:file:1626:L19 Activity sheet.docx
+  quote: Answers F ice, elevation, pain medication, and antihistamines.
+- activity: 1630
+  passage: NMD3101:file:1630:L 20 notes.pdf
+  quote: Causative agent Larvae of flies (Maggots) are the causative agents of myiasis.
+- activity: 1631
+  passage: NMD3101:file:1631:L 20 Activity sheet.docx
+  quote: 'can be caused in facultative myiasis: True False Justify: Myiasis is beneficial Give reasons: Vaseline is important in treatment of myiasis.'
+- activity: 1633
+  passage: NMD3101:file:1633:L21 Hepatitis Viruses (B, D).pdf
+  quote: Analysis of genome-wide nucleotide divergence has allowed for the identification of nine genotypes (A-I) and several sub-genotypes.
+- activity: 1634
+  passage: NMD3101:file:1634:L21 Hepatitis Viruses B  D (part 1).pdf
+  quote: HEPATITIS B VIRUS Structure of HBV • HBV is the major member of the hepadnaviruses.
+- activity: 1636
+  passage: NMD3101:file:1636:L22 Hepatitis Viruses (A, C, E).pdf
+  quote: Almost all (>90%) HIV-infected people who are or were intravenous drug users are infected with HCV.
+- activity: 1637
+  passage: NMD3101:file:1637:L22 Hepatitis Viruses C  A  E (part 2) ppt.pdf
+  quote: Almost all (>90%) HIV -infected people who are or were intravenous drug users are infected with HCV .
+- activity: 1639
+  passage: NMD3101:file:1639:Practical parasitology class 3.pdf
+  quote: Black or red color when there is intestinal haemorrhage.
+- activity: 1640
+  passage: NMD3101:file:1640:Practical parasitology class 3 notes.pdf
+  quote: Additional Techniques Used for Identification of Intestinal Parasites i.
+- activity: 1645
+  passage: NMD3101:file:1645:Practical revision NMD3101.pdf
+  quote: Aspirate pus material from wall or excise tissue, aseptically transfer all material into a sterile screw-top container .
+- activity: 1646
+  passage: NMD3101:file:1646:Bacteriology revision MED217.pdf
+  quote: Lung •Size of bacteria•Examples of prokaryotes•Chromosome of bacteria•What are prions 0.
+- activity: 1647
+  passage: NMD3101:file:1647:Virology  Mycology revision MED217.pdf
+  quote: Defective virus •Which of the following best defines “virus”?A.
+- activity: 1648
+  passage: NMD3101:file:1648:micro revision practical MED217 AAST 2023-2024.pdf
+  quote: ANTIMICROBIAL SUSCEPTIBILITY TESTING LABORATORY TESTING METHODS OF ANTIMICROBIAL SUSCEPTIBILITY 1.
+- activity: 1653
+  passage: NMD3101:file:1653:Bacteriology revision NMD3101 2025-2026.pptx
+  quote: A laboratory experiment demonstrated that a non-pathogenic bacterium could become pathogenic after acquiring new DNA from its environment.
+- activity: 1654
+  passage: NMD3101:file:1654:Virology  Mycology Revision 2025-2026.pptx
+  quote: Activate cytotoxic T-cells A new vaccine uses plasmid DNA encoding a viral protein.
+- activity: 1655
+  passage: NMD3101:file:1655:Parasitology Revision 2025-2026.pptx
+  quote: A common parasitic example of Sarcodina is Entamoeba histolytica and a common commensal example is Entamoeba coli.
+- activity: 1659
+  passage: NMD3101:file:1659:MCQs (L1-L10)  2026-2027.pdf
+  quote: A 28-year-old female presents with dysuria and urinary frequency.
+- activity: 1514
+  passage: NMD3101:file:1514:L1 Basic concept of infection (activity sheet).pdf
+  quote: Parasites Which of the following is a multicellular organism? A.
+- activity: 1515
+  passage: NMD3101:file:1515:L1 Basic concepts of infection.pdf
+  quote: Blood, Body Fluids, and Tissues In health, the blood, body fluids, and tissues are sterile.
+- activity: 1516
+  passage: NMD3101:file:1516:L1 Basic concepts of infection (ppt).pdf
+  quote: Relate the role of microbiota in different body sites with health and disease.
+- activity: 1519
+  passage: NMD3101:file:1519:L2 Bacterial structure, classification  growth.pdf
+  quote: Capsular polysaccharides can also form the basis of serotyping and vaccine targets.
+- activity: 1520
+  passage: NMD3101:file:1520:L2 Bacterial structure, classification  growth (ppt).pdf
+  quote: Bacterial size and shape Structure of bacteria • The major structures of the bacterial cell consists of 1.
+- activity: 1521
+  passage: NMD3101:file:1521:L2 Bacterial structure, classification  growth (activity sheet).pdf
+  quote: Cell membrane Which of the following bacterial structures is involved in conjugation? A.
+- activity: 1524
+  passage: NMD3101:file:1524:L3 Pathogenesis of bacterial infection.pdf
+  quote: Analyze the sequential mechanisms by which bacteria enter the host, adhere to target cells, invade tissues, and evade host defenses.
+- activity: 1525
+  passage: NMD3101:file:1525:L3 Pathogenesis of bacterial infection (ppt).pdf
+  quote: Escherichia coli in the colon, but if displacement regularly causes acute infection.
+- activity: 1526
+  passage: NMD3101:file:1526:L3 Pathogenesis of bacterial infection (activity sheet).pdf
+  quote: All of the above Which of the following organisms are able to modulate their lipid A pattern to evade the immune response? A.
+- activity: 1530
+  passage: NMD3101:file:1530:L4 Bacterial genetics.pdf
+  quote: Both cells can now function as donor cells.
+- activity: 1531
+  passage: NMD3101:file:1531:L4 Bacterial genetics (ppt).pdf
+  quote: Differentiate different types of genetic transfer and exchange 4.
+- activity: 1532
+  passage: NMD3101:file:1532:L4 Bacterial genetics (activity sheet).pdf
+  quote: Conjugation 2 Which of the following genetic exchange involves cell to cell contact? A.
+- activity: 1536
+  passage: NMD3101:file:1536:P1 Sample collection for microbiological diagnosis of infection.pptx
+  quote: 'Answer: Patient name and date/time of collection/type and site of specimen.'
+- activity: 1539
+  passage: NMD3101:file:1539:L5 Antibacterial agents.pdf
+  quote: Analyze clinical scenarios to select an appropriate antibacterial agent based on efficacy, resistance, tissue penetration, and toxicity.
+- activity: 1540
+  passage: NMD3101:file:1540:L5 Antibacterial agents.pdf
+  quote: Classify the mechanisms of action of antibacterial agents 2.
+- activity: 1541
+  passage: NMD3101:file:1541:L5 Antibacterial agents (activity sheet).pdf
+  quote: All above Which antibiotics target intracellular pathogens (chlamydia, mycoplasma)? A.
+- activity: 1544
+  passage: NMD3101:file:1544:L6 Antibiotic resistance.pdf
+  quote: Analyze clinical and microbiological findings to identify the most likely mechanism of antibiotic resistance.
+- activity: 1545
+  passage: NMD3101:file:1545:L6 Antibiotic resistance.pdf
+  quote: 'Examples of altered antimicrobial targets MRSA: altered PBP → PBP2a → reduced β-lactam binding.'
+- activity: 1546
+  passage: NMD3101:file:1546:L6 Antibiotic resistance (activity sheet).pdf
+  quote: 'Klebsiella CRE ANSWER: C What is the mechanism of antibiotic resistance labeled (1) in the figure? A.'
+- activity: 1548
+  passage: NMD3101:file:1548:L7 Viral structure  classification.pdf
+  quote: Some viruses (eg, enteroviruses) are resistant to acidic conditions.
+- activity: 1549
+  passage: NMD3101:file:1549:L7 Viral structure  classification.pdf
+  quote: Enveloped viruses are much more heat labile , rapidly at 37 °C.
+- activity: 1550
+  passage: NMD3101:file:1550:L7 Viral structure  classification (activity sheet).pdf
+  quote: Formaldehyde Which of the following best describes “virion”? A.
+misses:
+- activity: 1511
+  quote: Parasites 2 Which of the following contains DNA NOT surrounded by nuclear membrane? A.
+  absent: NMD3101:file:1514:L1 Basic concept of infection (activity sheet).pdf
+- activity: 1511
+  quote: Analyze the microbiota of different body sites to distinguish normal colonization from findings suggestive of infection.
+  absent: NMD3101:file:1515:L1 Basic concepts of infection.pdf
+- activity: 1511
+  quote: Classification of medically important microbes 13 • All organisms other than viruses and prions are made up of cells.
+  absent: NMD3101:file:1516:L1 Basic concepts of infection (ppt).pdf
+- activity: 1511
+  quote: Adjacent glycan chains are cross-linked into sheets by peptide amino acids side chains.
+  absent: NMD3101:file:1519:L2 Bacterial structure, classification  growth.pdf
+- activity: 1511
+  quote: Adjacent glycan chains are cross - linked into sheets by peptide amino acids side chains.
+  absent: NMD3101:file:1520:L2 Bacterial structure, classification  growth (ppt).pdf

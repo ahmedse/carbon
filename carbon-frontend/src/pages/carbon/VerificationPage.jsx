@@ -16,11 +16,7 @@ import {
   DialogContent,
   DialogTitle,
   Divider,
-  FormControl,
   IconButton,
-  InputLabel,
-  MenuItem,
-  Select,
   Snackbar,
   Stack,
   Tab,
@@ -28,9 +24,9 @@ import {
   TextField,
   Tooltip,
   Typography,
-  useTheme,
 } from '@mui/material';
-import { DataGrid } from '@mui/x-data-grid';
+import FilteredDataGrid from '../../components/FilteredDataGrid';
+import { SCOPE_META } from '../../theme/themeTokens';
 import {
   CheckCircle as ApproveIcon,
   Close as RejectIcon,
@@ -52,25 +48,17 @@ import {
   rejectVerificationRecord,
 } from '../../api/emissions-extended';
 import PageHeader from '../../components/Page/PageHeader';
-import LoadingSkeleton from '../../components/Page/LoadingSkeleton';
 import ErrorAlert from '../../components/Page/ErrorAlert';
-import EmptyState from '../../components/Page/EmptyState';
 
 // ── Tab config ──────────────────────────────────────────────────────────
 
 const VERIFICATION_TABS = [
-  { label: 'Pending Review', key: 'pending',  icon: <ReviewIcon sx={{ fontSize: '1.125rem' }} />, status: 'pending' },
-  { label: 'Verified',       key: 'verified', icon: <ApprovedIcon sx={{ fontSize: '1.125rem' }} />, status: 'verified' },
+  { label: 'Pending Review', key: 'pending',  icon: <ReviewIcon />, status: 'pending' },
+  { label: 'Verified',       key: 'verified', icon: <ApprovedIcon />, status: 'verified' },
   { label: 'All Periods',    key: 'all',      icon: null,                                   status: null },
 ];
 
 // ── Scope config ─────────────────────────────────────────────────────────
-
-const SCOPE_CFG = {
-  1: { label: 'Scope 1', palette: 'success' },
-  2: { label: 'Scope 2', palette: 'info' },
-  3: { label: 'Scope 3', palette: 'warning' },
-};
 
 // ── Period status config ──────────────────────────────────────────────────
 
@@ -95,38 +83,15 @@ const STATUS_CFG = {
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
-function ScopeBadge({ value }) {
-  const theme = useTheme();
-  const cfg = SCOPE_CFG[value] || SCOPE_CFG[1];
-  const p = theme.palette[cfg.palette];
-  return (
-    <Chip
-      label={cfg.label}
-      size="small"
-      sx={{
-        height: 2.5,
-        ...FONT.body,
-        fontWeight: 700,
-        bgcolor: p?.[50] || (p?.light + '30'),
-        color: p?.dark || p?.main,
-        border: 'none',
-        '& .MuiChip-label': { px: 1 },
-      }}
-    />
-  );
-}
-
 function StatusChip({ status }) {
   const cfg = STATUS_CFG[status] || STATUS_CFG.pending;
   const Icon = cfg.Icon;
   return (
     <Chip
-      icon={<Icon sx={{ fontSize: '0.8125rem !important' }} />}
+      icon={<Icon fontSize="small" />}
       label={cfg.label}
       size="small"
       color={cfg.palette}
-      variant="outlined"
-      sx={{ height: 2.5, ...FONT.body, '& .MuiChip-label': { px: 0.5 }, '& .MuiChip-icon': { ml: 0.5 } }}
     />
   );
 }
@@ -234,6 +199,7 @@ export default function VerificationPage() {
 
   // Scope filter
   const [scopeFilter, setScopeFilter] = useState('');
+  const [search, setSearch] = useState('');
 
   // Dialogs
   const [rejectDialog, setRejectDialog] = useState({ open: false, record: null });
@@ -265,6 +231,14 @@ export default function VerificationPage() {
   useEffect(() => {
     loadRecords();
   }, [loadRecords]);
+
+  const visibleRecords = useMemo(() => {
+    if (!search) return records;
+    const q = search.toLowerCase();
+    return records.filter((row) =>
+      (row.period_label || row.period_name || '').toLowerCase().includes(q)
+    );
+  }, [records, search]);
 
   // ── Actions ──────────────────────────────────────────────────────────
 
@@ -321,7 +295,7 @@ export default function VerificationPage() {
         width: 120,
         renderCell: (params) => {
           const cfg = PERIOD_STATUS_CFG[params.value] || PERIOD_STATUS_CFG.draft;
-          return <Chip label={cfg.label} size="small" color={cfg.color} variant="outlined" sx={{ height: 2.5, ...FONT.body }} />;
+          return <Chip label={cfg.label} size="small" color={cfg.color === 'default' ? undefined : cfg.color} />;
         },
       },
       {
@@ -349,12 +323,7 @@ export default function VerificationPage() {
                   key={scope}
                   label={`S${scope}: ${fmtNum(tonnes)}`}
                   size="small"
-                  sx={{
-                    height: 2.5,
-                    ...FONT.bodySmall,
-                    fontWeight: 600,
-                    bgcolor: 'action.hover',
-                  }}
+                  color={SCOPE_META[Number(scope)]?.color}
                 />
               ))}
             </Stack>
@@ -460,43 +429,20 @@ export default function VerificationPage() {
           subtitle="Review, approve, or reject period-level emission calculations"
           description="Independent verification of emission results with auditor workflow. Review calculation evidence, approve valid results, and reject discrepancies with documented justification."
           actions={
-            <Stack direction="row" spacing={1}>
-              <FormControl size="small" sx={{ minWidth: 120 }}>
-                <InputLabel id="scope-filter-label">Scope</InputLabel>
-                <Select
-                  labelId="scope-filter-label"
-                  value={scopeFilter}
-                  label="Scope"
-                  onChange={(e) => setScopeFilter(e.target.value)}
-                >
-                  <MenuItem value="">All Scopes</MenuItem>
-                  <MenuItem value="1">Scope 1</MenuItem>
-                  <MenuItem value="2">Scope 2</MenuItem>
-                  <MenuItem value="3">Scope 3</MenuItem>
-                </Select>
-              </FormControl>
-              <Tooltip title="Refresh">
-                <span>
-                  <IconButton onClick={loadRecords} size="small" disabled={loading}>
-                    <RefreshIcon />
-                  </IconButton>
-                </span>
-              </Tooltip>
-            </Stack>
+            <Tooltip title="Refresh">
+              <span>
+                <IconButton onClick={loadRecords} size="small" disabled={loading} aria-label="Refresh">
+                  <RefreshIcon />
+                </IconButton>
+              </span>
+            </Tooltip>
           }
         />
       </Box>
 
       {/* Tabs */}
       <Box sx={{ px: 2.5, borderBottom: '1px solid', borderColor: 'divider' }}>
-        <Tabs
-          value={activeTab}
-          onChange={(_, v) => setActiveTab(v)}
-          sx={{
-            minHeight: 5,
-            '& .MuiTab-root': { minHeight: 5, ...FONT.body, textTransform: 'none', px: 2 },
-          }}
-        >
+        <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)}>
           {VERIFICATION_TABS.map((tab) => (
             <Tab
               key={tab.key}
@@ -516,38 +462,39 @@ export default function VerificationPage() {
       )}
 
       {/* DataGrid */}
-      <Box sx={{ flex: 1, overflow: 'auto', px: 2.5, pb: 2, pt: 1.5 }}>
-        {loading ? (
-          <LoadingSkeleton variant="table" />
-        ) : records.length === 0 ? (
-          <EmptyState
-            icon={isPendingTab ? <ReviewIcon /> : <VerifiedIcon />}
-            title={isPendingTab ? 'No pending reviews' : 'No verified records'}
-            description={
-              isPendingTab
-                ? 'All periods have been reviewed. Check the Verified tab for completed verifications.'
-                : 'No records match the current filter criteria.'
-            }
-          />
-        ) : (
-          <DataGrid
-            rows={records}
-            columns={columns}
-            pageSizeOptions={[25, 50, 100]}
-            initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
-            disableRowSelectionOnClick
-            getRowId={(row) => row.id || `${row.period_id}-${row.scope}`}
-            sx={{
-              border: '1px solid',
-              borderColor: 'divider',
-              borderRadius: 2,
-              height: '100%',
-              bgcolor: 'background.paper',
-              '& .MuiDataGrid-cell': { outline: 'none' },
-            }}
-          />
-        )}
-      </Box>
+      <FilteredDataGrid
+        embedded
+        rows={visibleRecords}
+        columns={columns}
+        loading={loading}
+        searchValue={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search periods…"
+        filterDefs={[{
+          key: 'scope',
+          label: 'Scope',
+          options: [
+            { value: '1', label: 'Scope 1' },
+            { value: '2', label: 'Scope 2' },
+            { value: '3', label: 'Scope 3' },
+          ],
+        }]}
+        filterValues={{ scope: scopeFilter }}
+        onFilterChange={(key, value) => {
+          if (key === 'scope') setScopeFilter(value || '');
+        }}
+        onClearFilters={() => {
+          setSearch('');
+          setScopeFilter('');
+        }}
+        emptyMessage={isPendingTab ? 'No pending reviews' : 'No verified records'}
+        emptySubtext={
+          isPendingTab
+            ? 'All periods have been reviewed. Check the Verified tab for completed verifications.'
+            : 'No records match the current filter criteria.'
+        }
+        getRowId={(row) => row.id || `${row.period_id}-${row.scope}`}
+      />
 
       {/* ── Approve Dialog ── */}
       <ApproveDialog

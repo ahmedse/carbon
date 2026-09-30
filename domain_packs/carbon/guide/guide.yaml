@@ -1,0 +1,227 @@
+# Carbon guide pack (docs/carbon/CARBON-LEARN-DESIGN.md).
+#
+# Structure only. Text lives in copy.en.yaml / copy.ar.yaml next to this file.
+# Nothing here or in any payload carries a kilogram, a tonne or a factor value.
+# First lesson is D1 (data owed this period). No shell/menu lesson.
+#
+# priority   global order of "next up". Data gathering comes first.
+# phase      gather | close. The hub groups by phase inside a track.
+# any / all  capability keys. Empty = every carbon user. `any` needs one, `all` needs each.
+# needs      probes (kind need) whose miss shows a blocker; the lesson stays visible.
+# host       probe (kind host) that must also hold for completion.
+# live       probe (kind live) that fills the coach's live card.
+# scope_cap  capability whose org scope decides "your sources".
+# question   static (correct = zero-based option index) or probe (kind question).
+pack: carbon
+version: 1
+probes: emissions.guide_probes
+lessons:
+  - id: D1
+    track: D
+    phase: gather
+    priority: 20
+    minutes: 2
+    version: 1
+    any: [carbon:enter_data]
+    needs: [source_in_scope]
+    live: my_data
+    scope_cap: carbon:enter_data
+    route: /carbon/my-data
+    target: my-data.list
+    question: {kind: static, options: 3, correct: 0}
+
+  - id: D2
+    track: D
+    phase: gather
+    priority: 30
+    minutes: 3
+    version: 1
+    any: [carbon:enter_data]
+    needs: [one_open_period, source_in_scope]
+    live: my_data
+    scope_cap: carbon:enter_data
+    host: row_created
+    route: /carbon/my-data
+    target: my-data.add-row
+    question: {kind: probe, name: scope_of_source, options: 3}
+
+  - id: D3
+    track: D
+    phase: gather
+    priority: 40
+    minutes: 2
+    version: 1
+    any: [carbon:enter_data]
+    live: period
+    route: /carbon/calculations
+    target: calculations.list
+    question: {kind: static, options: 3, correct: 1}
+
+  - id: D4
+    track: D
+    phase: gather
+    priority: 50
+    minutes: 2
+    version: 1
+    any: [carbon:enter_data]
+    live: period
+    route: /carbon/my-data
+    target: my-data.quality
+    question: {kind: static, options: 3, correct: 1}
+
+  - id: D5
+    track: D
+    phase: gather
+    priority: 60
+    minutes: 2
+    version: 1
+    any: [carbon:enter_data]
+    live: period
+    route: /carbon/my-data
+    target: my-data.period
+    question: {kind: static, options: 3, correct: 1}
+
+  - id: D6
+    track: D
+    phase: gather
+    priority: 70
+    minutes: 2
+    version: 1
+    any: [carbon:enter_data]
+    needs: [source_in_scope]
+    live: my_data
+    scope_cap: carbon:enter_data
+    route: /carbon/my-data
+    target: my-data.coverage
+    question: {kind: static, options: 3, correct: 1}
+
+  - id: D7
+    track: D
+    phase: gather
+    priority: 80
+    minutes: 3
+    version: 1
+    any: [carbon:enter_data]
+    live: my_data
+    scope_cap: carbon:enter_data
+    route: /carbon/my-data
+    target: my-data.bulk-import
+    question: {kind: static, options: 3, correct: 0}
+
+  - id: C2
+    track: C
+    phase: gather
+    priority: 90
+    minutes: 2
+    version: 1
+    live: period
+    route: /carbon/onboarding
+    target: onboarding.period
+    question: {kind: static, options: 3, correct: 0}
+
+  - id: C3
+    track: C
+    phase: gather
+    priority: 100
+    minutes: 2
+    version: 1
+    live: sources
+    scope_cap: carbon:view_console
+    route: /carbon/onboarding
+    target: onboarding.tier
+    question: {kind: static, options: 3, correct: 1}
+
+  - id: L2
+    track: L
+    phase: gather
+    priority: 110
+    minutes: 3
+    version: 1
+    any: [carbon:manage_reporting_periods]
+    live: period
+    host: one_open_period
+    route: /carbon/reporting/periods
+    target: periods.status
+    question: {kind: static, options: 3, correct: 0}
+
+  - id: L3
+    track: L
+    phase: gather
+    priority: 120
+    minutes: 3
+    version: 1
+    any: [carbon:manage_inventory_coverage, carbon:manage_emission_factors]
+    live: sources
+    scope_cap: carbon:manage_inventory_coverage
+    host: source_has_factor
+    route: /carbon/admin/inventory-coverage
+    target: coverage.sources
+    question: {kind: static, options: 3, correct: 0}
+
+  - id: L5
+    track: L
+    phase: gather
+    priority: 130
+    minutes: 3
+    version: 1
+    any: [carbon:manage_inventory_coverage]
+    needs: [one_open_period, source_in_scope]
+    live: sources
+    scope_cap: carbon:manage_inventory_coverage
+    host: status_decided
+    route: /carbon/admin/inventory-coverage
+    target: coverage.status
+    question: {kind: static, options: 3, correct: 1}
+
+  # ── close: calculate, lock, submit, check. After every gathering lesson. ──
+  - id: L1
+    track: L
+    phase: close
+    priority: 200
+    minutes: 2
+    version: 1
+    any: [carbon:manage_reporting_periods]
+    needs: [one_open_period]
+    live: boundary
+    host: boundary_set
+    route: /carbon/admin/boundaries
+    target: boundaries.list
+    question: {kind: static, options: 3, correct: 1}
+
+  - id: L4
+    track: L
+    phase: close
+    priority: 210
+    minutes: 3
+    version: 1
+    any: [carbon:trigger_calculations]
+    needs: [one_open_period]
+    live: period
+    host: calculation_run_by_me
+    route: /carbon/calculations
+    target: calculations.run
+    question: {kind: static, options: 3, correct: 0}
+
+  - id: L6
+    track: L
+    phase: close
+    priority: 220
+    minutes: 3
+    version: 1
+    any: [carbon:manage_reporting_periods, carbon:verify_data]
+    live: period
+    route: /carbon/reporting/periods
+    target: periods.transition
+    question: {kind: static, options: 3, correct: 0}
+
+  - id: L7
+    track: L
+    phase: close
+    priority: 230
+    minutes: 2
+    version: 1
+    any: [carbon:manage_reporting_periods, carbon:view_dashboard]
+    live: period
+    route: /carbon/chairman
+    target: chairman.total
+    question: {kind: static, options: 3, correct: 1}

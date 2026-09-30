@@ -7,6 +7,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { SCOPE_META } from '../../theme/themeTokens';
 import {
   Box,
   Chip,
@@ -38,7 +39,6 @@ function notify(message, type = 'info') {
   window.dispatchEvent(event);
 }
 
-const SCOPE_META = { 1: { label: 'Scope 1', color: 'error' }, 2: { label: 'Scope 2', color: 'warning' }, 3: { label: 'Scope 3', color: 'info' } };
 
 function fmtDate(v) {
   if (!v) return '—';
@@ -232,7 +232,7 @@ export default function RowDetailPage() {
         </Typography>
       </Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexShrink: 0 }}>
-        {scopeMeta && <Chip label={scopeMeta.label} size="small" color={scopeMeta.color} sx={{ height: 2.5, fontSize: '0.68rem' }} />}
+        {scopeMeta && <Chip label={scopeMeta.label} size="small" color={scopeMeta.color} />}
         {totalCo2e > 0 && <Chip label={`${(totalCo2e / 1000).toFixed(2)} tCO₂e`} size="small" color="warning" variant="filled" sx={{ height: 2.5, fontSize: '0.68rem' }} />}
       </Box>
       <Box sx={{ display: 'flex', gap: 0.25, flexShrink: 0 }}>

@@ -25,6 +25,9 @@ from django.db.models import Q
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework_simplejwt.exceptions import TokenError
 
@@ -121,10 +124,20 @@ class LoginRateThrottle(AnonRateThrottle):
     scope = 'login'
 
 
+class CarbonTokenObtainPairSerializer(TokenObtainPairSerializer):
+    """Login payload includes whether this account must replace the shared password."""
+
+    def validate(self, attrs):
+        data = super().validate(attrs)
+        data['must_change_password'] = bool(getattr(self.user, 'must_change_password', False))
+        return data
+
+
 class ThrottledTokenObtainPairView(TokenObtainPairView):
     """JWT obtain view with request throttling."""
 
     throttle_classes = [LoginRateThrottle]
+    serializer_class = CarbonTokenObtainPairSerializer
 
 
 class ThrottledTokenRefreshView(TokenRefreshView):
@@ -644,23 +657,23 @@ def change_password(request):
             status=status.HTTP_401_UNAUTHORIZED,
         )
 
-    # Validate new password length
-    if len(new_password) < 8:
-        return Response(
-            {'new_password': ['Password must be at least 8 characters long.']},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    # Prevent using the same password
     if user.check_password(new_password):
         return Response(
             {'new_password': ['New password cannot be the same as the current password.']},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # Set the new password
+    try:
+        validate_password(new_password, user)
+    except DjangoValidationError as exc:
+        return Response(
+            {'new_password': list(exc.messages)},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
     user.set_password(new_password)
-    user.save()
+    user.must_change_password = False
+    user.save(update_fields=['password', 'must_change_password'])
 
     return Response(
         {'detail': 'Password changed successfully.'},

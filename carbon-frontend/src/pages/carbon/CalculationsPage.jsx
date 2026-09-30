@@ -15,23 +15,15 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  FormControl,
   IconButton,
-  InputAdornment,
-  InputLabel,
-  MenuItem,
-  Select,
   Snackbar,
   Stack,
-  TextField,
   Tooltip,
   Typography,
 } from '@mui/material';
-import { DataGrid } from '@mui/x-data-grid';
 import {
   Autorenew as RecalculateIcon,
   Refresh as RefreshIcon,
-  Search as SearchIcon,
 } from '@mui/icons-material';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { FONT } from '../../theme/themeTokens';
@@ -44,9 +36,8 @@ import {
   batchRecalculateCalculations,
 } from '../../api/emissions-extended';
 import PageHeader from '../../components/Page/PageHeader';
-import LoadingSkeleton from '../../components/Page/LoadingSkeleton';
 import ErrorAlert from '../../components/Page/ErrorAlert';
-import EmptyState from '../../components/Page/EmptyState';
+import FilteredDataGrid from '../../components/FilteredDataGrid';
 import { useNotes } from '../../notes/NotesContext';
 import {
   registerCalculationInspectorTabs,
@@ -146,10 +137,6 @@ export default function CalculationsPage() {
     }
   };
 
-  const handleFilterChange = (field) => (e) => {
-    setFilters((prev) => ({ ...prev, [field]: e.target.value }));
-  };
-
   // ── Columns ───────────────────────────────────────────────────────────
 
   const columns = useMemo(() => [
@@ -212,7 +199,7 @@ export default function CalculationsPage() {
                 disabled={recalcLoading}
                 onClick={() => { setRecalcTarget(row); setRecalcConfirm('single'); }}
               >
-                <RecalculateIcon sx={{ fontSize: '0.9375rem' }} />
+                <RecalculateIcon fontSize="small" />
               </IconButton>
             </span>
           </Tooltip>
@@ -305,105 +292,50 @@ export default function CalculationsPage() {
         />
       </Box>
 
-      {/* Filter Bar */}
-      <Box sx={{ px: 2.5, py: 1.5 }}>
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems="center">
-          <TextField
-            placeholder="Search periods, rules, org units…"
-            size="small"
-            value={filters.search}
-            onChange={handleFilterChange('search')}
-            sx={{ flex: 1, minWidth: 200 }}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon sx={{ fontSize: '1.125rem', color: 'text.secondary' }} />
-                </InputAdornment>
-              ),
-            }}
-          />
-          <FormControl size="small" sx={{ minWidth: 140 }}>
-            <InputLabel id="scope-filter-label">Scope</InputLabel>
-            <Select
-              labelId="scope-filter-label"
-              value={filters.scope}
-              label="Scope"
-              onChange={handleFilterChange('scope')}
-            >
-              <MenuItem value="">All Scopes</MenuItem>
-              <MenuItem value="1">Scope 1</MenuItem>
-              <MenuItem value="2">Scope 2</MenuItem>
-              <MenuItem value="3">Scope 3</MenuItem>
-            </Select>
-          </FormControl>
-          <FormControl size="small" sx={{ minWidth: 140 }}>
-            <InputLabel id="status-filter-label">Status</InputLabel>
-            <Select
-              labelId="status-filter-label"
-              value={filters.status}
-              label="Status"
-              onChange={handleFilterChange('status')}
-            >
-              <MenuItem value="">All Statuses</MenuItem>
-              {Object.entries(STATUS_CFG).map(([key, cfg]) => (
-                <MenuItem key={key} value={key}>{cfg.label}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        </Stack>
-      </Box>
-
       {error && (
         <Box sx={{ px: 2.5, pb: 1 }}>
           <ErrorAlert message={error} onRetry={loadCalculations} />
         </Box>
       )}
 
-      {/* Main Content: Grid */}
-      <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden', px: 2.5, pb: 2, gap: 2 }}>
-        {/* DataGrid */}
-        <Box sx={{ flex: 1, overflow: 'auto' }}>
-          {loading ? (
-            <LoadingSkeleton variant="table" />
-          ) : filteredCalculations.length === 0 ? (
-            <EmptyState
-              icon={<RecalculateIcon />}
-              title="No calculations found"
-              description={filters.search || filters.scope || filters.status ? 'Try adjusting your filters.' : 'No calculations have been run yet.'}
-              actionLabel={!filters.search && !filters.scope && !filters.status ? 'Refresh' : undefined}
-              onAction={loadCalculations}
-            />
-          ) : (
-            <DataGrid
-              rows={filteredCalculations}
-              columns={columns}
-              pageSizeOptions={[25, 50, 100]}
-              initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
-              disableRowSelectionOnClick
-              checkboxSelection={isAdmin}
-              {...(isAdmin ? {
-                rowSelectionModel: selectedRows.length
-                  ? { type: 'include', ids: new Set(selectedRows) }
-                  : { type: 'include', ids: new Set() },
-                onRowSelectionModelChange: (model) => setSelectedRows(Array.from(model?.ids || [])),
-              } : {})}
-              onRowClick={handleRowClick}
-              getRowId={(row) => row.id}
-              sx={{
-                border: '1px solid',
-                borderColor: 'divider',
-                borderRadius: 2,
-                height: '100%',
-                bgcolor: 'background.paper',
-                '& .MuiDataGrid-cell': { outline: 'none' },
-                '& .MuiDataGrid-row.Mui-selected': {
-                  bgcolor: 'action.selected',
-                },
-              }}
-            />
-          )}
-        </Box>
-      </Box>
+      <FilteredDataGrid
+        embedded
+        rows={filteredCalculations}
+        columns={columns}
+        loading={loading}
+        searchValue={filters.search}
+        onSearchChange={(value) => setFilters((prev) => ({ ...prev, search: value }))}
+        searchPlaceholder="Search periods, rules, org units…"
+        filterDefs={[
+          {
+            key: 'scope',
+            label: 'Scope',
+            options: [
+              { value: '1', label: 'Scope 1' },
+              { value: '2', label: 'Scope 2' },
+              { value: '3', label: 'Scope 3' },
+            ],
+          },
+          {
+            key: 'status',
+            label: 'Status',
+            options: Object.entries(STATUS_CFG).map(([value, cfg]) => ({ value, label: cfg.label })),
+          },
+        ]}
+        filterValues={{ scope: filters.scope, status: filters.status }}
+        onFilterChange={(key, value) => setFilters((prev) => ({ ...prev, [key]: value || '' }))}
+        onClearFilters={() => setFilters({ period: '', scope: '', status: '', search: '' })}
+        emptyMessage="No calculations found"
+        emptySubtext={filters.search || filters.scope || filters.status ? 'Try adjusting your filters.' : 'No calculations have been run yet.'}
+        onRowClick={handleRowClick}
+        highlightRow={(row) => row.id === selectedCalc?.id}
+        checkboxSelection={isAdmin}
+        rowSelectionModel={selectedRows.length
+          ? { type: 'include', ids: new Set(selectedRows) }
+          : { type: 'include', ids: new Set() }}
+        onRowSelectionModelChange={(model) => setSelectedRows(Array.from(model?.ids || []))}
+        getRowId={(row) => row.id}
+      />
 
       {/* ── Recalculate Confirm Dialog ── */}
       <Dialog open={!!recalcConfirm} onClose={() => { if (!recalcLoading) { setRecalcConfirm(null); setRecalcTarget(null); } }}>

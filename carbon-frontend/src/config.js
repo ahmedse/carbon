@@ -87,6 +87,7 @@ export const API_ROUTES = {
   token: "token/",
   tokenRefresh: "token/refresh/",
   logout: "accounts/logout/",
+  changePassword: "accounts/change-password/",
   myRoles: "accounts/my-roles/",
   
   // Core

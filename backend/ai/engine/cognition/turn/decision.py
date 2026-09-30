@@ -17,6 +17,11 @@ COMMAND_OPS = T("turn/decision.py::COMMAND_OPS")
 # decided tool's payload only — never whatever other payload is chartable.
 RENDER_MODES = T("turn/decision.py::RENDER_MODES")
 
+# What an answer rests on (ADR-0056 Amendment 1): what this call was shown,
+# or knowledge and memory it was not.
+CONVERSATION_SOURCE = "conversation"
+KNOWLEDGE_SOURCE = "knowledge"
+
 # handoff_agent target for a multi-step / conditional goal (Agent plans it).
 PLAN_PROCESS_ID = "plan"
 
@@ -43,6 +48,10 @@ class Command:
     # The returned fields the user asked about, by catalog ``returns`` name.
     # Empty means the whole answer.
     fields: list[str] = field(default_factory=list)
+    # What an ``answer`` rests on (ADR-0056 Amendment 1). Only "conversation"
+    # lets ``text`` stand as the reply; anything else is written with
+    # retrieval and memory.
+    source: str = ""
 
     def reads_host(self) -> bool:
         """A read the executor runs: a named call, a confirm, or a continue."""
@@ -95,6 +104,9 @@ def _cmd_from_obj(raw: Any) -> Command | None:
         chart = ""
     raw_fields = raw.get("fields") if isinstance(raw.get("fields"), list) else []
     fields = list(dict.fromkeys(str(f).strip() for f in raw_fields if str(f).strip()))[:12]
+    source = str(raw.get("source") or "").strip().lower()
+    if source not in (CONVERSATION_SOURCE, KNOWLEDGE_SOURCE):
+        source = ""
     return Command(
         op=op,
         name=str(raw.get("name") or ""),
@@ -110,6 +122,7 @@ def _cmd_from_obj(raw: Any) -> Command | None:
         render=render,
         chart=chart,
         fields=fields,
+        source=source,
     )
 
 
@@ -363,7 +376,12 @@ EMIT_DECISION_TOOL: dict[str, Any] = {
             "CONVERSATION STATE inform that prose; they are not reprinted. "
             "Use continue only to show the last view again. A follow-up "
             "about a different record than those rows hold is call_tool for "
-            "that record's tool. The reply is written after this decision. "
+            "that record's tool. On answer, text is the reply the user reads, "
+            "in the language this decision names. Set source=conversation "
+            "when it rests only on the identity, CONVERSATION STATE and "
+            "messages shown here; set source=knowledge when it needs a "
+            "policy, a document, or a fact from another conversation, and "
+            "the reply is then written with them. "
             "Use navigate with "
             "target_id set to one NAV name when the user wants to open a "
             "place in the app. When one catalog example is this message, call "
@@ -413,7 +431,26 @@ EMIT_DECISION_TOOL: dict[str, Any] = {
                             "value": {"type": "string"},
                             "process_id": {"type": "string"},
                             "reason": {"type": "string"},
-                            "text": {"type": "string"},
+                            "text": {
+                                "type": "string",
+                                "description": (
+                                    "On answer: the reply itself, short, in the "
+                                    "decision's language. An Arabic reply has Arabic "
+                                    "words even when it is one figure. Names, titles, "
+                                    "figures and other record values are quoted exactly "
+                                    "as the conversation shows them, not translated. "
+                                    "Never say you looked anything up, saved, "
+                                    "submitted, or changed anything."
+                                ),
+                            },
+                            "source": {
+                                "type": "string",
+                                "enum": ["", CONVERSATION_SOURCE, KNOWLEDGE_SOURCE],
+                                "description": (
+                                    "On answer: conversation or knowledge. "
+                                    "Empty on every other op."
+                                ),
+                            },
                             "render": {
                                 "type": "string",
                                 "enum": sorted(RENDER_MODES),
@@ -433,7 +470,7 @@ EMIT_DECISION_TOOL: dict[str, Any] = {
                                 ),
                             },
                         },
-                        "required": ["op", "fields"],
+                        "required": ["op", "fields", "source"],
                     },
                 },
                 "language": {"type": "string", "enum": ["ar", "en"]},

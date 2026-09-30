@@ -5,7 +5,12 @@ import json
 import unittest
 from pathlib import Path
 
-from emissions.onboarding_o1 import evaluate_o1
+from emissions.onboarding_o1 import (
+    _benchmark_status,
+    activity_matches_close,
+    evaluate_o1,
+    o1_linked_summary,
+)
 
 
 def _period(**extra):
@@ -44,6 +49,57 @@ class EvaluateO1Tests(unittest.TestCase):
         self.assertEqual(result["checks"], [
             {"id": "CR-PER-01", "code": "open_period_count", "met": False, "count": 0, "periods": []},
         ])
+
+    def test_passed_only_when_the_source_series_matches(self):
+        close = {
+            "period": {"start_date": "2023-07-01", "end_date": "2024-06-30"},
+            "electricity_kwh": {"2023-07-01": 284379, "2023-08-01": 233019},
+            "diesel_litres": 3000,
+        }
+        period = {"start_date": "2023-07-01", "end_date": "2024-06-30"}
+        electricity = [
+            {"month": "2023-07-01", "kwh": 284379, "on_period": True},
+            {"month": "2023-08-01", "kwh": 233019, "on_period": True},
+            {"month": "2023-01-01", "kwh": 235992, "on_period": False},
+        ]
+        diesel = [
+            {"litres": 3000, "on_period": True},
+            {"litres": 980, "on_period": False},
+        ]
+        self.assertTrue(activity_matches_close(period, electricity, diesel, close))
+        self.assertFalse(activity_matches_close(
+            {"start_date": "2023-07-01", "end_date": "2026-06-30"},
+            electricity,
+            diesel,
+            close,
+        ))
+        extra = electricity + [{"month": "2025-07-01", "kwh": 311902, "on_period": True}]
+        self.assertFalse(activity_matches_close(period, extra, diesel, close))
+
+    def test_source_backing_does_not_pass_while_a_check_fails(self):
+        result = evaluate_o1(
+            periods=[_period()],
+            boundaries=[_boundary()],
+            sources=_both_o1_sources(),
+            statuses=[],
+            summary=None,
+            source_backed=True,
+        )
+        self.assertEqual(result["benchmark_status"], "open")
+        backed = next(row for row in result["checks"] if row["code"] == "source_backed")
+        self.assertTrue(backed["met"])
+
+    def test_passed_needs_source_backing_and_not_assured_unmet(self):
+        checks = [
+            {"code": "boundary_met", "met": True},
+            {"code": "not_assured", "met": False},
+            {"code": "source_backed", "met": True},
+        ]
+        self.assertEqual(_benchmark_status(checks, True), "passed")
+        self.assertEqual(_benchmark_status(checks, False), "open")
+        assured = [dict(row) for row in checks]
+        assured[1] = {"code": "not_assured", "met": True}
+        self.assertEqual(_benchmark_status(assured, True), "open")
 
     def test_two_open_periods_fail_closed(self):
         # O1-COR-EVAL
@@ -104,6 +160,30 @@ class EvaluateO1Tests(unittest.TestCase):
         )
         self.assertTrue(any(row["code"] == "diesel_stream_both" for row in result["checks"]))
         self.assertTrue(any(row["code"] == "source_missing" and row["name"] == "Smart Village electricity" for row in result["checks"]))
+
+    def test_o1_linked_summary_is_not_the_period_mix(self):
+        # O1-COR-QUOTE
+        summary = o1_linked_summary({2: "1254223.105920", 1: "19456.800000"}, 24)
+        self.assertEqual(summary["quote"], "o1_linked_tables")
+        self.assertEqual(summary["total_calculations"], 24)
+        result = evaluate_o1(
+            periods=[_period()],
+            boundaries=[_boundary()],
+            sources=_both_o1_sources(),
+            statuses=[],
+            summary=summary,
+        )
+        kilograms = {
+            row["scope"]: row["kg"]
+            for row in result["checks"]
+            if row["code"] == "summary_kg"
+        }
+        self.assertEqual(kilograms["2"], "1254223.105920")
+        self.assertEqual(kilograms["1"], "19456.800000")
+        self.assertNotIn("405271", json.dumps(result))
+        self.assertNotIn("5269592", json.dumps(result))
+        assured = next(row for row in result["checks"] if row["code"] == "not_assured")
+        self.assertFalse(assured["met"])
 
     def test_summary_kilograms_are_copied_and_not_assured(self):
         result = evaluate_o1(
@@ -327,6 +407,32 @@ class EvaluateO1Tests(unittest.TestCase):
         self.assertEqual(row["completeness"], "absolute")
         self.assertNotIn("target_coverage_pct", row)
         self.assertNotIn("target_coverage_pct", json.dumps(result))
+
+    def test_coverage_goal_prefers_draft_over_active_sbti(self):
+        # O1-COR-GOAL
+        result = evaluate_o1(
+            periods=[_period()],
+            boundaries=[_boundary()],
+            sources=_both_o1_sources(),
+            statuses=[],
+            summary=None,
+            goals=[
+                {
+                    "id": 1, "name": "Scope 1+2 Coverage", "scope": "1+2",
+                    "completeness_definition": "materiality_bounded",
+                    "min_quality_tier": 3, "status": "active", "target_year": 2026,
+                },
+                {
+                    "id": 9, "name": "O1 Smart Village", "scope": "1+2",
+                    "completeness_definition": "materiality_bounded",
+                    "min_quality_tier": 4, "status": "draft", "target_year": 2026,
+                },
+            ],
+        )
+        met = next(row for row in result["checks"] if row["code"] == "coverage_goal_met")
+        self.assertEqual(met["record_id"], 9)
+        self.assertEqual(met["name"], "O1 Smart Village")
+        self.assertNotIn("target_coverage_pct", met)
 
     def test_coverage_goal_met_fields(self):
         result = evaluate_o1(

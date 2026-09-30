@@ -1,0 +1,3 @@
+employee_no,full_name,org_unit,position,basic_salary,nationality,gender,employment_type,rotation,manager_employee_no,is_active
+DMSDEV9002,DMS Sample Two,coiled-tubing,Coiled Tubing Operator,250.000,IND,male,full-time,2/1,DMSDEV9001,yes
+DMSDEV9003,DMS Sample Three,drilling,Driller,300.000,EGY,female,contract,office,,yes

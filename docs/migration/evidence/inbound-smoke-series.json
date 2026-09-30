@@ -1,0 +1,65 @@
+{
+  "schema": 1,
+  "rows": [
+    {
+      "date": "2026-09-29",
+      "batch_id": 6,
+      "status": "committed",
+      "target_key": "people.leave_history",
+      "insert": 1,
+      "update": 0,
+      "skip": 0,
+      "reject": 0
+    },
+    {
+      "date": "2026-09-29",
+      "batch_id": 5,
+      "status": "committed",
+      "target_key": "people.leave_opening_balance",
+      "insert": 1,
+      "update": 0,
+      "skip": 0,
+      "reject": 0
+    },
+    {
+      "date": "2026-09-28",
+      "batch_id": 4,
+      "status": "committed",
+      "target_key": "dataschema.1",
+      "insert": 1,
+      "update": 0,
+      "skip": 0,
+      "reject": 0
+    },
+    {
+      "date": "2026-09-28",
+      "batch_id": 3,
+      "status": "committed",
+      "target_key": "people.employee_snapshot",
+      "insert": 0,
+      "update": 1,
+      "skip": 0,
+      "reject": 0
+    },
+    {
+      "date": "2026-09-28",
+      "batch_id": 2,
+      "status": "committed",
+      "target_key": "people.employee_snapshot",
+      "insert": 1,
+      "update": 0,
+      "skip": 0,
+      "reject": 0
+    },
+    {
+      "date": "2026-09-28",
+      "batch_id": 1,
+      "status": "smoked",
+      "target_key": "people.employee_snapshot",
+      "insert": 1,
+      "update": 0,
+      "skip": 0,
+      "reject": 0
+    }
+  ]
+}

@@ -1,7 +1,7 @@
-# Open leaf for AASTMT Carbon onboarding. No activity quantities live here.
+# O1 leaf. Passed only when the open period matches close. Otherwise the API stays open.
 id: O1
 title: Smart Village electricity and diesel
-status: open
+status: passed
 owner: carbon-inventory-lead
 locked: 2026-09-29
 product: Carbon on AASTMT
@@ -39,6 +39,34 @@ coverage:
   covered_requires:
     - linked_tables non-empty on this period's InventorySourceStatus
     - a Calculation row for the same reporting_period
+close:
+  period:
+    start_date: "2023-07-01"
+    end_date: "2024-06-30"
+  electricity_kwh:
+    "2023-07-01": 284379
+    "2023-08-01": 233019
+    "2023-09-01": 248068
+    "2023-10-01": 264041
+    "2023-11-01": 233830
+    "2023-12-01": 257163
+    "2024-01-01": 232689
+    "2024-02-01": 199364
+    "2024-03-01": 194412
+    "2024-04-01": 183368
+    "2024-05-01": 160356
+    "2024-06-01": 213498
+  diesel_litres: 3000
+  diesel_stream: generators
+  evidence:
+    - raw/Carbon footprint app/csv/smart_village_monthly_electricity.csv
+    - raw/Carbon footprint app/csv/smart_village_inventory_fy2324.csv
+  limit: >
+    These twelve months sum to 2704187 kWh, the FY 2023-24 inventory electricity
+    total. Diesel is the annual generators row, 3000 L, not twelve invented
+    months. Fleet diesel 5161 L is in that same inventory and is not this
+    stream. FY 2025-26 has no Smart Village file. Do not fabricate it.
+    not_assured stays unmet. Passed is this match. It is not external assurance.
 evaluator:
   module: emissions.onboarding_o1
   function: evaluate_o1

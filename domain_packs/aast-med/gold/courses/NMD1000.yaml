@@ -1,0 +1,308 @@
+# Verbatim sentence from this course bank. It cites one open file, or it is refused.
+version: 1
+course: NMD1000
+world: aast-mbbs
+ask: According to the handout
+miss: This is not in this lecture.
+hits:
+- activity: 1249
+  passage: NMD1000:file:1249:MED100 Study guide 23-24 (2).pdf
+  quote: Each task is de signed to assess different sets of knowledge and skills gained in Course 1.
+- activity: 1265
+  passage: NMD1000:file:1265:L7 Assessment in med school - 26-27.pptx
+  quote: 'ABC of learning and teaching in medicine: Evaluation.'
+- activity: 1266
+  passage: NMD1000:file:1266:Assessment.pdf
+  quote: 'AST Medical College Objectives:  Discuss types of assessment  Correlate assessment methods with different ILO’s Outline What is assessment?'
+- activity: 1268
+  passage: NMD1000:file:1268:Health Care.pdf
+  quote: Classify the medical service according to different parameters Do you know such terms?
+- activity: 1269
+  passage: NMD1000:file:1269:Activity Sheet of L 7-8.pdf
+  quote: A) A lead-in statement B) A station mark sheet C) A sequential patient update D) A global rating scale E) A portfolio summary 3.
+- activity: 1270
+  passage: NMD1000:file:1270:Activity Sheet of L 7-8 Answer.docx
+  quote: 'ANSWER: B A graduating candidate achieves exemplary performance across all core assessments and seeks to graduate with Honors.'
+- activity: 1273
+  passage: NMD1000:file:1273:AASTMT Library.pdf
+  quote: AASTMT Library Why use the Library when I have Google! • Sources on the Internet are difficult to verify.
+- activity: 1274
+  passage: NMD1000:file:1274:Database-Search Tips.pdf
+  quote: A common variation is how databases recognize phrases.
+- activity: 1275
+  passage: NMD1000:file:1275:Searching Databases.pdf
+  quote: 'A way to find subject headings: ✓Start with a keyword search, using words/phrases that describe your topic.'
+- activity: 1278
+  passage: NMD1000:file:1278:Terminology 1.pdf
+  quote: Identify the commonly used medical prefixes and suffixes 3.
+- activity: 1280
+  passage: NMD1000:file:1280:Terminology 2.pdf
+  quote: Differentiate medical terms related to some pathological conditions in the heart and blood vessels.
+- activity: 1281
+  passage: NMD1000:file:1281:Activity Sheet L1011.pdf
+  quote: Cocces A clinician uses a precision tool called a 'micrometer' during a micro-vascular procedure.
+- activity: 1282
+  passage: NMD1000:file:1282:Activity Sheet L1011 Answer.pdf
+  quote: A patient undergoing chemotherapy develops an abnormally low count of platelets (clot-forming cells).
+- activity: 1288
+  passage: NMD1000:file:1288:L 17- Carbohydrates.pdf
+  quote: Although a common source of energy, where 1 gram of dietary CHO provides 4 Cal.
+- activity: 1289
+  passage: NMD1000:file:1289:Activity sheet Carbohydrates.pdf
+  quote: Justify your answer 3- After following the low caloric diet for couple of weeks Mr Sameh started to lose some weight.
+- activity: 1290
+  passage: NMD1000:file:1290:Carbohydrates- Activity sheet answers.pdf
+  quote: 'Activity Sheet Chemical Blocks of Life: CHO 1- A young man entered his physician’s office complaining of bloating and diarrhea.'
+- activity: 1291
+  passage: NMD1000:file:1291:L13-Chemical Blocks of Life- Carbohydrates 2026.pdf
+  quote: ALL DIETARY CARBOHYDRATES MUST BE HYDROLYZED TO MONOSACCHARIDES TO ENABLE THEIR ABSORPTION.
+- activity: 1293
+  passage: NMD1000:file:1293:CHO activity sheet-final.docx
+  quote: A 20-year-old student developed bloating, abdominal discomfort and diarrhea after drinking milk.
+- activity: 1296
+  passage: NMD1000:file:1296:L 18- Lipids.pdf
+  quote: Both ω-6 fatty acids and ω -3 fatty acids are important for grow th and development.
+- activity: 1297
+  passage: NMD1000:file:1297:Activity sheet Lipids .pdf
+  quote: 'of the following choose the right label and justify your answer: Saturated FA- Unsaturated Cis FA- Unsaturated Trans FA A- B- C- 2- Match: a.'
+- activity: 1298
+  passage: NMD1000:file:1298:Lipids- Activity sheet answers.pdf
+  quote: medium chain FA which contains fewer calories compared to long chain fatty acids in butter but they give higher satiety and reduce appetite.
+- activity: 1299
+  passage: NMD1000:file:1299:L14-Chemical Blocks of Life-Lipids.pdf
+  quote: Arachidonic acid is referred to as an ω-6 fatty acid because the terminal double bond is six bonds from the ω end.
+- activity: 1300
+  passage: NMD1000:file:1300:Lipids 2026.pptx
+  quote: Add the chapter and pages Lecture notes Portal resources.
+- activity: 1305
+  passage: NMD1000:file:1305:L19-Chemical blocks of life -Proteins.pdf
+  quote: Defects in enzymes can lead to serious diseases (for example glycogen storage diseases that lead to liver enlargement and death).
+- activity: 1306
+  passage: NMD1000:file:1306:L19- proteins activity sheet.docx
+  quote: Becomes an essential amino acid during period of growth 5.
+- activity: 1307
+  passage: NMD1000:file:1307:Aminoacids to memorize.pdf
+  quote: Aminoacids to memorize  Glycine ( smallest amino acid)  Proline( imino acid)  Hydroxy containing a.
+- activity: 1308
+  passage: NMD1000:file:1308:L19- proteins activity sheet-answered.docx
+  quote: Becomes an essential amino acid during period of growth (B) 5.
+- activity: 1309
+  passage: NMD1000:file:1309:L15-Chemical Blocks of Life-Proteins.pdf
+  quote: B, The normal physiological pH of the body is 7.
+- activity: 1310
+  passage: NMD1000:file:1310:proteins 2026.pptx
+  quote: Biology Branched chain amino acids used in treatment ( Valine - Leucine -Isoleucine) Sulfur containing amino acids (Cysteine, Methionine) Dr.
+- activity: 1311
+  passage: NMD1000:file:1311:L20-chemical bonds.pdf
+  quote: ATP is the main energy currency in the body.
+- activity: 1313
+  passage: NMD1000:file:1313:Med 100- L20 Chemical bonds.pptx
+  quote: A) Phosphodiester B)Hydrogen C)Ionic D)Electrostatic Dr.
+- activity: 1314
+  passage: NMD1000:file:1314:L-20 chemical bonds activity sheet.docx
+  quote: 'Activity Sheet L 20 : Chemical bonds Extended matching Theme: Chemical bonds Choices A.'
+- activity: 1315
+  passage: NMD1000:file:1315:Chemical bonds- Activity sheet answers.pdf
+  quote: 'Activity Sheet L20: Chemical bonds Extended matching Theme: Chemical bonds Choices A.'
+- activity: 1316
+  passage: NMD1000:file:1316:L 16-chemical bonds 2026.pdf
+  quote: Denaturation of protein (breaking of protein bonds by several conditions like heat and changes in pH , Figure 4.
+- activity: 1317
+  passage: NMD1000:file:1317:Chemical bonds 2026.pptx
+  quote: Form between two atoms of the same element, or between atoms of different elements that share electrons more or less equally.
+- activity: 1320
+  passage: NMD1000:file:1320:L 21- Enzyme properties and importance.pdf
+  quote: ES is then converted to an enzyme –product (EP) complex that subsequently dissociates to enzyme and product.
+- activity: 1321
+  passage: NMD1000:file:1321:1-11 (1) Enzyme properties.docx
+  quote: However on further investigations it was found that LDH-1 was increased but LDH-5 was normal.
+- activity: 1322
+  passage: NMD1000:file:1322:Enzyme properties- Activity sheet answers.pdf
+  quote: However on further investigations it was found that LDH -1 was increased but LDH-5 was normal.
+- activity: 1323
+  passage: NMD1000:file:1323:L17-Enzyme properties and importance 2026.pdf
+  quote: Active site  Enzyme molecules contain a special pocket or cleft called the active site.
+- activity: 1327
+  passage: NMD1000:file:1327:L 22- Mechanism of action of enzymes.pdf
+  quote: Therefore, they are used as analgesic, antipyretic and anti- inflammatory.
+- activity: 1328
+  passage: NMD1000:file:1328:1-11 (2) Mechanism of enzyme action.docx
+  quote: E nzymes lower the activation energy for chemical reactions.
+- activity: 1329
+  passage: NMD1000:file:1329:Mechanism of enzyme action- Activity sheet answers.pdf
+  quote: Enzymes lower the activation energy for chemical reactions.
+- activity: 1330
+  passage: NMD1000:file:1330:L18-Mechanism of action of enzymes  2026.pdf
+  quote: It does, however, accelerate the rate by which equilibrium is reached.
+- activity: 1334
+  passage: NMD1000:file:1334:L 23- Factors affecting rate of Reactions.pdf
+  quote: Correlate factors affecting rate of reaction with normal metabolic processes 3.
+- activity: 1335
+  passage: NMD1000:file:1335:1-11 (3) Factors affecting rate of Reactions.docx
+  quote: 'w W: What I want to know L: What I learnt Hussein read an online article explaining that during our fasting hours we use glycogen for energy.'
+- activity: 1336
+  passage: NMD1000:file:1336:Factors affecting rate of Reactions- Activity sheet answers.pdf
+  quote: 'What I want to know L: What I learnt 2- Hussein read an online article explaining that during our fasting hours we use glycogen for energy.'
+- activity: 1337
+  passage: NMD1000:file:1337:L19-Factors affecting rate of Reactions 2026.pdf
+  quote: For example, catalytic activity may require that an amino group of the enzyme be in the protonated form (−NH3 +).
+- activity: 1341
+  passage: NMD1000:file:1341:L 24- Regulation of enzyme activity.pdf
+  quote: Also cyanide leads to irreversible inhibition of enzymes responsible for ATP synthesis.
+- activity: 1342
+  passage: NMD1000:file:1342:1-11 (4) Regulation of Enzyme Activity.docx
+  quote: alent modification- Short term regulation- Phosphorylation- Negative Effectors- Induction- Dephosphorylation- Repression- Positive Effectors.
+- activity: 1343
+  passage: NMD1000:file:1343:Regulation of Enzyme Activity- Activity sheet answers.pdf
+  quote: nt modification - Short term regulation - Phosphorylation- Negative Effectors - Induction- Dephosphorylation- Repression- Positive Effectors.
+- activity: 1344
+  passage: NMD1000:file:1344:L 20-Regulation of enzyme activity 2026.pdf
+  quote: Allosteric effec tors that increase catalytic activity of the enzyme are known as “Positive effectors”.
+- activity: 1345
+  passage: NMD1000:file:1345:L21 Ethics im morgue and Labs.pptx
+  quote: A long-sleeved white coat / apron should be worn while working with the cadaver.
+- activity: 1346
+  passage: NMD1000:file:1346:L22 mentorship.pptx
+  quote: Agree on a procedure for notifying one another if one will be late or absent Frequency and length of meetings, locations of meetings.
+- activity: 1351
+  passage: NMD1000:file:1351:L23 exam preparation revision.pptx
+  quote: Actively apply what you’re learning Very Important Revision Tips What you prepare on Monday try and recall it on Tuesday without using books.
+- activity: 1353
+  passage: NMD1000:file:1353:L24 Orientation to cell biology and life cycle.pptx
+  quote: All lectures are given face to face in addition to being recorded on your portal.
+- activity: 1249
+  passage: NMD1000:file:1249:MED100 Study guide 23-24 (2).pdf
+  quote: Please review the following section carefully to understand wha t you need to do with each activity.
+- activity: 1265
+  passage: NMD1000:file:1265:L7 Assessment in med school - 26-27.pptx
+  quote: An unauthorized paper slip, table, notes or any other means or tools with course information.
+- activity: 1266
+  passage: NMD1000:file:1266:Assessment.pdf
+  quote: Analyze This level breaks information down into smaller parts.
+- activity: 1268
+  passage: NMD1000:file:1268:Health Care.pdf
+  quote: Endocrinologists focus on hormone systems, including diseases like diabetes and thyroid disease.
+- activity: 1269
+  passage: NMD1000:file:1269:Activity Sheet of L 7-8.pdf
+  quote: Assistant A patient requires a semi-urgent diagnostic procedure that must be conducted within a timeframe of a few hours to a couple of days.
+- activity: 1270
+  passage: NMD1000:file:1270:Activity Sheet of L 7-8 Answer.docx
+  quote: 'ANSWER: E A patient requires a semi-urgent diagnostic procedure that must be conducted within a timeframe of a few hours to a couple of days.'
+- activity: 1273
+  passage: NMD1000:file:1273:AASTMT Library.pdf
+  quote: Egyptian Knowledge Bank (EKB) • EKB is a digital library that provides access to scientific databases to Egyptians inside Egypt.
+- activity: 1274
+  passage: NMD1000:file:1274:Database-Search Tips.pdf
+  quote: 'Be aware: In many, but not all, databases, the AND is implied.'
+- activity: 1275
+  passage: NMD1000:file:1275:Searching Databases.pdf
+  quote: Boolean Operators are simple words that connect your search words together to either narrow or broaden your set of results.
+- activity: 1278
+  passage: NMD1000:file:1278:Terminology 1.pdf
+  quote: 'at the end of a word Suffixes Word root + Suffix = Noun dent -ist dentist Word root + Suffix = Adjective Anem -ic Anemic Suffix: Singular vs.'
+- activity: 1280
+  passage: NMD1000:file:1280:Terminology 2.pdf
+  quote: Identify medical terms to express pathological conditions related to the urinary system.
+- activity: 1281
+  passage: NMD1000:file:1281:Activity Sheet L1011.pdf
+  quote: Cutting of vessel vs Opening of vessel A patient undergoing chemotherapy developed an abnormally low count of platelets (clot-forming cells).
+- activity: 1282
+  passage: NMD1000:file:1282:Activity Sheet L1011 Answer.pdf
+  quote: 'Cocces ANSWER: B A clinician uses a precision tool called a ''micrometer'' during a micro-vascular procedure.'
+- activity: 1288
+  passage: NMD1000:file:1288:L 17- Carbohydrates.pdf
+  quote: As a result, they have diarrhea, gas and bloating after eating or drinking dairy products.
+- activity: 1289
+  passage: NMD1000:file:1289:Activity sheet Carbohydrates.pdf
+  quote: ntered his physician’s office complaining of episodes of bloating and diarrhea following ingestion of a significant amount of dairy products.
+- activity: 1290
+  passage: NMD1000:file:1290:Carbohydrates- Activity sheet answers.pdf
+  quote: Enzyme responsible for digestion of lactose (breaking bond between glucose and galactose) 1- Are Carbohydrates important for our body?
+- activity: 1291
+  passage: NMD1000:file:1291:L13-Chemical Blocks of Life- Carbohydrates 2026.pdf
+  quote: Absence of fructose can lead to male infertility.
+- activity: 1293
+  passage: NMD1000:file:1293:CHO activity sheet-final.docx
+  quote: A carbohydrate isolated from his diet contained more than 10 monosaccharide units.
+- activity: 1296
+  passage: NMD1000:file:1296:L 18- Lipids.pdf
+  quote: Describe how lipids help us function and survive 2.
+- activity: 1298
+  passage: NMD1000:file:1298:Lipids- Activity sheet answers.pdf
+  quote: 'our answer: Saturated FA- Unsaturated Cis FA- Unsaturated Trans FA A- unsaturated trans FA B- saturated FA unsaturated cis FA C- 2- Match: a.'
+- activity: 1299
+  passage: NMD1000:file:1299:L14-Chemical Blocks of Life-Lipids.pdf
+  quote: 'B: Bile salts are synthesized from cholesterol in the liver and excreted with bile.'
+- activity: 1300
+  passage: NMD1000:file:1300:Lipids 2026.pptx
+  quote: Antibodies Lipids What are Lipids? H eterogeneous organic compounds related to fatty acids.
+- activity: 1305
+  passage: NMD1000:file:1305:L19-Chemical blocks of life -Proteins.pdf
+  quote: Defects in production of hormones can lead to several diseases such as diabetes mellitus (defects in insulin).
+- activity: 1306
+  passage: NMD1000:file:1306:L19- proteins activity sheet.docx
+  quote: ine, tryptophan, Glycine, proline 3- Nutritionists advise that one should start his/her breakfast with proteins in order to help weight loss.
+- activity: 1307
+  passage: NMD1000:file:1307:Aminoacids to memorize.pdf
+  quote: histidine,arginine, lysine)  Acidic amino acid ( aspartate ,glutamate)  Semi essential aminoacid ( histidine,arginine)  Branched chain a.
+- activity: 1308
+  passage: NMD1000:file:1308:L19- proteins activity sheet-answered.docx
+  quote: r ) Methionine (contains sulfer ) 3- Nutritionists advise that one should start his/her breakfast with proteins in order to help weight loss.
+- activity: 1309
+  passage: NMD1000:file:1309:L15-Chemical Blocks of Life-Proteins.pdf
+  quote: 'Effect on Solubility: This shell acts as a physical barrier.'
+- activity: 1310
+  passage: NMD1000:file:1310:proteins 2026.pptx
+  quote: Biology Classification of amino acids According to structure According to charge According to biological importance According to polarity Dr.
+- activity: 1311
+  passage: NMD1000:file:1311:L20-chemical bonds.pdf
+  quote: Because opposite charges attract, the atoms bond together to form a molecule.
+- activity: 1313
+  passage: NMD1000:file:1313:Med 100- L20 Chemical bonds.pptx
+  quote: F orm between two atoms of the same element, or between atoms of different elements that share electrons more or less equally.
+- activity: 1314
+  passage: NMD1000:file:1314:L-20 chemical bonds activity sheet.docx
+  quote: Justify your answer 3- How can the process of hydrogenation of oil, change unsaturated fatty acids to saturated fatty acids?
+- activity: 1315
+  passage: NMD1000:file:1315:Chemical bonds- Activity sheet answers.pdf
+  quote: Present between molecules of water and each other (F) 5.
+- activity: 1316
+  passage: NMD1000:file:1316:L 16-chemical bonds 2026.pdf
+  quote: Ester bond formation 5 • The more disulfide bonds present in the hair pro tein, the more curly the hair is and vice versa.
+- activity: 1317
+  passage: NMD1000:file:1317:Chemical bonds 2026.pptx
+  quote: It’s called Beta 1, 4 glycosidic linkage Cellulose Can be digested Can’t be digested OH looking downwards OH looking upwards Dr.
+- activity: 1320
+  passage: NMD1000:file:1320:L 21- Enzyme properties and importance.pdf
+  quote: 'Example: LDH (Lactate dehydrogenase) exists in five different forms eac h having four polypeptide chains.'
+- activity: 1321
+  passage: NMD1000:file:1321:1-11 (1) Enzyme properties.docx
+  quote: Protein catalysts- Decrease the energy barrier- Active Site Mr Samir is a 52 years old man admitted to the E R because of acute heart attack.
+- activity: 1322
+  passage: NMD1000:file:1322:Enzyme properties- Activity sheet answers.pdf
+  quote: perform this experiment and made sure that the enzyme was working but unfortunately his enzyme only worked when Glutamate was the substrate.
+- activity: 1323
+  passage: NMD1000:file:1323:L17-Enzyme properties and importance 2026.pdf
+  quote: Correlate the spatial compartmentalization of human enzymes within specific organelles (such as lysosomal hydrolases vs.
+- activity: 1327
+  passage: NMD1000:file:1327:L 22- Mechanism of action of enzymes.pdf
+  quote: This class is used for emergency lysis of a blood clot that blocks the blood flow in case of acute myocardial infarction or ischemic stroke.
+- activity: 1328
+  passage: NMD1000:file:1328:1-11 (2) Mechanism of enzyme action.docx
+  quote: E nzymes might change shape slightly when substrate binds.
+misses:
+- activity: 1249
+  quote: 'ABC of learning and teaching in medicine: Evaluation.'
+  absent: NMD1000:file:1265:L7 Assessment in med school - 26-27.pptx
+- activity: 1249
+  quote: 'AST Medical College Objectives:  Discuss types of assessment  Correlate assessment methods with different ILO’s Outline What is assessment?'
+  absent: NMD1000:file:1266:Assessment.pdf
+- activity: 1249
+  quote: Classify the medical service according to different parameters Do you know such terms?
+  absent: NMD1000:file:1268:Health Care.pdf
+- activity: 1249
+  quote: A) A lead-in statement B) A station mark sheet C) A sequential patient update D) A global rating scale E) A portfolio summary 3.
+  absent: NMD1000:file:1269:Activity Sheet of L 7-8.pdf
+- activity: 1249
+  quote: 'ANSWER: B A graduating candidate achieves exemplary performance across all core assessments and seeks to graduate with Honors.'
+  absent: NMD1000:file:1270:Activity Sheet of L 7-8 Answer.docx

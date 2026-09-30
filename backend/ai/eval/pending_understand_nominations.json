@@ -864,5 +864,55 @@
     "conversation_id": "b5c7ce2a-e38f-49bd-bf20-09d20a924845",
     "nominated_at": "2026-09-28T09:50:22.385054+00:00",
     "status": "pending_human_review"
+  },
+  {
+    "utterance": "What is my project code?",
+    "audience": [
+      "ess",
+      "hr"
+    ],
+    "raw_ops": [
+      "call_tool"
+    ],
+    "final_ops": [
+      "answer"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "get_my_profile",
+        "code": "unknown_field",
+        "detail": "This read does not return project_code; it returns full_name, employee_no, job_title, org_unit, manager, is_active, basic_salary. If the conversation already gives that value, answer from it; otherwise answer that the record does not carry it. Ask a read only for fields it returns."
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "df25428e-1d48-4d4a-a0b4-cfafdce6b399",
+    "nominated_at": "2026-09-29T20:23:35.220617+00:00",
+    "status": "pending_human_review"
+  },
+  {
+    "utterance": "How many active employees are there? Number only.",
+    "audience": [
+      "ess",
+      "hr"
+    ],
+    "raw_ops": [
+      "call_tool"
+    ],
+    "final_ops": [
+      "call_tool"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "analyze_employees",
+        "code": "invalid_args",
+        "detail": "missing required field 'dimension'; unknown field 'is_active'"
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "9c07b1e3-840f-4d83-bed8-7f1c35be3532",
+    "nominated_at": "2026-09-29T20:35:38.041580+00:00",
+    "status": "pending_human_review"
   }
 ]

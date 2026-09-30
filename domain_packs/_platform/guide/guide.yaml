@@ -1,0 +1,7 @@
+# Shared lessons for every domain app. Priorities below 20 are reserved.
+# Only ship a lesson here if it teaches a host process, not the shell
+# (menu, roles, "why the list is short"). Carbon starts on Data Entry.
+pack: _platform
+version: 2
+probes: guide.platform_probes
+lessons: []

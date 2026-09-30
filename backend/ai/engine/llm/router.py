@@ -126,6 +126,20 @@ def _find_rates(model: str) -> dict[str, float] | None:
     return None
 
 
+HAIKU_FALLBACK = "anthropic/claude-haiku-4.5"
+
+
+def fallback_model(base_url: str | None, kind: str, *, deepseek_configured: bool) -> str | None:
+    """One alternate model after a transient failure. A second failure is not retried."""
+    if kind != "transient":
+        return None
+    if "deepseek.com" in (base_url or ""):
+        return HAIKU_FALLBACK
+    if deepseek_configured:
+        return "deepseek-flash"
+    return None
+
+
 def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
     """Estimate USD cost for token counts. Returns 0.0 if model rates unknown."""
     rates = _find_rates(model)
@@ -372,18 +386,27 @@ async def route_chat(
             response = await create_completion(client, **kwargs)
         except Exception as exc:
             from ai.engine.llm.provider import classify_llm_error
-            key = (settings.DEEPSEEK_API_KEY or "").strip()
-            if (
-                key
-                and "deepseek.com" not in (base_url or "")
-                and classify_llm_error(exc) == "transient"
-            ):
-                logger.warning("primary provider failed; one retry on deepseek-flash")
-                client, model, base_url = client_for_model("deepseek-flash")
+            alternate = fallback_model(
+                base_url,
+                classify_llm_error(exc),
+                deepseek_configured=bool((settings.DEEPSEEK_API_KEY or "").strip()),
+            )
+            if alternate:
+                logger.warning("primary provider failed; one retry on %s", alternate)
+                client, model, base_url = client_for_model(alternate)
                 kwargs["model"] = model
+                extra = dict(kwargs.get("extra_body") or {})
+                extra.pop("thinking", None)
+                extra.pop("reasoning_effort", None)
                 mode = reasoning_mode(model, base_url) if reasoning else None
                 if mode is not None:
-                    kwargs["extra_body"] = {**(kwargs.get("extra_body") or {}), **mode.body}
+                    extra.update(mode.body)
+                    if mode.temperature is not None:
+                        kwargs["temperature"] = mode.temperature
+                if extra:
+                    kwargs["extra_body"] = extra
+                else:
+                    kwargs.pop("extra_body", None)
                 response = await create_completion(client, **kwargs)
             else:
                 raise

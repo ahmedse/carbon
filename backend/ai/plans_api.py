@@ -172,14 +172,15 @@ class PlanViewSet(viewsets.GenericViewSet):
 
     def list(self, request):
         """List the requesting user's plans (newest first)."""
-        limit = request.query_params.get("limit", 50)
+        raw_limit = request.query_params.get("limit", 50)
         try:
-            return Response(self.service.list_plans(request.user, limit=limit))
-        except (ValueError, TypeError):
+            limit = int(raw_limit)
+        except (TypeError, ValueError):
             return Response(
                 {"error": "limit must be an integer."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        return Response(self.service.list_plans(request.user, limit=limit))
 
     def create(self, request):
         """Create a reviewable plan from a brief — planning only, no execution.

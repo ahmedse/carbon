@@ -1,0 +1,308 @@
+# Verbatim sentence from this course bank. It cites one open file, or it is refused.
+version: 1
+course: NMD4201
+world: aast-mbbs
+ask: According to the handout
+miss: This is not in this lecture.
+hits:
+- activity: 1365
+  passage: NMD4201:file:1365:History taking.pdf
+  quote: 'AGE: oCertain diseases are peculiar to a particular age e.'
+- activity: 1366
+  passage: NMD4201:file:1366:History taking from a surgical point of view.pptx
+  quote: After Summarize to patient Address concerns and manage expectations Accurate and thorough records Explain plan forward What is the problem ?
+- activity: 1367
+  passage: NMD4201:file:1367:Introduction to Surgery.pptx
+  quote: Hard work will not get you faster but it will get you there stronger and well developed Follow a straightforward pathway.
+- activity: 1368
+  passage: NMD4201:file:1368:Introduction to surgery.pdf
+  quote: Aesthetic Surgery o It serves for improvement of patient quality of life.
+- activity: 1369
+  passage: NMD4201:file:1369:approach to patient with pain.pdf
+  quote: Acute, sudden onset pain usually indicates injury or inflammation, whereas chronic pain might point to long-standing issues.
+- activity: 1372
+  passage: NMD4201:file:1372:final examination of a LUMP.pptx
+  quote: A LUMP Examination Color and texture of overlying skin The skin over a lump may be discolored and become smooth and shiny or thick and rough.
+- activity: 1374
+  passage: NMD4201:file:1374:preoperative preparation.pdf
+  quote: Airway assessment • The ability to intubate the trachea and oxygenate the patient are basic and crucial skills of the anaesthetist.
+- activity: 1375
+  passage: NMD4201:file:1375:Consent for surgery-1.pdf
+  quote: 'Agree: The participant must agree to the proposed intervention.'
+- activity: 1378
+  passage: NMD4201:file:1378:postoperative care .pdf
+  quote: A head tilt, chin lift or jaw thrust should relieve obstruction related to reduced muscle tone.
+- activity: 1379
+  passage: NMD4201:file:1379:wounds.pdf
+  quote: B- Local  Injury to important structures, liver, spleen, intestines, brain … etc.
+- activity: 1381
+  passage: NMD4201:file:1381:wound healing modified.pdf
+  quote: B- Local • Injury to important structures, liver, spleen, intestines, brain … etc.
+- activity: 1382
+  passage: NMD4201:file:1382:Acute appendicitis - MSH.pdf
+  quote: Localized tenderness and rebound usually over the McBurney‘s point with guarding.
+- activity: 1385
+  passage: NMD4201:file:1385:Sepsis and infection in surgery.pdf
+  quote: Confirmation Microbiology sampling – everywhere Radiology – often CT Thorax, abdomen, & pelvis (TAP).
+- activity: 1387
+  passage: NMD4201:file:1387:Abdominal trauma.pdf
+  quote: Abdominal Trauma Mohamed Bekheit 4 Seat belt trauma as an example of blunt abdominal trauma (left) and stab wound injury (right).
+- activity: 1388
+  passage: NMD4201:file:1388:Trauma AASTMT medicine.pptx
+  quote: Advanced Techniques of Repair (III & IV) all performed with Pringle Maneuver in place.
+- activity: 1390
+  passage: NMD4201:file:1390:bleeding per rectum.pdf
+  quote: A change in bowel habit means any alteration in an individual’s stool frequency, caliber or consistency.
+- activity: 1391
+  passage: NMD4201:file:1391:Cardiothoracic Trauma Presenation.pdf
+  quote: Bilateral fractures of ribs that are attached to the strnum.
+- activity: 1392
+  passage: NMD4201:file:1392:Cardiothoracic Trauma.pdf
+  quote: After intercostal tube insertion for pneumothorax when the tube is blocked.
+- activity: 1393
+  passage: NMD4201:file:1393:Surgery of Esophagus  Mediastinum Presentation.pdf
+  quote: 'Benefit from this treatment (elderly) ❑Pneumatic dilation: • A balloon is insufflated at the level of the G.'
+- activity: 1394
+  passage: NMD4201:file:1394:Surgery of Esophagus  mediastinum.pdf
+  quote: A fiberoptic sensor probe is used to detect bilirubin in bile refluxate into the esophagus.
+- activity: 1395
+  passage: NMD4201:file:1395:Cardiac Surgery Presentation.pdf
+  quote: At the end of the operation, de-airing is done to expel the air entered inside the heart during the operation to avoid cerebral air embolism.
+- activity: 1396
+  passage: NMD4201:file:1396:Surgery of Heart diseases.pdf
+  quote: A right thoracotomy may be used in some cases).
+- activity: 1397
+  passage: NMD4201:file:1397:SURGERY OF LUNG  PLEURA.pdf
+  quote: Decreasing incidence and deaths in men; and increase in women.
+- activity: 1398
+  passage: NMD4201:file:1398:Surgery of Pulmonary and pleural diseases.pdf
+  quote: Adenocarcinoma It is characterized by glandular differentiation, usually located peripheral, most common in females and non-smokers.
+- activity: 1402
+  passage: NMD4201:file:1402:scrotal swelling and pain.pdf
+  quote: A primary hydrocoele is seen most commonly in mid dle and later life, but can also occur in older children.
+- activity: 1403
+  passage: NMD4201:file:1403:scrotal swellng ( academy ).pptx
+  quote: A primary hydrocoele is seen most commonly in middle and later life, but can also occur in older children.
+- activity: 1404
+  passage: NMD4201:file:1404:scrotal swellng ( academy )2026.pdf
+  quote: Causes of Scrotal pain • Epididymitis • Hydrocele • Orchitis • Scrotal masses • Spermatocele • Testicle injury or hard hit to the testicles.
+- activity: 1405
+  passage: NMD4201:file:1405:Surgery of Hernia.pdf
+  quote: A hernia is defined as an area of weakness or disruption (defect) of the fibromuscular tissues of the body wall.
+- activity: 1406
+  passage: NMD4201:file:1406:Surgery of Hernia notes.pdf
+  quote: 'Acquired: secondary to any cause of raised intra-abdominal pressure.'
+- activity: 1407
+  passage: NMD4201:file:1407:Thyroid gland AAST.pptx
+  quote: Blood supply Venous Drainage (1) Superior Thyroid Veins drain into the internal jugular vein (IJV).
+- activity: 1408
+  passage: NMD4201:file:1408:Surgery of the thyroid gland.pdf
+  quote: Both nerves are branches of the vagus nerve.
+- activity: 1409
+  passage: NMD4201:file:1409:surgery of parathyroid academy Edit 1.pptx
+  quote: Addition of Ca to the dialysate bath & oral Ca supplements.
+- activity: 1410
+  passage: NMD4201:file:1410:surgery of parathyroid  2026.pptx
+  quote: As a result of the receptor "thinking" there is sufficient calcium, parathyroid hormone (PTH) secretion will be reduced.
+- activity: 1411
+  passage: NMD4201:file:1411:surgery of parathyroid lecture notes.pdf
+  quote: 'Appearance: small, well-encapsulated tumour, dark red or greyish-brown.'
+- activity: 1412
+  passage: NMD4201:file:1412:Surgery of adrenal glands Edit 1.pptx
+  quote: A significant difference in the ACR ratio on one side indicates unilateral disease.
+- activity: 1413
+  passage: NMD4201:file:1413:Neck Swelling.pdf
+  quote: A history of coughs, fever, sore throat, recent travel, dental problems, and insect bites should be sought.
+- activity: 1415
+  passage: NMD4201:file:1415:neck swelling academy 2.pptx
+  quote: A ranula is a mucus retention cyst or mucocele that arises from an sublingual salivary gland or minor salivary gland or minor salivary gland.
+- activity: 1416
+  passage: NMD4201:file:1416:neck swelling + tongue  ( academy ).pptx
+  quote: Carotid Body Tumour, CP A painless slowly growing lump.
+- activity: 1417
+  passage: NMD4201:file:1417:surgery of salivary glands ( academy ).pptx
+  quote: Adenoid cystic carcinoma ( cylinderoma ) It is aggressive and has tendency to perineural spread even intracranially .
+- activity: 1418
+  passage: NMD4201:file:1418:salivary gland lecture notes 1.pdf
+  quote: 'Acute Suppurative Parotitis (Parotid Abscess): Etiology: • The infective organism is usually staph.'
+- activity: 1419
+  passage: NMD4201:file:1419:Cervical-Lymphadenopathy and Neck Dissection.pdf
+  quote: Acute upper respiratory tract viral infections (Adenovirus, Rhinovirus).
+- activity: 1420
+  passage: NMD4201:file:1420:Surgery of the oral cavity .pdf
+  quote: 'Age: This occurs in old patients (edentulous) or babies who suck their thumb.'
+- activity: 1421
+  passage: NMD4201:file:1421:Surgery of the jaw.pdf
+  quote: A panoramic view gives a good picture of the mandible, teeth & their roots.
+- activity: 1422
+  passage: NMD4201:file:1422:27 September Anatomy of the breast.pptx
+  quote: Artery I nternal mammary artery originates from the subclavian artery, traveling parallel and posterior to the lateral border of the sternum.
+- activity: 1423
+  passage: NMD4201:file:1423:Benign breast diseases.pdf
+  quote: Management of Benign breast diseases Galal AbouElnagah FRCS(Lond.
+- activity: 1425
+  passage: NMD4201:file:1425:benign breast diseases lecture notes.pdf
+  quote: Antibiotics covering aerobic and anaerobic bacteria , aspiration of any abscess; stop smoking.
+- activity: 1426
+  passage: NMD4201:file:1426:Breast anatomy and investigations lecture notes.pdf
+  quote: 'Amazia: absence of breast tissue with a nipple present (often iatrogenic).'
+- activity: 1427
+  passage: NMD4201:file:1427:Anatomy, investigations and benign breast conditions final ppt.pdf
+  quote: Congenital anomalies • If there is failure of a pit to elevate above skin level, an inverted nipple results.
+- activity: 1428
+  passage: NMD4201:file:1428:Nipple discharge.pptx
+  quote: 'Bloody, serous, clear Character i stics of nipple discharges Physiological nipple discharge: Requires no surgical intervention.'
+- activity: 1430
+  passage: NMD4201:file:1430:Breast cancer.pdf
+  quote: Alcohol consumption is known to increase serum levels of estradiol.
+- activity: 1431
+  passage: NMD4201:file:1431:Soft tissue neoplasm and retroperitoneal tumors.pdf
+  quote: A thin layer of tissue called the reactive zone surrounds the compression zone.
+- activity: 1432
+  passage: NMD4201:file:1432:Soft tissue neoplasms soft tissue sarcoma.pptx
+  quote: Chronic lymphedema Chronic lymphedema may predispose to the development of lymphangiosarcoma.
+- activity: 1433
+  passage: NMD4201:file:1433:Surgery of Lymph Nodes.pdf
+  quote: Bacterial infections are the common cause, but sill can be caused by viral and parasitic infestation.
+- activity: 1437
+  passage: NMD4201:file:1437:breast surgery.pdf
+  quote: Are you taking any hormones, medications, or supplements?
+- activity: 1439
+  passage: NMD4201:file:1439:Presentation4.pptx
+  quote: 'ACUTE : Staphylococcus aureus and Streptococcus species are the frequent causative organisms.'
+- activity: 1440
+  passage: NMD4201:file:1440:Surgery of the Hiatus.pdf
+  quote: 'Chronic: Reflux of acid in sliding hernia, after gastric surgery.'
+- activity: 1442
+  passage: NMD4201:file:1442:Gastric cancer PPP 2025.pdf
+  quote: Benign gastric polyps are found incidentally in 2- 3% of upper gastrointestinal endoscopies.
+- activity: 1444
+  passage: NMD4201:file:1444:Gastric cancer PPP 2025 [Autosaved].pdf
+  quote: 'May be single or multiple 3- Inflammatory fibroid polyps: rare found in the gastric antrum.'
+- activity: 1445
+  passage: NMD4201:file:1445:surgery of the stomach notes.pdf
+  quote: Antacids, H2 blockers or proton pump inhibitors (PPI) usually result in prompt healing 4.
+- activity: 1446
+  passage: NMD4201:file:1446:Liver surgery.pptx
+  quote: A drain should be left in abscesses larger than 3 cm.
+- activity: 1447
+  passage: NMD4201:file:1447:Portal hypertension.pptx
+  quote: rtial shunts Portal hypertension is defined as increased portal venous pressure, with a hepatic venous pressure gradient greater than 5 mmHg.
+- activity: 1448
+  passage: NMD4201:file:1448:Portal hypertension and surgery of the spleen.pptx
+  quote: t Definition Treatment DENVER AND LEVEEN SHUNTS SUBCUTANEOUS SHUNTS THAT DRAIN ASCITIC FLUID FROM THE ABDOMEN INTO THE CENTRAL VENOUS SYSTEM.
+- activity: 1450
+  passage: NMD4201:file:1450:Surgery of the pancreas-1.pptx
+  quote: 'EUS-FNA: Required if concern for malignancy (mural nodules, solid component).'
+- activity: 1451
+  passage: NMD4201:file:1451:Intestinal obstruction 3.pptx
+  quote: 'Adynamic : mechanical element is absent - Peristalsis my be absent (paralytic ileus) - Peristalsis present in non propulsive form.'
+- activity: 1452
+  passage: NMD4201:file:1452:Small bowel Tumors.pptx
+  quote: Bleeding Obstruction What is the most frequent location for villous adenoma in the small intestine ?
+- activity: 1453
+  passage: NMD4201:file:1453:Principles of Bariatric surgery 1.pdf
+  quote: Bariatric surgical techniques Restrictive Malabsorptive Combined procedure Mechanism ➢ Reduction of caloric consumption.
+- activity: 1454
+  passage: NMD4201:file:1454:bariatric surgery lecture book.pdf
+  quote: Advantages o Highly effective for long-term weight loss and remission of type 2 diabetes.
+- activity: 1455
+  passage: NMD4201:file:1455:vomiting of blood .pdf
+  quote: Acid hypersecretion due to increase number of parital cells or as seen in (Zollinger-Ellison syndrome).
+- activity: 1458
+  passage: NMD4201:file:1458:surgery of the anal canal.pdf
+  quote: Additionally, mucosal and submucosal blood flow is interrupted by a circular staple line Techniques 1.
+- activity: 1459
+  passage: NMD4201:file:1459:Diverticular disease.pptx
+  quote: A single pouch is called a diverticulum and ≥ 2 pouches are called diverticula.
+- activity: 1460
+  passage: NMD4201:file:1460:lecture appendicitis.pptx
+  quote: Acute appendicitis is the most common acute surgical emergency of the abdomen.
+- activity: 1462
+  passage: NMD4201:file:1462:diverticular disease and volvulus.pdf
+  quote: A Meckel‘s diverticulum usually remains symptomless throughout life and is found only at necropsy.
+- activity: 1463
+  passage: NMD4201:file:1463:lower GIT bleeding notes.pdf
+  quote: Colonoscopy offers the chance of proper diagnosis and sometimes-non-surgical stoppage of bleeding.
+- activity: 1464
+  passage: NMD4201:file:1464:Cancer colon.pdf
+  quote: Adenomatous polyposis syndromes - Familial adenoamtous polyposis (FAP) - MYH-associated polyposis (MAP) b.
+- activity: 1465
+  passage: NMD4201:file:1465:Colorectal Cancer lecture.pdf
+  quote: Middle East Cancer Consortium (MECC), Egypt Surgery of CRC RiskFactorsfor CRC Surgery of CRC RiskFactorsforCRC1.
+- activity: 1466
+  passage: NMD4201:file:1466:INFLAMMATORY BOWEL DISEASES handout.pdf
+  quote: 'A: Loss of the normal vessel pattern is the earliest endoscopic change.'
+- activity: 1467
+  passage: NMD4201:file:1467:IBD lecture.pdf
+  quote: 'Course: Most patients experience intermittent exacerbations with nearly complete remissions between attacks.'
+- activity: 1469
+  passage: NMD4201:file:1469:General anesthesia and post operative care.pptx
+  quote: 'Blood Products: Transfusion may be required based on intraoperative blood loss 4.'
+- activity: 1470
+  passage: NMD4201:file:1470:Intravenous anesthetics - lecture notes.pptx
+  quote: Analgesia and sedation in various settings, including emergency medicine and pain management.
+- activity: 1471
+  passage: NMD4201:file:1471:Regional_Anesthesia_and_Nerve_Blocks modified.pptx
+  quote: 'Allergic Reactions : As with other amide local anesthetics, allergic reactions are rare.'
+- activity: 1472
+  passage: NMD4201:file:1472:IV FLUIDS, BLOOD TRANSFUSION   DIC.pptx
+  quote: 'Acute hemolytic reaction : Due to ABO incompatibility, can cause hemolysis and organ failure.'
+- activity: 1473
+  passage: NMD4201:file:1473:acid base and electrolyte balance.pptx
+  quote: A normal AG in acidosis suggests bicarbonate loss (e.
+- activity: 1474
+  passage: NMD4201:file:1474:History taking checklist modified.pdf
+  quote: 'Drug History Current medications: prescriptions, over-the-counter, herbal remedies 7.'
+- activity: 1475
+  passage: NMD4201:file:1475:History taking detailed.pdf
+  quote: A structured approach to these symptoms is essential for narrowing the differential diagnosis and guiding further clinical evaluation.
+- activity: 1476
+  passage: NMD4201:file:1476:Swelling_Local_Examination_Checklist.pdf
+  quote: 'Check for tenderness: Apply gentle, increasing pressure and observe patient’s reaction (grimace, withdrawal, guarding) and ask if it hurts 3.'
+- activity: 1477
+  passage: NMD4201:file:1477:Groin examination simplified checklist.pdf
+  quote: A direct hernia will show a bulge medial to the occluding finger but an indirect hernia will not find access.
+- activity: 1478
+  passage: NMD4201:file:1478:Groin examination checklist with interpretation.pdf
+  quote: A direct hernia will show a bulge medial to the occludin g finger but an indirect hernia will not find access.
+- activity: 1479
+  passage: NMD4201:file:1479:scrotal examination with explanation checklist.pdf
+  quote: An impulse either expansile in nature (hernia or congenital hydrocele) or thrill-like (varicocele or lymph varix) may be obtained.
+- activity: 1480
+  passage: NMD4201:file:1480:scrotal examination simplified checklist.pdf
+  quote: 'Inspect the skin over the swelling and check for: loss of normal rugosity? tense? inflamed? Dilated veins? Ulcers? 3.'
+- activity: 1481
+  passage: NMD4201:file:1481:breast examination checklist.pdf
+  quote: 'Asymmetry Peau d’ orange : due to blockage of dermal lymphatics Carcinoma breast with extensive skin involvement.'
+- activity: 1482
+  passage: NMD4201:file:1482:breast examination simplified checklist.pdf
+  quote: 'tology and examination Palpate the axillary lymph nodes: (anterior, central, posterior, lateral, apical) • Stand on the patient’s right side.'
+- activity: 1483
+  passage: NMD4201:file:1483:breast examination simplified checklist modified 16-17.pdf
+  quote: Stand in front of the sitting patient • Take hold of her right elbow with your right hand and let her forearm rest on your right forearm.
+- activity: 1484
+  passage: NMD4201:file:1484:abominal examination.pdf
+  quote: 'Abdominal palpation: a- superficial palpation AP IP NP 1.'
+- activity: 1485
+  passage: NMD4201:file:1485:Subcuticular suturing checklist (1).pdf
+  quote: Clean area with sterile solution using sterile swabs and forceps and allow to dry 4.
+- activity: 1486
+  passage: NMD4201:file:1486:NASOGASTRIC TUBE.pdf
+  quote: Ask the patient if he has any questions or concerns.
+misses:
+- activity: 1366
+  quote: 'AGE: oCertain diseases are peculiar to a particular age e.'
+  absent: NMD4201:file:1365:History taking.pdf
+- activity: 1365
+  quote: After Summarize to patient Address concerns and manage expectations Accurate and thorough records Explain plan forward What is the problem ?
+  absent: NMD4201:file:1366:History taking from a surgical point of view.pptx
+- activity: 1365
+  quote: Hard work will not get you faster but it will get you there stronger and well developed Follow a straightforward pathway.
+  absent: NMD4201:file:1367:Introduction to Surgery.pptx
+- activity: 1365
+  quote: Aesthetic Surgery o It serves for improvement of patient quality of life.
+  absent: NMD4201:file:1368:Introduction to surgery.pdf
+- activity: 1365
+  quote: Acute, sudden onset pain usually indicates injury or inflammation, whereas chronic pain might point to long-standing issues.
+  absent: NMD4201:file:1369:approach to patient with pain.pdf

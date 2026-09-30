@@ -194,10 +194,10 @@ def page_context_from_snapshot(host_context: dict[str, Any], snapshot: dict[str,
 
 
 def door_answer(message: str, snapshot: dict[str, Any] | None) -> str | None:
-    """Section, lecture, and fact replies. None means this message is not one of those."""
-    from ai.moodle_page import fact_answer, lecture_answer, section_answer
+    """Section, lecture, fact, and identity replies. None means this message is not one of those."""
+    from ai.moodle_page import course_answer, fact_answer, identity_answer, lecture_answer, section_answer
 
-    for answer_for in (fact_answer, lecture_answer, section_answer):
+    for answer_for in (identity_answer, course_answer, fact_answer, lecture_answer, section_answer):
         answer = answer_for(message, snapshot)
         if answer:
             return answer

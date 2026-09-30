@@ -13,7 +13,8 @@
 /* eslint-disable react-refresh/only-export-components */
 
 import React from 'react';
-import { Box, Chip, LinearProgress, Typography, useTheme } from '@mui/material';
+import { Box, Chip, LinearProgress, Typography } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import {
   CheckCircleOutline as VerifiedIcon,
   ErrorOutline as FailedIcon,
@@ -21,15 +22,7 @@ import {
   Schedule as ScheduledIcon,
 } from '@mui/icons-material';
 import { registerInspectorTab } from '../InspectorTabRegistry';
-import { FONT } from '../../theme/themeTokens';
-
-// ── Scope config ─────────────────────────────────────────────────────────
-
-const SCOPE_CFG = {
-  1: { label: 'Scope 1', palette: 'success' },
-  2: { label: 'Scope 2', palette: 'info' },
-  3: { label: 'Scope 3', palette: 'warning' },
-};
+import { FONT, SCOPE_META } from '../../theme/themeTokens';
 
 // ── Status config (exported — CalculationsPage filter dropdown uses it) ────
 
@@ -56,24 +49,11 @@ export function fmtNum(v) {
 }
 
 export function ScopeBadge({ value }) {
-  const theme = useTheme();
-  const cfg = SCOPE_CFG[value] || SCOPE_CFG[1];
-  const p = theme.palette[cfg.palette];
-  return (
-    <Chip
-      label={cfg.label}
-      size="small"
-      sx={{
-        height: 2.5,
-        ...FONT.body,
-        fontWeight: 700,
-        bgcolor: p?.[50] || (p?.light + '30'),
-        color: p?.dark || p?.main,
-        border: 'none',
-        '& .MuiChip-label': { px: 1 },
-      }}
-    />
-  );
+  const { t } = useTranslation('emissions');
+  const n = Number(value);
+  const cfg = SCOPE_META[n] || SCOPE_META[1];
+  const labelKey = n === 2 ? 'scope2' : n === 3 ? 'scope3' : 'scope1';
+  return <Chip label={t(labelKey)} size="small" color={cfg.color} />;
 }
 
 export function StatusChip({ status }) {
@@ -81,12 +61,10 @@ export function StatusChip({ status }) {
   const Icon = cfg.Icon;
   return (
     <Chip
-      icon={<Icon sx={{ fontSize: '0.8125rem !important' }} />}
+      icon={<Icon fontSize="small" />}
       label={cfg.label}
       size="small"
       color={cfg.palette === 'default' ? undefined : cfg.palette}
-      variant="outlined"
-      sx={{ height: 2.5, ...FONT.body, '& .MuiChip-label': { px: 0.5 }, '& .MuiChip-icon': { ml: 0.5 } }}
     />
   );
 }

@@ -18,7 +18,7 @@ from ai.eval.g6_runner import (
 BANK_PATH = Path(__file__).resolve().parent / "g6_bank.yaml"
 
 BASELINE_N = 61
-V21_N = 24
+V21_N = 25
 
 
 def test_bank_has_unique_ids_per_tier():
@@ -41,7 +41,7 @@ def test_v21_tier_cases_are_shaped_and_stay_out_of_offline_gate():
         "g6-062", "g6-063", "g6-064", "g6-065", "g6-066", "g6-067",
         "g6-068", "g6-069", "g6-070", "g6-071", "g6-072", "g6-073", "g6-074",
         "g6-075", "g6-076", "g6-077", "g6-078", "g6-079", "g6-080", "g6-081",
-        "g6-082", "g6-083", "g6-084", "g6-085",
+        "g6-082", "g6-083", "g6-084", "g6-085", "g6-086",
     }
     for case in v21:
         assert case["expect_op"] in {"call_tool", "handoff_agent", "answer", "clarify"}
@@ -81,6 +81,25 @@ def test_chart_followups_pin_subject_from_state():
     assert (got["op"], got["api"], got["render"]) == ("call_tool", "get_my_leave_balance", "chart")
     assert _matches_expect(got, case)
     assert not _matches_expect({**got, "render": "text"}, case)
+
+
+def test_answer_goldens_pin_their_source():
+    """ADR-0056 Amendment 1: a scored answer must name the evidence it rests on."""
+    from ai.eval.g6_runner import _decision_to_dict
+    from ai.engine.cognition.turn.decision import Command, Decision
+
+    bank = {c["id"]: c for c in load_bank()}
+    assert {cid for cid, c in bank.items() if c.get("expect_source")} == {
+        "g6-049", "g6-050", "g6-051", "g6-052", "g6-076", "g6-077", "g6-086",
+    }
+    case = bank["g6-086"]
+    said = _decision_to_dict(Decision(commands=[Command(op="answer", text="ALPHA-7", source="conversation")]))
+    guessed = _decision_to_dict(Decision(commands=[Command(op="answer", text="ALPHA-7", source="knowledge")]))
+    assert said["source"] == "conversation"
+    assert _matches_expect(said, case)
+    assert not _matches_expect(guessed, case)
+    # The lexical ladder has no source to score.
+    assert _matches_expect({"op": "answer", "api": ""}, case)
 
 
 def test_every_category_at_least_three():

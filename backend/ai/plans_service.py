@@ -483,6 +483,19 @@ RETRY_MAX_DELAY_SECONDS = 8.0
 RUN_RETRY_MAX = 1
 
 
+def _depends_on_ids(step) -> list:
+    """Step dependencies as a list. Older rows stored a JSON string, not a list."""
+    raw = getattr(step, "depends_on_json", None)
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            return []
+    if not isinstance(raw, (list, tuple)):
+        return []
+    return list(raw)
+
+
 def _step_evidence(step, steps) -> list:
     """I3. Dependency status for an export consent card. Empty for other steps."""
     if (getattr(step, "tool_name", "") or "") != "export_document":
@@ -496,7 +509,7 @@ def _step_evidence(step, steps) -> list:
         }
         for s in steps
     }
-    return evidence_rows(getattr(step, "depends_on_json", None) or [], statuses)
+    return evidence_rows(_depends_on_ids(step), statuses)
 
 
 def _step_narration(step, steps) -> str:
@@ -504,10 +517,11 @@ def _step_narration(step, steps) -> str:
     from ai.engine.cognition.turn.reasoning import step_narration
 
     done = {"completed", "completed_with_gaps"}
+    depends = _depends_on_ids(step)
     waiting = [
         str(s.step_index)
         for s in steps
-        if s.step_index in (getattr(step, "depends_on_json", None) or [])
+        if s.step_index in depends
         and str(getattr(s, "status", "") or "") not in done
     ]
     return step_narration(getattr(step, "intent", "") or "", waiting)
@@ -1767,7 +1781,7 @@ class PlansService:
                     "intent": s.intent,
                     "tool_name": s.tool_name,
                     "tool_args": s.tool_args_json or {},
-                    "depends_on": s.depends_on_json or [],
+                    "depends_on": _depends_on_ids(s),
                     **_step_execution_fields(step_phase, s.step_index, s.status),
                     "instructions": (
                         (step_meta.get(s.step_index) or {}).get("instructions")
@@ -2577,7 +2591,7 @@ class PlansService:
                         "intent": s.intent or "",
                         "tool_name": s.tool_name,
                         "tool_args": s.tool_args_json or {},
-                        "depends_on": s.depends_on_json or [],
+                        "depends_on": _depends_on_ids(s),
                         "is_mutation": False,
                         "dry_run_supported": False,
                         "agent_role": "orchestrator",

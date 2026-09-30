@@ -123,6 +123,31 @@ def test_list_chat_models_returns_catalog_with_pricing_and_default():
     assert defaults[0]["id"].strip().lower() == get_model_for_task("chat").strip().lower()
 
 
+def test_a_stuck_deepseek_call_does_not_wait_two_minutes():
+    from ai.engine.llm.provider import (
+        CHAT_READ_TIMEOUT_S,
+        THINKING_READ_TIMEOUT_S,
+        request_timeout,
+    )
+
+    assert request_timeout("https://api.deepseek.com/v1") == CHAT_READ_TIMEOUT_S
+    assert CHAT_READ_TIMEOUT_S <= 15
+    assert request_timeout("https://api.deepseek.com/v1", {"thinking": {"type": "disabled"}}) == CHAT_READ_TIMEOUT_S
+    assert request_timeout(
+        "https://api.deepseek.com/v1", {"thinking": {"type": "enabled"}},
+    ) == THINKING_READ_TIMEOUT_S
+    assert request_timeout("https://api.poe.com/v1") == 30.0
+    from ai.engine.llm.router import estimate_cost, fallback_model
+
+    assert estimate_cost("deepseek-flash", 1_000_000, 0) == 0.3
+    assert estimate_cost("deepseek-flash", 0, 1_000_000) == 1.2
+    assert estimate_cost("anthropic/claude-haiku-4.5", 1_000_000, 0) == 1.0
+    assert fallback_model("https://api.deepseek.com/v1", "transient", deepseek_configured=True) == "anthropic/claude-haiku-4.5"
+    assert fallback_model("https://api.poe.com/v1", "transient", deepseek_configured=True) == "deepseek-flash"
+    assert fallback_model("https://api.deepseek.com/v1", "permanent", deepseek_configured=True) is None
+    assert fallback_model("https://api.poe.com/v1", "transient", deepseek_configured=False) is None
+
+
 def test_find_rates_is_case_insensitive():
     from ai.engine.llm.router import _find_rates
 

@@ -1,0 +1,308 @@
+# Verbatim sentence from this course bank. It cites one open file, or it is refused.
+version: 1
+course: MED5310
+world: aast-mbbs
+ask: According to the handout
+miss: This is not in this lecture.
+hits:
+- activity: 701
+  passage: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  quote: Challenges in Healthcare The variability of patient needs and the complexity of healthcare delivery require a thoughtful approach to Lean implementation.
+- activity: 702
+  passage: MED5310:file:702:١ آداب وقوانين مهنة الطب.pptx
+  quote: وتكون العقوبة السجن المؤبد وبغرامة لا تقل عن خمسمائة ألف جنيه ولا تجاوز مليون جنيه إذا ترتب علي الفعل المشار إليه في الفقرتين السابقتين وفاة المنقول منه.
+- activity: 699
+  passage: MED5310:file:699:MED5310_L1_Healthcare_systems_Slides.pptx
+  quote: Private and Mixed Systems Involve private insurance and public programs, offering innovation and choice but facing equity and cost control challenges.
+- activity: 706
+  passage: MED5310:file:706:burnout in med students.pptx
+  quote: Why now? Faster pace Shrinking workforce Easier communication Higher expectations Impossible role models Stereotype “success” Signs Are you burnt-out?
+- activity: 700
+  passage: MED5310:file:700:MED5310_L2_Quality_(Slides).pptx
+  quote: The practice of comparing business processes and performance metrics to industry bests and best practices from other companies.
+- activity: 705
+  passage: MED5310:file:705:١ آداب وقوانين الإعلان فى الطب.pptx
+  quote: 'الإعلان من طبيب لغيره مادة ( 8 ) : لا يجوز للطبيب أن يأتى عملاً من الأعمال الآتية : أ ـ .'
+- activity: 701
+  passage: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  quote: Staff Training Providing comprehensive training for staff is crucial to equip them with the necessary skills and knowledge for successful Lean practices.
+- activity: 702
+  passage: MED5310:file:702:١ آداب وقوانين مهنة الطب.pptx
+  quote: وإذا ترتب علي الفعل المشار إليه في الفقرة السابقة وفاة المتبرع تكون العقوبة السجن المشدد وغرامة لا تقل عن مائة ألف جنيه ولا تجاوز مائتي ألف جنيه.
+- activity: 699
+  passage: MED5310:file:699:MED5310_L1_Healthcare_systems_Slides.pptx
+  quote: Cost Control and Challenges While costs are controlled under this model, challenges include resource limitations and longer wait times for treatment.
+- activity: 706
+  passage: MED5310:file:706:burnout in med students.pptx
+  quote: What is it? A state of emotional and physical exhaustion that leads to interruption of personal, academic, occupational, and/or social functions.
+- activity: 700
+  passage: MED5310:file:700:MED5310_L2_Quality_(Slides).pptx
+  quote: The degree to which health services for individuals and populations increase the likelihood of desired health outcomes.
+- activity: 701
+  passage: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  quote: Insufficient Training Without proper training, team members may struggle to implement PDSA effectively, affecting the overall success of the initiative.
+- activity: 702
+  passage: MED5310:file:702:١ آداب وقوانين مهنة الطب.pptx
+  quote: مادة 261- كل من أسقط عمدا امرأة حبلى بإعطائها أدوية أو باستعمال وسائل مؤدية إلى ذلك أو بدلالتها عليها سواء كان برضائها أم لا ، يعاقب بالحبس .
+- activity: 699
+  passage: MED5310:file:699:MED5310_L1_Healthcare_systems_Slides.pptx
+  quote: Public Oversight and Private Delivery It balances public oversight with private healthcare delivery, ensuring social solidarity in funding.
+- activity: 706
+  passage: MED5310:file:706:burnout in med students.pptx
+  quote: 'Mindful socialization: Make the meetings count, avoid meaningless social pleasantries and aim for productive and enjoyable events.'
+- activity: 700
+  passage: MED5310:file:700:MED5310_L2_Quality_(Slides).pptx
+  quote: What is not measured, cannot be improved.
+- activity: 701
+  passage: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  quote: Waste Reduction Central to the Lean model is the concept of waste reduction, aiming to eliminate non-value-adding activities in the production process.
+- activity: 702
+  passage: MED5310:file:702:١ آداب وقوانين مهنة الطب.pptx
+  quote: 'مادة ( 12 ) : يجب على الطبيب أن يلتزم في اللافتة والمطبوعات والتذاكر الطبية وما في حكمها بالتشريعات و القوانين و اللوائح المنظمة لذلك.'
+- activity: 699
+  passage: MED5310:file:699:MED5310_L1_Healthcare_systems_Slides.pptx
+  quote: Universal Coverage The Beveridge model provides universal healthcare coverage to all residents without direct charges at point of service.
+- activity: 706
+  passage: MED5310:file:706:burnout in med students.pptx
+  quote: Have some fun, even on exam night Treat your brain as you treat your phone, make sure it is fully charged before using it.
+- activity: 701
+  passage: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  quote: Establishing Pull Establishing pull means producing items only as needed, reducing overproduction and ensuring that customer demand drives the process.
+- activity: 702
+  passage: MED5310:file:702:١ آداب وقوانين مهنة الطب.pptx
+  quote: 'مادة ( 22 ) : على الطبيب أن يلتزم بحدود مهاراته المهنية و أن يستعين بخبرة من هم أكفأ منه من الأطباء في مناظرة وعلاج مريضه عند اللزوم .'
+- activity: 699
+  passage: MED5310:file:699:MED5310_L1_Healthcare_systems_Slides.pptx
+  quote: System Complexity Variations in coverage, financing, and service delivery highlight the complexity of healthcare systems worldwide.
+- activity: 706
+  passage: MED5310:file:706:burnout in med students.pptx
+  quote: Great achievements are built on many incremental little successes rather than one huge break-through.
+- activity: 701
+  passage: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  quote: Involving frontline staff in improvement assessments ensures that practical insights are captured from those who understand the day-to-day operations.
+- activity: 702
+  passage: MED5310:file:702:١ آداب وقوانين مهنة الطب.pptx
+  quote: 'مادة ( 8 ) : لا يجوز للطبيب أن يأتى عملاً من الأعمال الآتية : أ ـ الاستعانة بالوسطاء في مزاولة المهنة سواء كان ذلك بأجر أو بدون أجر.'
+- activity: 699
+  passage: MED5310:file:699:MED5310_L1_Healthcare_systems_Slides.pptx
+  quote: Regulated Competition The model features regulated competition among sickness funds to promote quality care and cost control.
+- activity: 706
+  passage: MED5310:file:706:burnout in med students.pptx
+  quote: Honourable mention… Managing expectations Being mindful Achievable goals The “learning curve”.
+- activity: 701
+  passage: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  quote: Patients Patients are essential stakeholders in the Six Sigma process, providing feedback that helps shape quality improvement efforts and outcomes.
+- activity: 702
+  passage: MED5310:file:702:١ آداب وقوانين مهنة الطب.pptx
+  quote: ويعاقب بالعقوبة المقررة في الفقرة السابقة كل من زرع عضواً أو جزءاً منه أو نسيجاً تم نقله بطريق التحايل أو الإكراه مع علمه بذلك.
+- activity: 699
+  passage: MED5310:file:699:MED5310_L1_Healthcare_systems_Slides.pptx
+  quote: Catastrophic health expenditure Underfunded public system Fragmented coverage Poor compliance (health outcomes ?
+- activity: 706
+  passage: MED5310:file:706:burnout in med students.pptx
+  quote: WHO has included burn-out in ICD-11 as an “occupational phenomenon” not a disease condition.
+- activity: 701
+  passage: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  quote: Teams analyze data thoroughly to uncover the root causes of defects or inefficiencies, ensuring a comprehensive understanding of the issues at hand.
+- activity: 702
+  passage: MED5310:file:702:١ آداب وقوانين مهنة الطب.pptx
+  quote: إسقاط الحوامل مادة 260- كل من أسقط عمدا امرأة حبلى بضرب أو نحوه من أنواع الإيذاء يعاقب بالأشغال الشاقة المؤقتة .
+- activity: 699
+  passage: MED5310:file:699:MED5310_L1_Healthcare_systems_Slides.pptx
+  quote: Challenges Administrative complexity and cost escalation remain challenges within the Bismarck model.
+- activity: 706
+  passage: MED5310:file:706:burnout in med students.pptx
+  quote: One study showed positive correlation between support and rates of development of burnout.
+- activity: 701
+  passage: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  quote: Continuous Improvement Lean emphasizes continuous improvement, encouraging organizations to constantly seek ways to enhance processes and products.
+- activity: 702
+  passage: MED5310:file:702:١ آداب وقوانين مهنة الطب.pptx
+  quote: ب - أن يلتزم بالأدوية الضرورية مع مراعاة أن تكون الأولوية للدواء الوطنى والأقل سعراً بشرط الفاعلية والأمان.
+- activity: 699
+  passage: MED5310:file:699:MED5310_L1_Healthcare_systems_Slides.pptx
+  quote: Many disadvantages Large private sector creating a financial barrier.
+- activity: 706
+  passage: MED5310:file:706:burnout in med students.pptx
+  quote: 'Stress, burnout and depression: A systematic review on DNA methylation mechanisms.'
+- activity: 701
+  passage: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  quote: Continuous Monitoring Regularly monitoring progress ensures that Lean initiatives remain on track and allows for timely adjustments when necessary.
+- activity: 702
+  passage: MED5310:file:702:١ آداب وقوانين مهنة الطب.pptx
+  quote: 'مادة ( 21 ) : على الطبيب أن يوفر لمريضه المعلومات المتعلقة بحالته المرضية بطريقة مبسطة ومفهومة.'
+- activity: 706
+  passage: MED5310:file:706:burnout in med students.pptx
+  quote: Pyramid vs Elon Musk Focus Playing the long game Life is a marathon, not a sprint.
+- activity: 701
+  passage: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  quote: Misalignment of Goals A lack of alignment between Lean initiatives and organizational objectives can lead to fragmented efforts and poor outcomes.
+- activity: 702
+  passage: MED5310:file:702:١ آداب وقوانين مهنة الطب.pptx
+  quote: مادة 263- إذا كان المسقط طبيبا أو جراحا أو صيدليا أو قابل ة يحكم عليه بالأشغال الشاقة المؤقتة .
+- activity: 706
+  passage: MED5310:file:706:burnout in med students.pptx
+  quote: Setting impossible standards is the one universal common factor in burn-out.
+- activity: 701
+  passage: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  quote: Data Availability Data availability can hinder Six Sigma implementation; ensuring access to relevant data is crucial for informed decision-making.
+- activity: 702
+  passage: MED5310:file:702:١ آداب وقوانين مهنة الطب.pptx
+  quote: ويشترط لتوقيع العقوبات المنصوص عليها فى الفقرة السابقة أن يقع الفعل المشار إليه فيها خلسة.
+- activity: 706
+  passage: MED5310:file:706:burnout in med students.pptx
+  quote: Jelena Bakusic , Wilmar Schaufeli, Stephan Claes, Lode Godderis .
+- activity: 701
+  passage: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  quote: Identifying Key Factors Key factors contributing to readmissions were identified, enabling the hospital to target specific areas for improvement.
+- activity: 702
+  passage: MED5310:file:702:١ آداب وقوانين مهنة الطب.pptx
+  quote: كما يجب عليه إبلاغ المريض قبل بدء الفحص بصفته وأنه يحل محل الطبيب صاحب العيادة بصفة مؤقتة.
+- activity: 706
+  passage: MED5310:file:706:burnout in med students.pptx
+  quote: The same study found no correlation between workload and burnout.
+- activity: 701
+  passage: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  quote: Training and Support Providing comprehensive training and support for staff is essential to facilitate the acceptance of Six Sigma methodologies.
+- activity: 702
+  passage: MED5310:file:702:١ آداب وقوانين مهنة الطب.pptx
+  quote: ويضاعف الحد الأقصى للعقوبات المقررة بالمادة 240 إذا ارتكب الجريمة تنفيذا لغرض إرهابي .
+- activity: 706
+  passage: MED5310:file:706:burnout in med students.pptx
+  quote: Professional help Colleagues (including seniors and professors).
+- activity: 701
+  passage: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  quote: Cause-and-effect diagrams, also known as fishbone diagrams, help visualize the relationship between various causes and the effects they produce.
+- activity: 702
+  passage: MED5310:file:702:١ آداب وقوانين مهنة الطب.pptx
+  quote: بالحبس مدة لا تزيد على سنه وبغرامة لا تجاوز مائتي جنيه أو بإحدى هاتين العقوبتين .
+- activity: 706
+  passage: MED5310:file:706:burnout in med students.pptx
+  quote: Help sleep by positioning these sessions in the late afternoon.
+- activity: 701
+  passage: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  quote: Resistance to Change Resistance from team members can create barriers to implementing PDSA, preventing necessary innovations and improvements.
+- activity: 702
+  passage: MED5310:file:702:١ آداب وقوانين مهنة الطب.pptx
+  quote: كما لا يجوز له أيضا أن ينسب لنفسه دون وجه حق أي كشف علمي أو يدعى انفراده به.
+- activity: 706
+  passage: MED5310:file:706:burnout in med students.pptx
+  quote: Some genetic evidence suggest susceptibility (or resistance).
+- activity: 701
+  passage: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  quote: Targeted Interventions Implementing targeted interventions led to significant improvements in patient outcomes and reduced readmission rates.
+- activity: 702
+  passage: MED5310:file:702:١ آداب وقوانين مهنة الطب.pptx
+  quote: الإقدام على عمل غير مقدر خطورته وغير مدرك مايحتمل أن يترتب عليه من آثار.
+- activity: 706
+  passage: MED5310:file:706:burnout in med students.pptx
+  quote: Humans are a social species Social media is antisocial.
+- activity: 701
+  passage: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  quote: Measure Phase The Measure phase involves collecting data to establish current performance baselines, identifying key metrics for improvement.
+- activity: 702
+  passage: MED5310:file:702:١ آداب وقوانين مهنة الطب.pptx
+  quote: إغفال اتخاذ احتياطات يوجبها الحذر كان من شأن اتخاذها عدم حدوث النتيجة.
+- activity: 706
+  passage: MED5310:file:706:burnout in med students.pptx
+  quote: Do an effort to meet friends and family in real life.
+- activity: 701
+  passage: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  quote: Sustaining Changes Quality improvement frameworks also focus on implementing and sustaining changes for long-term benefits in patient care.
+- activity: 702
+  passage: MED5310:file:702:١ آداب وقوانين مهنة الطب.pptx
+  quote: جـ - أن يقتصر على طلب التحاليل المعملية أو وسائل التشخيص الضرورية .
+- activity: 701
+  passage: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  quote: Lack of Training Insufficient training can hinder successful Lean implementation, leading to misunderstandings and ineffective practices.
+- activity: 702
+  passage: MED5310:file:702:١ آداب وقوانين مهنة الطب.pptx
+  quote: سوء التقدير أو نقص المهارة أو الجهل بما يتعين العلم به.
+- activity: 701
+  passage: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  quote: Improve Phase In the Improve phase, solutions are developed and implemented to address root causes, enhancing overall process efficiency.
+- activity: 702
+  passage: MED5310:file:702:١ آداب وقوانين مهنة الطب.pptx
+  quote: الضرر قد نشأ عن خطأ التابع وهو يؤدى وظيفته أو بسببها.
+- activity: 701
+  passage: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  quote: Creating Flow Creating flow involves organizing steps to ensure smooth and efficient processes, reducing waste and delays in production.
+- activity: 702
+  passage: MED5310:file:702:١ آداب وقوانين مهنة الطب.pptx
+  quote: أن يكون للمتبوع سلطة فعلية فى رقابة التابع وتوجيهه.
+- activity: 701
+  passage: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  quote: Identifying the specific challenges faced by the organization helps in customizing the QI framework to address those issues effectively.
+- activity: 702
+  passage: MED5310:file:702:١ آداب وقوانين مهنة الطب.pptx
+  quote: الحبس مدة لا تقل عن سنه ولا تزيد على خمس سنين .
+- activity: 701
+  passage: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  quote: Pareto charts assist teams in prioritizing issues by displaying the most significant factors contributing to defects or inefficiencies.
+- activity: 702
+  passage: MED5310:file:702:١ آداب وقوانين مهنة الطب.pptx
+  quote: مسئولية الطبيب عن الأدوات والأجهزة الطبية.
+- activity: 701
+  passage: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  quote: These projects have enhanced operational efficiency, allowing healthcare organizations to deliver better services with fewer resources.
+- activity: 701
+  passage: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  quote: Focus groups provide qualitative insights by engaging participants in discussions, revealing deeper issues and potential improvements.
+- activity: 701
+  passage: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  quote: Setting Measurable Goals Establishing clear and measurable goals is crucial for tracking project success and ensuring accountability.
+- activity: 701
+  passage: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  quote: Surveys are a powerful tool for gathering quantitative data on employee and customer experiences, helping identify improvement areas.
+- activity: 701
+  passage: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  quote: Control Phase The Control phase focuses on sustaining improvements through monitoring and control plans, ensuring long-term success.
+- activity: 701
+  passage: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  quote: Process mapping visualizes workflows, helping organizations identify inefficiencies and streamline processes for better performance.
+- activity: 701
+  passage: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  quote: Identifying Changes These frameworks assist organizations in pinpointing necessary changes to improve patient outcomes effectively.
+- activity: 701
+  passage: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  quote: Data analysis is essential for quality improvement, helping organizations identify areas for enhancement and optimize performance.
+- activity: 701
+  passage: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  quote: Incorporating patient feedback into decision-making processes enhances service quality and aligns initiatives with customer needs.
+- activity: 701
+  passage: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  quote: Utilizing performance metrics allows organizations to measure success and identify key areas for improvement in decision-making.
+- activity: 701
+  passage: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  quote: Study Stage The Study stage involves evaluating the results, analyzing data, and understanding the impact of the actions taken.
+- activity: 701
+  passage: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  quote: Consideration of available resources is crucial when selecting a QI framework, as it impacts implementation and sustainability.
+- activity: 701
+  passage: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  quote: Defining the project's scope and objectives is essential to align efforts with organizational priorities and desired outcomes.
+- activity: 701
+  passage: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  quote: Analyze Phase During the Analyze phase, data is analyzed to identify root causes of issues and areas for process enhancement.
+- activity: 701
+  passage: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  quote: Tailoring the QI framework to the healthcare context significantly increases the likelihood of achieving successful outcomes.
+- activity: 701
+  passage: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  quote: Act Stage The Act stage is about making necessary adjustments based on the evaluation to improve the process moving forward.
+misses:
+- activity: 699
+  quote: وتكون العقوبة السجن المؤبد وبغرامة لا تقل عن خمسمائة ألف جنيه ولا تجاوز مليون جنيه إذا ترتب علي الفعل المشار إليه في الفقرتين السابقتين وفاة المنقول منه.
+  absent: MED5310:file:702:١ آداب وقوانين مهنة الطب.pptx
+- activity: 700
+  quote: Private and Mixed Systems Involve private insurance and public programs, offering innovation and choice but facing equity and cost control challenges.
+  absent: MED5310:file:699:MED5310_L1_Healthcare_systems_Slides.pptx
+- activity: 699
+  quote: Why now? Faster pace Shrinking workforce Easier communication Higher expectations Impossible role models Stereotype “success” Signs Are you burnt-out?
+  absent: MED5310:file:706:burnout in med students.pptx
+- activity: 699
+  quote: The practice of comparing business processes and performance metrics to industry bests and best practices from other companies.
+  absent: MED5310:file:700:MED5310_L2_Quality_(Slides).pptx
+- activity: 699
+  quote: 'الإعلان من طبيب لغيره مادة ( 8 ) : لا يجوز للطبيب أن يأتى عملاً من الأعمال الآتية : أ ـ .'
+  absent: MED5310:file:705:١ آداب وقوانين الإعلان فى الطب.pptx

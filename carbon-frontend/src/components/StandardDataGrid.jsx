@@ -65,7 +65,7 @@ export default function StandardDataGrid({
         hideFooterSelectedRowCount={hideFooterSelectedRowCount}
         slots={toolbar ? { toolbar: GridToolbar } : undefined}
         slotProps={toolbar ? { toolbar: { showQuickFilter: true, quickFilterProps: { debounceMs: 250 } } } : undefined}
-        sx={{ border: 'none', flex: 1, '& .MuiDataGrid-cell': { outline: 'none', display: 'flex', alignItems: 'center' } }}
+        sx={{ border: 'none', flex: 1, '& .MuiDataGrid-cell': { display: 'flex', alignItems: 'center' } }}
         {...props}
         localeText={{ ...localeText, ...props.localeText }}
       />

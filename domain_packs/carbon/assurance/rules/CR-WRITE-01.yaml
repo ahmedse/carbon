@@ -21,3 +21,8 @@ catalogue: planned
 residual: >
   Catalogue stays planned until an assurance event records a Chat turn that
   attempted a write and was handed off. The static file check is not that event.
+target: O1
+product: Carbon on AASTMT
+evidence: test_write_tools_require_confirmation on domain_packs/carbon/instance.yaml
+locked: 2026-09-29
+limit: The static file check is not a fault-demonstrated event. Catalogue stays planned. Does not block release.

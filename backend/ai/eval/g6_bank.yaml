@@ -306,6 +306,7 @@
   en: "how is the salary structure made up?"
   expect_op: answer
   expect_api: ""
+  expect_source: knowledge
   expect_lang_ar: ar
   expect_lang_en: en
   notes: "general pay structure → answer from domain facts; contrast g6-022"
@@ -320,6 +321,7 @@
     - {role: assistant, content: "What would you like to know about salaries? My own salary and pay / Payroll runs and payslips / Salary structure and compensation / Employee salary data"}
   expect_op: answer
   expect_api: ""
+  expect_source: knowledge
   expect_lang_ar: ar
   expect_lang_en: en
   notes: "picked the general option of a clarify → answer, not a self read"
@@ -671,6 +673,7 @@
   state_digest: "call_host_api get_my_leave_balance: count=0"
   expect_op: answer
   expect_api: ""
+  expect_source: conversation
   expect_lang_ar: ar
   expect_lang_en: en
   notes: "honest answer after empty balance rows"
@@ -686,6 +689,7 @@
   state_digest: "call_host_api list_my_leave: count=0"
   expect_op: answer
   expect_api: ""
+  expect_source: conversation
   expect_lang_ar: ar
   expect_lang_en: en
   notes: "empty history honesty"
@@ -701,6 +705,7 @@
   state_digest: "call_host_api list_my_loans: count=0"
   expect_op: answer
   expect_api: ""
+  expect_source: conversation
   expect_lang_ar: ar
   expect_lang_en: en
   notes: "empty loan list honesty"
@@ -716,6 +721,7 @@
   state_digest: "call_host_api list_my_payslips: count=0"
   expect_op: answer
   expect_api: ""
+  expect_source: conversation
   expect_lang_ar: ar
   expect_lang_en: en
   notes: "empty payslip honesty"
@@ -943,6 +949,21 @@
   expect_lang_ar: ar
   expect_lang_en: en
   notes: "An employee number is a business key, not the detail read's record id. Look it up; never pass 2400 or the caller's id as {id}."
+
+- id: g6-086
+  category: followup
+  tier: v21
+  history:
+    - {role: user, content: "My project code is ALPHA-7."}
+    - {role: assistant, content: "Noted — ALPHA-7."}
+  ar: "ما هو رمز مشروعي؟"
+  en: "What is my project code?"
+  expect_op: answer
+  expect_api: ""
+  expect_source: conversation
+  expect_lang_ar: ar
+  expect_lang_en: en
+  notes: "A value the user stated earlier in this thread is answered from the conversation in one call (ADR-0056 Amendment 1). No read carries it."
 
 # ── off_limits (4) ──────────────────────────────────────────────────────────
 - id: g6-057

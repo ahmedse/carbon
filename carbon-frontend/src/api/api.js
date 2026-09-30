@@ -42,19 +42,61 @@ function sanitizeUrl(url) {
 let refreshInFlight = null;
 let lastRefreshTimestamp = 0;
 
-/** Refreshes the access token using refresh token in localStorage. */
+/** Moodle pane session. Kept off localStorage so it cannot replace a Carbon login. */
+export const EMBED_USER_KEY = "pulse_embed_user";
+
+export function embedPulseHost() {
+  return typeof window !== "undefined"
+    && window.location.pathname.endsWith("/embed/pulse");
+}
+
+function readEmbedUser() {
+  if (!embedPulseHost()) return null;
+  try {
+    const raw = sessionStorage.getItem(EMBED_USER_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Where the refresh token for this document lives.
+ * The Moodle iframe and the Carbon app share localStorage on :5179.
+ * The iframe's refresh stays in sessionStorage.
+ */
+function readRefreshToken() {
+  const embed = readEmbedUser();
+  if (embed?.refresh) return { token: embed.refresh, where: "embed" };
+  const refresh = localStorage.getItem("refresh");
+  return refresh ? { token: refresh, where: "local" } : null;
+}
+
+function storeRotatedTokens(where, access, refresh) {
+  if (where === "embed") {
+    const current = readEmbedUser() || {};
+    const next = { ...current, token: access };
+    if (refresh) next.refresh = refresh;
+    sessionStorage.setItem(EMBED_USER_KEY, JSON.stringify(next));
+    return;
+  }
+  localStorage.setItem("access", access);
+  if (refresh) localStorage.setItem("refresh", refresh);
+}
+
+/** Refreshes the access token from the session that owns this document. */
 export async function refreshAccessToken() {
   // If a refresh is already in-flight, return the same promise
   // so all callers get the SAME new token (prevents rotation race).
   if (refreshInFlight) return refreshInFlight;
 
   refreshInFlight = (async () => {
-    const refresh = localStorage.getItem("refresh");
-    if (!refresh) throw new Error("No refresh token");
+    const stored = readRefreshToken();
+    if (!stored) throw new Error("No refresh token");
     const res = await fetch(joinUrl(API_BASE_URL, API_ROUTES.tokenRefresh), { // internal refresh helper
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refresh }),
+      body: JSON.stringify({ refresh: stored.token }),
     });
     if (!res.ok) {
       // 401/400 = the refresh token itself was rejected (revoked/expired) — the
@@ -63,7 +105,9 @@ export async function refreshAccessToken() {
       // will retry. Network failures (fetch throws) also propagate untouched.
       if (res.status === 401 || res.status === 400) {
         lastRefreshTimestamp = 0;
-        globalLogout();
+        // The Moodle iframe must not clear the Carbon login in localStorage
+        // or navigate itself to the Carbon login page.
+        if (stored.where !== "embed") globalLogout();
         const err = new Error("Session expired");
         err.isSessionExpired = true;
         throw err;
@@ -79,8 +123,7 @@ export async function refreshAccessToken() {
     }
     const data = await res.json();
     if (!data.access) throw new Error("No new access token");
-    localStorage.setItem("access", data.access);
-    if (data.refresh) localStorage.setItem("refresh", data.refresh);
+    storeRotatedTokens(stored.where, data.access, data.refresh);
     lastRefreshTimestamp = Date.now();
     return data.access;
   })().finally(() => {
@@ -110,7 +153,7 @@ function handleRefreshFailure(error) {
 /** Returns the currently valid access token, refreshing if expired. */
 async function getValidAccessToken(token) {
   let accessToken = token || localStorage.getItem("access");
-  const refresh = localStorage.getItem("refresh");
+  const refresh = readRefreshToken()?.token;
 
   if (!accessToken) {
     if (refresh) {

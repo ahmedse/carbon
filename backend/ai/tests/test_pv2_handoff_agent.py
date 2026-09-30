@@ -388,11 +388,7 @@ def test_medicine_ask_grounding_omits_people_writes():
         "BROAD REPORT",
     ):
         assert fragment not in block, fragment
-    assert "HOST WRITES" in block
-    assert "switch to Agent" in block
-    assert "call_host_api" in block
-    assert "create_dq_rule" in block
-    assert "learn_fact" in block
+    assert block == ""
 
 
 def test_plan_grounding_does_not_name_a_people_write():

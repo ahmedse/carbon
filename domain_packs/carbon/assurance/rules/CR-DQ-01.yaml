@@ -23,3 +23,8 @@ residual: >
   A missing month is not visible until that table is linked, and scanning
   every DataTable would invent a zero. Quantity rules apply on the host
   screen when the row is entered.
+target: O1
+product: Carbon on AASTMT
+evidence: Host screen /carbon/my-data. evaluate_o1 emits no CR-DQ-01 code.
+locked: 2026-09-29
+limit: Does not scan every DataTable. Does not insert a missing month as zero. Catalogue stays planned.

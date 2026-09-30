@@ -38,7 +38,7 @@ def test_google_intros_and_unlinked_ids_are_absent():
 
 
 def test_a_course_without_keys_has_no_file_passages():
-    assert load_c4_files("MED213") == {}
+    assert load_c4_files("NMD1601") == {}
 
 
 def _meat_text(ref: str) -> str:

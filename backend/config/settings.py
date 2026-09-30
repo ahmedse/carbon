@@ -279,6 +279,7 @@ INSTALLED_APPS = [
     'core',
     'dataschema',
     'emissions',
+    'guide',
     'catalog',
     'mdm',
     'dq',
@@ -325,6 +326,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'accounts.password_gate.PasswordChangeRequiredMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -509,7 +511,7 @@ AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
         'OPTIONS': {
-            'min_length': 12,
+            'min_length': 10,
         }
     },
     {

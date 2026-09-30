@@ -155,6 +155,7 @@ export const NAV_LABEL_KEYS = {
   "Who's Out": 'nav.whosOut',
   'Chairman Overview': 'nav.chairmanOverview',
   'Inventory onboarding': 'nav.inventoryOnboarding',
+  'My guide': 'nav.myGuide',
   'Inventory Coverage': 'nav.inventoryCoverage',
   Stems: 'nav.stems',
   Calibration: 'nav.calibration',

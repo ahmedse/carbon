@@ -15,7 +15,7 @@ logger = logging.getLogger("pulse.cognition.turn.degradation")
 @dataclass(frozen=True)
 class Degradation:
     stage: str   # understand | act | write
-    cause: str   # understand_error | malformed_decision | act_error | record_mismatch | model_error | empty_output | invalid_output | ungrounded
+    cause: str   # understand_error | malformed_decision | act_error | record_mismatch | handoff_not_on_host | model_error | empty_output | invalid_output | ungrounded
 
     def to_dict(self) -> dict:
         return {"stage": self.stage, "cause": self.cause}

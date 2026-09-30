@@ -48,14 +48,15 @@ class Settings(BaseSettings):
     # ── LLM ──
     LLM_API_KEY: str = ""
     LLM_BASE_URL: str = ""
-    # Direct DeepSeek key. Used for deepseek-* models and as the one retry
-    # when the primary provider (Poe) times out or returns a 5xx.
+    # Direct DeepSeek key. deepseek-* models use this endpoint.
+    # A transient DeepSeek failure retries once on Claude Haiku via LLM_BASE_URL.
+    # A transient failure on any other provider retries once on deepseek-flash.
     DEEPSEEK_API_KEY: str = ""
     DEEPSEEK_BASE_URL: str = "https://api.deepseek.com/v1"
-    LLM_MODEL: str = "anthropic/claude-haiku-4.5"          # deep mode / fallback
-    LLM_NORMAL_MODEL: str = "anthropic/claude-haiku-4.5"   # normal mode
+    LLM_MODEL: str = "deepseek-flash"          # deep mode / fallback
+    LLM_NORMAL_MODEL: str = "deepseek-flash"   # normal mode
     LLM_EMBEDDING_MODEL: str = "text-embedding-3-small"
-    LLM_COGNITION_MODEL: str = "anthropic/claude-haiku-4.5"
+    LLM_COGNITION_MODEL: str = "deepseek-flash"
     LLM_INTROSPECT_MODEL: str = ""               # schema enrichment; falls back to LLM_MODEL
     # When set, genuinely hard problems (deep salience or a knowledge_gap)
     # escalate to this reasoning-grade model via the "reason" task lane.
@@ -76,8 +77,12 @@ class Settings(BaseSettings):
 
     # ── LLM Cost Tracking ──
     LLM_DAILY_BUDGET_USD: float = 5.0            # per-instance daily spend cap
+    # Peak Flash rates (cache miss). Off-peak is half; the cap must not undercount.
+    # Haiku rates are Anthropic list, used when the Poe fallback runs.
     LLM_COST_MODELS: str = (
-        '{"Claude-Haiku-4.5": {"input": 1.0, "output": 5.0},'
+        '{"deepseek-flash": {"input": 0.30, "output": 1.20},'
+        ' "Claude-Haiku-4.5": {"input": 1.0, "output": 5.0},'
+        ' "anthropic/claude-haiku-4.5": {"input": 1.0, "output": 5.0},'
         ' "Claude-Sonnet-4.5": {"input": 3.0, "output": 5.0},'
         ' "GPT-4o": {"input": 2.5, "output": 10.0},'
         ' "GPT-4o-mini": {"input": 0.15, "output": 0.6}}'

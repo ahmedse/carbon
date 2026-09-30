@@ -15,6 +15,8 @@ _ROOT = Path(__file__).resolve().parents[2] / "domain_packs" / "aast-med"
 _PACK = _ROOT / "section_asks.yaml"
 _LECTURE = _ROOT / "lecture_asks.yaml"
 _FACT = _ROOT / "fact_asks.yaml"
+_IDENTITY = _ROOT / "identity_asks.yaml"
+_COURSE = _ROOT / "course_asks.yaml"
 _ACCESS = _ROOT / "access_reasons.yaml"
 
 
@@ -59,6 +61,63 @@ def _fact_spec() -> tuple[tuple[tuple[str, ...], ...], int]:
         if terms:
             groups.append(terms)
     return tuple(groups), int(data.get("min_span") or 24)
+
+
+@lru_cache(maxsize=1)
+def _identity() -> tuple[tuple[tuple[str, ...], ...], str]:
+    data = yaml.safe_load(_IDENTITY.read_text(encoding="utf-8")) or {}
+    groups = []
+    for group in data.get("all_of_any") or []:
+        terms = tuple(str(term).casefold() for term in group if str(term).strip())
+        if terms:
+            groups.append(terms)
+    return tuple(groups), str(data.get("answer") or "").strip()
+
+
+def identity_answer(message: str, snapshot: dict[str, Any] | None = None) -> str | None:
+    """Who this assistant is. None when the message is not that question."""
+    del snapshot
+    text = (message or "").casefold()
+    if not text.strip():
+        return None
+    groups, sentence = _identity()
+    if not sentence:
+        return None
+    if any(all(term in text for term in terms) for terms in groups):
+        return sentence
+    return None
+
+
+@lru_cache(maxsize=1)
+def _course_groups() -> tuple[tuple[str, ...], ...]:
+    data = yaml.safe_load(_COURSE.read_text(encoding="utf-8")) or {}
+    groups = []
+    for group in data.get("all_of_any") or []:
+        terms = tuple(str(term).casefold() for term in group if str(term).strip())
+        if terms:
+            groups.append(terms)
+    return tuple(groups)
+
+
+def is_course_ask(message: str) -> bool:
+    text = (message or "").casefold()
+    if not text.strip():
+        return False
+    return any(all(term in text for term in terms) for terms in _course_groups())
+
+
+def course_answer(message: str, snapshot: dict[str, Any] | None) -> str | None:
+    """Name the open course from the snapshot. None when this is not that question."""
+    if not is_course_ask(message):
+        return None
+    course = (snapshot or {}).get("course") if isinstance((snapshot or {}).get("course"), dict) else {}
+    full = str(course.get("fullname") or "").strip()
+    short = str(course.get("shortname") or "").strip()
+    if full and short:
+        return f"This course is {full} ({short})."
+    if full or short:
+        return f"This course is {full or short}."
+    return "No course is open."
 
 
 def is_fact_ask(message: str) -> bool:

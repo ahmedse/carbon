@@ -1,0 +1,308 @@
+# Verbatim sentence from this course bank. It cites one open file, or it is refused.
+version: 1
+course: NMD2303
+world: aast-mbbs
+ask: According to the handout
+miss: This is not in this lecture.
+hits:
+- activity: 791
+  passage: NMD2303:file:791:Consent final.pdf
+  quote: A valid Consent is not given for illegal act as criminal abortion and euthanasia.
+- activity: 800
+  passage: NMD2303:file:800:Values and beliefs.pptx
+  quote: According to the doctor’s personal beliefs he chooses to refrain from treating this particular individual.
+- activity: 802
+  passage: NMD2303:file:802:Leadership - Copy.pptx
+  quote: It sets direction, builds a vision, and adapts as circumstances require.
+- activity: 805
+  passage: NMD2303:file:805:intra-interprof - Copy_074143.pdf
+  quote: Active listening to encourage ideas and opinions of other team members.
+- activity: 791
+  passage: NMD2303:file:791:Consent final.pdf
+  quote: A valid Informed Consent should be obtained by a health care provider who is involved with the patient's care.
+- activity: 800
+  passage: NMD2303:file:800:Values and beliefs.pptx
+  quote: According to the ethical construct of justice, treatment and resources should be reserved for people with lower chance of reinfection.
+- activity: 802
+  passage: NMD2303:file:802:Leadership - Copy.pptx
+  quote: Leadership happens at all levels within organizations and society, not just among those who work in defined "leadership positions.
+- activity: 805
+  passage: NMD2303:file:805:intra-interprof - Copy_074143.pdf
+  quote: 'Assessment: Share abnormal assessment findings and your evaluation of the current situation.'
+- activity: 791
+  passage: NMD2303:file:791:Consent final.pdf
+  quote: Apply the principals of informed consent and how to be valid and documented.
+- activity: 800
+  passage: NMD2303:file:800:Values and beliefs.pptx
+  quote: Each group will try to come up with as many values and beliefs about one topic.
+- activity: 802
+  passage: NMD2303:file:802:Leadership - Copy.pptx
+  quote: Leadership is about mapping out where you need to go to "win" as a team or an organization.
+- activity: 805
+  passage: NMD2303:file:805:intra-interprof - Copy_074143.pdf
+  quote: Avoiding discipline-specific terminology when communicating information with patients, families, community members.
+- activity: 791
+  passage: NMD2303:file:791:Consent final.pdf
+  quote: Capacity The patient must have the capacity to give consent.
+- activity: 800
+  passage: NMD2303:file:800:Values and beliefs.pptx
+  quote: In doing so you should only state your beliefs and values without imposition on the patient or causing them distress.
+- activity: 802
+  passage: NMD2303:file:802:Leadership - Copy.pptx
+  quote: They then embody that vision in everything they do and find ways of connecting it to employee performance to make it a reality.
+- activity: 805
+  passage: NMD2303:file:805:intra-interprof - Copy_074143.pdf
+  quote: Be sure to document communication in the patient’s chart.
+- activity: 791
+  passage: NMD2303:file:791:Consent final.pdf
+  quote: Consent by Dr/ Somaya Madkour Professor of Forensic Medicine & Clinical Toxicology Alexandria University 2 Consent ILO’s.
+- activity: 800
+  passage: NMD2303:file:800:Values and beliefs.pptx
+  quote: Outline the values and beliefs of the patient and the doctor.
+- activity: 802
+  passage: NMD2303:file:802:Leadership - Copy.pptx
+  quote: ure and have realistic goals that determine their direction Leaders hold in mind their vision while understanding the reality of the present.
+- activity: 805
+  passage: NMD2303:file:805:intra-interprof - Copy_074143.pdf
+  quote: Demonstrate effective communication Strategies for collaborating with other healthcare professionals.
+- activity: 791
+  passage: NMD2303:file:791:Consent final.pdf
+  quote: Differentiate types of consents in the medical field.
+- activity: 800
+  passage: NMD2303:file:800:Values and beliefs.pptx
+  quote: Reflect on the doctor’s choices and what is the best course of action References Sagiv L, Roccas S, Cieciuch J, Schwartz SH.
+- activity: 805
+  passage: NMD2303:file:805:intra-interprof - Copy_074143.pdf
+  quote: Expedites initiation of treatment A substantial proportion of healthcare is marked by waiting periods.
+- activity: 791
+  passage: NMD2303:file:791:Consent final.pdf
+  quote: 'Informed: The patient must be informed in broad terms of the nature and purpose in a way that the patient can understand.'
+- activity: 800
+  passage: NMD2303:file:800:Values and beliefs.pptx
+  quote: She was told by her obstetrician that there is a considerable chance that the child has been deformed.
+- activity: 805
+  passage: NMD2303:file:805:intra-interprof - Copy_074143.pdf
+  quote: Expressing one’s knowledge and opinions to team members with clarity, and respect to ensure common understanding of information.
+- activity: 791
+  passage: NMD2303:file:791:Consent final.pdf
+  quote: It lies at the heart of the relationship between the patient and the health care professional.
+- activity: 800
+  passage: NMD2303:file:800:Values and beliefs.pptx
+  quote: There may be grounds for abortion, but the doctor prefers to wait and see if the child really has deformities.
+- activity: 805
+  passage: NMD2303:file:805:intra-interprof - Copy_074143.pdf
+  quote: Giving sensitive, constructive feedback to others about their performance on the team.
+- activity: 791
+  passage: NMD2303:file:791:Consent final.pdf
+  quote: Legally, adults are presumed to have capacity to consent to or refuse medical treatment unless otherwise indicated.
+- activity: 800
+  passage: NMD2303:file:800:Values and beliefs.pptx
+  quote: This means you must not refuse to treat a particular patient or group of patients because of your personal beliefs or views about them.
+- activity: 805
+  passage: NMD2303:file:805:intra-interprof - Copy_074143.pdf
+  quote: 'Interprofessional & Intraprofessional Relationships in Healthcare By the end of this lecture, students will be able to: 1.'
+- activity: 791
+  passage: NMD2303:file:791:Consent final.pdf
+  quote: Oral consent is valid, but it is usual to obtain written consent for major procedures.
+- activity: 800
+  passage: NMD2303:file:800:Values and beliefs.pptx
+  quote: absolute, and generalised beliefs that people hold about themselves, others, the world, and/or the future (3) Activity Divide into 4 groups.
+- activity: 805
+  passage: NMD2303:file:805:intra-interprof - Copy_074143.pdf
+  quote: 'Introduction: Introduce your name, role, and the agency from which you are calling.'
+- activity: 791
+  passage: NMD2303:file:791:Consent final.pdf
+  quote: Respect the patient’s right to refuse treatment.
+- activity: 800
+  passage: NMD2303:file:800:Values and beliefs.pptx
+  quote: 'and: do not treat patients unfairly do not deny patients access to appropriate medical treatment or services do not cause patients distress.'
+- activity: 805
+  passage: NMD2303:file:805:intra-interprof - Copy_074143.pdf
+  quote: It ensures the safety and quality of healthcare.
+- activity: 791
+  passage: NMD2303:file:791:Consent final.pdf
+  quote: Sometimes ethical beliefs and legal rights do not always coincide.
+- activity: 800
+  passage: NMD2303:file:800:Values and beliefs.pptx
+  quote: ct a defect in self-esteem resulting from depression or body dysmorphic disorder Case An 8-week pregnant woman has been exposed to radiation.
+- activity: 805
+  passage: NMD2303:file:805:intra-interprof - Copy_074143.pdf
+  quote: One of the dimensions of patient-centered care is the coordination and smooth transition from one healthcare setting to another.
+- activity: 791
+  passage: NMD2303:file:791:Consent final.pdf
+  quote: The act of the patient standing in line to receive a vaccination.
+- activity: 800
+  passage: NMD2303:file:800:Values and beliefs.pptx
+  quote: e and belief systems Correlate the impact of values and beliefs on patient care Solve ethical vignettes related to value and belief conflict.
+- activity: 805
+  passage: NMD2303:file:805:intra-interprof - Copy_074143.pdf
+  quote: 'Participatory leadership: It is a unique leadership style, also referred to as democratic leadership.'
+- activity: 791
+  passage: NMD2303:file:791:Consent final.pdf
+  quote: The four criteria for a valid consent must be met irrespective of whether the consent is in writing or oral.
+- activity: 800
+  passage: NMD2303:file:800:Values and beliefs.pptx
+  quote: fuse treatment on religious or cultural background discuss their concerns and look for treatment options that will accommodate their beliefs.
+- activity: 805
+  passage: NMD2303:file:805:intra-interprof - Copy_074143.pdf
+  quote: 'Patient-centered care: Patient-centered care is one of the main competencies in the healthcare system.'
+- activity: 791
+  passage: NMD2303:file:791:Consent final.pdf
+  quote: To protect the physician from claims of malpractice.
+- activity: 800
+  passage: NMD2303:file:800:Values and beliefs.pptx
+  quote: le should not change the way God made them She is from a moderate socio-economic class and there must be better things to spend her money on.
+- activity: 805
+  passage: NMD2303:file:805:intra-interprof - Copy_074143.pdf
+  quote: Patients await physician consultations and physicians await input from other interprofessional team members.
+- activity: 791
+  passage: NMD2303:file:791:Consent final.pdf
+  quote: We cannot legally consent to voluntary euthanasia, since it is illegal, even if we feel strongly that it should be permitted.
+- activity: 800
+  passage: NMD2303:file:800:Values and beliefs.pptx
+  quote: must respect a competent patient’s decision to refuse an investigation or treatment, even if you think their decision is wrong or irrational.
+- activity: 805
+  passage: NMD2303:file:805:intra-interprof - Copy_074143.pdf
+  quote: Regarding the intraprofessional relationship, it is the collaboration between two or more disciplines within the same profession e.
+- activity: 791
+  passage: NMD2303:file:791:Consent final.pdf
+  quote: What are the requirements for obtaining a valid consent?
+- activity: 800
+  passage: NMD2303:file:800:Values and beliefs.pptx
+  quote: 'other is apprehensive and choses to go with abortion anyway because: “why take a risk when I can skip this pregnancy and bear another child”.'
+- activity: 805
+  passage: NMD2303:file:805:intra-interprof - Copy_074143.pdf
+  quote: 'Request/Recommendations: such as reassessment, order a lab/diagnostic test, prescribe/change medication.'
+- activity: 791
+  passage: NMD2303:file:791:Consent final.pdf
+  quote: Why is consent important? • To protect the patient from unauthorized procedures.
+- activity: 800
+  passage: NMD2303:file:800:Values and beliefs.pptx
+  quote: patient who is promiscuous or homosexual because They increased their chances of contracting the illness by making certain lifestyle choices.
+- activity: 805
+  passage: NMD2303:file:805:intra-interprof - Copy_074143.pdf
+  quote: 'Situation: Provide the patient’s name and location, the reason you are calling, recent vital signs, and the status of the patient.'
+- activity: 791
+  passage: NMD2303:file:791:Consent final.pdf
+  quote: 'b) Written consent: For more invasive tests or for major procedures with significant risks e.'
+- activity: 800
+  passage: NMD2303:file:800:Values and beliefs.pptx
+  quote: s, as long as this does not result in direct or indirect discrimination against, or harassment of, individual patients or groups of patients.
+- activity: 805
+  passage: NMD2303:file:805:intra-interprof - Copy_074143.pdf
+  quote: They also promote transparent communication and collaborative solutions.
+- activity: 791
+  passage: NMD2303:file:791:Consent final.pdf
+  quote: be obtained for any procedure that carries any risk, and therefore, patient-specific agreement must be obtained before the procedure starts.
+- activity: 800
+  passage: NMD2303:file:800:Values and beliefs.pptx
+  quote: sting Ramadan You may talk about your own personal beliefs only if the patient asks or directly indicates that they would welcome such input.
+- activity: 805
+  passage: NMD2303:file:805:intra-interprof - Copy_074143.pdf
+  quote: Using respectful language in difficult situations, or during conflict.
+- activity: 791
+  passage: NMD2303:file:791:Consent final.pdf
+  quote: blood transfusion ▪ breast biopsy ▪ all operations requiring general or spinal anesthesia.
+- activity: 805
+  passage: NMD2303:file:805:intra-interprof - Copy_074143.pdf
+  quote: atient such as admission date and diagnosis, current condition , recent relevant lab or diagnostic results, previous illnesses and allergies.
+- activity: 791
+  passage: NMD2303:file:791:Consent final.pdf
+  quote: c) All patients have the right to be involved in decisions about their treatment and care and to make informed decisions if they can.
+- activity: 805
+  passage: NMD2303:file:805:intra-interprof - Copy_074143.pdf
+  quote: collaboration between a pediatrician and neurosurgeon for the sake of the patient.
+- activity: 791
+  passage: NMD2303:file:791:Consent final.pdf
+  quote: d) The exchange of information between doctor and patient is essential to good decision making.
+- activity: 805
+  passage: NMD2303:file:805:intra-interprof - Copy_074143.pdf
+  quote: collaboration between physicians, nurses, pharmacists, physical therapists and the social care profession.
+- activity: 791
+  passage: NMD2303:file:791:Consent final.pdf
+  quote: dure (the patient or his guardian as in case of minor responsible about them) • If the patient does not know what the intervention entails ….
+- activity: 805
+  passage: NMD2303:file:805:intra-interprof - Copy_074143.pdf
+  quote: coordinated care by ensuring that all aspects of a patient’s condition are addressed, leading to more accurate diagnoses and treatment plans.
+- activity: 791
+  passage: NMD2303:file:791:Consent final.pdf
+  quote: e patient to decide whether he/she will accept or reject treatment, or in some circumstances request that the professional make the decision.
+- activity: 805
+  passage: NMD2303:file:805:intra-interprof - Copy_074143.pdf
+  quote: costs Interprofessional collaboration ensures more efficient resource utilization, leading to cost savings and improved resource allocation.
+- activity: 791
+  passage: NMD2303:file:791:Consent final.pdf
+  quote: ent must be freely given 3) the consent must be sufficiently specific to the procedure or treatment proposed 4) the consent must be informed.
+- activity: 805
+  passage: NMD2303:file:805:intra-interprof - Copy_074143.pdf
+  quote: ction Optimizing clinical workflows through improved interdisciplinary collaboration helps reduce burnout and improve clinician satisfaction.
+- activity: 791
+  passage: NMD2303:file:791:Consent final.pdf
+  quote: he right to be listened to, and to be given the information they need to make a decision and the time and support they need to understand it.
+- activity: 805
+  passage: NMD2303:file:805:intra-interprof - Copy_074143.pdf
+  quote: errors According to the Joint Commission, miscommunication during patient handoffs contributes to an estimated 80% of serious medical errors.
+- activity: 791
+  passage: NMD2303:file:791:Consent final.pdf
+  quote: icient information by the physician to allow him/her to make an informed decision to decide whether or not to consent to a certain procedure.
+- activity: 805
+  passage: NMD2303:file:805:intra-interprof - Copy_074143.pdf
+  quote: ess and to which those providing the care do so with sensitivity and respect for the patient’s need, expectations and individual differences.
+- activity: 791
+  passage: NMD2303:file:791:Consent final.pdf
+  quote: ients have the right to be involved in decisions about their treatment and care and be supported to make informed decisions if they are able.
+- activity: 805
+  passage: NMD2303:file:805:intra-interprof - Copy_074143.pdf
+  quote: ficant role of all members in team success, so they encourage all team members to provide feedback and participate in shared decision-making.
+- activity: 791
+  passage: NMD2303:file:791:Consent final.pdf
+  quote: 'in medical practice is needed in the following situations: 1-Examination of a patient for the purpose of diagnosis and subsequent treatment.'
+- activity: 805
+  passage: NMD2303:file:805:intra-interprof - Copy_074143.pdf
+  quote: ized as important due to the complex and dynamic nature of healthcare organizations and the growing specialization of healthcare professions.
+- activity: 791
+  passage: NMD2303:file:791:Consent final.pdf
+  quote: it is 2 way and sometimes family member , friends may be involved ) the exchange of relevant information specific to the individual patient.
+- activity: 805
+  passage: NMD2303:file:805:intra-interprof - Copy_074143.pdf
+  quote: mation is ISBARR, a mnemonic for the components of Introduction, Situation, Background, Assessment, Request/Recommendations, and Repeat back.
+- activity: 791
+  passage: NMD2303:file:791:Consent final.pdf
+  quote: 'lst others may not) • respect a person’s privacy • substitute decision making is a last resort 2) Freely given: Consent must be freely given.'
+- activity: 805
+  passage: NMD2303:file:805:intra-interprof - Copy_074143.pdf
+  quote: n healthcare providers work as a team that actively engages in addressing disagreements and responding effectively to all types of conflict .
+- activity: 791
+  passage: NMD2303:file:791:Consent final.pdf
+  quote: mily members, court- appointed guardians, or others (as determined by law) may act as "surrogate decision-makers" and make decisions for you.
+- activity: 805
+  passage: NMD2303:file:805:intra-interprof - Copy_074143.pdf
+  quote: nd acknowledge differing perspectives • communicate positively and constructively • see conflict with the potential for a positive outcome 5.
+- activity: 791
+  passage: NMD2303:file:791:Consent final.pdf
+  quote: must not be pressured, coerced or intimidated into giving consent by Health Service staff, a Health Practitioner, a carer or a family member.
+- activity: 805
+  passage: NMD2303:file:805:intra-interprof - Copy_074143.pdf
+  quote: 'ntra/ interprofessional collaboration: Competencies identified for intra/interprofessional collaboration are categorized into six domains: 1.'
+- activity: 791
+  passage: NMD2303:file:791:Consent final.pdf
+  quote: on or agreement for an intervention (whether diagnostic or therapeutic) following a process of communication about the proposed intervention.
+- activity: 805
+  passage: NMD2303:file:805:intra-interprof - Copy_074143.pdf
+  quote: of different health professionals’ fields in a responsive and responsible manner that supports a team and influence patient care positively.
+misses:
+- activity: 800
+  quote: A valid Consent is not given for illegal act as criminal abortion and euthanasia.
+  absent: NMD2303:file:791:Consent final.pdf
+- activity: 791
+  quote: According to the doctor’s personal beliefs he chooses to refrain from treating this particular individual.
+  absent: NMD2303:file:800:Values and beliefs.pptx
+- activity: 791
+  quote: It sets direction, builds a vision, and adapts as circumstances require.
+  absent: NMD2303:file:802:Leadership - Copy.pptx
+- activity: 791
+  quote: Active listening to encourage ideas and opinions of other team members.
+  absent: NMD2303:file:805:intra-interprof - Copy_074143.pdf
+- activity: 800
+  quote: A valid Informed Consent should be obtained by a health care provider who is involved with the patient's care.
+  absent: NMD2303:file:791:Consent final.pdf

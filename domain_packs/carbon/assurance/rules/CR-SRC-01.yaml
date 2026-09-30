@@ -20,6 +20,10 @@ implementation: >
 confidence: high-code
 catalogue: planned
 residual: >
-  OrgUnit for Smart Village may not exist yet. The source cannot be saved
-  without org_unit. Until that row exists, O1 stays open and the page says
-  the campus org unit is missing. Do not invent an org id.
+  Do not invent an org id. A source cannot be saved without org_unit. Covering
+  another campus, or a Scope 3 category, does not finish O1.
+target: O1
+product: Carbon on AASTMT
+evidence: Source names in benchmarks/O1-smart-village.yaml. Codes source_missing and source_covered.
+locked: 2026-09-29
+limit: Does not open O2, O3, O4, or O5. Does not invent an org id.

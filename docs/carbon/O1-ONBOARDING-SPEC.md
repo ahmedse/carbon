@@ -22,10 +22,14 @@ rule breaks. Do not treat a live GET as a suite.
 | Id | Suite | Proves |
 |----|--------|--------|
 | O1-COR-EVAL | `backend/emissions/tests/test_onboarding_o1.py` | `evaluate_o1` is pure. Two open periods emit `open_period_count` with `periods` (id, name, period_type, start_date, end_date, status) and no `summary_kg`. Zero open periods emit `periods: []`. A declared campus with an exclusion reason is `other_campus_no_status`. Factor and goal checks use `record_id`. `factor_value` and `target_coverage_pct` are absent from the JSON. |
+| O1-COR-GOAL | Same suite | A draft 1+2 tier-4 goal is chosen over an active SBTi 1+2 goal with a lower id. |
+| O1-COR-QUOTE | Same suite | `summary_kg` is copied from the linked-table summary. A period-wide mix is not that summary. `not_assured` stays unmet. |
 | O1-COR-CONTRACT | `backend/emissions/tests/test_onboarding_contract.py` | Rule files load. Catalogue is planned. `blocks_release` is empty. O1 sources and closed ids O2–P2 are in the benchmark. Twelve principles. Eight process steps. Non-GET catalog tools require confirmation. |
 | O1-USE-PAGE | `carbon-frontend/src/pages/carbon/__tests__/OnboardingPage.test.jsx` | Loading shows a skeleton. Count 0 is EmptyState. Count 2 names both periods and shows no `kg CO2e`. Missing sources name electricity and diesel. Kilograms appear only from `summary_kg`. A `factor_value` of `0.42` on the payload is not rendered. A percent sign is not rendered. Load failure shows Alert and `common:retry`. |
 | O1-USE-TWO | Same page test, count 2 | Alert severity warning with `onboarding.tooManyOpen`. Copy names Lock, not Close. Action button `onboarding.openPeriods` navigates to `/carbon/reporting/periods`. The page does not POST or lock. The lead chooses which period leaves Open. |
 | O1-USE-PERIODS | `carbon-frontend/src/pages/emissions/__tests__/ReportingPeriodsPage.test.jsx` | When two rows have `status` open, Alert severity warning with flat keys `tooManyOpenPeriods` / `tooManyOpenPeriodsHint`. It names both periods. It does not call `lockPeriod` or `closePeriod`. Close from Open stays 409 on the host. The next legal action remains Lock on the existing admin-gated control. One open period does not show this Alert. |
+| O1-USE-QUOTE | `ChairmanDashboard.test.jsx` and `InventoryCoveragePage` quote test | Chairman and Coverage warn that figures are not O1. Button goes to `/carbon/onboarding`. No POST. Coverage new-goal scope is `1+2`. `target_coverage_pct` is not 100. |
+| O1-USE-QUOTE-HEAD | Same two files, rank 4 | `--run vitest:src/pages/carbon/__tests__/ChairmanDashboard.test.jsx` and `--run vitest:src/pages/carbon/__tests__/InventoryCoveragePage.test.jsx`. A `file_contains` is not this rank. |
 | O1-SPC-GAUGE | `python -m excellence.gauge --collect --only repo,rbac,budget,design_lint,antipatterns --no-db --tier carbon` | Catalogue problems stay empty. `CARBON-ONB-OBS-05` stays failed until a real calculation-summary payload is stored. Do not `--write` this collect to claim Operated. |
 | O1-SEC-BRAND | `backend/emissions/tests/test_onboarding_api.py` | Unauthenticated GET is 401. `DJANGO_BRAND=nibras` authenticated GET is 403 with the Carbon-app message. `DJANGO_BRAND=aastmt` authenticated GET is 200 and `writes` is false. The test does not insert a period. |
 | O1-REL-RETRY | `OnboardingPage.test.jsx` `shows an alert and retry` | A rejected load shows Alert and a Retry button that calls `fetchOnboardingO1` again. There is no automatic retry. |
@@ -55,7 +59,7 @@ Nightly Pulse goldens and `people:view` for `emp_1067` are not in this plan.
 | Condition | Checklist / UI | What does not happen |
 |-----------|----------------|----------------------|
 | Zero `ReportingPeriod` with status `open` | `open_period_count` met false, count 0, `periods: []`. EmptyState. | No kilogram. No factor check. |
-| Two or more open periods | `open_period_count` met false, `periods` sorted by id. Live `carbon_dev` 29 Sep 2026: FY 2023-24 id 15 and FY 2025-26 id 16. | The checklist does not pick which period to close. |
+| Two or more open periods | `open_period_count` met false, `periods` sorted by id. | The checklist does not pick which period to Lock. |
 | One open period, dates inverted | `open_period_dates` | Period type and sources are still scored. |
 | One open period, type not `annual` | `open_period_type` | O1 does not accept quarterly. |
 | No boundary | `boundary_missing` | Campus words in a blank name are not a pass. |
@@ -71,9 +75,9 @@ Nightly Pulse goldens and `people:view` for `emp_1067` are not in this plan.
 
 There is no automatic lock or close of the extra period. Close from Open is 409
 (`test_close_invalid_transition_409`). The next legal host action is Lock
-(open → locked). After that, exactly one row may remain `status` open. The
-inventory lead chooses which period leaves Open. The onboarding page only
-navigates to `/carbon/reporting/periods`.
+(open → locked). The onboarding page only navigates to `/carbon/reporting/periods`.
+
+Host decision on `carbon_dev`, 30 Sep 2026: FY 2023-24 id 15 is the one open period, because that is the year in `smart_village_monthly_electricity.csv`. FY 2025-26 id 16 is locked. The checklist did not choose the year. The source file did.
 
 ## Budget
 
@@ -93,7 +97,7 @@ Declared, not measured as a live p95:
 | `backend/emissions/onboarding_o1.py` and its tests | `backend/ai/engine/**` |
 | `domain_packs/carbon/**` | `backend/people/**` |
 | `assurance/carbon/ladder.yaml` | `carbon-frontend/src/apps/{people,my,team}/**` |
-| `carbon-frontend/src/pages/carbon/OnboardingPage.jsx` and its test | `docs/carbon/evidence/O1-smart-village.json` until a real payload exists |
+| `carbon-frontend/src/pages/carbon/OnboardingPage.jsx` and its test | `docs/carbon/evidence/O1-smart-village.json` (the contract test fails if this file exists) |
 | `docs/carbon/O1-ONBOARDING-SPEC.md`, `docs/carbon/SCREEN-SPEC-O1-ONBOARDING.md` | A second evaluator that re-decides the rules in the browser |
 
 `evaluate_o1` is the only checklist. The React page renders codes. It does not POST. Catalogue stays planned. `blocks_release` stays empty until a fault-demonstrated event exists.
@@ -107,9 +111,10 @@ The live signal is GET `/carbon-api/carbon/onboarding/o1/` as `ahmed` on brand `
 | HTTP | 200 on AASTMT. 403 on Nibras. |
 | `writes` | `false` |
 | `benchmark` | `O1` |
-| `benchmark_status` | `open` until the evidence file exists |
+| `benchmark_status` | `passed` only when the open period is 2023-07-01 to 2024-06-30 and the linked calculations match `close` in the benchmark. Any other activity, including a filled year, stays `open`. |
 | When count ≠ 1 | `checks` has exactly one row, code `open_period_count`, and `periods` lists every open row |
-| Rank 5 file | `docs/carbon/evidence/O1-smart-village.json` stays absent until that GET returns one open period and a calculation summary with a kilogram that was not invented |
+| Live `carbon_dev` 29 Sep 2026 | `open_period_id` 16. Both O1 names covered. Diesel stream `generators`. Other campuses excluded `insufficient_data`. Factors `factor_met`. Coverage goal id 3 is draft, tier 4, 25 percent. |
+| Rank 5 | Served GET `/carbon-api/carbon/onboarding/o1/` returns `summary_kg` scope 2 `1239599.320800` and scope 1 `8040.000000`, `not_assured` met false, and does not return `405271.000000`, `5269592.116320`, `1254223.105920`, or `19456.800000`. The JSON path stays absent. |
 
 A latency SLO is not declared because none is measured.
 
@@ -130,6 +135,8 @@ body. A comment on the class is not a citation.
 | Id | Dimension | Must fail when |
 |----|-----------|----------------|
 | O1-COR-EVAL | specified, correct | Two open periods emit a kilogram or omit `periods` |
+| O1-COR-GOAL | specified, correct | An active SBTi 1+2 goal is chosen when a draft tier-4 1+2 goal exists |
+| O1-COR-QUOTE | specified, correct | `summary_kg` copies a period-wide mix, or `not_assured` is met |
 | O1-SEC-BRAND | specified, secure | Nibras returns 200, or the unauthenticated GET is 200 |
 | O1-REL-RETRY | specified, reliable | The error Alert has no Retry, or load() is called on a timer |
 | O1-PRF-STOP | specified, performant | A second check appears when the open count is not 1 |
@@ -156,6 +163,7 @@ Do not run the whole emissions app.
 | O1-REL-HEAD | reliable | `pytest:onboarding-reliable` | `test_onboarding_o1.py::EvaluateO1Tests::test_evaluate_o1_is_idempotent` |
 | O1-PRF-HEAD | performant | `pytest:onboarding-performant` | `test_two_open_periods_ignores_factors_and_summary_kg` |
 | O1-USE-HEAD | usable | `vitest:src/pages/carbon/__tests__/OnboardingPage.test.jsx` | That file only. Not a Playwright live journey. |
+| O1-USE-QUOTE-HEAD | usable | `vitest:src/pages/carbon/__tests__/ChairmanDashboard.test.jsx` and `vitest:src/pages/carbon/__tests__/InventoryCoveragePage.test.jsx` | Quote honesty only. Not a Playwright live journey. |
 | O1-MNT-HEAD | maintainable | `pytest:onboarding-maintainable` | `test_onboarding_o1_module_does_not_import_people_or_engine` |
 | O1-OBS-HEAD | observed | `pytest:onboarding-observed` | `test_zero_open_periods_is_only_a_count`, `test_aastmt_authenticated_is_read_only` |
 | O1-GOV-HEAD | governed | `pytest:onboarding-governed` | `test_onboarding_contract.py` |
@@ -191,4 +199,44 @@ manifest, not a test tree.
 | `docs/carbon/CARBON-PACK-SPEC.md` | `carbon.pack` | Test plan, roles, failure modes, budget, boundary, signal. Screen spec stays the O1 screen. `pack_contract` is named and not run by the probe. |
 | `docs/carbon/CARBON-UI-SHELL-SPEC.md` | `carbon.ui` | Manifest nav and roles. ADR-0016. Does not grade every Carbon page. |
 
-`carbon.module.emissions` stays L1. It has no rank-2 spec in this slice.
+`docs/carbon/CARBON-MODULE-SPEC.md` is rank 2 for `carbon.module.emissions`.
+`docs/carbon/SCREEN-SPEC-O1-QUOTE.md` is the chairman and coverage quote
+contract. Neither file closes O1.
+
+## Rollout
+
+`docs/carbon/O1-ROLLOUT-PLAN.md` is the sentence for staff. It does not add
+a ladder cell. It does not raise a level. It does not score
+`carbon.clearturn.tech`.
+
+`docs/carbon/O1-READINESS-AUDIT.md` is the jobs, observability, health,
+data-quality, and coverage audit. It does not change code.
+
+## Complete system
+
+Two sentences. Do not merge them.
+
+**O1 leaf working fine** means all of these are true on the same date, with
+evidence:
+
+1. Exactly one ReportingPeriod status `open` (CR-PER-01).
+2. That period has a boundary and one of the three approaches (CR-BND-01).
+3. Both O1 sources exist, or the gap is recorded (CR-SRC-01).
+4. Factors pass CR-FAC-01. The checklist omits `factor_value`.
+5. Activity quantity is above zero where a month exists. Missing months are gaps (CR-DQ-01).
+6. A person confirmed a Calculation for that period.
+7. Covered uses this period's linked tables plus that Calculation (CR-COV-01).
+8. Other campuses are declared or excluded with `insufficient_data` (CR-EXC-01).
+9. A quoted O1 kilogram is `summary_kg` from the two linked tables. The period-wide `get_calculation_summary` is not that number (CR-PULSE-01).
+10. The served GET returns that `summary_kg`. Rank 5 is that live read (`CARBON-ONB-OBS-05`). `docs/carbon/evidence/O1-smart-village.json` stays absent. A file on disk is evidence class executed and cannot be Operated.
+
+On 30 Sep 2026 the gauge collected `carbon.journey.onboarding` at L5 Operated on HEAD `e2aa038`, `--no-db`, 131 events, not written. All nine dimensions were 5. Scheduled runs `36629282256`, `36632621412`, and `36665212782` (03:37 UTC) of `.github/workflows/carbon-o1-nightly.yml` succeeded with `event=schedule` and `headSha` `e2aa038903a3827f831051a03a8e8d59be026534`. CI run `36626387201` succeeded on that same commit. The served GET quotes scope 2 `1239599.320800` kg and scope 1 `8040.000000` kg when the open period is FY 2023-24 and the rows match the source files: twelve electricity months in `smart_village_monthly_electricity.csv` (sum 2,704,187 kWh) and generators diesel 3,000 L from `smart_village_inventory_fy2324.csv`. `not_assured` stays unmet. Fleet diesel 5,161 L is in that inventory and is not the O1 stream. FY 2025-26 has no Smart Village file, so that period is locked and its × 1.018 fill is not the quote. Electricity is the twelve meter months in the Excel export. Diesel is the annual generators quantity in that inventory, not twelve monthly bills. The period-wide `get_calculation_summary` still mixes Abu Qir and South Valley. Do not call that total Smart Village. Secure, reliable, and performant rank 5 are the platform window on `/api/health/`, which is 404 here. Carbon process health is `/carbon-api/health/`. Module, UI, and pack stayed L2. The Pulse nightly is not this leaf.
+
+**Academy complete** means O2, O3, O4, O5, P1, and P2 have each passed under
+their own benchmark. O1 passing does not open them. P2 needs a named verifier.
+Corporate Standard v3 is a draft. Catalogue stays planned.
+
+**Process working** (`/carbon-api/health/` 200, Prometheus API counters) is
+neither sentence.
+
+Do not say the complete system is working fine. The onboarding journey L5 is a local collect that was not written. O2 through P2 stay closed. `carbon.clearturn.tech` has not been scored. The activity series is not a utility invoice.

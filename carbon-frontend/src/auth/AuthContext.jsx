@@ -1,7 +1,7 @@
 import React, { createContext, useState, useContext, useEffect, useMemo, useRef } from "react";
 import { API_BASE_URL, API_ROUTES } from "../config";
 import { fetchModules } from "../api/modules";
-import { apiFetch, refreshAccessToken } from "../api/api"; // <-- Add this import
+import { apiFetch, refreshAccessToken, EMBED_USER_KEY, embedPulseHost } from "../api/api";
 import { DATASCHEMA_VIEW } from "../capabilities";
 import { applyWorkspaceForUser, clearAuthStorage, resolveLandingPath } from "../shell/sessionRestore";
 
@@ -12,6 +12,24 @@ import { applyWorkspaceForUser, clearAuthStorage, resolveLandingPath } from "../
 
 // --- Auth Context ---
 const AuthContext = createContext();
+
+/** Keep the rotated access token on the session that owns this document. */
+function persistSessionUser(prev, access) {
+  if (!prev) return prev;
+  const next = { ...prev, token: access };
+  try {
+    if (embedPulseHost()) {
+      // refreshAccessToken already stored a rotated refresh on this key.
+      // Keep that refresh. Writing `prev.refresh` would blacklist it.
+      const stored = JSON.parse(sessionStorage.getItem(EMBED_USER_KEY) || "null");
+      if (stored?.refresh) next.refresh = stored.refresh;
+      sessionStorage.setItem(EMBED_USER_KEY, JSON.stringify(next));
+    } else {
+      localStorage.setItem("user", JSON.stringify(next));
+    }
+  } catch { /* ignore quota */ }
+  return next;
+}
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -158,7 +176,7 @@ export const AuthProvider = ({ children }) => {
   }, [embedHost]);
 
   useEffect(() => {
-    if (embedHost || !user) return;
+    if (embedHost || !user || user.must_change_password) return;
     fetchPerspectiveContext(user.token).catch(() => {
       console.warn("Failed to refresh perspective context on reload");
     });
@@ -187,14 +205,7 @@ export const AuthProvider = ({ children }) => {
           // Keep React `user.token` aligned with localStorage so apiFetch
           // (which prefers the React token) does not keep a stale access JWT.
           if (access) {
-            setUser((prev) => {
-              if (!prev) return prev;
-              const next = { ...prev, token: access };
-              try {
-                localStorage.setItem("user", JSON.stringify(next));
-              } catch { /* ignore quota */ }
-              return next;
-            });
+            setUser((prev) => persistSessionUser(prev, access));
           }
         } catch (err) {
           debug("Token refresh failed:", err);
@@ -223,14 +234,7 @@ export const AuthProvider = ({ children }) => {
         refreshAccessToken()
           .then((access) => {
             if (!access) return;
-            setUser((prev) => {
-              if (!prev) return prev;
-              const next = { ...prev, token: access };
-              try {
-                localStorage.setItem("user", JSON.stringify(next));
-              } catch { /* ignore */ }
-              return next;
-            });
+            setUser((prev) => persistSessionUser(prev, access));
           })
           .catch(() => {
             // Silently fail — the next API call will trigger a proper refresh or logout
@@ -255,7 +259,7 @@ export const AuthProvider = ({ children }) => {
 
   // --- Ensure a working context exists whenever the user is present ---
   useEffect(() => {
-    if (user && !context) {
+    if (user && !context && !user.must_change_password) {
       buildContext(user);
     }
     // eslint-disable-next-line
@@ -263,7 +267,7 @@ export const AuthProvider = ({ children }) => {
 
   // --- Refetch tables when context changes (or when the table-view gate flips) ---
   useEffect(() => {
-    if (user && context?.modules) {
+    if (user && context?.modules && !user.must_change_password) {
       refetchTables();
     }
     // eslint-disable-next-line
@@ -293,7 +297,24 @@ export const AuthProvider = ({ children }) => {
         body: JSON.stringify({ username, password }),
       });
       if (!res.ok) throw new Error("Invalid credentials");
-      const { access, refresh } = await res.json();
+      const { access, refresh, must_change_password: mustChange } = await res.json();
+
+      if (mustChange) {
+        const userObj = {
+          username,
+          token: access,
+          refresh,
+          roles: [],
+          must_change_password: true,
+        };
+        setUser(userObj);
+        localStorage.setItem("user", JSON.stringify(userObj));
+        localStorage.setItem("access", access);
+        localStorage.setItem("refresh", refresh);
+        loginInFlightRef.current = false;
+        setLoading(false);
+        return { requirePasswordChange: true, requireProjectSelection: true };
+      }
 
       // Fetch roles
       const rolesData = await apiFetch('accounts/my-roles/', { method: 'GET', token: access }); // fetch roles
@@ -383,7 +404,7 @@ export const AuthProvider = ({ children }) => {
       };
       setContext(ctx);
       setProjects([ctx.project]);
-      localStorage.setItem("context", JSON.stringify(ctx));
+      if (!embedHost) localStorage.setItem("context", JSON.stringify(ctx));
       setLoading(false);
       return ctx;
     } catch (err) {
@@ -425,6 +446,10 @@ export const AuthProvider = ({ children }) => {
     setTablesByModule({});
     if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
     if (refreshTimerRef.current) clearInterval(refreshTimerRef.current);
+    if (embedHost) {
+      try { sessionStorage.removeItem(EMBED_USER_KEY); } catch { /* ignore */ }
+      return;
+    }
     clearAuthStorage();
     window.location.href = `${import.meta.env.VITE_BASE}login?expired=1`;
   };
@@ -497,6 +522,16 @@ export const AuthProvider = ({ children }) => {
         acceptHostSession,
         selectProject,
         logout,
+        completePasswordChange: () => {
+          setUser((prev) => {
+            if (!prev) return prev;
+            const next = { ...prev, must_change_password: false };
+            try {
+              localStorage.setItem("user", JSON.stringify(next));
+            } catch { /* ignore quota */ }
+            return next;
+          });
+        },
         hasRole,
         canSchemaAdmin,
         canManageAllModules,
@@ -526,6 +561,7 @@ export const useAuth = () => useContext(AuthContext) || {
   login: async () => ({ requireProjectSelection: false }),
   selectProject: async () => true,
   logout: async () => {},
+  completePasswordChange: () => {},
   hasRole: () => false,
   canSchemaAdmin: () => false,
   canManageAllModules: () => false,

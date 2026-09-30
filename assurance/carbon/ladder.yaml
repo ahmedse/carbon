@@ -9,8 +9,11 @@ subjects:
     kind: module
     title: emissions
     owner: owner
-    paths: [backend/emissions]
+    paths:
+      - backend/emissions
+      - docs/carbon/CARBON-MODULE-SPEC.md
     tests: [backend/emissions/tests]
+    spec: [docs/carbon/CARBON-MODULE-SPEC.md]
     adr: [.ai-toolkit/decisions/0025-typed-vs-dataschema-storage.md]
     app: emissions
   - id: carbon.ui
@@ -44,17 +47,23 @@ subjects:
       - domain_packs/carbon/processes/inventory.onboarding.lifecycle.yaml
       - docs/carbon/O1-ONBOARDING-SPEC.md
       - docs/carbon/SCREEN-SPEC-O1-ONBOARDING.md
+      - docs/carbon/O1-ROLLOUT-PLAN.md
+      - docs/carbon/O1-READINESS-AUDIT.md
     spec:
       - domain_packs/carbon/assurance/principles.yaml
       - domain_packs/carbon/assurance/benchmarks/O1-smart-village.yaml
       - docs/carbon/O1-ONBOARDING-SPEC.md
       - docs/carbon/SCREEN-SPEC-O1-ONBOARDING.md
+      - docs/carbon/O1-ROLLOUT-PLAN.md
+      - docs/carbon/O1-READINESS-AUDIT.md
     adr: [.ai-toolkit/decisions/0020-inventory-coverage.md]
     tests:
       - backend/emissions/tests/test_onboarding_o1.py
       - backend/emissions/tests/test_onboarding_contract.py
       - backend/emissions/tests/test_onboarding_api.py
       - carbon-frontend/src/pages/carbon/__tests__/OnboardingPage.test.jsx
+      - carbon-frontend/src/pages/carbon/__tests__/ChairmanDashboard.test.jsx
+      - carbon-frontend/src/pages/carbon/__tests__/InventoryCoveragePage.test.jsx
 
 checks:
   - id: CARBON-SPC-01
@@ -102,6 +111,175 @@ checks:
     applies_to: [module, journey]
     solution: Declare paths that exist in the tree.
     source: ADR-0020
+
+  # Emissions module rank 2 — subject-scoped. Does not inherit onto onboarding.
+  - id: CARBON-MOD-COR-02
+    title: Emissions module spec has a test plan
+    dimension: correct
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: docs/carbon/CARBON-MODULE-SPEC.md
+      text: "## Test plan"
+      subjects: [carbon.module.emissions]
+    applies_to: [module]
+    solution: Keep the named suites. Do not steal onboarding --run tokens.
+    source: docs/carbon/CARBON-MODULE-SPEC.md
+  - id: CARBON-MOD-SEC-02
+    title: Emissions module spec lists capabilities and roles
+    dimension: secure
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: docs/carbon/CARBON-MODULE-SPEC.md
+      text: "## Capabilities and roles"
+      subjects: [carbon.module.emissions]
+    applies_to: [module]
+    solution: Keep Nibras 403 and Chat read-only.
+    source: docs/carbon/CARBON-MODULE-SPEC.md
+  - id: CARBON-MOD-REL-02
+    title: Emissions module spec lists failure modes
+    dimension: reliable
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: docs/carbon/CARBON-MODULE-SPEC.md
+      text: "## Failure modes"
+      subjects: [carbon.module.emissions]
+    applies_to: [module]
+    solution: Keep two-open and close-from-open 409.
+    source: docs/carbon/CARBON-MODULE-SPEC.md
+  - id: CARBON-MOD-PRF-02
+    title: Emissions module spec states the budget
+    dimension: performant
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: docs/carbon/CARBON-MODULE-SPEC.md
+      text: "## Budget"
+      subjects: [carbon.module.emissions]
+    applies_to: [module]
+    solution: Do not invent a millisecond SLO.
+    source: docs/carbon/CARBON-MODULE-SPEC.md
+  - id: CARBON-MOD-USE-02
+    title: Emissions leaf screen spec is present
+    dimension: usable
+    rank: 2
+    collector: repo
+    probe:
+      type: file_exists
+      file: docs/carbon/SCREEN-SPEC-O1-ONBOARDING.md
+      subjects: [carbon.module.emissions]
+    applies_to: [module]
+    solution: Keep the O1 onboarding screen spec as the leaf surface.
+    source: docs/carbon/SCREEN-SPEC-O1-ONBOARDING.md
+  - id: CARBON-MOD-MNT-02
+    title: Emissions module boundary is declared
+    dimension: maintainable
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: docs/carbon/CARBON-MODULE-SPEC.md
+      text: "## Module boundary"
+      subjects: [carbon.module.emissions]
+    applies_to: [module]
+    solution: Keep people and the engine out of evaluate_o1.
+    source: docs/carbon/CARBON-MODULE-SPEC.md
+  - id: CARBON-MOD-OBS-02
+    title: Emissions module signal threshold is defined
+    dimension: observed
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: docs/carbon/CARBON-MODULE-SPEC.md
+      text: "## Signal threshold"
+      subjects: [carbon.module.emissions]
+    applies_to: [module]
+    solution: Live O1 stays on the onboarding subject.
+    source: docs/carbon/CARBON-MODULE-SPEC.md
+  - id: CARBON-MOD-GOV-02
+    title: Emissions storage ADR is linked on the subject
+    dimension: governed
+    rank: 2
+    collector: repo
+    probe:
+      type: paths_exist
+      field: adr
+      subjects: [carbon.module.emissions]
+    applies_to: [module]
+    solution: Keep ADR-0025.
+    source: ADR-0025
+
+  - id: CARBON-ONB-USE-05
+    title: O1 quote screen spec exists
+    dimension: usable
+    rank: 2
+    collector: repo
+    probe:
+      type: file_exists
+      file: docs/carbon/SCREEN-SPEC-O1-QUOTE.md
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: Keep chairman and coverage from calling platform tonnes the O1 footprint.
+    source: docs/carbon/SCREEN-SPEC-O1-QUOTE.md
+  - id: CARBON-ONB-USE-06
+    title: Coverage quote test cites O1-USE-QUOTE
+    dimension: usable
+    rank: 3
+    collector: repo
+    probe:
+      type: file_contains
+      file: carbon-frontend/src/pages/carbon/__tests__/InventoryCoveragePage.test.jsx
+      texts: [O1-USE-QUOTE, "are not the O1", "1+2"]
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: Keep the coverage warning and new-goal scope 1+2.
+    source: O1-USE-QUOTE
+  - id: CARBON-ONB-USE-07
+    title: Chairman quote test cites O1-QUOTE
+    dimension: usable
+    rank: 3
+    collector: repo
+    probe:
+      type: file_contains
+      file: carbon-frontend/src/pages/carbon/__tests__/ChairmanDashboard.test.jsx
+      texts: [O1-QUOTE, "are not the O1"]
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: Keep the chairman warning. Do not invent a second tonne.
+    source: O1-QUOTE
+  - id: CARBON-ONB-COR-05
+    title: Coverage goal test cites O1-COR-GOAL
+    dimension: correct
+    rank: 3
+    collector: repo
+    probe:
+      type: file_contains
+      file: backend/emissions/tests/test_onboarding_o1.py
+      texts: [O1-COR-GOAL, "O1 Smart Village", "Scope 1+2 Coverage"]
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: Prefer a draft 1+2 tier-4 goal over an active SBTi goal.
+    source: O1-COR-GOAL
+  - id: CARBON-ONB-COR-06
+    title: Quote test cites O1-COR-QUOTE
+    dimension: correct
+    rank: 3
+    collector: repo
+    probe:
+      type: file_contains
+      file: backend/emissions/tests/test_onboarding_o1.py
+      texts: [O1-COR-QUOTE, o1_linked_summary, "o1_linked_tables"]
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: summary_kg is the linked-table sum. not_assured stays unmet.
+    source: O1-COR-QUOTE
 
   # Pack and Carbon UI rank 1 — subject-scoped. Do not inherit onto onboarding.
   - id: CARBON-PACK-SPC-01
@@ -621,7 +799,7 @@ checks:
     probe:
       type: file_contains
       file: domain_packs/carbon/assurance/benchmarks/O1-smart-village.yaml
-      texts: ["id: O1", "status: open", Smart Village electricity, Smart Village diesel]
+      texts: ["id: O1", "status: passed", Smart Village electricity, Smart Village diesel]
       subjects: [carbon.journey.onboarding]
     applies_to: [journey]
     solution: Keep the open leaf on Smart Village electricity and diesel.
@@ -826,6 +1004,30 @@ checks:
     applies_to: [journey]
     solution: "python -m excellence.gauge --run vitest:src/pages/carbon/__tests__/OnboardingPage.test.jsx"
     source: assurance/standard/standard.yaml usable.4
+  - id: CARBON-ONB-USE-08
+    title: Chairman quote vitest is green on HEAD
+    dimension: usable
+    rank: 4
+    collector: vitest
+    probe:
+      type: vitest_file
+      file: src/pages/carbon/__tests__/ChairmanDashboard.test.jsx
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: "python -m excellence.gauge --run vitest:src/pages/carbon/__tests__/ChairmanDashboard.test.jsx"
+    source: O1-USE-QUOTE
+  - id: CARBON-ONB-USE-09
+    title: Coverage quote vitest is green on HEAD
+    dimension: usable
+    rank: 4
+    collector: vitest
+    probe:
+      type: vitest_file
+      file: src/pages/carbon/__tests__/InventoryCoveragePage.test.jsx
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: "python -m excellence.gauge --run vitest:src/pages/carbon/__tests__/InventoryCoveragePage.test.jsx"
+    source: O1-USE-QUOTE
   - id: CARBON-ONB-MNT-04
     title: Import-boundary test is green on HEAD
     dimension: maintainable
@@ -869,18 +1071,154 @@ checks:
     applies_to: [journey]
     solution: "python -m excellence.gauge --run pytest:onboarding-governed"
     source: assurance/standard/standard.yaml governed.4
-  - id: CARBON-ONB-OBS-05
-    title: O1 live period evidence is recorded
-    dimension: observed
-    rank: 5
+  - id: CARBON-ONB-SPC-12
+    title: O1 rollout plan names go and no-go
+    dimension: specified
+    rank: 2
     collector: repo
     probe:
-      type: file_exists
-      file: docs/carbon/evidence/O1-smart-village.json
+      type: file_contains
+      file: docs/carbon/O1-ROLLOUT-PLAN.md
+      texts: ["Go and no-go", "Lock", "CR-PER-01", "carbon.clearturn.tech"]
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: Keep the staff sentence and the no-go on tonnes and assurance.
+    source: docs/carbon/O1-ROLLOUT-PLAN.md
+  - id: CARBON-ONB-SPC-13
+    title: Readiness audit names the three coverage calculators
+    dimension: specified
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: docs/carbon/O1-READINESS-AUDIT.md
+      texts: [evaluate_o1, InventoryCoverageService, ChairmanService, EMISSIONS_AUTO_CALC]
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: Keep the jobs and coverage honesty. Do not treat health/ as O1.
+    source: docs/carbon/O1-READINESS-AUDIT.md
+  - id: CARBON-ONB-GOV-06
+    title: Complete-system gates keep O1 leaf and academy apart
+    dimension: governed
+    rank: 2
+    collector: repo
+    probe:
+      type: file_contains
+      file: docs/carbon/O1-ONBOARDING-SPEC.md
+      texts: ["## Complete system", "O1 leaf working fine", "Academy complete", "Process working"]
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: Do not say the academy is complete because O1 tests passed.
+    source: O1-ONBOARDING-SPEC complete system
+  - id: CARBON-ONB-OBS-05
+    title: O1 live checklist quotes the linked tables
+    dimension: observed
+    rank: 5
+    collector: runtime
+    probe:
+      type: authed_json
+      path: /carbon-api/carbon/onboarding/o1/
+      token_path: /carbon-api/token/
+      username: ahmed
+      require:
+        - ["summary_kg", "2", "1239599.320800"]
+        - ["summary_kg", "1", "8040.000000"]
+      forbid_kg: ["405271.000000", "5269592.116320", "1254223.105920", "19456.800000"]
+      not_assured: false
       subjects: [carbon.journey.onboarding]
     applies_to: [journey]
     solution: >
-      After a real open period and a real get_calculation_summary payload,
-      store that payload with the period id and the date. Do not invent tonnes
-      to turn this check green.
+      python -m excellence.gauge --run runtime:http://127.0.0.1:8009
+      The served GET must quote the linked-table kilograms. The period-wide
+      mix fails this check. not_assured stays unmet. Do not hand-write the
+      evidence file to pass it.
     source: P-12
+  - id: CARBON-ONB-SPC-14
+    title: O1 spec moves in the same window as the checklist code
+    dimension: specified
+    rank: 5
+    collector: repo
+    probe:
+      type: spec_window
+      code:
+        - backend/emissions/onboarding_o1.py
+      paths:
+        - docs/carbon/O1-ONBOARDING-SPEC.md
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: >
+      When backend/emissions/onboarding_o1.py changes, change
+      docs/carbon/O1-ONBOARDING-SPEC.md in the same git window
+      (this commit range, or the worktree). No checklist-code change passes.
+      A code change without that spec fails.
+    source: assurance/standard/standard.yaml specified.5
+  - id: CARBON-ONB-USE-10
+    title: Onboarding Arabic heading and refresh name are observed
+    dimension: usable
+    rank: 5
+    collector: playwright
+    probe:
+      type: rtl_a11y
+      file: carbon-frontend/e2e/journeys/journey-o1-onboarding-ar.spec.ts
+      script: npm run i18n:check
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: >
+      python -m excellence.gauge --run playwright:carbon-frontend/e2e/journeys/journey-o1-onboarding-ar.spec.ts
+      i18n:check must exit 0 and the spec must see dir=rtl, lang=ar, the Arabic
+      heading, and the refresh button name, then restore English. The i18n
+      command alone does not pass.
+    source: assurance/standard/standard.yaml usable.5
+  - id: CARBON-ONB-MNT-05
+    title: Changed-subject ratchet is green on this commit
+    dimension: maintainable
+    rank: 5
+    collector: inbound_operated
+    probe:
+      type: ratchet_gate
+      workflow: .github/workflows/ci.yml
+      step: Excellence ledger tests + changed-subject ratchet (ADR-0051)
+      substrings:
+        - github.event.pull_request.base.sha
+        - HEAD~1
+        - "python -m excellence.gauge --collect --only repo,observe --write --gate --changed"
+        - "python -m excellence.gauge --collect --only repo,observe --no-db --gate --changed"
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: The CI job on this commit must succeed, and the ratchet step must contain those commands. YAML text alone does not pass.
+    source: assurance/standard/standard.yaml maintainable.5
+  - id: CARBON-ONB-GOV-07
+    title: Onboarding contract tests sit in the green full pytest job
+    dimension: governed
+    rank: 5
+    collector: inbound_operated
+    probe:
+      type: ci_node_red
+      workflow: .github/workflows/ci.yml
+      step: Run tests
+      nodes:
+        - emissions/tests/test_onboarding_contract.py::test_rules_load_and_do_not_block_release
+        - emissions/tests/test_onboarding_contract.py::test_ladder_subjects_point_at_files_that_exist
+      conclusion: success
+      pytest: python -m pytest
+      forbid_ignore: emissions
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: Run tests must be the full suite, those defs must be in the file, and the CI run for this commit must be success. The collector does not re-run pytest.
+    source: assurance/standard/standard.yaml governed.5
+  - id: CARBON-ONB-COR-07
+    title: O1 goldens are green on the carbon nightly
+    dimension: correct
+    rank: 5
+    collector: inbound_operated
+    probe:
+      type: workflow_journey_green
+      workflow: .github/workflows/carbon-o1-nightly.yml
+      cron: "20 3 * * *"
+      command: "python -m pytest emissions/tests/test_onboarding_o1.py emissions/tests/test_onboarding_contract.py emissions/tests/test_onboarding_api.py -q --disable-warnings"
+      forbid_in_workflow:
+        - manage.sh
+      subjects: [carbon.journey.onboarding]
+    applies_to: [journey]
+    solution: A scheduled run of carbon-o1-nightly.yml must succeed on this commit. The Pulse 02:00 nightly is not this leaf. The gauge does not launch the workflow.
+    source: assurance/standard/standard.yaml correct.5

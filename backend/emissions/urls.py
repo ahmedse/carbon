@@ -167,6 +167,7 @@ urlpatterns = [
     path('', include(coverage_action_router.urls)),
     path('coverage/', InventoryCoverageAPIView.as_view(), name='inventory-coverage'),
     path('onboarding/o1/', OnboardingO1APIView.as_view(), name='onboarding-o1'),
+
     
     # Dashboard API
     path('dashboard/', DashboardAPIView.as_view(), name='dashboard'),

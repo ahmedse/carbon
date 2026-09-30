@@ -30,6 +30,11 @@ persona: >
 
 default_app: moodle
 
+# Ask only. Plan can be added here later. Until then the turn must not
+# offer Plan, Agent, or My.
+dials:
+  - ask
+
 domain_context_enabled: false
 
 api_catalog:

@@ -45,7 +45,8 @@ export default function PulseEmbedPage() {
       .then((data) => {
         if (cancelled) return;
         setPageContext(data.page_context || '');
-        if (user?.token) return undefined;
+        // The ticket is the session Moodle just issued. A token already in
+        // sessionStorage can be an expired access from an earlier pane.
         return acceptHostSession({
           access: data.access,
           refresh: data.refresh,
@@ -61,7 +62,7 @@ export default function PulseEmbedPage() {
     return () => {
       cancelled = true;
     };
-  }, [ticket, user?.token, acceptHostSession]);
+  }, [ticket, acceptHostSession]);
 
   if (!user?.token || (ticket && exchanging && !pageContext)) {
     return (

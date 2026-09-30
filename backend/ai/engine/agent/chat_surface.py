@@ -782,7 +782,9 @@ def build_handoff_envelope(
             if isinstance(value, (dict, list)):
                 continue
             en_lab, ar_lab = field_labels_for(key)
-            rows.append([ar_lab if locale == "ar" else en_lab, str(value)])
+            # Resolve while the pack is bound. A live string cannot be stored.
+            label = str(ar_lab if locale == "ar" else en_lab)
+            rows.append([label, str(value)])
         if rows:
             tables.append({
                 "title": table_title,

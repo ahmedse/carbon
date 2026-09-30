@@ -38,9 +38,9 @@ import {
 
 function ScopeChip({ value }) {
   const cfg = {
-    '1':      { label: 'Scope 1',     color: 'error' },
+    '1':      { label: 'Scope 1',     color: 'success' },
     '2':      { label: 'Scope 2',     color: 'warning' },
-    '3':      { label: 'Scope 3',     color: 'success' },
+    '3':      { label: 'Scope 3',     color: 'primary' },
     '1+2':    { label: 'Scope 1+2',   color: 'info' },
     '1+2+3':  { label: 'Scope 1+2+3', color: 'primary' },
   };
@@ -50,8 +50,6 @@ function ScopeChip({ value }) {
       label={meta.label}
       size="small"
       color={meta.color === 'default' ? undefined : meta.color}
-      variant="outlined"
-      sx={{ height: 2.5, ...FONT.body, fontWeight: 600 }}
     />
   );
 }
@@ -89,8 +87,6 @@ function TypeChip({ value }) {
       label={meta.label}
       size="small"
       color={meta.color === 'default' ? undefined : meta.color}
-      variant="outlined"
-      sx={{ height: 2.5, ...FONT.body, fontWeight: 600 }}
     />
   );
 }

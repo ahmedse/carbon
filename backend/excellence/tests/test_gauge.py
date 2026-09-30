@@ -183,3 +183,58 @@ def test_gauge_text_renders(capsys) -> None:
     assert rc == 0
     text = capsys.readouterr().out
     assert "[pulse]" in text and "pulse.agent.planner" in text
+
+
+def test_spec_window_fails_when_code_moves_without_the_spec() -> None:
+    from excellence.catalogue import Check, Subject
+    from excellence.collectors import collect_repo
+
+    check = Check(
+        id="T-SPEC", title="window", dimension="specified", rank=5, collector="repo",
+        probe={
+            "type": "spec_window",
+            "code": ["backend/emissions/onboarding_o1.py"],
+            "paths": ["docs/spec.md"],
+        },
+    )
+    subject = Subject(id="s", kind="journey", title="s", tier="carbon")
+    missed = collect_repo(None, [(check, subject)], {"spec_names": ["backend/emissions/onboarding_o1.py"]})
+    assert missed[0].result == "failed"
+    assert missed[0].evidence_class == "enforcement-verified"
+    both = collect_repo(None, [(check, subject)], {"spec_names": [
+        "backend/emissions/onboarding_o1.py", "docs/spec.md",
+    ]})
+    assert both[0].result == "passed"
+    quiet = collect_repo(None, [(check, subject)], {"spec_names": ["docs/other.md"]})
+    assert quiet[0].result == "passed"
+    assert quiet[0].detail["no_code_diff"] is True
+
+
+def test_rtl_a11y_needs_both_the_i18n_command_and_the_spec() -> None:
+    from excellence.catalogue import Check, Subject
+    from excellence.collectors import collect_playwright
+
+    check = Check(
+        id="T-RTL", title="rtl", dimension="usable", rank=5, collector="playwright",
+        probe={
+            "type": "rtl_a11y",
+            "file": "carbon-frontend/e2e/journeys/journey-o1-onboarding-ar.spec.ts",
+            "script": "npm run i18n:check",
+        },
+    )
+    subject = Subject(id="s", kind="journey", title="s", tier="carbon")
+    quiet = collect_playwright(None, [(check, subject)], {})
+    assert quiet[0].result == "unknown"
+    missed = collect_playwright(None, [(check, subject)], {
+        "run_playwright": {check.probe["file"]},
+        "playwright_i18n_exit": 1,
+    })
+    assert missed[0].result == "failed"
+    assert missed[0].evidence_class == "enforcement-verified"
+    both = collect_playwright(None, [(check, subject)], {
+        "run_playwright": {check.probe["file"]},
+        "playwright_i18n_exit": 0,
+        "playwright_spec_exit": 0,
+    })
+    assert both[0].result == "passed"
+    assert both[0].evidence_class == "enforcement-verified"

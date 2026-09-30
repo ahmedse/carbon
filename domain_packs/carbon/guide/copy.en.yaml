@@ -1,0 +1,186 @@
+tracks:
+  D: {title: "Enter and gather data", blurb: "Your sources: find them, fill them, keep them clean."}
+  L: {title: "Run the inventory", blurb: "Open the period, declare sources, cover or exclude them."}
+  C: {title: "The period and the figure", blurb: "What an open period allows, and what a quality tier means."}
+blockers:
+  no_open_period: {title: "No open period", body: "Data entry needs exactly one open period. A carbon lead opens one on Reporting Periods."}
+  many_open_periods: {title: "More than one open period", body: "Only one period may be open at a time. A carbon lead locks or closes the others on Reporting Periods."}
+  no_source_in_scope: {title: "No source is assigned to you yet", body: "This lesson uses your own sources. A carbon lead declares them on Inventory Coverage and gives you the org unit."}
+  probe_missing: {title: "Lesson unavailable", body: "This lesson is not wired to the app yet."}
+lessons:
+  D1:
+    title: "What I owe this period"
+    know: "Data Entry lists the data products you own for the open period. Each one is a source someone counts on. A source with no rows is a gap, and the total is only as complete as its sources."
+    do: "Open Data Entry and read the list. Find the source with the fewest rows."
+    dont: "Do not enter data for a source you do not own. It will not appear in your list."
+    question: "Which page lists the data you own for this period?"
+    options:
+      - "Data Entry"
+      - "Chairman Overview"
+      - "Emission Factors"
+    explain: "Data Entry is scoped to your org units. The Chairman page shows the whole picture and Emission Factors is configuration."
+  D2:
+    title: "Enter one activity row"
+    know: "A row records one activity: litres of fuel, kWh of electricity. Enter the amount in the unit the factor expects. Your source's scope decides which factor applies."
+    do: "On Data Entry, add one row to your source and save it. The lesson completes when the row exists and you have answered."
+    dont: "Do not round or convert to another unit to look tidy. Enter what the meter or invoice says."
+    question: "Which GHG scope is {source} in?"
+    options:
+      - "Scope 1: direct emissions"
+      - "Scope 2: purchased energy"
+      - "Scope 3: value chain"
+    explain: "The scope is set when the source is declared. It decides which factor is used, so check it before you enter."
+  D3:
+    title: "Why my total didn't move"
+    know: "Saving a row records activity. It does not calculate emissions. A calculation turns rows into emissions, and it is run by someone with the calculate permission, usually the carbon lead."
+    do: "After saving a row, open Calculations. Your row shows up once a calculation has run."
+    dont: "Do not enter the row again because the total is unchanged. That doubles your activity."
+    question: "Your row is saved but the total did not move. Who runs the calculation?"
+    options:
+      - "You, by refreshing the page"
+      - "Someone with the calculate permission, usually the carbon lead"
+      - "The verifier, when they approve"
+    explain: "Entering data and calculating are separate steps with separate permissions. Ask your lead to run it."
+  D4:
+    title: "Read my quality status"
+    know: "Quality checks mark a row as passing, warning or failing. A failing row breaks a rule. A warning is a doubt worth a second look."
+    do: "Open a row with a flag and read the reason. Fix failing rows first."
+    dont: "Do not archive a failing row to make it disappear. The reason is part of the record."
+    question: "One row is failing and another is warning. What do you fix first?"
+    options:
+      - "The warning"
+      - "The failing row"
+      - "Neither, until the lead asks"
+    explain: "Failing rows break a rule and can block the period. Warnings can wait until the failures are gone."
+  D5:
+    title: "Locked or rejected: what now"
+    know: "When a period is locked, its rows are read-only. When it is rejected, the verifier's note says what to fix. In both cases the carbon lead moves the period, not you."
+    do: "Read the period status on Data Entry. If it is rejected, read the note and prepare the corrected row."
+    dont: "Do not archive and re-enter rows to get around a lock."
+    question: "The period is locked. Can you edit rows?"
+    options:
+      - "Yes, if you are quick"
+      - "No. Ask the carbon lead to reopen it"
+      - "Yes, by archiving and re-adding"
+    explain: "A lock protects what was submitted. Only the lead can move the period back to open."
+  D6:
+    title: "Hand-off to the lead"
+    know: "You supply the data. The carbon lead decides whether a source counts as covered or is excluded with a reason. Your job ends when the rows are in and clean."
+    do: "Look at your source's status in the list. If it says declared, tell your lead the rows are ready."
+    dont: "Do not mark a source excluded because it is hard to collect. That is the lead's call and needs a reason."
+    question: "Who decides that a source is covered or excluded?"
+    options:
+      - "You, as the data owner"
+      - "The carbon lead"
+      - "The chairman"
+    explain: "Coverage is an inventory decision with its own permission. The data owner supplies rows, the lead decides coverage."
+  D7:
+    title: "Bring many rows: bulk import"
+    know: "For many rows, import a file. The wizard has three steps: upload, map your columns to the table's fields, then validate. It takes one file of up to 10 MB."
+    do: "On your table choose Import, drop one file, map each column, and fix what validation flags."
+    dont: "Do not split one month across several files. Keep one file per import."
+    question: "What are the wizard's steps, in order?"
+    options:
+      - "Upload, map columns, validate"
+      - "Validate, upload, map columns"
+      - "Map columns, validate, upload"
+    explain: "You upload first, so the wizard can read your columns. Then you map them, then it validates before anything is saved."
+  C2:
+    title: "Read a period's status"
+    know: "A period moves through draft, open, locked, submitted, then verified or rejected, and finally closed. The status tells you what is allowed right now."
+    do: "Find the current period and read its status."
+    dont: "Do not assume a period is open because you can see it."
+    question: "While a period is open, what is allowed?"
+    options:
+      - "Data entry and calculation"
+      - "Nothing. It is read-only"
+      - "Only verification"
+    explain: "Open is the working state. Locking freezes it for submission and verification."
+  C3:
+    title: "Tiers and 'not assured'"
+    know: "Each source has a data quality tier from 1 (audited) to 5 (proxy). The lower the tier number, the stronger the evidence. Figures that rest on weak tiers must say so."
+    do: "Look at a source's tier in the list."
+    dont: "Do not present a Tier 4 or 5 figure as assured."
+    question: "A source is Tier 5 (proxy). How is its figure treated?"
+    options:
+      - "As assured"
+      - "Labelled 'not assured' until better data exists"
+      - "Hidden"
+    explain: "A proxy is a useful estimate, not proof. It is shown, labelled, and improved over time."
+  L2:
+    title: "One open period"
+    know: "The inventory works on exactly one open period at a time. With none, nobody can enter data. With two, totals and locks become ambiguous."
+    do: "On Reporting Periods, check that exactly one period is open. Open one if none is, lock the extras if several are."
+    dont: "Do not keep an old period open to let someone finish late entries."
+    question: "How many periods should be open?"
+    options:
+      - "Exactly one"
+      - "One per campus"
+      - "As many as needed"
+    explain: "One open period keeps entry, calculation and locking pointed at the same window."
+  L3:
+    title: "Declare sources and bind a factor"
+    know: "A source is something you must measure: a generator, a meter, a fleet. Declare it with its scope. Each source needs an active emission factor of the same scope."
+    do: "On Inventory Coverage, declare a source and confirm a factor exists for its scope."
+    dont: "Do not declare one source twice with different names."
+    question: "What must match between an activity row and its emission factor?"
+    options:
+      - "The unit, such as litres or kWh"
+      - "The table title"
+      - "The month"
+    explain: "The factor multiplies an amount in a specific unit. A mismatch gives a wrong figure or no figure."
+  L5:
+    title: "Cover or exclude, with a reason"
+    know: "Every declared source ends up covered by data, or excluded on purpose. An exclusion needs a reason: not material, insufficient data, outside the boundary, or other."
+    do: "On Inventory Coverage, mark a source covered once its table is linked, or exclude it with a reason."
+    dont: "Do not exclude a source silently. An unexplained gap looks like a mistake."
+    question: "What does excluding a source require?"
+    options:
+      - "Nothing"
+      - "A stated reason"
+      - "The chairman's approval"
+    explain: "The reason is what makes an exclusion a decision instead of an omission."
+  L1:
+    title: "Boundary first"
+    know: "The boundary says which entities count in the inventory and how they are consolidated: equity share, financial control or operational control. The open period must point to one."
+    do: "On Organizational Boundaries, check that the open period has a boundary with an approach."
+    dont: "Do not change the approach after data is entered. Every figure would silently mean something else."
+    question: "What does the boundary decide?"
+    options:
+      - "Which emission factor applies"
+      - "Which entities count and how they are consolidated"
+      - "Who may enter data"
+    explain: "Boundary is the first inventory decision. Sources, factors and totals all sit inside it."
+  L4:
+    title: "Run a calculation"
+    know: "A calculation turns activity rows into emissions using the source's factor. It is a separate permission from data entry, and every run writes an audit row saying who ran it."
+    do: "On Calculations, run the calculation for the open period, then read the run's counts: created, skipped, errors."
+    dont: "Do not run it again just to see the result faster. Read the skipped and error counts first."
+    question: "Who can see that you ran a calculation?"
+    options:
+      - "Everyone with audit access: every run is recorded with its user"
+      - "Nobody: runs are not recorded"
+      - "Only you"
+    explain: "Each run writes an audit row with the user, the time and the counts."
+  L6:
+    title: "Lock, submit, verify or reject"
+    know: "A period moves draft, open, locked, then submitted. A verifier then verifies or rejects it, and a verified period can be closed. A rejected one goes back for a fix and a new submission. Closing straight from open is refused."
+    do: "On Reporting Periods, read the period's status and name the next legal step."
+    dont: "Do not try to close a period that is still open. Lock it first."
+    question: "The period is open and data entry is finished. What is the next step?"
+    options:
+      - "Lock it"
+      - "Verify it"
+      - "Close it"
+    explain: "Open goes to locked. Verification and closing come after submission."
+  L7:
+    title: "Check the quote"
+    know: "Before you quote a total, know what it sums. The chairman page adds every calculation across all periods. The period in its header is a label, not a filter."
+    do: "Open the chairman page and compare its total with the calculations of the period you mean to quote."
+    dont: "Do not quote the header's period as the scope of the number."
+    question: "The chairman page shows a total under period X. What does that total add up?"
+    options:
+      - "Only period X"
+      - "Every calculation across all periods. The period is a label"
+      - "Only verified rows"
+    explain: "State the scope of a number in words when you quote it. The page label alone does not define it."

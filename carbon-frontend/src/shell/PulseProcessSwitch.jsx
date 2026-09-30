@@ -47,9 +47,9 @@ export default function PulseProcessSwitch({
         flexShrink: 0,
       }}
     >
-      {items.map(({ id, labelKey, ariaKey }) => {
+      {items.filter(({ id }) => !lockedIds.includes(id)).map(({ id, labelKey, ariaKey }) => {
         const selected = value === id;
-        const locked = disabled || lockedIds.includes(id);
+        const locked = disabled;
         return (
           <Box
             key={id}

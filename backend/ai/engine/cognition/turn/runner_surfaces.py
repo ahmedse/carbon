@@ -749,12 +749,30 @@ class SoftSurfacesMixin:
         from ai.engine.agent.surface import Surface
 
         on_agent = Surface.resolve(surface).may_host_mutate
+        from ai.engine.agent.surface import plan_offered
+
+        plan_on = plan_offered(instance_config)
         handoff_api = (
             str(lead.process_id or "")
             if lead is not None and lead.op == "handoff_agent" and not executed
             else ""
         )
-        if handoff_api and handoff_api != PLAN_PROCESS_ID and not on_agent:
+        known_write = handoff_api in set(write_names or ())
+        foreign_handoff = (
+            bool(handoff_api)
+            and not on_agent
+            and not known_write
+            and not (handoff_api == PLAN_PROCESS_ID and plan_on)
+        )
+        if foreign_handoff:
+            # ADR-0053: do not replace a handoff this host does not list
+            # with another host's card or with a written answer.
+            _signal(ledger, "v21_understand", False, reason="handoff_not_on_host")
+            await record("handoff_not_on_host", [])
+            return _degraded_reply(
+                ledger, Degradation("act", "handoff_not_on_host"), state, mode,
+            )
+        if handoff_api and handoff_api != PLAN_PROCESS_ID and not on_agent and known_write:
             # Chat proposes, Agent applies (ADR-0046): the model's own write
             # and args become the handoff card and seed the slots in state.
             from ai.engine.cognition.turn.handoff_agent import (
@@ -851,7 +869,9 @@ class SoftSurfacesMixin:
                         )
                         await record(cause, [])
                         return _degraded_reply(ledger, Degradation("speak", cause), state, mode)
-            elif lead.op == "handoff_agent" and (handoff_api == PLAN_PROCESS_ID or on_agent):
+            elif lead.op == "handoff_agent" and (
+                (handoff_api == PLAN_PROCESS_ID and plan_on) or on_agent
+            ):
                 planned = await self._try_plan_dial_process_plan(
                     user_message=user_message or "", process_mode=process_mode,
                     state_ctx=state_ctx, ledger=ledger, turn_id=turn_id,
@@ -870,7 +890,12 @@ class SoftSurfacesMixin:
             return None
 
         cmd0 = lead_command(decision)
-        if cmd0 is not None and cmd0.op == "handoff_agent" and str(cmd0.process_id or "") == "plan":
+        if (
+            plan_on
+            and cmd0 is not None
+            and cmd0.op == "handoff_agent"
+            and str(cmd0.process_id or "") == "plan"
+        ):
             from ai.engine.agent.chat_surface import build_plan_mode_switch_handoff
 
             switch = build_plan_mode_switch_handoff(

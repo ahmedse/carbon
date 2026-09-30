@@ -16,7 +16,8 @@ function useShortLandscape() {
 export function useIsMobile() {
   const theme = useTheme();
   const narrow = useMediaQuery(theme.breakpoints.down('sm'));
-  return narrow || useShortLandscape();
+  const shortLandscape = useShortLandscape();
+  return narrow || shortLandscape;
 }
 
 /** True phone portrait (< sm). Tablets at sm+ are false. */
@@ -30,7 +31,9 @@ export function useIsPhone() {
  * Tablets keep the desktop alongside dock (ADR-0035 tablet dock).
  */
 export function usePulseFullscreen() {
-  return useIsPhone() || useShortLandscape();
+  const phone = useIsPhone();
+  const shortLandscape = useShortLandscape();
+  return phone || shortLandscape;
 }
 
 export default useIsMobile;

@@ -253,6 +253,16 @@ def test_is_mutation_request_detects_leave_submit_en_ar():
     assert not _is_mutation_request("رصيد اجازاتي")
 
 
+def test_medicine_pack_does_not_treat_every_sentence_as_a_write():
+    from ai.engine.pack_vocab import bind_pack
+
+    with bind_pack("aast-med"):
+        assert _is_mutation_request("which course") is False
+        assert _is_mutation_request("who are you") is False
+    with bind_pack("nibras"):
+        assert _is_mutation_request("I want to request leave tomorrow") is True
+
+
 def test_is_mutation_request_ignores_reads():
     assert not _is_mutation_request("list dq rules")
     assert not _is_mutation_request("show me the emission factors")

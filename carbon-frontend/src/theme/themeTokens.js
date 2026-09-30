@@ -36,10 +36,12 @@ import {
   LocalShippingRounded,
 } from '@mui/icons-material';
 
+// Chip contract (compact-ui): Scope 1 success, Scope 2 warning, Scope 3 primary.
+// Palette names only. The theme chip overrides own the fill.
 export const SCOPE_META = {
-  1: { bg: '#e8f5e9', color: '#2e7d32', label: 'Scope 1', icon: NatureRounded },
-  2: { bg: '#e3f2fd', color: '#1565c0', label: 'Scope 2', icon: BoltRounded },
-  3: { bg: '#fff3e0', color: '#e65100', label: 'Scope 3', icon: LocalShippingRounded },
+  1: { color: 'success', label: 'Scope 1', icon: NatureRounded },
+  2: { color: 'warning', label: 'Scope 2', icon: BoltRounded },
+  3: { color: 'primary', label: 'Scope 3', icon: LocalShippingRounded },
 };
 
 import {

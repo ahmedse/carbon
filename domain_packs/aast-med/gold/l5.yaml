@@ -1,16 +1,49 @@
-# L5 is not passable. Eight fact questions are frozen. Ninety-two are not gold.
+# L5 is not passable. All 13 shortnames cite 95 of 100.
+# R11 and R12 stay at zero, so status stays not_passable.
+# The original eight NMD1103 handout cases stay in gold/c6.yaml.
 version: 1
 status: not_passable
 curriculum_benchmark:
   sample_size: 100
   min_passage_cite: 95
   max_extra_fact: 2
-  frozen_n: 8
-  deferred_n: 92
+  per: shortname
+  notice_courses: 13
+  at_bar: 13
+  handout_frozen_n: 8
+  short: {}
 enabled_courses_gold_covers:
+  - NMD1000
   - NMD1103
+  - NMD1301
+  - NMD1402
+  - NMD2101
+  - MED213
+  - NMD2303
+  - NMD2403
+  - NMD3101
+  - NMD3304
+  - NMD4201
+  - MED520
+  - MED5310
+# Local file banks. A joined body can be cited. It is not a fact question.
+file_bank_on_dev:
+  joined_bodies:
+    NMD1000: 58
+    NMD1301: 27
+    NMD1402: 16
+    NMD2101: 125
+    MED213: 14
+    NMD2303: 4
+    NMD2403: 16
+    NMD3101: 74
+    NMD3304: 10
+    NMD4201: 119
+    MED520: 31
+    MED5310: 7
 includes:
   - gold/c6.yaml
+  - gold/courses
 r11_draft:
   required_n: 4
   frozen_n: 0

@@ -1,0 +1,108 @@
+{
+  "hub": {
+    "title": "My guide",
+    "subtitle": "Short lessons for the work you actually do here",
+    "description": "Each lesson takes a few minutes and uses your own sources and your own role. Nothing here changes your data.",
+    "loadFailed": "Could not load your guide.",
+    "emptyTitle": "No lessons for you yet",
+    "emptyBody": "Lessons appear when your role gives you work in this app.",
+    "pickTitle": "Pick a lesson",
+    "pickBody": "Start with the one marked Next.",
+    "next": "Next",
+    "blocked": "Blocked",
+    "recommended": "Recommended",
+    "start": "Start",
+    "nextUp": "Next up: {{title}}",
+    "minutes": "{{count}} min",
+    "progress": "{{done}} of {{total}} done",
+    "phase": {
+      "gather": "Gathering data",
+      "close": "Analysis and close"
+    }
+  },
+  "state": {
+    "offered": "New",
+    "started": "In progress",
+    "done": "Done",
+    "snoozed": "Later"
+  },
+  "coach": {
+    "minutes": "{{count}} min",
+    "step": {
+      "know": "Know",
+      "do": "Do",
+      "check": "Check",
+      "after": "After"
+    },
+    "dont": "Do not:",
+    "openScreen": "Open the screen",
+    "fix": "Fix it",
+    "submit": "Check my answer",
+    "wrong": "Not quite. Read the Know card and try again.",
+    "waitingHost": "Your answer is right. The lesson finishes when the app shows you did it.",
+    "checkAgain": "Check again",
+    "done": "Lesson complete.",
+    "notDone": "Finish the Check card to complete this lesson.",
+    "next": "Next lesson",
+    "backToHub": "Back to my guide",
+    "back": "Back",
+    "continue": "Continue",
+    "loadFailed": "Could not load this lesson."
+  },
+  "nudge": {
+    "text": "Next lesson: {{title}} ({{count}} min)",
+    "start": "Start",
+    "later": "Later"
+  },
+  "live": {
+    "identity": {
+      "capabilities": "What your role allows",
+      "orgUnits": "Where you work",
+      "none": "None"
+    },
+    "period": {
+      "title": "Reporting period",
+      "none": "There is no reporting period yet.",
+      "openCount": "Open periods: {{count}}",
+      "status": {
+        "draft": "Draft",
+        "open": "Open",
+        "locked": "Locked",
+        "submitted": "Submitted",
+        "verified": "Verified",
+        "rejected": "Rejected",
+        "closed": "Closed"
+      }
+    },
+    "sources": {
+      "title": "Your sources",
+      "none": "No source is assigned to you yet.",
+      "scope": "Scope {{scope}}",
+      "rows_zero": "No rows",
+      "rows_one": "{{count}} row",
+      "rows_two": "{{count}} rows",
+      "rows_few": "{{count}} rows",
+      "rows_many": "{{count}} rows",
+      "rows_other": "{{count}} rows",
+      "notLinked": "No table linked yet",
+      "status": {
+        "declared": "Declared",
+        "covered": "Covered",
+        "excluded": "Excluded",
+        "passing": "Passing",
+        "warning": "Warning",
+        "failing": "Failing",
+        "no_data": "No data"
+      }
+    },
+    "boundary": {
+      "title": "Organizational boundary",
+      "none": "The open period has no boundary yet.",
+      "approach": {
+        "equity_share": "Equity share",
+        "financial_control": "Financial control",
+        "operational_control": "Operational control"
+      }
+    }
+  }
+}

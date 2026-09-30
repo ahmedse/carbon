@@ -23,7 +23,7 @@ The model already understands: G6 accuracy 0.993, parity 0.987. The intelligence
 
 0. **One capability surface.** Every chat-visible tool becomes a catalog entry: name, description, parameter schema, and `kind` from its own metadata (`requires_confirmation` → write; memory tools → memory, the ADR-0046 Chat exception; otherwise read). The executor runs a tool entry as that tool and a host entry as `call_host_api`. No name list decides which is which.
 1. **v21 finishes every op it can emit.**
-   - `answer` → one writer call (`speak_answer`) with the same ContextPack plus the retrieved knowledge and memory the draft uses today, no tools. It is grounded like every other reply.
+   - `answer` → one writer call (`speak_answer`) with the same ContextPack plus the retrieved knowledge and memory the draft uses today, no tools. It is grounded like every other reply. An answer from the conversation is spoken from the Decision itself (Amendment 1).
    - `navigate` → the navigation reply built from the Decision's target, validated against the scoped route list.
    - `set_slot` → state write plus the next clarify/confirm from state.
    - `handoff_agent process_id=plan` on the Plan dial → the planner (ADR-0055) is called *by the Decision*, not reached by fallthrough.
@@ -68,5 +68,22 @@ The model already understands: G6 accuracy 0.993, parity 0.987. The intelligence
 ## Consequences
 
 - **Positive:** One pipeline. Every Chat reply is traceable to one Decision. No code path can say "Live data summary" or swap a draft. The routing meters fall toward zero.
-- **Negative:** An understand-model outage is a visible failure, not a degraded answer (ADR-0053 already chose this). `answer` turns keep two model calls (understand + writer), the same as today's understand + draft.
+- **Negative:** An understand-model outage is a visible failure, not a degraded answer (ADR-0053 already chose this). An `answer` that needs knowledge or memory keeps two model calls (understand + writer). An answer from the conversation is one call (Amendment 1).
 - **Do NOT re-try:** A wording gate before understand. A fallthrough to "some other path that might answer". A post-hoc rewrite of model text.
+
+## Amendment 1 — the answer names its evidence (2026-09-29, C8)
+
+**Context.** Five Ask retest files on 28 Sep (0758 to 1018) show that almost every turn over 4 s made two or three model calls. The median 1-call turn took 2.5 to 3.3 s. The extra calls came from the `answer` finish:
+
+1. The `emit_decision` description said "the reply is written after this decision", and `text` had no description. The model left `text` empty, so every `answer` paid a writer call.
+2. `grounded_reply` refused the Decision's text whenever `state.last_results` had a row. The writer sees the same state block and the same history as understand, so the veto protected no evidence understand lacked.
+3. So whether retrieval ran depended on whether anything had been read earlier in the thread, not on whether the answer needed it.
+
+**Decision.** An `answer` command carries `source`:
+
+- `conversation`: the reply rests only on what the understand call was shown (identity, CONVERSATION STATE with its read digests, and the messages in this prompt). `text` is the reply, in the Decision's language. It is shown as written when it passes the same checks as writer text: not empty, the Decision's language, every figure present in that evidence, no catalog names. Otherwise the writer runs.
+- `knowledge`: the reply needs policy, documents, or facts remembered from other conversations. The writer runs with retrieval and memory, as in §1.
+
+A missing or unknown `source` is `knowledge`. Code never infers the source from wording or from unrelated state. The writer names the reply language from `Decision.language`, so an Arabic turn does not spend a wrong-language retry.
+
+**Gate.** The tests for the rule. `pulse_gauge --gate` and `pack_contract --gate` pass, with no meter rising. C8 is signed only by three consecutive live retest files on the same 19-turn bank. A model change is not a C8 pass.

@@ -54,3 +54,8 @@ residual: >
   This rule does not choose the numeric factor. If no kWh or litre factor
   exists, O1 stays open. Do not copy a factor from the July 2026 deployment
   sketch.
+target: O1
+product: Carbon on AASTMT
+evidence: Codes factor_missing, factor_inactive, factor_country, factor_source_blank, factor_met
+locked: 2026-09-29
+limit: Does not put factor_value on the checklist. Does not copy a factor from a sketch.

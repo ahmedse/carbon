@@ -1310,8 +1310,12 @@ def _ask_grounding_rules_block() -> str:
     """Ask dial: answer reads. A reviewable plan belongs on the Plan dial.
 
     Host sentences are included only when the bound pack has both halves.
-    A missing half is omitted. The write ban stays, without a foreign tool name.
+    A pack that does not supply them gets no substitute paragraph.
     """
+    writes = V("t_host_writes_leave_loan_attendance_payroll")
+    submit = V("t_rx_copy_ask_no_submit")
+    if not (writes and submit):
+        return ""
     head = (
         "GROUNDING RULES — follow them exactly:\n"
         "- You have tools available. For READS (balances, lists, profile, "
@@ -1344,26 +1348,15 @@ def _ask_grounding_rules_block() -> str:
         )
     else:
         broad = ""
-    writes = V("t_host_writes_leave_loan_attendance_payroll")
-    submit = V("t_rx_copy_ask_no_submit")
-    if writes and submit:
-        host = (
-            writes
-            + "stages or submits them. Do NOT call "
-            + submit
-            + " / mutation "
-            "call_host_api / create_dq_rule. When the user wants to submit and you "
-            "have the details, tell them to switch to Agent (you will carry the "
-            "details over) or open My — one clear next step.\n"
-        )
-    else:
-        host = (
-            "- HOST WRITES: Chat never stages or submits them. Do not call a "
-            "mutation through call_host_api or create_dq_rule. When the user "
-            "wants to submit and you have the details, tell them to switch to "
-            "Agent (you will carry the details over) or open My — one clear "
-            "next step.\n"
-        )
+    host = (
+        writes
+        + "stages or submits them. Do NOT call "
+        + submit
+        + " / mutation "
+        "call_host_api / create_dq_rule. When the user wants to submit and you "
+        "have the details, tell them to switch to Agent (you will carry the "
+        "details over) or open My — one clear next step.\n"
+    )
     tail = (
         "- If required details are missing, ask ONE short clarifying question "
         "for the missing piece only; never re-ask slots already known.\n"

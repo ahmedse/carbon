@@ -11,12 +11,9 @@ import { INSTANCE_LOGO, PLATFORM_TITLE } from "../config/branding";
 function validatePassword(password) {
   // Returns i18n key suffixes under `reset.passwordRules.*` (translated at render).
   const errors = [];
-  if (password.length < 12) errors.push("length");
-  if (!/[A-Z]/.test(password)) errors.push("uppercase");
-  if (!/[a-z]/.test(password)) errors.push("lowercase");
+  if (password.length < 10) errors.push("length");
+  if (!/[A-Za-z]/.test(password)) errors.push("letter");
   if (!/[0-9]/.test(password)) errors.push("number");
-  if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password))
-    errors.push("special");
   return errors;
 }
 

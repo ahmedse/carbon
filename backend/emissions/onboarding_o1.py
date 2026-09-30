@@ -237,13 +237,26 @@ def _sanitize_goal(row: dict) -> dict:
     return {key: row[key] for key in _GOAL_KEYS if key in row}
 
 
+def _pick_o1_goal(goals: list[dict]) -> dict | None:
+    """Prefer a draft 1+2 O1 row. Do not treat an active SBTi goal as O1."""
+    scoped = [_sanitize_goal(row) for row in goals if row.get("scope") == "1+2"]
+    if not scoped:
+        return None
+    matching = [
+        row for row in scoped
+        if row.get("completeness_definition") == "materiality_bounded"
+        and row.get("min_quality_tier") == 4
+        and row.get("status") == "draft"
+    ]
+    return min(matching or scoped, key=lambda row: row.get("id", 0))
+
+
 def _coverage_goal_checks(sources: list[dict], goals: list[dict]) -> list[dict]:
     if _source(sources, ELECTRICITY, 2) is None or _source(sources, DIESEL, 1) is None:
         return []
-    scoped = [_sanitize_goal(row) for row in goals if row.get("scope") == "1+2"]
-    if not scoped:
+    goal = _pick_o1_goal(goals)
+    if goal is None:
         return [_check("CR-COV-01", "coverage_goal_absent", False)]
-    goal = min(scoped, key=lambda row: row.get("id", 0))
     if goal.get("completeness_definition") != "materiality_bounded":
         return [_check(
             "CR-COV-01", "coverage_goal_completeness", False,
@@ -268,6 +281,19 @@ def _coverage_goal_checks(sources: list[dict], goals: list[dict]) -> list[dict]:
     )]
 
 
+def o1_linked_summary(by_scope: dict, count: int) -> dict:
+    """Copy linked-table kilogram sums. Does not read the period-wide summary."""
+    return {
+        "total_calculations": int(count or 0),
+        "by_scope": {
+            str(scope): {"total_co2e_kg": kg}
+            for scope, kg in (by_scope or {}).items()
+            if kg is not None and kg != ""
+        },
+        "quote": "o1_linked_tables",
+    }
+
+
 def _quote_checks(summary: dict | None) -> list[dict]:
     total = int((summary or {}).get("total_calculations") or 0)
     if total <= 0:
@@ -284,6 +310,78 @@ def _quote_checks(summary: dict | None) -> list[dict]:
     return rows
 
 
+def _close_block() -> dict:
+    """Source series that can move benchmark_status off open. Pack file, not a guess."""
+    from pathlib import Path
+
+    import yaml
+
+    path = Path(__file__).resolve().parents[2] / "domain_packs" / "carbon" / "assurance" / "benchmarks" / "O1-smart-village.yaml"
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    close = data.get("close") or {}
+    return close if isinstance(close, dict) else {}
+
+
+def activity_matches_close(period: dict, electricity: list[dict], diesel: list[dict], close: dict) -> bool:
+    """True when this open period's calculated rows are the source series and nothing else."""
+    window = close.get("period") or {}
+    if str(period.get("start_date") or "") != str(window.get("start_date") or ""):
+        return False
+    if str(period.get("end_date") or "") != str(window.get("end_date") or ""):
+        return False
+    expected = close.get("electricity_kwh") or {}
+    if not expected:
+        return False
+    on_period = [row for row in electricity if row.get("on_period")]
+    if len(on_period) != len(expected):
+        return False
+    seen = {}
+    for row in on_period:
+        month = str(row.get("month") or "")[:10]
+        seen[month] = row.get("kwh")
+    if set(seen) != set(expected):
+        return False
+    for month, kwh in expected.items():
+        if _decimal(seen.get(month)) != _decimal(kwh):
+            return False
+    diesel_on = [row for row in diesel if row.get("on_period")]
+    if len(diesel_on) != 1:
+        return False
+    if _decimal(diesel_on[0].get("litres")) != _decimal(close.get("diesel_litres")):
+        return False
+    return True
+
+
+def _decimal(value: Any):
+    from decimal import Decimal, InvalidOperation
+
+    if value is None or value == "":
+        return None
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        return None
+
+
+def _benchmark_status(checks: list[dict], source_backed: bool) -> str:
+    if not source_backed:
+        return "open"
+    saw_unassured = False
+    for row in checks:
+        if row.get("code") == "not_assured":
+            if row.get("met") is not False:
+                return "open"
+            saw_unassured = True
+            continue
+        if row.get("code") == "source_backed":
+            continue
+        if row.get("met") is not True:
+            return "open"
+    if not saw_unassured:
+        return "open"
+    return "passed"
+
+
 def evaluate_o1(
     *,
     periods,
@@ -293,6 +391,7 @@ def evaluate_o1(
     summary,
     factors=None,
     goals=None,
+    source_backed=False,
 ) -> dict[str, Any]:
     """Return the O1 checklist. ``summary`` kilograms are copied, never computed here."""
     periods = list(periods or [])
@@ -357,18 +456,92 @@ def evaluate_o1(
     checks.extend(_other_campus_checks(sources, statuses, period.get("id")))
     checks.extend(_factor_checks(factors))
     checks.extend(_coverage_goal_checks(sources, goals))
+    checks.append(_check("O1", "source_backed", bool(source_backed)))
 
     return {
         "benchmark": "O1",
-        "benchmark_status": "open",
+        "benchmark_status": _benchmark_status(checks, bool(source_backed)),
         "open_period_id": None if period is None else period.get("id"),
         "writes": False,
         "checks": checks,
     }
 
 
+def _summary_for_linked_o1(period_id) -> dict:
+    """Kilograms on the two O1 sources' linked tables for this period only."""
+    from django.db.models import Count, Sum
+
+    from emissions.models import Calculation, InventorySourceStatus
+
+    wanted = {ELECTRICITY: 2, DIESEL: 1}
+    by_scope: dict[int, Any] = {}
+    count = 0
+    statuses = InventorySourceStatus.objects.filter(
+        reporting_period_id=period_id,
+        status="covered",
+        source__source_name__in=wanted,
+    ).select_related("source")
+    for status_row in statuses:
+        scope = wanted.get(status_row.source.source_name)
+        if scope is None or status_row.source.scope != scope:
+            continue
+        table_ids = list(status_row.linked_tables.values_list("id", flat=True))
+        if not table_ids:
+            continue
+        agg = Calculation.objects.filter(
+            reporting_period_id=period_id,
+            data_row__data_table_id__in=table_ids,
+            scope=scope,
+        ).aggregate(kg=Sum("co2e_kg"), n=Count("id"))
+        n = int(agg["n"] or 0)
+        if agg["kg"] is None or n <= 0:
+            continue
+        by_scope[scope] = agg["kg"]
+        count += n
+    return o1_linked_summary(by_scope, count)
+
+
+def _linked_activity_matches(period: dict) -> bool:
+    """Compare calculated rows on the two O1 linked tables with the pack close series."""
+    from dataschema.models import DataRow
+    from emissions.models import Calculation, InventorySourceStatus
+
+    close = _close_block()
+    period_id = period.get("id")
+    electricity = []
+    diesel = []
+    statuses = InventorySourceStatus.objects.filter(
+        reporting_period_id=period_id,
+        status="covered",
+        source__source_name__in=(ELECTRICITY, DIESEL),
+    ).select_related("source")
+    for status_row in statuses:
+        name = status_row.source.source_name
+        scope = status_row.source.scope
+        for row in status_row.linked_tables.all():
+            for data_row in DataRow.objects.filter(data_table_id=row.id, is_archived=False):
+                values = data_row.values or {}
+                on_period = Calculation.objects.filter(
+                    data_row_id=data_row.id,
+                    reporting_period_id=period_id,
+                    scope=scope,
+                ).exists()
+                if name == ELECTRICITY and scope == 2:
+                    electricity.append({
+                        "month": str(values.get("month") or "")[:10],
+                        "kwh": values.get("total_kwh"),
+                        "on_period": on_period,
+                    })
+                elif name == DIESEL and scope == 1:
+                    diesel.append({
+                        "litres": values.get("diesel_liters"),
+                        "on_period": on_period,
+                    })
+    return activity_matches_close(period, electricity, diesel, close)
+
+
 def load_o1_inputs(user) -> dict[str, Any]:
-    """Read periods, boundaries, sources, statuses, and the calculation summary."""
+    """Read periods, boundaries, sources, statuses, and O1 linked-table kilograms."""
     from django.db.models import Count
 
     from emissions.models import (
@@ -379,7 +552,6 @@ def load_o1_inputs(user) -> dict[str, Any]:
         OrganizationalBoundary,
         ReportingPeriod,
     )
-    from emissions.services import CalculationSummaryService
 
     periods = [
         {
@@ -428,7 +600,7 @@ def load_o1_inputs(user) -> dict[str, Any]:
                 linked_table_count=Count("linked_tables"),
             )
         ]
-        summary = CalculationSummaryService.get_summary(user, period_id)
+        summary = _summary_for_linked_o1(period_id)
         factors = [
             {
                 "id": row.id,
@@ -458,6 +630,10 @@ def load_o1_inputs(user) -> dict[str, Any]:
                 "min_quality_tier", "status", "target_year",
             )
         ]
+    source_backed = False
+    if len(open_ids) == 1:
+        period_row = next(row for row in periods if row["id"] == open_ids[0])
+        source_backed = _linked_activity_matches(period_row)
     return evaluate_o1(
         periods=periods,
         boundaries=boundaries,
@@ -466,6 +642,7 @@ def load_o1_inputs(user) -> dict[str, Any]:
         summary=summary,
         factors=factors,
         goals=goals,
+        source_backed=source_backed,
     )
 
 

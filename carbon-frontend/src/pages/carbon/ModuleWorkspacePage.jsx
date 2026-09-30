@@ -1,20 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Box, Chip, IconButton, Tooltip, Typography } from '@mui/material';
+import { Chip, IconButton, Tooltip } from '@mui/material';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import { useAuth } from '../../auth/AuthContext';
 import { fetchDataSchemaTables } from '../../api/dataschema';
 import { fetchOwnerActivity } from '../../api/emissions';
-import { CarbonDataGrid, PageHeader, EmptyState, ErrorAlert, LoadingSkeleton } from '../../components';
+import { PageHeader, ErrorAlert, LoadingSkeleton } from '../../components';
+import FilteredDataGrid from '../../components/FilteredDataGrid';
+import PageContainer from '../../components/layout/PageContainer';
+import { SCOPE_META } from '../../theme/themeTokens';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { useNotes } from '../../notes/NotesContext';
 import { registerModuleInspectorTabs } from '../../inspector/tabs/moduleTabs';
-
-const SCOPE_META = {
-  1: { label: 'Scope 1', color: 'error' },
-  2: { label: 'Scope 2', color: 'warning' },
-  3: { label: 'Scope 3', color: 'info' },
-};
 
 export default function ModuleWorkspacePage() {
   useDocumentTitle("My Data Workspace");
@@ -25,6 +22,7 @@ export default function ModuleWorkspacePage() {
   const [activity, setActivity] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [tableSearch, setTableSearch] = useState('');
 
   const projectId = context?.project_id || context?.projectId;
   const module = useMemo(
@@ -56,7 +54,7 @@ export default function ModuleWorkspacePage() {
       headerName: 'Table Name',
       flex: 2,
       minWidth: 220,
-      renderCell: (params) => <Typography sx={{ fontWeight: 600 }}>{params.value || params.row.name}</Typography>,
+      renderCell: (params) => params.value || params.row.name,
     },
     {
       field: 'row_count',
@@ -81,7 +79,7 @@ export default function ModuleWorkspacePage() {
       renderCell: ({ row }) => (
         <Tooltip title="Open table data">
           <IconButton size="small" onClick={(e) => { e.stopPropagation(); navigate(`/carbon/my-data/${moduleId}/${row.id}`); }}>
-            <VisibilityIcon sx={{ fontSize: '0.9375rem' }} />
+            <VisibilityIcon fontSize="small" />
           </IconButton>
         </Tooltip>
       ),
@@ -106,41 +104,46 @@ export default function ModuleWorkspacePage() {
     return () => setContexts(null);
   }, [inspectorContext, setContexts]);
 
-  if (loading) return <LoadingSkeleton variant="detail" />;
+  if (loading) {
+    return (
+      <PageContainer>
+        <PageHeader title="Source Workspace" />
+        <LoadingSkeleton variant="detail" />
+      </PageContainer>
+    );
+  }
   if (error) return (
-    <Box>
-      <PageHeader title="Source Workspace" subtitle="Loading workspace" />
+    <PageContainer>
+      <PageHeader title="Source Workspace" />
       <ErrorAlert message={error} onRetry={() => window.location.reload()} />
-    </Box>
+    </PageContainer>
   );
 
-  return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', bgcolor: 'background.default' }}>
-      <Box sx={{ bgcolor: 'white', px: 2, pt: 1.5, pb: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
-        <PageHeader
-          title={module?.name || 'Loading...'}
-          subtitle={`${SCOPE_META[module?.scope]?.label || 'Scope'} — ${tables.length} tables, ${tables.reduce((sum, t) => sum + (t.row_count || 0), 0)} rows`}
-          description="Browse, filter, edit, and manage rows in each table. Use the inspector panel for quality checks. Add new rows or import data from CSV."
-          badge={SCOPE_META[module?.scope]?.label ? { label: SCOPE_META[module?.scope]?.label, color: SCOPE_META[module?.scope]?.color } : undefined}
-        />
-      </Box>
+  const scopeMeta = SCOPE_META[module?.scope];
 
-      <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
-        {tables.length === 0 ? (
-          <EmptyState
-            title="No tables defined for this source yet"
-            description="Contact your administrator to set up data tables."
-          />
-        ) : (
-          <CarbonDataGrid
-            rows={tables}
-            columns={columns}
-            height={420}
-            pageSize={20}
-            showColumnToggle={false}
-          />
-        )}
-      </Box>
-    </Box>
+  return (
+    <PageContainer>
+      <PageHeader
+        title={module?.name || 'Source Workspace'}
+        subtitle={`${scopeMeta?.label || 'Scope'} — ${tables.length} tables, ${tables.reduce((sum, item) => sum + (item.row_count || 0), 0)} rows`}
+        description="Browse, filter, edit, and manage rows in each table. Use the inspector panel for quality checks. Add new rows or import data from CSV."
+        badge={scopeMeta ? { label: scopeMeta.label, color: scopeMeta.color } : undefined}
+      />
+      <FilteredDataGrid
+        embedded
+        rows={tables.filter((row) => {
+          if (!tableSearch) return true;
+          const q = tableSearch.toLowerCase();
+          return (row.title || row.name || '').toLowerCase().includes(q);
+        })}
+        columns={columns}
+        searchValue={tableSearch}
+        onSearchChange={setTableSearch}
+        searchPlaceholder="Search tables…"
+        onClearFilters={() => setTableSearch('')}
+        emptyMessage="No tables defined for this source yet"
+        emptySubtext="Contact your administrator to set up data tables."
+      />
+    </PageContainer>
   );
 }

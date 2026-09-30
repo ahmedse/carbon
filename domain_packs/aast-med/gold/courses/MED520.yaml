@@ -1,0 +1,308 @@
+# Verbatim sentence from this course bank. It cites one open file, or it is refused.
+version: 1
+course: MED520
+world: aast-mbbs
+ask: According to the handout
+miss: This is not in this lecture.
+hits:
+- activity: 1105
+  passage: MED520:file:1105:Sexual dysfunction.pdf
+  quote: Almost 50% of men with known coronary artery disease have ED.
+- activity: 1107
+  passage: MED520:file:1107:Introduction to male infertility.pdf
+  quote: Causes include cystic fibrosis spectrum disease, calcifications, tuberculosis and other GU infections.
+- activity: 1109
+  passage: MED520:file:1109:Basic skin lesions  skin examination  dermatologic therapies.pdf
+  quote: 'Absorption: The skin can absorb certain substances, including some medications and chemicals.'
+- activity: 1111
+  passage: MED520:file:1111:alopecia.pdf
+  quote: A scoring system, the severity alopecia tool (SALT) has been devised to assess the severity.
+- activity: 1113
+  passage: MED520:file:1113:leukodermas.pdf
+  quote: Antibodies to normal human melanocytes have been detected using a specific immunoprecipitation assay.
+- activity: 1115
+  passage: MED520:file:1115:fungal infection.pdf
+  quote: A Diffuse scaling of the palm of one hand, with accentuation in the creases.
+- activity: 1117
+  passage: MED520:file:1117:Skin and systemic diseases.pdf
+  quote: Assess a patient presenting with pruritus, recognising potential systemic causes and ordering the appropriate investigations 2.
+- activity: 1119
+  passage: MED520:file:1119:Drug_reactions_simplified.pdf
+  quote: 'Airway Compromise: Upper airway involvement can lead to fatal asphyxiation.'
+- activity: 1120
+  passage: MED520:file:1120:Cutaneous manfestations of HIV.pdf
+  quote: Both are enveloped, single-stranded RNA lentiviruses in the Retroviridae family.
+- activity: 1122
+  passage: MED520:file:1122:Leprosy.pdf
+  quote: Bacille Calmette–Guérin (BCG) vaccination protects against leprosy.
+- activity: 1123
+  passage: MED520:file:1123:leprosy 2025.pdf
+  quote: Edema (swelling) of the hands, feet can occur.
+- activity: 1124
+  passage: MED520:file:1124:Lichen planus and pityriasis rosea final.pdf
+  quote: 'Actinic lichen planus: • Mostly in children or young adults with dark skin.'
+- activity: 1125
+  passage: MED520:file:1125:Lichen planus.pptx
+  quote: 'Clinical features Common sites : the flexor wrists and forearms , the dorsal hands, the shins, and the presacral area.'
+- activity: 1126
+  passage: MED520:file:1126:Lichen planus.pdf
+  quote: 'Clinical features • Common sites : the flexor wrists and forearms, the dorsal hands, the shins, and the presacral area.'
+- activity: 1127
+  passage: MED520:file:1127:herpes.pptx
+  quote: Clinical features of other primary herpes Primary Herpes Gladiatorum Skin infection in wrestlers or athletes with skin-to-skin contact.
+- activity: 1128
+  passage: MED520:file:1128:herpes.pdf
+  quote: Primary Herpes Gladiatorum • Skin infection in wrestlers or athletes with skin-to-skin contact.
+- activity: 1129
+  passage: MED520:file:1129:bacterial infections.pdf
+  quote: Bullous Impetigo • Less common • Often occurs in neonates (see Ch.
+- activity: 1131
+  passage: MED520:file:1131:warts.pdf
+  quote: 'Dome-shaped, hyperkeratotic papules ➢ Sites: hands, fingers, elbows, knees ➢ Black dots = hemorrhage into the stratum corneum.'
+- activity: 1133
+  passage: MED520:file:1133:urticaria.pdf
+  quote: 'Acute urticaria: urticaria present daily or almost daily for less than 6 weeks 2.'
+- activity: 1134
+  passage: MED520:file:1134:urticaria updated.pdf
+  quote: 'CSU with a known (internal) cause: no external triggers but it has an autoimmune basis.'
+- activity: 1135
+  passage: MED520:file:1135:Parasitic infestations.pdf
+  quote: A scalpel or curette or transparent adhesive tapes may be used to obtain the skin sample.
+- activity: 1137
+  passage: MED520:file:1137:syphilis and gonorrhea.pdf
+  quote: Adenopathy begins 1 or 2 weeks after the chancre appears.
+- activity: 1139
+  passage: MED520:file:1139:Acne, hidradenitis suppurativa and rosacea.pdf
+  quote: Androgen stimulation of the sebaceous glands is critical.
+- activity: 1141
+  passage: MED520:file:1141:lasers in dermatology.pdf
+  quote: Clinical applications of fractional lasers include treatment of photoaging, striae distensae, and scars.
+- activity: 1142
+  passage: MED520:file:1142:lasers in dermatology-simplified.pptx
+  quote: Clinical applications of fractional lasers include treatment of photoaging, striae distensae , and scars.
+- activity: 1143
+  passage: MED520:file:1143:eczema.pdf
+  quote: A compromised barrier allows allergens and microbes to penetrate the skin more easily.
+- activity: 1145
+  passage: MED520:file:1145:Bullous dermatoses.pdf
+  quote: A few rounded-up (acantholytic) keratinocytes are often seen within the blister cavity.
+- activity: 1147
+  passage: MED520:file:1147:lupus erythematosus, scleroderma.pdf
+  quote: 'Another classification: LE into three groups ; cutaneous LE, intermediate LE and SLE .'
+- activity: 1149
+  passage: MED520:file:1149:psoriasis.pdf
+  quote: A sharply defined edge at the wrist, forearm or palm and absence of vesiculation are helpful to distinguish from eczema.
+- activity: 1151
+  passage: MED520:file:1151:Genodermatoses-.pdf
+  quote: Cesarean birth is typical, with failure in progression of labor because of a placental sulfatase deficiency.
+- activity: 1105
+  passage: MED520:file:1105:Sexual dysfunction.pdf
+  quote: As patients age, cardiovascular diseases, hypertension, and other co-morbidities play an increasingly significant role in this condition.
+- activity: 1107
+  passage: MED520:file:1107:Introduction to male infertility.pdf
+  quote: Coital Sexual dysfunction, interference with semen deposition in vagina, lubricants may impair semen parameters.
+- activity: 1109
+  passage: MED520:file:1109:Basic skin lesions  skin examination  dermatologic therapies.pdf
+  quote: Apocrine glands are limited to the axilla, areola, nipple, skin around the anus, and external genitalia and have an odor.
+- activity: 1111
+  passage: MED520:file:1111:alopecia.pdf
+  quote: 'Alopecia areata is an autoimmune disease : • There is an increased frequency of other autoimmune diseases in patients with alopecia areata.'
+- activity: 1113
+  passage: MED520:file:1113:leukodermas.pdf
+  quote: Approximately 30% of patients have a positive family history and vitiligo has been reported in monozygotic twins.
+- activity: 1115
+  passage: MED520:file:1115:fungal infection.pdf
+  quote: Brittle or crumbly nails, sometimes with a foul odor.
+- activity: 1117
+  passage: MED520:file:1117:Skin and systemic diseases.pdf
+  quote: Cutaneous small vessel vasculitis Palpable purpura; may be widespread and/or in unusual locations .
+- activity: 1119
+  passage: MED520:file:1119:Drug_reactions_simplified.pdf
+  quote: 'Allergic/Histamine-Mediated: Epinephrine (for severe cases/shock), H1/H2 antihistamines, and corticosteroids.'
+- activity: 1120
+  passage: MED520:file:1120:Cutaneous manfestations of HIV.pdf
+  quote: Cryptococcus neoformans is an encapsulated yeast that is found worldwide in bird droppings and contaminated soil.
+- activity: 1122
+  passage: MED520:file:1122:Leprosy.pdf
+  quote: Bacilli are rarely found in the epidermis and are only excreted by untreated LL patients.
+- activity: 1123
+  passage: MED520:file:1123:leprosy 2025.pdf
+  quote: Epithelioid histiocytes and Langhans giant cells are surrounded by lymphocytes.
+- activity: 1124
+  passage: MED520:file:1124:Lichen planus and pityriasis rosea final.pdf
+  quote: Adhesion between the epidermis of the dorsal nail fold and the nail bed may cause partial destruction of the nail (pterygium unguis).
+- activity: 1125
+  passage: MED520:file:1125:Lichen planus.pptx
+  quote: Clinical features Herald patch :a solitary lesion appears on the trunk and enlarges over several days.
+- activity: 1126
+  passage: MED520:file:1126:Lichen planus.pdf
+  quote: LP • It may be erosive and non erosive • the most common site of involvement is the buccal mucosa; lesions are often bilateral and symmetric.
+- activity: 1127
+  passage: MED520:file:1127:herpes.pptx
+  quote: 'Clinical features of other primary herpes Primary Herpetic Whitlow: Painful vesicles on fingers.'
+- activity: 1128
+  passage: MED520:file:1128:herpes.pdf
+  quote: Primary Herpes Keratitis • First HSV infection of the eye.
+- activity: 1129
+  passage: MED520:file:1129:bacterial infections.pdf
+  quote: Carbuncles • are collections of furuncles that extend deep into the subcutaneous tissue.
+- activity: 1131
+  passage: MED520:file:1131:warts.pdf
+  quote: tent cervical infection with a high -risk HPV type is required for the development of cervical intraepithelial neoplasia (CIN) and carcinoma.
+- activity: 1133
+  passage: MED520:file:1133:urticaria.pdf
+  quote: Define management lines of acute and chronic urticaria 6.
+- activity: 1134
+  passage: MED520:file:1134:urticaria updated.pdf
+  quote: 'Causes of urticaria Acute urticaria : Food : fish, eggs, milk, wheat ,soy.'
+- activity: 1135
+  passage: MED520:file:1135:Parasitic infestations.pdf
+  quote: A skin biopsy may confirm the clinical diagnosis, but only if the specimen obtained happens to contain the mite or its eggs.
+- activity: 1137
+  passage: MED520:file:1137:syphilis and gonorrhea.pdf
+  quote: Because these tests use lipoidal antigens rather than T.
+- activity: 1139
+  passage: MED520:file:1139:Acne, hidradenitis suppurativa and rosacea.pdf
+  quote: Androgens, alterations in lipid composition, and an abnormal response to local cytokines are all hypothesized to be important.
+- activity: 1141
+  passage: MED520:file:1141:lasers in dermatology.pdf
+  quote: Describe principles, indications of ablative lasers Lasers Cutaneous laser surgery is a continually evolving area of dermatology.
+- activity: 1142
+  passage: MED520:file:1142:lasers in dermatology-simplified.pptx
+  quote: LASERS in Dermatology Tattoo and pigment lasers Light-tissue interaction Melanosomes are melanin-containing organelles that range from ~0.
+- activity: 1143
+  passage: MED520:file:1143:eczema.pdf
+  quote: A non -steroidal option for mild -to-moderate AD.
+- activity: 1145
+  passage: MED520:file:1145:Bullous dermatoses.pdf
+  quote: Acantholysis occurs just above the basal cell layer (suprabasilar acantholysis).
+- activity: 1147
+  passage: MED520:file:1147:lupus erythematosus, scleroderma.pdf
+  quote: 'Arthritis : Involvement of the joints occurs at some time in approximately 90% of patients, arthralgia being more common than arthritis.'
+- activity: 1149
+  passage: MED520:file:1149:psoriasis.pdf
+  quote: Accumulation of neutrophils in the stratum corneum (munro microabscesses).
+- activity: 1151
+  passage: MED520:file:1151:Genodermatoses-.pdf
+  quote: 'Cutaneous features: Age of onset: Early infancy/ first 2ys.'
+- activity: 1105
+  passage: MED520:file:1105:Sexual dysfunction.pdf
+  quote: Cyclic GMP activates protein kinase G, which opens potassium channels and closes calcium channels.
+- activity: 1107
+  passage: MED520:file:1107:Introduction to male infertility.pdf
+  quote: Cryptorchidism Cryptorchidism is a condition where one or both testicles fail to descend from the abdomen into the scrotum before birth.
+- activity: 1109
+  passage: MED520:file:1109:Basic skin lesions  skin examination  dermatologic therapies.pdf
+  quote: Arteriovenous anastomoses, provide direct connections between arterial and venous plexuses.
+- activity: 1111
+  passage: MED520:file:1111:alopecia.pdf
+  quote: Alopecia areata • Alopecia areata is a common, chronic, inflammatory disease that causes non‐scarring hair loss.
+- activity: 1113
+  passage: MED520:file:1113:leukodermas.pdf
+  quote: 'Chemical induced leukodermas: ex, phenolic compounds, sulfahydryl, arsenic, corticosteroids, azaleic acid and mercury.'
+- activity: 1115
+  passage: MED520:file:1115:fungal infection.pdf
+  quote: Can involve mucosal areas (oral thrush, vaginal candidiasis).
+- activity: 1117
+  passage: MED520:file:1117:Skin and systemic diseases.pdf
+  quote: In hypertrophic osteoarthropathy, clubbing is associated with hypertrophy of the extremities and painful pseudoinflammatory joint disease.
+- activity: 1119
+  passage: MED520:file:1119:Drug_reactions_simplified.pdf
+  quote: Angioedema Localized, non-pitting swelling of the deep skin, GI tract, or airways due to increased vascular permeability.
+- activity: 1120
+  passage: MED520:file:1120:Cutaneous manfestations of HIV.pdf
+  quote: Cutaneous manifestations are prominent, affecting up to 90% of HIV-infected persons.
+- activity: 1122
+  passage: MED520:file:1122:Leprosy.pdf
+  quote: Bacilli probably enter nerves via endoneural blood vessels .
+- activity: 1123
+  passage: MED520:file:1123:leprosy 2025.pdf
+  quote: Inflammation of nerves (neuritis), which can lead to a sudden loss of sensory or motor function if not treated quickly.
+- activity: 1124
+  passage: MED520:file:1124:Lichen planus and pityriasis rosea final.pdf
+  quote: An association with HLA‐A3 and HLA‐5 has been documented.
+- activity: 1125
+  passage: MED520:file:1125:Lichen planus.pptx
+  quote: DD ? Treatment Reassurance Antipruritic lotions or low- to medium-strength topical corticosteroids may be needed for symptomatic relief.
+- activity: 1126
+  passage: MED520:file:1126:Lichen planus.pdf
+  quote: Ulcerated oral lesions may have a higher incidence of malignant transformation in men.
+- activity: 1127
+  passage: MED520:file:1127:herpes.pptx
+  quote: PHN Molluscum contagiosum the most common poxvirus infection in humans MC lesions are firm, umbilicated, pearly papules with a waxy surface.
+- activity: 1128
+  passage: MED520:file:1128:herpes.pdf
+  quote: 'Recurrent  Herpes labialis: lip border common Predisposing Factors for Recurrent Herpes: 1.'
+- activity: 1129
+  passage: MED520:file:1129:bacterial infections.pdf
+  quote: Diagnosis and Treatment Diagnosis is clinical; Culture tests guide therapy in severe cases.
+- activity: 1133
+  passage: MED520:file:1133:urticaria.pdf
+  quote: Individual lesions may be single or multiple and may appear with dramatic suddenness.
+- activity: 1134
+  passage: MED520:file:1134:urticaria updated.pdf
+  quote: Hashimoto's thyroiditis), and rarely with chronic infections ( e.
+- activity: 1135
+  passage: MED520:file:1135:Parasitic infestations.pdf
+  quote: Antipruritic therapy • Itching may persist for up to a month, even following successful treatment.
+- activity: 1137
+  passage: MED520:file:1137:syphilis and gonorrhea.pdf
+  quote: 'Chancres generally occur singly Figure 2: Syphilitic chancre (Dermatology, 5th Edition By Jean L.'
+- activity: 1139
+  passage: MED520:file:1139:Acne, hidradenitis suppurativa and rosacea.pdf
+  quote: As the retained cells block the follicular opening, the lower portion of the follicle is dilated by entrapped sebum.
+- activity: 1141
+  passage: MED520:file:1141:lasers in dermatology.pdf
+  quote: 'Examples of indications: port-wine birthmarks, telangiectasias, erythematous scars, and hemangiomas.'
+- activity: 1142
+  passage: MED520:file:1142:lasers in dermatology-simplified.pptx
+  quote: Laser” is an acronym for L ight A mplification by S timulated E mission of R adiation.
+- activity: 1143
+  passage: MED520:file:1143:eczema.pdf
+  quote: 'Acute: Red, swollen (edematous) plaques, sometimes with tiny grouped vesicles (blisters).'
+- activity: 1145
+  passage: MED520:file:1145:Bullous dermatoses.pdf
+  quote: Bullous pemphigoid Bullous pemphigoid (BP) is the most common autoimmune subepidermal blistering disease.
+- activity: 1147
+  passage: MED520:file:1147:lupus erythematosus, scleroderma.pdf
+  quote: CCLE includes localized and generalized DLE, hypertrophic LE, lupus profundus and lupus tumidus.
+- activity: 1149
+  passage: MED520:file:1149:psoriasis.pdf
+  quote: Activated T cells are key in the pathogenesis of psoriasis.
+- activity: 1151
+  passage: MED520:file:1151:Genodermatoses-.pdf
+  quote: Describe the pathogenesis of epidermolysis bullosa, main clinical features, diagnostic tests, management lines 4.
+- activity: 1105
+  passage: MED520:file:1105:Sexual dysfunction.pdf
+  quote: Describe risk factors, pathophysiology, investigations and management lines.
+- activity: 1107
+  passage: MED520:file:1107:Introduction to male infertility.pdf
+  quote: Cryptorchidism is associated with testicular hyperthermia and possible role of genetic defect in the testis.
+- activity: 1109
+  passage: MED520:file:1109:Basic skin lesions  skin examination  dermatologic therapies.pdf
+  quote: Basic skin lesions & skin examination & dermatologic therapies SLOs By the end of this lecture, students will be able to 1.
+- activity: 1111
+  passage: MED520:file:1111:alopecia.pdf
+  quote: An intriguing feature of alopecia areata is the sparing of white hairs.
+- activity: 1113
+  passage: MED520:file:1113:leukodermas.pdf
+  quote: Complete vitiligo (universalis), although most often a few pigmented areas remain indefinitely.
+- activity: 1115
+  passage: MED520:file:1115:fungal infection.pdf
+  quote: Characteristic red, scaly patches with raised borders and central clearing.
+misses:
+- activity: 1104
+  quote: Almost 50% of men with known coronary artery disease have ED.
+  absent: MED520:file:1105:Sexual dysfunction.pdf
+- activity: 1104
+  quote: Causes include cystic fibrosis spectrum disease, calcifications, tuberculosis and other GU infections.
+  absent: MED520:file:1107:Introduction to male infertility.pdf
+- activity: 1104
+  quote: 'Absorption: The skin can absorb certain substances, including some medications and chemicals.'
+  absent: MED520:file:1109:Basic skin lesions  skin examination  dermatologic therapies.pdf
+- activity: 1104
+  quote: A scoring system, the severity alopecia tool (SALT) has been devised to assess the severity.
+  absent: MED520:file:1111:alopecia.pdf
+- activity: 1104
+  quote: Antibodies to normal human melanocytes have been detected using a specific immunoprecipitation assay.
+  absent: MED520:file:1113:leukodermas.pdf

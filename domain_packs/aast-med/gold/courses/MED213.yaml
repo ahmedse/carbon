@@ -1,0 +1,308 @@
+# Verbatim sentence from this course bank. It cites one open file, or it is refused.
+version: 1
+course: MED213
+world: aast-mbbs
+ask: According to the handout
+miss: This is not in this lecture.
+hits:
+- activity: 853
+  passage: MED213:file:853:Clinical Skills I learning guide .pdf
+  quote: Adjust to fit without leaving gaps on the sides Doffing Done Inadequate Not Done 1.
+- activity: 854
+  passage: MED213:file:854:CLINICAL SKILLS 3,4 with examinations final, 2026 final.pdf
+  quote: Ability to spell a word backward and forward III.
+- activity: 859
+  passage: MED213:file:859:Vital Signs- Pulse .docx
+  quote: Any physiological or pathological changes in the body functions would be reflected in the vital signs .
+- activity: 861
+  passage: MED213:file:861:final Measuring and recording Blood Pressure .pptx
+  quote: There is a difference in the procedure for measuring blood pressure.
+- activity: 863
+  passage: MED213:file:863:Vital Signs Radial Pulse and Arterial blood pressure (2).docx
+  quote: As the heart pushes blood through the arteries, the arteries expand and contract with the flow of the blood.
+- activity: 867
+  passage: MED213:file:867:History Taking.pptx
+  quote: Calculate the number of ‘ pack-years ‘ Ask if the patient regularly exercises and if so clarify the frequency and activity type of exercise.
+- activity: 889
+  passage: MED213:file:889:MSK-imaging  lecture, annotated .pptx
+  quote: CUN CAL TAL MSK Trauma Conventional Radiography (X-ray) Fractures Fractures Displacement – Angulation - Impaction Intra-articular extension.
+- activity: 895
+  passage: MED213:file:895:EEG revision.pptx
+  quote: EEG Rhythms Recording Brain Waves Recording an EEG is relatively simple, noninvasive, and it is painless.
+- activity: 896
+  passage: MED213:file:896:EMG 2025-26.pptx
+  quote: Background A compound muscle action potential is the sum of all action potentials occurring in individual muscle fibers of the whole muscle.
+- activity: 897
+  passage: MED213:file:897:2025 Brain rhythm.pptx
+  quote: Apply pressure to the electrodes for about 1 minute after the initial placement.
+- activity: 898
+  passage: MED213:file:898:revision EMG .pptx
+  quote: It is calculated by the time needed until amplitude of the curve has decreased by -------- 3- Name the instrument used in the patient hand?
+- activity: 1563
+  passage: MED213:page:1563
+  quote: Your goal is to differentiate between the normal heart sound and the abnormal one.
+- activity: 853
+  passage: MED213:file:853:Clinical Skills I learning guide .pdf
+  quote: Apply a palm-full of the product in a cupped hand, covering all surfaces 2.
+- activity: 854
+  passage: MED213:file:854:CLINICAL SKILLS 3,4 with examinations final, 2026 final.pdf
+  quote: 'Abnormalities: Hyposmia (decreased sense of smell) or anosmia (inability to smell).'
+- activity: 859
+  passage: MED213:file:859:Vital Signs- Pulse .docx
+  quote: As the heart pushes blood through the arteries, the arteries expand and contract with the blood flow .
+- activity: 861
+  passage: MED213:file:861:final Measuring and recording Blood Pressure .pptx
+  quote: Why do we use Stethoscope? Stethoscope Try to put your stethoscope on your radial or brachial artery would you hear anything?
+- activity: 863
+  passage: MED213:file:863:Vital Signs Radial Pulse and Arterial blood pressure (2).docx
+  quote: 'CP: Competently performed P A performed with A ssistance NP ( not done) II.'
+- activity: 867
+  passage: MED213:file:867:History Taking.pptx
+  quote: Have you noticed any side effects from the medication you currently take?
+- activity: 889
+  passage: MED213:file:889:MSK-imaging  lecture, annotated .pptx
+  quote: Computed radiography ( CT ) Excellent demonstration of osseous structures.
+- activity: 895
+  passage: MED213:file:895:EEG revision.pptx
+  quote: Electro Electrical encephalo Brain gram Picture Beta waves are observed in all age groups.
+- activity: 896
+  passage: MED213:file:896:EMG 2025-26.pptx
+  quote: Because each motor unit generate less force, many motor units must fire to generate a small amount of force.
+- activity: 897
+  passage: MED213:file:897:2025 Brain rhythm.pptx
+  quote: As soon as Subject stops hyperventilating and is sitting still, Click Record immediately.
+- activity: 898
+  passage: MED213:file:898:revision EMG .pptx
+  quote: Revision Difference between Normal/ Neuropathy / Myopathy 1- This tracing represents the ------------ of the clenched muscle.
+- activity: 853
+  passage: MED213:file:853:Clinical Skills I learning guide .pdf
+  quote: Apply all infection control measures to perform aseptic urinary catheter insertion.
+- activity: 854
+  passage: MED213:file:854:CLINICAL SKILLS 3,4 with examinations final, 2026 final.pdf
+  quote: Also, observe the position of the eyes for any exophthalmos (proptosis) or enophthalmos.
+- activity: 859
+  passage: MED213:file:859:Vital Signs- Pulse .docx
+  quote: Exercises, some illnesses and emotions could increase the heart rate.
+- activity: 861
+  passage: MED213:file:861:final Measuring and recording Blood Pressure .pptx
+  quote: fter 5 minutes rest Back , leg and arm supported Ask the patients to expose the right arm by rolling up their sleeves What is blood pressure?
+- activity: 863
+  passage: MED213:file:863:Vital Signs Radial Pulse and Arterial blood pressure (2).docx
+  quote: Exercises, some illness and emotions could increase the heart rate.
+- activity: 867
+  passage: MED213:file:867:History Taking.pptx
+  quote: Past History Why is it important to take past history ?
+- activity: 889
+  passage: MED213:file:889:MSK-imaging  lecture, annotated .pptx
+  quote: MD Assistant professor and chest imaging consultant in department of Radio-diagnosis, faculty of Medicine, Alexandria University.
+- activity: 895
+  passage: MED213:file:895:EEG revision.pptx
+  quote: Electrode EEG Features of Normal Wakefulness- sleep in Adults Alpha waves generally are seen in all age groups but are most common in adults.
+- activity: 896
+  passage: MED213:file:896:EMG 2025-26.pptx
+  quote: Begin with a weak clench , then increase grip so the fourth clench is at maximum.
+- activity: 897
+  passage: MED213:file:897:2025 Brain rhythm.pptx
+  quote: Blinking and other movement will affect the recording of all four rhythms.
+- activity: 898
+  passage: MED213:file:898:revision EMG .pptx
+  quote: Student Lab by clenching muscles of the dominant arm of a subject 1- In this test, what we have asked the patient to do to have this tracing?
+- activity: 853
+  passage: MED213:file:853:Clinical Skills I learning guide .pdf
+  quote: Apply enough soap to cover all hand surfaces 3.
+- activity: 854
+  passage: MED213:file:854:CLINICAL SKILLS 3,4 with examinations final, 2026 final.pdf
+  quote: 'Appropriateness, Intensity, Mood (Experience and Expression) Behavior (expression): Aggressive, assertive, passive, and passive aggressive.'
+- activity: 859
+  passage: MED213:file:859:Vital Signs- Pulse .docx
+  quote: On the other hand, runners who do a lot of cardiovascular conditions may have a slower heart rate of 40 beats per minute.
+- activity: 861
+  passage: MED213:file:861:final Measuring and recording Blood Pressure .pptx
+  quote: ic blood pressure Palpate the patient’s radial pulse Inflate the blood pressure cuff until you can no longer feel the patient's radial pulse.
+- activity: 863
+  passage: MED213:file:863:Vital Signs Radial Pulse and Arterial blood pressure (2).docx
+  quote: If the patient has a history of postural hypotension.
+- activity: 867
+  passage: MED213:file:867:History Taking.pptx
+  quote: Predict course and possible complication of the disease N arrow differential diagnosis What are the items of past History ?
+- activity: 889
+  passage: MED213:file:889:MSK-imaging  lecture, annotated .pptx
+  quote: MSK ultrasound Allows ultrasound guided aspiration, biopsy or injection.
+- activity: 895
+  passage: MED213:file:895:EEG revision.pptx
+  quote: K complex Sleep spindle Questions Identify the wave.
+- activity: 896
+  passage: MED213:file:896:EMG 2025-26.pptx
+  quote: ELECTROMYOGRAGHY What tests can we do with EMG?
+- activity: 897
+  passage: MED213:file:897:2025 Brain rhythm.pptx
+  quote: Continue recording and observe the corresponding plot, primarily expressing alpha rhythm, for one or two minutes.
+- activity: 898
+  passage: MED213:file:898:revision EMG .pptx
+  quote: d by Biopac Student Lab by stimulating the abductor carpi ulnaris muscle of the non dominant arm 1- The letter “a” represents --------------.
+- activity: 853
+  passage: MED213:file:853:Clinical Skills I learning guide .pdf
+  quote: Backs of fingers to opposing palms with fingers interlocked 6.
+- activity: 854
+  passage: MED213:file:854:CLINICAL SKILLS 3,4 with examinations final, 2026 final.pdf
+  quote: Ask the patient to name five things that start with a particular letter.
+- activity: 859
+  passage: MED213:file:859:Vital Signs- Pulse .docx
+  quote: 'Pulse Rate: is measuring heartbeat by palpating a peripheral artery with the fingertip.'
+- activity: 861
+  passage: MED213:file:861:final Measuring and recording Blood Pressure .pptx
+  quote: manometer These devices use an electronic pressure sensor to measure the blood pressure, and the readings are presented on a digital display.
+- activity: 863
+  passage: MED213:file:863:Vital Signs Radial Pulse and Arterial blood pressure (2).docx
+  quote: Measuring Blood Pressure Auscultatory Method Place the stethoscope over the brachial artery pulse, ensuring that it does not touch the cuff.
+- activity: 867
+  passage: MED213:file:867:History Taking.pptx
+  quote: 'ations: prescriptions, over-the-counter, herbal remedies “Are you currently taking any prescribed medications or over-the-counter treatments?'
+- activity: 889
+  passage: MED213:file:889:MSK-imaging  lecture, annotated .pptx
+  quote: Magnetic Resonance Imaging (MRI ) Excellent soft tissue differentiation.
+- activity: 895
+  passage: MED213:file:895:EEG revision.pptx
+  quote: THANK YOU Collective synchronous activity of thousands of neurons are needed to create an EEG wave.
+- activity: 896
+  passage: MED213:file:896:EMG 2025-26.pptx
+  quote: EMG is performed using an instrument called an electromyograph to produce a record called an electromyogram.
+- activity: 897
+  passage: MED213:file:897:2025 Brain rhythm.pptx
+  quote: Electro Electrical encephalo Brain gram Picture Collective synchronous activity of thousands of neurons are needed to create an EEG wave.
+- activity: 898
+  passage: MED213:file:898:revision EMG .pptx
+  quote: ere recorded by Biopac Student Lab by clenching muscles of the dominant arm of a subject 1- These tracings represent the record of ---------.
+- activity: 853
+  passage: MED213:file:853:Clinical Skills I learning guide .pdf
+  quote: Backs of fingers to opposing palms with fingers interlocked 7.
+- activity: 854
+  passage: MED213:file:854:CLINICAL SKILLS 3,4 with examinations final, 2026 final.pdf
+  quote: Ask the patient to rename days of week backward.
+- activity: 859
+  passage: MED213:file:859:Vital Signs- Pulse .docx
+  quote: 'Pulse could be recorded from accessible arteries such as: Carotid Temporal Brachial Radial How to measure Radial pulse ?'
+- activity: 861
+  passage: MED213:file:861:final Measuring and recording Blood Pressure .pptx
+  quote: omanometer Mercury Sphygmomanometer Are made up of manually inflatable cuffs that are attached to measuring units with mercury-infused tubes.
+- activity: 863
+  passage: MED213:file:863:Vital Signs Radial Pulse and Arterial blood pressure (2).docx
+  quote: 'Measuring Blood Pressure STEP/TASK CP AP NP Getting ready: Wash your hand Introduce yourself to the patient.'
+- activity: 889
+  passage: MED213:file:889:MSK-imaging  lecture, annotated .pptx
+  quote: 'Musculo -skeletal (loco-motor system) imaging: Techniques with Anatomy and pathology for the under-graduates Prepared by: Dr.'
+- activity: 896
+  passage: MED213:file:896:EMG 2025-26.pptx
+  quote: 'Early recruitment Q1 : The following EMG and hand dynamometer graphs were done in a grip-strength experiment.'
+- activity: 897
+  passage: MED213:file:897:2025 Brain rhythm.pptx
+  quote: 'Example: Count backward from 30 by subtracting increasing odd numbers (e.'
+- activity: 853
+  passage: MED213:file:853:Clinical Skills I learning guide .pdf
+  quote: Develop, implement, monitor, and revise a personal learning plan to enhance professional practice•6.
+- activity: 854
+  passage: MED213:file:854:CLINICAL SKILLS 3,4 with examinations final, 2026 final.pdf
+  quote: Cranial nerve III innervates the superior rectus, medial rectus, inferior oblique and inferior rectus muscles.
+- activity: 859
+  passage: MED213:file:859:Vital Signs- Pulse .docx
+  quote: 'STEP CP PA NP Getting ready Prepare equipment: Watch or clock with a counter for seconds.'
+- activity: 861
+  passage: MED213:file:861:final Measuring and recording Blood Pressure .pptx
+  quote: to get actual systolic and diastolic reading Place the stethoscope over the brachial artery pulse, ensuring that it does not touch the cuff.
+- activity: 863
+  passage: MED213:file:863:Vital Signs Radial Pulse and Arterial blood pressure (2).docx
+  quote: Measuring blood pressure Position the BP measuring device so that it is roughly at the level of the patient’s heart.
+- activity: 889
+  passage: MED213:file:889:MSK-imaging  lecture, annotated .pptx
+  quote: Understand the different pathological entities which affect the musculo -skeletal system in their appropriate imaging modalities.
+- activity: 896
+  passage: MED213:file:896:EMG 2025-26.pptx
+  quote: Experiment 3 Record nerve conduction Muscle power and muscle fatigue can be recorded by combining electromyography with dynamometry.
+- activity: 897
+  passage: MED213:file:897:2025 Brain rhythm.pptx
+  quote: However, to avoid EMG artifact, make sure Subject has stopped hyperventilating prior to clicking Record.
+- activity: 853
+  passage: MED213:file:853:Clinical Skills I learning guide .pdf
+  quote: Discuss the different items of history; family history, medical history, drug history, and social history.
+- activity: 854
+  passage: MED213:file:854:CLINICAL SKILLS 3,4 with examinations final, 2026 final.pdf
+  quote: Cranial nerve IV innervates the superior oblique muscle and cranial nerve VI innervates the lateral rectus muscle.
+- activity: 859
+  passage: MED213:file:859:Vital Signs- Pulse .docx
+  quote: 'roviders include: Body temperature Pulse rate Breathing rate (respiration) Blood pressure We will start by pulse rate What is the pulse rate?'
+- activity: 863
+  passage: MED213:file:863:Vital Signs Radial Pulse and Arterial blood pressure (2).docx
+  quote: Note the reading on the sphygmomanometer at the point at which the radial pulse becomes impalpable.
+- activity: 889
+  passage: MED213:file:889:MSK-imaging  lecture, annotated .pptx
+  quote: ioclavicular joint MEDIAL Sternoclavicular joint Shoulder - XRay Objectives Be able to identify the bones of the upper and lower extremities.
+- activity: 896
+  passage: MED213:file:896:EMG 2025-26.pptx
+  quote: Fibrillations and positive sharp waves are potentials that are generated by individual muscle fibers.
+- activity: 897
+  passage: MED213:file:897:2025 Brain rhythm.pptx
+  quote: Inform the Subject that he will be asked to perform mental math.
+- activity: 853
+  passage: MED213:file:853:Clinical Skills I learning guide .pdf
+  quote: Don and doff personal protective equipment in the right way.
+- activity: 854
+  passage: MED213:file:854:CLINICAL SKILLS 3,4 with examinations final, 2026 final.pdf
+  quote: Cranial nerves II, III, IV and VI relate to the eye and the VIII nerve to hearing and balance.
+- activity: 859
+  passage: MED213:file:859:Vital Signs- Pulse .docx
+  quote: suring Radial Pulse before clinical skills session on Vital Signs Radial Pulse Vital signs are indicators of the basic functions of the body.
+- activity: 863
+  passage: MED213:file:863:Vital Signs Radial Pulse and Arterial blood pressure (2).docx
+  quote: On the other hand, runners who do a lot of cardiovascular conditions may have slower heart rate with 40 beats per minute.
+- activity: 889
+  passage: MED213:file:889:MSK-imaging  lecture, annotated .pptx
+  quote: ng Anatomy Pelvis – X-Ray AP Hip – X-ray AP Hip – X-ray Frog Leg Conventional Radiography (X-ray) Initial modality in almost all indications.
+- activity: 896
+  passage: MED213:file:896:EMG 2025-26.pptx
+  quote: In myopathic disorders, abnormal spontaneous potentials such as fibrillations and positive sharp waves are seen.
+- activity: 897
+  passage: MED213:file:897:2025 Brain rhythm.pptx
+  quote: Press the F9 key to insert a marker while telling the Subject to open his eyes.
+- activity: 853
+  passage: MED213:file:853:Clinical Skills I learning guide .pdf
+  quote: Exhibit commitment to quality improvement and patient’s safety.
+- activity: 854
+  passage: MED213:file:854:CLINICAL SKILLS 3,4 with examinations final, 2026 final.pdf
+  quote: Detect any nystagmus in the position of rest.
+- activity: 859
+  passage: MED213:file:859:Vital Signs- Pulse .docx
+  quote: ust medial to the distal radius and proximal to the patient’s wrist on the thumb side, about two centimeters proximal to the thenar eminence.
+- activity: 863
+  passage: MED213:file:863:Vital Signs Radial Pulse and Arterial blood pressure (2).docx
+  quote: Palpatory method Palpate the patient’s radial pulse, Inflate the blood pressure cuff until you can no longer feel the patient's radial pulse.
+- activity: 889
+  passage: MED213:file:889:MSK-imaging  lecture, annotated .pptx
+  quote: osteo -arthritis Sero -negative arthritis → Ankylosing spondylitis Thank you MSK ultrasound Excellent for superficial soft tissue structures.
+- activity: 896
+  passage: MED213:file:896:EMG 2025-26.pptx
+  quote: Integrated EMG is an alternative view of the EMG signal that shows a more accurate pattern of muscle activity.
+- activity: 897
+  passage: MED213:file:897:2025 Brain rhythm.pptx
+  quote: Recording steps Instruct the Subject to relax with eyes closed, not thinking about anything (not fixing attention on any mental object).
+- activity: 853
+  passage: MED213:file:853:Clinical Skills I learning guide .pdf
+  quote: Explore opportunities and use various resources for learning.
+- activity: 854
+  passage: MED213:file:854:CLINICAL SKILLS 3,4 with examinations final, 2026 final.pdf
+  quote: 'Examination: Ask the patient to close his eye.'
+misses:
+- activity: 854
+  quote: Adjust to fit without leaving gaps on the sides Doffing Done Inadequate Not Done 1.
+  absent: MED213:file:853:Clinical Skills I learning guide .pdf
+- activity: 853
+  quote: Ability to spell a word backward and forward III.
+  absent: MED213:file:854:CLINICAL SKILLS 3,4 with examinations final, 2026 final.pdf
+- activity: 853
+  quote: Any physiological or pathological changes in the body functions would be reflected in the vital signs .
+  absent: MED213:file:859:Vital Signs- Pulse .docx
+- activity: 853
+  quote: There is a difference in the procedure for measuring blood pressure.
+  absent: MED213:file:861:final Measuring and recording Blood Pressure .pptx
+- activity: 853
+  quote: As the heart pushes blood through the arteries, the arteries expand and contract with the flow of the blood.
+  absent: MED213:file:863:Vital Signs Radial Pulse and Arterial blood pressure (2).docx

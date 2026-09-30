@@ -177,6 +177,7 @@ const CARBON_ITEM_ICONS = {
   'Base Years':               HistoryIcon,
   'Inventory Coverage':       TrackChangesIcon,
   'Inventory onboarding':     AssignmentTurnedInIcon,
+  'My guide':                 SchoolIcon,
 };
 
 // People HRMS — filled / distinct glyphs (avoid thin-outline twins)

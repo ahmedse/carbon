@@ -16,6 +16,7 @@ repo (default)
     def_contains {file, def, text|texts}  needles must sit in that function body
     forbidden_import {root, names} non-test modules under root import none of names
     process_yaml                  subject.process file exists and parses
+    spec_window {code, paths}     git: a code change in the window includes a spec path
 antipatterns
     verify_antipatterns           .ai-toolkit/scripts/verify.sh antipatterns (exit 0)
 pulse_gauge
@@ -27,6 +28,9 @@ pytest
     pytest_app {app, nodes}       runs one app, or the listed node ids, when --run names app
 vitest
     vitest_file {file}            one frontend test file (only when --run vitest:<path>)
+playwright
+    journey {file}                one spec, evidence executed, only when --run names it
+    rtl_a11y {file, script}       i18n command and that spec; enforcement-verified. The command alone does not pass.
 observe
     ci_files                      subject.ci paths exist
     runbook_files                 subject.runbook paths exist
@@ -153,6 +157,78 @@ def _forbidden_imports(root: Path, names: list[str], skip_tests: bool) -> list[s
     return offenders
 
 
+def _spec_under(path: str, roots: list[str]) -> bool:
+    path = path.replace("\\", "/").lstrip("./")
+    for root in roots:
+        root = root.replace("\\", "/").strip("/")
+        if path == root or path.startswith(root + "/"):
+            return True
+    return False
+
+
+def _git_names(args: list[str]) -> tuple[int, list[str]]:
+    try:
+        proc = subprocess.run(
+            ["git", *args], cwd=REPO_ROOT, capture_output=True, text=True, check=False,
+        )
+    except OSError:
+        return 1, []
+    if proc.returncode != 0:
+        return proc.returncode, []
+    return 0, [line.strip() for line in proc.stdout.splitlines() if line.strip()]
+
+
+def _spec_window_names(ctx: dict[str, Any]) -> list[str] | None:
+    """Committed range plus the worktree. Injected names skip git."""
+    injected = ctx.get("spec_names")
+    if injected is not None:
+        return [str(path) for path in injected]
+    base = str(os.environ.get("GITHUB_BASE_SHA") or "HEAD~1")
+    names: set[str] = set()
+    for args in (
+        ["diff", "--name-only", "HEAD"],
+        ["diff", "--name-only", f"{base}...HEAD"],
+        ["ls-files", "--others", "--exclude-standard"],
+    ):
+        code, found = _git_names(args)
+        if code != 0:
+            return None
+        names.update(found)
+    return sorted(names)
+
+
+def _spec_window_draft(check: Check, subject: Subject, ctx: dict[str, Any]) -> EventDraft:
+    """Rank 5: the spec path is in the same git window as the code. No code diff passes."""
+    code_roots = [str(path) for path in (check.probe.get("code") or []) if str(path)]
+    docs = [str(path) for path in (check.probe.get("paths") or []) if str(path)]
+    bad = [path for path in (*code_roots, *docs) if path.startswith("/") or ".." in path.split("/")]
+    if not code_roots or not docs or bad:
+        return _draft(
+            check, subject, "failed", "enforcement-verified", source="git",
+            detail={"why": "spec_window needs relative code and paths"},
+        )
+    names = _spec_window_names(ctx)
+    if names is None:
+        return _unknown(check, subject, "git diff failed")
+    touched = [path for path in names if _spec_under(path, code_roots)]
+    source = "git diff HEAD and HEAD~1...HEAD"
+    if not touched:
+        return _draft(
+            check, subject, "passed", "enforcement-verified", source=source,
+            detail={"no_code_diff": True},
+        )
+    docs_hit = [path for path in names if _spec_under(path, docs)]
+    if docs_hit:
+        return _draft(
+            check, subject, "passed", "enforcement-verified", source=source,
+            detail={"code": touched, "docs": docs_hit},
+        )
+    return _draft(
+        check, subject, "failed", "enforcement-verified", source=source,
+        detail={"code": touched, "why": "code changed and the spec path did not"},
+    )
+
+
 def collect_repo(cat: Catalogue, pairs: list[tuple[Check, Subject]], ctx: dict[str, Any]) -> list[EventDraft]:
     out: list[EventDraft] = []
     for check, subject in pairs:
@@ -228,6 +304,8 @@ def collect_repo(cat: Catalogue, pairs: list[tuple[Check, Subject]], ctx: dict[s
                 out.append(_draft(check, subject, "failed", source=str(subject.process), detail={"error": str(exc)}))
                 continue
             out.append(_draft(check, subject, "passed" if ok else "failed", source=str(subject.process)))
+        elif kind == "spec_window":
+            out.append(_spec_window_draft(check, subject, ctx))
         else:
             out.append(_unknown(check, subject, f"repo collector has no probe {kind!r}"))
     return out
@@ -591,6 +669,7 @@ def collect_playwright(cat: Catalogue, pairs: list[tuple[Check, Subject]], ctx: 
     out: list[EventDraft] = []
     for check, subject in pairs:
         rel = str(check.probe.get("file") or "")
+        kind = str(check.probe.get("type") or "")
         if not rel:
             out.append(_unknown(check, subject, "playwright probe has no file"))
             continue
@@ -601,29 +680,75 @@ def collect_playwright(cat: Catalogue, pairs: list[tuple[Check, Subject]], ctx: 
                 detail={"why": "not requested; pass --run playwright:<path>"},
             ))
             continue
-        if not (REPO_ROOT / rel).is_file():
-            out.append(_draft(check, subject, "failed", source=rel, detail={"why": "missing"}))
+        if kind == "rtl_a11y":
+            out.append(_rtl_a11y(check, subject, ctx, rel))
             continue
-        started = time.monotonic()
-        spec = rel[len("carbon-frontend/"):] if rel.startswith("carbon-frontend/") else rel
-        # CI skips the e2e webServer so this never starts or kills the dev stack.
-        env = os.environ.copy()
-        env["CI"] = "1"
-        try:
-            proc = subprocess.run(
-                ["npx", "playwright", "test", spec, "--config", "e2e/playwright.config.ts"],
-                cwd=REPO_ROOT / "carbon-frontend",
-                capture_output=True, text=True, timeout=int(ctx.get("timeout", 600)), check=False,
-                env=env,
-            )
-        except subprocess.TimeoutExpired:
-            out.append(_unknown(check, subject, f"playwright {rel} timed out"))
-            continue
-        ms = int((time.monotonic() - started) * 1000)
-        result = "passed" if proc.returncode == 0 else "failed"
-        out.append(_draft(check, subject, result, source=f"playwright {rel}", duration_ms=ms,
-                          detail={"exit": proc.returncode, "tail": (proc.stdout + proc.stderr)[-2000:]}))
+        out.append(_playwright_file(check, subject, ctx, rel, "executed"))
     return out
+
+
+def _rtl_a11y(check: Check, subject: Subject, ctx: dict[str, Any], rel: str) -> EventDraft:
+    """i18n exit 0 and the named spec. Either one alone is not a pass."""
+    script = str(check.probe.get("script") or "")
+    if not script:
+        return _draft(
+            check, subject, "failed", "enforcement-verified", source=rel,
+            detail={"why": "rtl_a11y needs an i18n script"},
+        )
+    i18n_exit = ctx.get("playwright_i18n_exit")
+    if i18n_exit is None:
+        i18n_exit = _frontend_exit(script.split(), ci=False)
+    if int(i18n_exit) != 0:
+        return _draft(
+            check, subject, "failed", "enforcement-verified", source=script,
+            detail={"exit": int(i18n_exit)},
+        )
+    spec_exit = ctx.get("playwright_spec_exit")
+    if spec_exit is not None:
+        ok = int(spec_exit) == 0
+        return _draft(
+            check, subject, "passed" if ok else "failed", "enforcement-verified", source=rel,
+            detail={"exit": int(spec_exit)},
+        )
+    return _playwright_file(check, subject, ctx, rel, "enforcement-verified")
+
+
+def _playwright_file(check: Check, subject: Subject, ctx: dict[str, Any], rel: str, evidence_class: str) -> EventDraft:
+    if not (REPO_ROOT / rel).is_file():
+        return _draft(check, subject, "failed", evidence_class, source=rel, detail={"why": "missing"})
+    started = time.monotonic()
+    spec = rel[len("carbon-frontend/"):] if rel.startswith("carbon-frontend/") else rel
+    env = os.environ.copy()
+    env["CI"] = "1"
+    try:
+        proc = subprocess.run(
+            ["npx", "playwright", "test", spec, "--config", "e2e/playwright.config.ts"],
+            cwd=REPO_ROOT / "carbon-frontend",
+            capture_output=True, text=True, timeout=int(ctx.get("timeout", 600)), check=False,
+            env=env,
+        )
+    except subprocess.TimeoutExpired:
+        return _unknown(check, subject, f"playwright {rel} timed out")
+    ms = int((time.monotonic() - started) * 1000)
+    result = "passed" if proc.returncode == 0 else "failed"
+    return _draft(
+        check, subject, result, evidence_class, source=f"playwright {rel}", duration_ms=ms,
+        detail={"exit": proc.returncode, "tail": (proc.stdout + proc.stderr)[-2000:]},
+    )
+
+
+def _frontend_exit(argv: list[str], *, ci: bool) -> int:
+    env = os.environ.copy()
+    if ci:
+        env["CI"] = "1"
+    try:
+        proc = subprocess.run(
+            argv, cwd=REPO_ROOT / "carbon-frontend", capture_output=True, text=True,
+            timeout=180, check=False, env=env,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return 1
+    return int(proc.returncode)
 
 
 _RUNTIME_HOSTS = frozenset({"127.0.0.1", "localhost"})
@@ -664,6 +789,65 @@ def _sample_window(origin: str, path: str, samples: int, fetch) -> dict[str, Any
     }
 
 
+def _authed_json(origin: str, probe: dict) -> dict:
+    """GET one JSON route with the dev superuser. The password is the env default."""
+    import json
+    import os
+    import urllib.request
+
+    origin = origin.rstrip("/")
+    password = os.environ.get("CARBON_ADMIN_PASSWORD") or "AdminPa_132"
+    token_path = str(probe.get("token_path") or "/carbon-api/token/")
+    path = str(probe.get("path") or "/")
+    username = str(probe.get("username") or "ahmed")
+    login = urllib.request.Request(
+        origin + token_path,
+        data=json.dumps({"username": username, "password": password}).encode(),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(login, timeout=10) as resp:
+        token = json.loads(resp.read().decode())["access"]
+    read = urllib.request.Request(
+        origin + path,
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    with urllib.request.urlopen(read, timeout=20) as resp:
+        return json.loads(resp.read().decode())
+
+
+def _o1_quote_ok(body: dict, probe: dict) -> tuple[bool, dict]:
+    checks = body.get("checks") if isinstance(body, dict) else None
+    found: dict[str, str] = {}
+    assured = None
+    for row in checks or []:
+        if row.get("code") == "summary_kg":
+            found[str(row.get("scope"))] = str(row.get("kg"))
+        elif row.get("code") == "not_assured":
+            assured = row.get("met")
+    missing = []
+    for item in probe.get("require") or []:
+        scope, kg = str(item[1]), str(item[2])
+        if found.get(scope) != kg:
+            missing.append({"scope": scope, "want": kg, "got": found.get(scope)})
+    leaked = [kg for kg in (str(x) for x in (probe.get("forbid_kg") or [])) if kg in found.values()]
+    not_assured_ok = assured is False
+    ok = (
+        isinstance(body, dict)
+        and body.get("writes") is False
+        and not missing
+        and not leaked
+        and not_assured_ok
+    )
+    return ok, {
+        "open_period_id": body.get("open_period_id") if isinstance(body, dict) else None,
+        "found": found,
+        "missing": missing,
+        "leaked": leaked,
+        "not_assured_met": assured,
+    }
+
+
 def collect_runtime(cat: Catalogue, pairs: list[tuple[Check, Subject]], ctx: dict[str, Any]) -> list[EventDraft]:
     """Live window for p95, error rate, and 429 rate. Unknown until --run runtime:<origin>."""
     origin = str(ctx.get("run_runtime") or "")
@@ -672,8 +856,28 @@ def collect_runtime(cat: Catalogue, pairs: list[tuple[Check, Subject]], ctx: dic
     out: list[EventDraft] = []
     for check, subject in pairs:
         kind = str(check.probe.get("type") or "")
-        if kind not in ("latency_p95", "error_rate", "status_429"):
+        if kind not in ("latency_p95", "error_rate", "status_429", "authed_json"):
             out.append(_unknown(check, subject, f"runtime collector has no probe {kind!r}"))
+            continue
+        if kind == "authed_json":
+            if not origin:
+                out.append(EventDraft(
+                    check_id=check.id, subject_id=subject.id, tier=subject.tier, track=subject.track,
+                    result="unknown", evidence_class="configured", source="runtime",
+                    detail={"why": "not requested; pass --run runtime:http://127.0.0.1:<port>"},
+                ))
+                continue
+            try:
+                body = _authed_json(origin, check.probe)
+            except (ValueError, OSError) as exc:
+                out.append(_draft(check, subject, "failed", "enforcement-verified", source="runtime", detail={"error": str(exc)}))
+                continue
+            ok, detail = _o1_quote_ok(body, check.probe)
+            out.append(_draft(
+                check, subject, "passed" if ok else "failed", "enforcement-verified",
+                source=origin.rstrip("/") + str(check.probe.get("path") or ""),
+                detail=detail,
+            ))
             continue
         if not origin:
             out.append(EventDraft(

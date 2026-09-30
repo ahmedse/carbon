@@ -42,7 +42,7 @@ class OnboardingContractTests(unittest.TestCase):
         path = PACK / "assurance" / "benchmarks" / "O1-smart-village.yaml"
         text = path.read_text(encoding="utf-8")
         self.assertIn("id: O1", text)
-        self.assertIn("status: open", text)
+        self.assertIn("status: passed", text)
         data = yaml.safe_load(text)
         names = [row["name"] for row in data["sources"]]
         self.assertEqual(names, ["Smart Village electricity", "Smart Village diesel"])
@@ -56,6 +56,26 @@ class OnboardingContractTests(unittest.TestCase):
         ids = [row["id"] for row in data["principles"]]
         self.assertEqual(ids, [f"P-{i:02d}" for i in range(1, 13)])
         self.assertEqual(data["target"], "O1")
+
+    def test_principles_and_rules_name_the_p12_sentence(self):
+        # P-12. A row is not ready without target, product, evidence, date, limit.
+        principles = yaml.safe_load(
+            (PACK / "assurance" / "principles.yaml").read_text(encoding="utf-8")
+        )
+        for row in principles["principles"]:
+            for key in ("target", "product", "evidence", "locked", "limit"):
+                self.assertTrue(str(row.get(key, "")).strip(), f"{row['id']} {key}")
+            self.assertEqual(row["target"], "O1", row["id"])
+            self.assertEqual(row["product"], "Carbon on AASTMT", row["id"])
+        for rule_id in RULES:
+            raw = yaml.safe_load(
+                (PACK / "assurance" / "rules" / f"{rule_id}.yaml").read_text(encoding="utf-8")
+            )
+            for key in ("target", "product", "evidence", "locked", "limit"):
+                self.assertTrue(str(raw.get(key, "")).strip(), f"{rule_id} {key}")
+            self.assertEqual(raw["target"], "O1", rule_id)
+            self.assertEqual(raw["product"], "Carbon on AASTMT", rule_id)
+            self.assertEqual(raw["catalogue"], "planned", rule_id)
 
     def test_process_steps_match_the_leaf(self):
         data = yaml.safe_load(

@@ -4182,12 +4182,16 @@ class CarbonIntelligence:
             conversation, "_turn_replaced_message_id", None
         )
 
+        from ai.engine.pack_vocab import as_data
+        from ai.engine.text.word_match import has_arabic_script
+
+        shown = _without_count_citation(content) if has_arabic_script(content) else content
         ai_msg = AIMessage.objects.create(
             conversation=conversation,
             role="assistant",
-            content=content,
-            metadata_json=snapshot,
-            token_usage_json=usage or {},
+            content=shown,
+            metadata_json=as_data(snapshot),
+            token_usage_json=as_data(usage or {}),
             status=message_status,
             parent_id=parent_id,
             context_signature=context_signature,
@@ -4294,6 +4298,27 @@ class CarbonIntelligence:
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────
+
+
+def _without_count_citation(content: str) -> str:
+    """Drop a Latin count-citation parenthetical from an Arabic reply.
+
+    The aggregate tool cites ``metric = count where ...`` for the model.
+    Copied into an Arabic sentence it makes the reply mostly English.
+    """
+    text = content or ""
+    start = text.find("(")
+    while start != -1:
+        end = text.find(")", start)
+        if end == -1:
+            break
+        inner = text[start:end + 1]
+        if " = count where " in inner:
+            text = f"{text[:start]}{text[end + 1:]}".strip()
+            start = text.find("(")
+            continue
+        start = text.find("(", start + 1)
+    return " ".join(text.split())
 
 
 def _build_deterministic_summary(conversation) -> str:

@@ -30,3 +30,8 @@ catalogue: planned
 residual: >
   The period's display name is chosen by the inventory lead. The rule does not
   prescribe a calendar year. It does not treat draft as open.
+target: O1
+product: Carbon on AASTMT
+evidence: GET /carbon-api/carbon/onboarding/o1/ codes open_period_count, open_period_dates, open_period_type
+locked: 2026-09-29
+limit: Does not choose which period to close. Does not treat draft as open. Does not close O2–P2.

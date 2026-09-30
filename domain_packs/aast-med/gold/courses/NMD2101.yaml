@@ -1,0 +1,308 @@
+# Verbatim sentence from this course bank. It cites one open file, or it is refused.
+version: 1
+course: NMD2101
+world: aast-mbbs
+ask: According to the handout
+miss: This is not in this lecture.
+hits:
+- activity: 417
+  passage: NMD2101:file:417:Neuroscience I SG.pdf
+  quote: 'Hanaa Mahmoud Nagdy Lecturer of Internal Medicine Contact information: hm_nagdy@aast.'
+- activity: 418
+  passage: NMD2101:file:418:Neuroscience I SG 2324.docx
+  quote: Differentiate sub-modalities of sensations in relation to somato -tropic map.
+- activity: 419
+  passage: NMD2101:file:419:Study Guide 2425.pdf
+  quote: Plagiarism will be tested among all the presented students’ maps.
+- activity: 421
+  passage: NMD2101:file:421:Study Guide 26-27.pdf
+  quote: 'edu 2 | Page STUDY GUIDE IN THIS Guide: • Welcome Note P.'
+- activity: 424
+  passage: NMD2101:file:424:L 1 Cranial cavity.pptx
+  quote: Anteriorly, it is attached to the crista galli and frontal crest .
+- activity: 425
+  passage: NMD2101:file:425:L 1 Cranial cavity.pdf
+  quote: Above the jugular foramen, lies the internal acoustic meatus while below the foramen, the hypoglossal canal is present.
+- activity: 426
+  passage: NMD2101:file:426:Activity Sheet - L 1- Cranial cavity.docx
+  quote: Attached margin of the tentorium cerebelli is attached to the anterior clinoid processes .
+- activity: 427
+  passage: NMD2101:file:427:Leture 1- Cranial Cavity- new (1).pptx
+  quote: 'Answer : A Diaphragma sellae - It is attached to the anterior and posterior clinoid processes.'
+- activity: 428
+  passage: NMD2101:file:428:L 1 Cranial cavity.pdf
+  quote: Diaphragmasellae •It is attached to the anterior and posterior clinoid processes overlying the pituitary gland.
+- activity: 434
+  passage: NMD2101:file:434:introduc tion neurosci 2024.pdf
+  quote: Appraise the primary functions of their different parts 3.
+- activity: 438
+  passage: NMD2101:file:438:Neurotrasnmitters 2026.pptx
+  quote: Amr Issa- Associate Professor of Medical Biochemistry and Molecular Biology II- Aminoacids derivatives 1)Gamma-Amino butyric acid (GABA) Dr.
+- activity: 439
+  passage: NMD2101:file:439:L3- neurotransmitters 2026.pdf
+  quote: CLASSIFICATION OF NEUROTRANSMITTERS A classification of neurotransmitters based on chemical composition is shown in table 1.
+- activity: 440
+  passage: NMD2101:file:440:neurotransmiteers activity sheet.docx
+  quote: A patient exposed to an organophosphate develops excessive cholinergic activity.
+- activity: 444
+  passage: NMD2101:file:444:L 4 Anterior triangle.docx
+  quote: Appraise the structures forming the roof and floor of the anterior triangle .
+- activity: 445
+  passage: NMD2101:file:445:Activity Sheet - L4 Anterior triangle.docx
+  quote: Mylohyoid Digastric Stylohyoid Omohyoid Wh ich muscle is supplied by mandibular nerve ?
+- activity: 449
+  passage: NMD2101:file:449:P1 Cranial cavity.pptx
+  quote: E xternal occipital crest S uperior nuchal line I nferior nuchal line Norma Lateralis Anterior  frontal , nasal , maxilla, zygomatic bones.
+- activity: 450
+  passage: NMD2101:file:450:P1 Cranial cavity.pptx
+  quote: e E xternal occipital crest S uperior nuchal line I nferior nuchal line Norma Lateralis Anterior  frontal , nasal, maxilla, zygomatic bones.
+- activity: 454
+  passage: NMD2101:file:454:Activity sheet - L5 Posterior triangle.docx
+  quote: A student is given four fascial structures and four anatomical descriptions.
+- activity: 459
+  passage: NMD2101:file:459:L 6 Anatomy of Vertebrae and spinal cord (slight modification).docx
+  quote: 'A t birth: (differential growth) the spinal cord ends at the level of L3 vertebra.'
+- activity: 460
+  passage: NMD2101:file:460:L6  anatomy of vertebral colomn and spinal cord- activity sheet.docx
+  quote: Anterior longitudinal ligament A patient undergoes MRI of the lumbar region below the termination of the spinal cord.
+- activity: 464
+  passage: NMD2101:file:464:L 7 Development of Head Neck corrected.pptx
+  quote: A B C Branchial Arches The artery supplying the fifth arch degenerates early, so the 5th arch itself degenerates too.
+- activity: 465
+  passage: NMD2101:file:465:L 7 Development of Head Neck.pdf
+  quote: 'CHIAL (PHARYNGEAL) APPARATUS: The branchial arches are six arches, which develop in successive manner from above downward around the pharynx.'
+- activity: 466
+  passage: NMD2101:file:466:Activity Sheet L7-Development of Head Neck.docx
+  quote: First Second Third Fourth Which of the following cranial nerves supplies the second branchial arch?
+- activity: 468
+  passage: NMD2101:file:468:Activity Sheet L7-Development of Head Neck.pdf
+  quote: 'Facial 2 II- Regarding the derivatives of the pointed pharyngeal arch in the opposite diagram; Mention: 1.'
+- activity: 471
+  passage: NMD2101:file:471:MED 210 L 8 The somatic sensory system. Structure of the neuron 23-24 Final.pdf
+  quote: 'Anterograde: It is the transport (for example of mitochondria & neurotransmitter vesicles ) away from the cell body.'
+- activity: 472
+  passage: NMD2101:file:472:L8 activity sheet 2026-2027.docx
+  quote: Dynein A pharmacological experiment selectively damages dendritic structures while leaving axons intact.
+- activity: 473
+  passage: NMD2101:file:473:MED2101 L 8 2024 2025 Dr Rehab.pptx
+  quote: 'Axon Dendrites Cytoplasm axoplasm Plasma membrane axolemma 1- Axon 1- Origin: Arises from axon hillock (what is its functional significance?'
+- activity: 475
+  passage: NMD2101:file:475:Med 210 L9 Part I Histology of the skin 2023-24.pdf
+  quote: Differentiate layers of keratinocytes on morphological & structural basis.
+- activity: 476
+  passage: NMD2101:file:476:MED 210 L 9 part II peripheral receptors 23-24.pdf
+  quote: A- Nuclear chain; They are cylindrical and uniform in shape.
+- activity: 477
+  passage: NMD2101:file:477:MED2101 L 9 Structure of the skin  sensory nerve endings 25-26 (1).pptx
+  quote: Dermis The epidermis The epidermis is composed of 2 types of cells I- Keratinocytes; cells synthesize intermediate filaments keratin.
+- activity: 478
+  passage: NMD2101:file:478:L 9 skin  sensory nerve endings activity sheet 2026-2027 .docx
+  quote: 'Answer: C Severe thermal burn injuries damaging the superficial epidermal layers often lead to rapid, life-threatening systemic dehydration.'
+- activity: 479
+  passage: NMD2101:file:479:L9.pptx
+  quote: Axonal transport 1- Anterograde 2- Retrograde Cytoskeleton Anterograde; mitochondria & neurotransmitter vesicles.
+- activity: 481
+  passage: NMD2101:file:481:MED2101 L 9 Structure of the skin  sensory nerve endings 24-25.pptx
+  quote: 'areolar, elatic & dense irregular CT Types of skin: I- Thin skin II- Thick skin; palm of hands & & sole of feet Layers of the Skin Dermis St.'
+- activity: 483
+  passage: NMD2101:file:483:Final tutorial#  1 CNS.pptx
+  quote: Choose the one best answer 1- A specific stimulus produces a receptor potential by which of the following mechanisms?
+- activity: 484
+  passage: NMD2101:file:484:L10- SENSORY RECEPTORS.pptx
+  quote: 'ACCORDING TO LOCALITY Exteroceptors : (d etect stimuli arising from the external environment.'
+- activity: 485
+  passage: NMD2101:file:485:L10-Physiological function of receptors  Sensory coding  2526.pdf
+  quote: An IPSP can be produced by a localized increase in Cl transport.
+- activity: 486
+  passage: NMD2101:file:486:Activity Sheet.docx
+  quote: Action potentials carry different shapes for each sensation E.
+- activity: 487
+  passage: NMD2101:file:487:L 10- 2026-  PPT SENSORY RECEPTORS.pdf
+  quote: Appraise the excitatory and inhibitory postsynaptic potential and their summation 4.
+- activity: 492
+  passage: NMD2101:file:492:L11. PPT somatic sensations- ascending pathways 2627.pptx
+  quote: A 48-year-old woman developed a lesion involving the anterior white mattar at the cervical spinal cord.
+- activity: 494
+  passage: NMD2101:file:494:L11-A- 2026 somatic sensation-Asending-1.pdf
+  quote: As skin temperature further decreases, the firing rate of cold receptors decreases until the temperature reaches 10 °C.
+- activity: 495
+  passage: NMD2101:file:495:L11- B-2026 Ascending-2-sensory cortex.pdf
+  quote: BELLAR TRACT (SCBT) PATHWAY The spinocerebellar tracts relay information about limb position and movement (proprioception) to the cerebellum.
+- activity: 496
+  passage: NMD2101:file:496:Activity sheet 2627.docx
+  quote: 'A Q 14: A researcher recorded activity in ascending spinocerebellar pathways during lower limb exercise in an animal model.'
+- activity: 498
+  passage: NMD2101:file:498:L11. PPT somatic sensations- ascending pathways-pdf.pdf
+  quote: Below that temperature, they are inactive, and the cold becomes an effective local anaesthetic C.
+- activity: 501
+  passage: NMD2101:file:501:L 12. 2026  Pain physiology (1).pptx
+  quote: Arachidonic acid Arachidonic acid is one of the chemicals released during tissue damage.
+- activity: 502
+  passage: NMD2101:file:502:12. 2026 Physiology of pain.pdf
+  quote: Acute pain is characterized by activation of nociceptors for a limited duration and is mediated mainly by A delta fibers .
+- activity: 503
+  passage: NMD2101:file:503:L12 activity sheet .docx
+  quote: Acute activation of high-threshold mechano-nociceptors by localized extracellular lactic acid accumulation C.
+- activity: 504
+  passage: NMD2101:file:504:L 12. 2026  Pain physiology  .pdf
+  quote: A decrease in pain tolerance is also evident in the elderly, and women appear to be more tolerant to pain than men .
+- activity: 511
+  passage: 'NMD2101:file:511: L 13-   Pain control  2026.pptx'
+  quote: Gate CLOSED (pain reduced) A β fibers activate the inhibitory interneuron.
+- activity: 512
+  passage: NMD2101:file:512:13. 2026 pain. control docx.pdf
+  quote: Additionally, activity from autonomic brain areas such as the hypothalamus or the amygdala stimulates the PAG to induce analgesia.
+- activity: 513
+  passage: 'NMD2101:file:513: L 13 activity sheet.pdf'
+  quote: A 40-year-old woman is about to give a public speech.
+- activity: 514
+  passage: NMD2101:file:514:2026 L 13-   Pain control .pdf
+  quote: Analgesia may be produced in certain stressful situations.
+- activity: 517
+  passage: NMD2101:file:517:L14 Analgesics 26.pptx
+  quote: But when guided, it can reduce opiate craving & alleviate withdrawal / so is used in opioid detoxication.
+- activity: 518
+  passage: NMD2101:file:518:L14 Analgesics 26.docx
+  quote: Also, morphine tends to increase intracranial pressure via respiratory depression and hypercapnia .
+- activity: 519
+  passage: NMD2101:file:519:L14 Analgesics activity sheet 26.docx
+  quote: A 35-year-old woman undergoing a painful procedure requires sedation with an opioid-sparing analgesic adjunct.
+- activity: 522
+  passage: NMD2101:file:522:P4 vertebrae.pptx
+  quote: Anatomy of the vertebrae All vertebrae share basic common structures.
+- activity: 524
+  passage: NMD2101:file:524:Tutorial Cortical Anatomy (1).pptx
+  quote: x insular cortex Q A A 45‐year ‐old female patient has a gunshot wound to her head that impacts on her ability to interpret sounds and words.
+- activity: 525
+  passage: NMD2101:file:525:Tutorial Anatomy 11.10 (2).pptx
+  quote: A and D Q In the process of removing cervical lymph nodes during a radical neck dissection, a surgeon mistakenly lesions the ansa cervicalis.
+- activity: 526
+  passage: NMD2101:file:526:my correction  L10- SENSORY RECEPTORS.pptx
+  quote: ACCORDING TO LOCALITY Exteroceptors :(d etect stimuli arising from the external environment.
+- activity: 527
+  passage: NMD2101:file:527:final 2026 tutorial 1 sensory CNS.pptx
+  quote: It occurs by stimulation of a single presynaptic fiber repetitively, provided the interval between stimuli does not exceed 15 milliseconds.
+- activity: 528
+  passage: NMD2101:file:528:final Tutorial integrated on Analgesics   23 24.pptx
+  quote: Although the surgeons tried to repair the arm, yet the blood supply was severely compromised and the affected part was amputated.
+- activity: 529
+  passage: NMD2101:file:529:edit tutorial pain final (1).pptx
+  quote: A) C fibers have a faster conduction velocity.
+- activity: 530
+  passage: NMD2101:file:530:tutorial .pptx
+  quote: Tutorial Anatomy 2 What is the cranial nerves with taste function?
+- activity: 535
+  passage: NMD2101:file:535:L 15 Anatomy of cerebrum.pdf
+  quote: Below this sulcus is the cingulate gyrus (functionally associated with the limbic lobe).
+- activity: 536
+  passage: NMD2101:file:536:Activity Sheet - L15 Anatomy of Cerebrum.docx
+  quote: 'Choose the correct answer: What is the main function of temporal lobe of cerebrum?'
+- activity: 540
+  passage: NMD2101:file:540:L 16 Blood Supply of CNS- EDITED.docx
+  quote: 'Anterior & posterior circulation Middle cerebral artery (MCA): (Fig.'
+- activity: 541
+  passage: NMD2101:file:541:Activity Sheet L 16-Blood Supply.docx
+  quote: How & where does the artery labelled “ G” is formed?
+- activity: 542
+  passage: NMD2101:file:542:Activity Sheet L 16-Blood Supply.pdf
+  quote: Anterior choroidal Which of the following arteries gives origin to the posterior cerebral artery? A.
+- activity: 544
+  passage: NMD2101:file:544:L17 Histological Features of Cerebral Cortex Histology.pptx
+  quote: 'A central white matter: which contains collection of nerve cell bodies called basal ganglia .'
+- activity: 546
+  passage: NMD2101:file:546:Activity sheet L17.docx
+  quote: Cajal Densely packed stellate cells A patient presenting with severe paresthesia and sensory loss following a thalamic infarct is evaluated.
+- activity: 548
+  passage: NMD2101:file:548:L17 activity sheet.docx
+  quote: Denderite arises from the middle of the base.
+- activity: 550
+  passage: NMD2101:file:550:L18-ET (1).pptx
+  quote: 'A Supplementary motor area ,SMA : The SMA is also involved in planning movements but is concerned with internally generated commands or cues.'
+- activity: 551
+  passage: NMD2101:file:551:NS1-L18  final.pdf
+  quote: A B Page 4 of 4 Thalamocortical projection The thalamus is a sensory relay station and is important in motor control.
+- activity: 552
+  passage: NMD2101:file:552:2026-27 L 18 Activity sheet.pdf
+  quote: A 17-year-old boy sustains serious head and neck trauma during a football game.
+- activity: 554
+  passage: NMD2101:file:554:This one (L18).pptx
+  quote: Association areas of the cerebral cortex The motor, sensory, and language areas account for only about half of the total cerebral cortex.
+- activity: 559
+  passage: NMD2101:file:559:Activity sheet L19 stroke 26-27.docx
+  quote: A 68 year old man with hypertension and smoking history presents with sudden right arm weakness and slurred speech.
+- activity: 560
+  passage: NMD2101:file:560:PPT L19 Stroke.pdf
+  quote: Border zone (“watershed”) infarcts occur in regions at the most distal portions of arterial territories.
+- activity: 568
+  passage: NMD2101:file:568:L20 answer ACTIVITY SHEET.docx
+  quote: A 30-year-old woman recalling how to ride a bicycle after years of not riding.
+- activity: 571
+  passage: NMD2101:file:571:this one L21.pptx
+  quote: Analysis of sounds (associating sound with concept) for comprehension of words both spoken and written .
+- activity: 572
+  passage: NMD2101:file:572:rev. NS1-L21 .pdf
+  quote: After the interpretation of auditory or visually presented words, the word meanings are fed into Wernicke's area.
+- activity: 573
+  passage: NMD2101:file:573:Activity sheetL21 2024-2025.docx
+  quote: 'Activity sheet: Lecture 21 Cortical Areas for Speech Physiology Which area is involved in SPOKEN language ?'
+- activity: 576
+  passage: NMD2101:file:576:1_Histology Practical Session neuroscience (neurons  receptors).pptx
+  quote: 'hanoreceptors in the skeletal muscle Muscle spindle Golgi tendon organ Contents of the practical session: Slides: Cerebrum (Pyramidal cells).'
+- activity: 580
+  passage: NMD2101:file:580:L22-  Brain Stem  Lecture note .pdf
+  quote: 'Dorsal surface marked by Trochlear (4th)Nerve: The only cranial nerve emerging from dorsal surface of brain stem.'
+- activity: 581
+  passage: NMD2101:file:581:L 22 Brain Stem.pdf
+  quote: 'Dorsal surface marked by Trochlear (4th) Nerve: The only cranial nerve emerging from dorsal surface of brain stem.'
+- activity: 587
+  passage: NMD2101:file:587:2026 L23- Spinal cord reflexes.pdf
+  quote: Acquired (Conditioned) reflexes on the other hand, need training, previous experience, and an intact cerebral cortex e.
+- activity: 590
+  passage: NMD2101:file:590:L23- Spinal cord reflexes- Dr Youssef Hatem.ppsx
+  quote: 'Body Temperature -Body Water -General Metabolism B) Brain Stem : i - Midbrain reflexes : e.'
+- activity: 593
+  passage: NMD2101:file:593:L 24  2026 descending tracts.pdf
+  quote: Corticobulbar fibres terminate on LMNs in the brainstem and control facial movements.
+- activity: 594
+  passage: NMD2101:file:594:~WRL0939.pdf
+  quote: AMer the internal capsule, the neurones pass through the crus cerebri of the midbrain, the pons and into the medulla.
+- activity: 596
+  passage: NMD2101:file:596:L 24 descending tracts.pptx
+  quote: Descends to the contralateral cervical spinal cord (short tract) .
+- activity: 600
+  passage: NMD2101:file:600:2026 L25-spinal cord reflexes part-2-Motor Unit .pdf
+  quote: 'Accordingly, motor units can be classified into: Recruitment of motor units: It means increasing the number of active motor units.'
+- activity: 603
+  passage: NMD2101:file:603:L26 nervous lesion  2026.pdf
+  quote: 'According to the level of lesion: o Above the level of C3, breathing could be affected.'
+- activity: 604
+  passage: NMD2101:file:604:2026 L 26 nervous  lesion .pdf
+  quote: 'Clonus: (Ankle or knee clonus) This sign may be elicited.'
+- activity: 605
+  passage: NMD2101:file:605:L26 Effects of  lesion to descending tracts at different levels-Dr Youssef Hatem.ppsx
+  quote: B The spinal cord ends at the level of the base of L2 vertebra.
+- activity: 609
+  passage: NMD2101:file:609:L27Neuroglia and Myelination Histology (1).pptx
+  quote: Assess the role of reactive microglia in CNS pathology and neuroinflammation .
+- activity: 610
+  passage: NMD2101:file:610:L27Neuroglia and Myelination Histology.pptx
+  quote: 'cells in the nervous system (neuroglia ) and study their importance Students’ learning outcomes At the end of this session, you have to : 1.'
+- activity: 611
+  passage: NMD2101:file:611:L 27 neuroglia and myelination.pdf
+  quote: Astrocytes are linked to each other by gap junctions, through which small molecules can diffuse.
+misses:
+- activity: 418
+  quote: 'Hanaa Mahmoud Nagdy Lecturer of Internal Medicine Contact information: hm_nagdy@aast.'
+  absent: NMD2101:file:417:Neuroscience I SG.pdf
+- activity: 417
+  quote: Plagiarism will be tested among all the presented students’ maps.
+  absent: NMD2101:file:419:Study Guide 2425.pdf
+- activity: 417
+  quote: Anteriorly, it is attached to the crista galli and frontal crest .
+  absent: NMD2101:file:424:L 1 Cranial cavity.pptx
+- activity: 417
+  quote: Above the jugular foramen, lies the internal acoustic meatus while below the foramen, the hypoglossal canal is present.
+  absent: NMD2101:file:425:L 1 Cranial cavity.pdf
+- activity: 417
+  quote: Attached margin of the tentorium cerebelli is attached to the anterior clinoid processes .
+  absent: NMD2101:file:426:Activity Sheet - L 1- Cranial cavity.docx

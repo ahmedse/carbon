@@ -19,6 +19,7 @@ import {
   AccordionSummary,
   AccordionDetails,
   Grid,
+  Button,
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { useTheme } from "@mui/material/styles";
@@ -43,6 +44,8 @@ import {
   TaskAlt,
   InfoOutlined,
 } from "@mui/icons-material";
+import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import useDocumentTitle from "../../hooks/useDocumentTitle";
 import { fetchChairmanData } from "../../api/emissions-extended";
 import PageContainer from "../../components/layout/PageContainer";
@@ -142,6 +145,8 @@ function Section({ title, badge, defaultExpanded = true, children }) {
 export default function ChairmanDashboard() {
   useDocumentTitle("Chairman Overview");
   const theme = useTheme();
+  const navigate = useNavigate();
+  const { t } = useTranslation("emissions");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [data, setData] = useState(null);
@@ -268,6 +273,18 @@ export default function ChairmanDashboard() {
         </Stack>
       </Box>
 
+      <Alert
+        severity="warning"
+        sx={{ mx: SPACING.lg, mt: 1.5 }}
+        action={(
+          <Button color="inherit" size="small" onClick={() => navigate("/carbon/onboarding")}>
+            {t("chairman.openOnboarding")}
+          </Button>
+        )}
+      >
+        {t("chairman.notO1Footprint")}
+      </Alert>
+
       {/* ── Section 1: Headline metrics (6 KPIs) ─────────────────────── */}
       <Section title="Headline Metrics" defaultExpanded>
         <Grid container spacing={1.25} sx={{ pt: 1 }}>
@@ -277,7 +294,7 @@ export default function ChairmanDashboard() {
               tooltip: "Total CO₂e across ALL reporting periods and campuses (Scope 1+2+3). Platform-wide, not period-filtered." },
             { label: "Inventory Coverage", value: coverageLabel, unit: `${h.coverage_pct ?? 0}%`, sub: "of declared universe",
               icon: <TaskAlt />, color: theme.palette.success.main,
-              tooltip: "Sources with at least one calculation ÷ total declared sources. Goal: 100% Scope 1+2, 80% Scope 3." },
+              tooltip: "Sources with at least one calculation ÷ total declared sources." },
             { label: "SBTi Targets", value: sbti.count ?? 0, unit: sbti.draft ? "draft" : "active", sub: `${sbti.committed ?? 0} committed`,
               icon: <Flag />, color: theme.palette.warning.main,
               tooltip: "Science-Based Targets. Draft = pending board ratification. SBTi 1.5°C pathway requires 42% reduction by 2030." },

@@ -437,12 +437,12 @@ def _is_default_model(row: ModelCatalog, default_key: str) -> bool:
 
 def _thinking_available() -> bool:
     """True when the understanding model declares a reasoning mode (Think switch)."""
-    from ai.engine.core.config import get_settings
-    from ai.engine.llm.provider import reasoning_mode
+    from ai.engine.llm.provider import reasoning_mode, resolve_model_endpoint
     from ai.engine.llm.router import get_model_for_task
 
     try:
-        return reasoning_mode(get_model_for_task("cognition"), get_settings().LLM_BASE_URL) is not None
+        wire, base = resolve_model_endpoint(get_model_for_task("cognition"))
+        return reasoning_mode(wire, base) is not None
     except Exception:  # noqa: BLE001 — an unreadable config hides the switch
         logger.exception("Failed to resolve the understanding model's reasoning mode")
         return False

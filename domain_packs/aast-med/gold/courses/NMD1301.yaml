@@ -1,0 +1,308 @@
+# Verbatim sentence from this course bank. It cites one open file, or it is refused.
+version: 1
+course: NMD1301
+world: aast-mbbs
+ask: According to the handout
+miss: This is not in this lecture.
+hits:
+- activity: 1172
+  passage: NMD1301:file:1172:lecture notes.pdf
+  quote: Altruism (الإيثار:) The only productive outcome of our work as physicians is improving patients’ quality of life.
+- activity: 1174
+  passage: NMD1301:file:1174:NMD1301_L1_Competencies.pptx
+  quote: What is a good fit for you? What is the scope of this subject?
+- activity: 1175
+  passage: NMD1301:file:1175:NARS-2017-medicine-1.pdf
+  quote: ATTRIBUTES OF THE GRADUATES OF MEDICAL SCHOOLS 8 IV.
+- activity: 1178
+  passage: NMD1301:file:1178:Medical career pathway.pptx
+  quote: t Experts in the field The highest responsibility in the unit and/or hospital Clinical care mostly involved complex cases and supervision (e.
+- activity: 1179
+  passage: NMD1301:file:1179:2026Bulletin.pdf
+  quote: Cautions To ensure you have a smooth examination journey, please be aware of the following cautions.
+- activity: 1182
+  passage: NMD1301:file:1182:Ethics overview and application.pptx
+  quote: Consultants do not automatically “rubber-stamp” the position of requester or the health care team.
+- activity: 1188
+  passage: NMD1301:file:1188:12529_2021_Article_10047.pdf
+  quote: Additionally, in Italy, all restrictions imposed to reduce the transmission of COVID-19 led to marked decrease in clinic assistance.
+- activity: 1190
+  passage: NMD1301:file:1190:Maintaining professional boundaries  conflict of interest.pptx
+  quote: Nepotism Nepotism is an advantage, privilege, or position that is granted to relatives in an occupation or field.
+- activity: 1191
+  passage: NMD1301:file:1191:Mayo clinic code of conduct.pdf
+  quote: Bringing or serving alcoholic beverages on a Mayo campus is strictly prohibited.
+- activity: 1198
+  passage: NMD1301:file:1198:lecture notes NMD1301.docx
+  quote: efore, this should be our prime target, and we should aim to achieve everything else only through the patient's benefit and never despite it.
+- activity: 1199
+  passage: NMD1301:file:1199:PowerPoint Competencies and attributes.pptx
+  quote: What is “Professionalism”? Confidence A feeling of trust in one's abilities, qualities, and judgement.
+- activity: 1206
+  passage: NMD1301:file:1206:Document (14).pdf
+  quote: A doctor assuming the paternal model of DPR will act as the patient's guardian and make decisions on his/her behalf a) True b) False 27.
+- activity: 1209
+  passage: NMD1301:file:1209:lecture notes MED131.pdf
+  quote: Altruism (اﻹيثار:)The only productive outcome of our work as physicians is improving patients’ quality of life.
+- activity: 1216
+  passage: NMD1301:file:1216:Maintaining a professional relationship.pptx
+  quote: Patients’ views of doctors Which view do you want your patient to have of you? How much do you really “KNOW” a professional?
+- activity: 1224
+  passage: NMD1301:file:1224:Final  medical interview.pdf
+  quote: At a minimum, clinicians must use the patient’s name at the beginning and the end of the visit.
+- activity: 1236
+  passage: NMD1301:file:1236:The three functions model.pptx
+  quote: Allows the clinician the opportunity to check the accuracy of what he/she thinks the patient actually said.
+- activity: 1238
+  passage: NMD1301:file:1238:Intro to communication (narrated).pptx
+  quote: A lot of people who OD do not do it intentionally This condition is cause for concern and worry.
+- activity: 1242
+  passage: NMD1301:file:1242:Attributes of a Physician (no narration).pptx
+  quote: Attributes of a Physician Dr Ahmed Elsheshai MD, MRCPsych Optimism Hopefulness and confidence about the future or the success of something.
+- activity: 1244
+  passage: NMD1301:file:1244:Overview and Development of Medical Ethics (2)-TheSpectre.pptx
+  quote: CPsych Psychiatry Consultant The story of medical ethics Medical Papyri The Egyptian physician made a prognosis before undertaking treatment.
+- activity: 1246
+  passage: NMD1301:file:1246:Introduction and Overview of Professionalism-TheSpectre.pptx
+  quote: American Board of Internal Medicine Medicine’s social contract with society Cruess SR.
+- activity: 1172
+  passage: NMD1301:file:1172:lecture notes.pdf
+  quote: Duty (الواجب:) The medical profession is not one that is bound by the rules of working hours or fees for service.
+- activity: 1174
+  passage: NMD1301:file:1174:NMD1301_L1_Competencies.pptx
+  quote: What is “Professionalism”? “The collection of basic competencies expected of a professional.
+- activity: 1175
+  passage: NMD1301:file:1175:NARS-2017-medicine-1.pdf
+  quote: As a bachelor degree, MBBCh is a level 5 qualification on the Egyptian National Qualification Framework.
+- activity: 1179
+  passage: NMD1301:file:1179:2026Bulletin.pdf
+  quote: ECFMG will share information on Certification eligibility with the USMLE co-sponsors for the purposes of registration.
+- activity: 1182
+  passage: NMD1301:file:1182:Ethics overview and application.pptx
+  quote: Ethics consultants don’t take over decision making in the case.
+- activity: 1188
+  passage: NMD1301:file:1188:12529_2021_Article_10047.pdf
+  quote: Analyses were adjusted for sociodemographic, anthropo- metric, and clinical data.
+- activity: 1190
+  passage: NMD1301:file:1190:Maintaining professional boundaries  conflict of interest.pptx
+  quote: Patients’ views of doctors Self referral Physician income decline (?) Primary interest vs secondary interest Disclosure (?
+- activity: 1191
+  passage: NMD1301:file:1191:Mayo clinic code of conduct.pdf
+  quote: CIR’s to familiarize themselves with relevant National Patient Safety Goals based on the level of interaction with Mayo’s patient population.
+- activity: 1199
+  passage: NMD1301:file:1199:PowerPoint Competencies and attributes.pptx
+  quote: What is “competency”? Skill Knowledge Experience Competency Who decides what competencies?
+- activity: 1206
+  passage: NMD1301:file:1206:Document (14).pdf
+  quote: According to the American Board of Internal Medicine which of the following is a competency of a physician?
+- activity: 1209
+  passage: NMD1301:file:1209:lecture notes MED131.pdf
+  quote: Duty (الواجب:)The medical profession is not one that is bound by the rules of working hours or fees for service.
+- activity: 1216
+  passage: NMD1301:file:1216:Maintaining a professional relationship.pptx
+  quote: Stand your ground, be a doctor Sources Thank you LOs Contrast professional and personal areas of a doctor’s life.
+- activity: 1224
+  passage: NMD1301:file:1224:Final  medical interview.pdf
+  quote: Be reliable and don’t make unrealistic promises.
+- activity: 1236
+  passage: NMD1301:file:1236:The three functions model.pptx
+  quote: Checking and summarizing Gives the clinician a few moments to review what has been heard and what needs to be explored next.
+- activity: 1238
+  passage: NMD1301:file:1238:Intro to communication (narrated).pptx
+  quote: Attitude You should try and look for help wherever you can get it.
+- activity: 1242
+  passage: NMD1301:file:1242:Attributes of a Physician (no narration).pptx
+  quote: Traits, Attributes, and Competencies Personality traits A reminder of competencies Variation in medical practice What are your expectations?
+- activity: 1244
+  passage: NMD1301:file:1244:Overview and Development of Medical Ethics (2)-TheSpectre.pptx
+  quote: I will keep pure and holy both my life and my art.
+- activity: 1246
+  passage: NMD1301:file:1246:Introduction and Overview of Professionalism-TheSpectre.pptx
+  quote: Doctor’s personal values Doctor’s superior knowledge Good communication? Scarce resources Time management Quality practice?
+- activity: 1172
+  passage: NMD1301:file:1172:lecture notes.pdf
+  quote: Excellence (التميز:) When have you ever heard of a patient settling for a mediocre doctor?
+- activity: 1174
+  passage: NMD1301:file:1174:NMD1301_L1_Competencies.pptx
+  quote: e Definitions of Trait Attribute Competence Don’t rush yourself, take your time and find the right fit for you in the vast world of medicine.
+- activity: 1175
+  passage: NMD1301:file:1175:NARS-2017-medicine-1.pdf
+  quote: Critically evaluate the results of achieved tasks to establish multi-dimensional correlations and build technical expertise.
+- activity: 1179
+  passage: NMD1301:file:1179:2026Bulletin.pdf
+  quote: If changes in the USMLE program occur after the release of this BOI, they will be effective when posted on the USMLE website.
+- activity: 1182
+  passage: NMD1301:file:1182:Ethics overview and application.pptx
+  quote: Example A surrogate for a patient who lacks decision-making capacity asks that mechanical ventilation be stopped.
+- activity: 1188
+  passage: NMD1301:file:1188:12529_2021_Article_10047.pdf
+  quote: Exclusion criteria included having other illnesses (severe disability due to disease, significant comorbidity, other diagnosed diseases).
+- activity: 1190
+  passage: NMD1301:file:1190:Maintaining professional boundaries  conflict of interest.pptx
+  quote: Stand your ground, be a doctor Conflict of interest LOs Contrast professional and personal areas of a doctor’s life.
+- activity: 1191
+  passage: NMD1301:file:1191:Mayo clinic code of conduct.pdf
+  quote: Do not bring or serve alcoholic beverages onto Mayo property.
+- activity: 1199
+  passage: NMD1301:file:1199:PowerPoint Competencies and attributes.pptx
+  quote: cine Medicine’s social contract with society GMP Society's expectations of medicine Medicine's expectations of society Reality vs appearance?
+- activity: 1206
+  passage: NMD1301:file:1206:Document (14).pdf
+  quote: An oncologist reads a recent medical article mentioning that certain food items with anti- oxidants can help fight cancer progression.
+- activity: 1209
+  passage: NMD1301:file:1209:lecture notes MED131.pdf
+  quote: Excellence (التميز:)When have you ever heard of a patient settling for a mediocre doctor?
+- activity: 1216
+  passage: NMD1301:file:1216:Maintaining a professional relationship.pptx
+  quote: influence derived from the previous professional relationship, or if a romantic relationship would otherwise foreseeably harm the individual.
+- activity: 1224
+  passage: NMD1301:file:1224:Final  medical interview.pdf
+  quote: 'Can I spend a few minutes with you now discussing your problems and examining you?’ Physician: "Good morning, Haj My name is Ahmed Ali.'
+- activity: 1236
+  passage: NMD1301:file:1236:The three functions model.pptx
+  quote: Clarification and direction A clinician must master the arts of gentle and respectful interruption.
+- activity: 1238
+  passage: NMD1301:file:1238:Intro to communication (narrated).pptx
+  quote: ECG is normal but stress ECG shows some minor changes.
+- activity: 1244
+  passage: NMD1301:file:1244:Overview and Development of Medical Ethics (2)-TheSpectre.pptx
+  quote: I will not use the knife, not even, verily, on sufferers from stone, but I will give place to such as are craftsmen therein.
+- activity: 1246
+  passage: NMD1301:file:1246:Introduction and Overview of Professionalism-TheSpectre.pptx
+  quote: GMP focuses on how doctors use this information to help other humans restore their lives to the best possible quality.
+- activity: 1172
+  passage: NMD1301:file:1172:lecture notes.pdf
+  quote: Respect for others (احترام الآخرين :) The medical profession is a very busy one.
+- activity: 1174
+  passage: NMD1301:file:1174:NMD1301_L1_Competencies.pptx
+  quote: ectations of medicine Medicine's expectations of society Competencies vs attributes Variation in medical practice What are your expectations?
+- activity: 1175
+  passage: NMD1301:file:1175:NARS-2017-medicine-1.pdf
+  quote: Ensures the application of quality assurance standards and procedures, enhancing methodologies and processes.
+- activity: 1179
+  passage: NMD1301:file:1179:2026Bulletin.pdf
+  quote: If your eligibility period crosses into the next calendar year (i.
+- activity: 1182
+  passage: NMD1301:file:1182:Ethics overview and application.pptx
+  quote: Formulate the ethics question Given uncertainty or conflict about values , what decisions or actions are ethically justifiable?
+- activity: 1188
+  passage: NMD1301:file:1188:12529_2021_Article_10047.pdf
+  quote: Federico II were consecutively enrolled in the study with their parents if they met the selec- tion criteria.
+- activity: 1190
+  passage: NMD1301:file:1190:Maintaining professional boundaries  conflict of interest.pptx
+  quote: You are forbidden from referring patients to services where you stand to make profit other than your known and agreed upon fees.
+- activity: 1191
+  passage: NMD1301:file:1191:Mayo clinic code of conduct.pdf
+  quote: Do not enter patient care areas unless authorized by Mayo clinical staff and accompanied by said clinical staff.
+- activity: 1199
+  passage: NMD1301:file:1199:PowerPoint Competencies and attributes.pptx
+  quote: good-medical-practice Attributes of a Physician Dr Ahmed Elsheshai MD, MRCPsych LOs Variation in medical practice What are your expectations?
+- activity: 1206
+  passage: NMD1301:file:1206:Document (14).pdf
+  quote: Autonomy means a patient can demand inappropriate treatment as long as he/she signs a consent form a) True b) False 15.
+- activity: 1209
+  passage: NMD1301:file:1209:lecture notes MED131.pdf
+  quote: Honour (الشرف:)A physician’s actions should always be honorable.
+- activity: 1216
+  passage: NMD1301:file:1216:Maintaining a professional relationship.pptx
+  quote: n “You must not use your professional position to pursue a sexual or improper emotional relationship with a patient or someone close to them.
+- activity: 1224
+  passage: NMD1301:file:1224:Final  medical interview.pdf
+  quote: Dr/ Somaya Madkour Professor of Forensic Medicine & Clinical Toxicology Alexandria University 2 The medical interview • Define interviewing.
+- activity: 1236
+  passage: NMD1301:file:1236:The three functions model.pptx
+  quote: Define each step involved in the three functions.
+- activity: 1238
+  passage: NMD1301:file:1238:Intro to communication (narrated).pptx
+  quote: Elsheshai MD MRCPsych Think about this patient A 21-year-old drug addict is presented to you at the PHC clinic where you are the on-duty GP.
+- activity: 1244
+  passage: NMD1301:file:1244:Overview and Development of Medical Ethics (2)-TheSpectre.pptx
+  quote: Left) Plates vi & vii of the Edwin Smith Papyrus at the Rare Book Room , New York Academy of Medicine.
+- activity: 1246
+  passage: NMD1301:file:1246:Introduction and Overview of Professionalism-TheSpectre.pptx
+  quote: In your opinion, what competencies or skills are required from a physician? Go to Nearpod.
+- activity: 1172
+  passage: NMD1301:file:1172:lecture notes.pdf
+  quote: Service (الخدمة:) Medical professionals work in the service of their patients.
+- activity: 1174
+  passage: NMD1301:file:1174:NMD1301_L1_Competencies.pptx
+  quote: good-medical-practice Introduction and Overview of Professionalism Dr Ahmed A Elsheshai Psychiatry consultant Lecturer of Medicine, AAST MSc.
+- activity: 1175
+  passage: NMD1301:file:1175:NARS-2017-medicine-1.pdf
+  quote: Evaluate the performance of subordinates and support their development.
+- activity: 1179
+  passage: NMD1301:file:1179:2026Bulletin.pdf
+  quote: 'Important Note: This change does not affect the requirements for ECFMG Certification.'
+- activity: 1182
+  passage: NMD1301:file:1182:Ethics overview and application.pptx
+  quote: Given uncertainty or conflict about values , is it ethically justifiable to decision or action ?
+- activity: 1188
+  passage: NMD1301:file:1188:12529_2021_Article_10047.pdf
+  quote: 'In particular, the aims of this study were to evaluate: 1.'
+- activity: 1190
+  passage: NMD1301:file:1190:Maintaining professional boundaries  conflict of interest.pptx
+  quote: You must not put pressure on patients or their families to make donations to other people or organizations.
+- activity: 1191
+  passage: NMD1301:file:1191:Mayo clinic code of conduct.pdf
+  quote: Educational literature pertaining to the product or service offered may be left with Mayo Clinic staff.
+- activity: 1199
+  passage: NMD1301:file:1199:PowerPoint Competencies and attributes.pptx
+  quote: ionalism Dr Ahmed A Elsheshai “Aspiring toward altruism, accountability, excellence, duty, service, honor, integrity, and respect for others.
+- activity: 1206
+  passage: NMD1301:file:1206:Document (14).pdf
+  quote: Clinical staff have no role in discussing rules of medical ethics.
+- activity: 1209
+  passage: NMD1301:file:1209:lecture notes MED131.pdf
+  quote: In dealing with all these people, doctors should have respect for the diversity of their views, backgrounds, and intentions.
+- activity: 1224
+  passage: NMD1301:file:1224:Final  medical interview.pdf
+  quote: 'Establish aims of the interview: Health history interviews are of two basic types; the problem -oriented and the health promotion interviews.'
+- activity: 1236
+  passage: NMD1301:file:1236:The three functions model.pptx
+  quote: Differentiate various elements involved in achieving the three functions.
+- activity: 1238
+  passage: NMD1301:file:1238:Intro to communication (narrated).pptx
+  quote: He dismissed it at the time but when it came up in a casual conversation his family were alarmed and insisted that he should visit a doctor.
+- activity: 1244
+  passage: NMD1301:file:1244:Overview and Development of Medical Ethics (2)-TheSpectre.pptx
+  quote: Neither will I administer a poison to anybody when asked to do so, nor will I suggest such a course.
+- activity: 1246
+  passage: NMD1301:file:1246:Introduction and Overview of Professionalism-TheSpectre.pptx
+  quote: Introduction and Overview of Professionalism Dr Ahmed A Elsheshai What is the scope of this subject?
+- activity: 1172
+  passage: NMD1301:file:1172:lecture notes.pdf
+  quote: Therefore, regulating this delicate workplace should be left to those carrying this responsibility and who best un derstand it.
+- activity: 1174
+  passage: NMD1301:file:1174:NMD1301_L1_Competencies.pptx
+  quote: n cannot be comfortable without his own approval Scope of the course Humility The quality of having a modest or low view of one's importance.
+- activity: 1175
+  passage: NMD1301:file:1175:NARS-2017-medicine-1.pdf
+  quote: Identify occupational hazards and design mitigation measures for them - Apply cost/effectiveness measures.
+- activity: 1179
+  passage: NMD1301:file:1179:2026Bulletin.pdf
+  quote: Step 1 and Step 2 CK will continue to be required by ECFMG to meet the medical science examination requirement for Certification.
+- activity: 1182
+  passage: NMD1301:file:1182:Ethics overview and application.pptx
+  quote: They ask the ethics consultation service whether they should discontinue mechanical ventilation.
+- activity: 1188
+  passage: NMD1301:file:1188:12529_2021_Article_10047.pdf
+  quote: Italian health system was progressively revived and restric- tive isolation measures were reduced, allowing a gradual return to normality.
+- activity: 1190
+  passage: NMD1301:file:1190:Maintaining professional boundaries  conflict of interest.pptx
+  quote: You should refuse gifts where they could be perceived as an abuse of trust.
+misses:
+- activity: 1060
+  quote: Altruism (الإيثار:) The only productive outcome of our work as physicians is improving patients’ quality of life.
+  absent: NMD1301:file:1172:lecture notes.pdf
+- activity: 1060
+  quote: What is a good fit for you? What is the scope of this subject?
+  absent: NMD1301:file:1174:NMD1301_L1_Competencies.pptx
+- activity: 1060
+  quote: ATTRIBUTES OF THE GRADUATES OF MEDICAL SCHOOLS 8 IV.
+  absent: NMD1301:file:1175:NARS-2017-medicine-1.pdf
+- activity: 1060
+  quote: t Experts in the field The highest responsibility in the unit and/or hospital Clinical care mostly involved complex cases and supervision (e.
+  absent: NMD1301:file:1178:Medical career pathway.pptx
+- activity: 1060
+  quote: Cautions To ensure you have a smooth examination journey, please be aware of the following cautions.
+  absent: NMD1301:file:1179:2026Bulletin.pdf

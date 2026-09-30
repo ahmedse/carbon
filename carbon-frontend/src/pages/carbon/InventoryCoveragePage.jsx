@@ -20,7 +20,10 @@ import {
   Tabs,
   Tab,
   LinearProgress,
+  Alert,
 } from '@mui/material';
+import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import PageContainer from '../../components/layout/PageContainer';
 import { FONT } from '../../theme/themeTokens';
@@ -58,9 +61,9 @@ import {
 function ScopeChip({ value }) {
   const key = String(value ?? '');
   const cfg = {
-    '1':      { label: 'Scope 1',     color: 'error' },
+    '1':      { label: 'Scope 1',     color: 'success' },
     '2':      { label: 'Scope 2',     color: 'warning' },
-    '3':      { label: 'Scope 3',     color: 'success' },
+    '3':      { label: 'Scope 3',     color: 'primary' },
     '1+2':    { label: 'Scope 1+2',   color: 'info' },
     '1+2+3':  { label: 'Scope 1+2+3', color: 'primary' },
   };
@@ -70,8 +73,6 @@ function ScopeChip({ value }) {
       label={meta.label}
       size="small"
       color={meta.color === 'default' ? undefined : meta.color}
-      variant="outlined"
-      sx={{ height: 2.5, ...FONT.body, fontWeight: 600 }}
     />
   );
 }
@@ -97,8 +98,6 @@ function TierChip({ value }) {
       label={meta.label}
       size="small"
       color={meta.color === 'default' ? undefined : meta.color}
-      variant="outlined"
-      sx={{ height: 2.5, ...FONT.body, fontWeight: 600 }}
     />
   );
 }
@@ -150,8 +149,6 @@ function ExclusionChip({ value }) {
       label={meta.label}
       size="small"
       color={meta.color === 'default' ? undefined : meta.color}
-      variant="outlined"
-      sx={{ height: 2.5, ...FONT.body, fontWeight: 600 }}
     />
   );
 }
@@ -169,8 +166,6 @@ function CompletenessChip({ value }) {
       label={meta.label}
       size="small"
       color={meta.color === 'default' ? undefined : meta.color}
-      variant="outlined"
-      sx={{ height: 2.5, ...FONT.body, fontWeight: 600 }}
     />
   );
 }
@@ -190,8 +185,6 @@ function ActionTypeChip({ value }) {
       label={meta.label}
       size="small"
       color={meta.color === 'default' ? undefined : meta.color}
-      variant="outlined"
-      sx={{ height: 2.5, ...FONT.body, fontWeight: 600 }}
     />
   );
 }
@@ -377,7 +370,7 @@ function GoalDialog({ open, goal, onSave, onClose }) {
   const [form, setForm] = useState({
     org_unit: '',
     name: '',
-    scope: '1+2+3',
+    scope: '1+2',
     target_coverage_pct: '',
     min_quality_tier: '',
     completeness_definition: 'materiality_bounded',
@@ -401,7 +394,7 @@ function GoalDialog({ open, goal, onSave, onClose }) {
       });
     } else {
       setForm({
-        org_unit: '', name: '', scope: '1+2+3', target_coverage_pct: '', min_quality_tier: '',
+        org_unit: '', name: '', scope: '1+2', target_coverage_pct: '', min_quality_tier: '',
         completeness_definition: 'materiality_bounded', target_year: '', sbti_target: '', status: 'active',
       });
     }
@@ -587,6 +580,8 @@ function ActionDialog({ open, action, sources, onSave, onClose }) {
 
 export default function InventoryCoveragePage() {
   useDocumentTitle('Inventory Coverage');
+  const { t } = useTranslation('emissions');
+  const navigate = useNavigate();
   const { user, token, availablePerspectives } = useAuth();
   const { notify, notifyFromError } = useNotification();
 
@@ -966,6 +961,20 @@ export default function InventoryCoveragePage() {
           </Stack>
         }
       />
+
+      {coverage != null && typeof coverage === 'object' && (
+        <Alert
+          severity="warning"
+          sx={{ mb: 2 }}
+          action={(
+            <Button color="inherit" size="small" onClick={() => navigate('/carbon/onboarding')}>
+              {t('chairman.openOnboarding')}
+            </Button>
+          )}
+        >
+          {t('chairman.notO1Footprint')}
+        </Alert>
+      )}
 
       {/* Reporting period selector */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>

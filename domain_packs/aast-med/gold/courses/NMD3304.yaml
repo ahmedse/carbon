@@ -1,0 +1,308 @@
+# Verbatim sentence from this course bank. It cites one open file, or it is refused.
+version: 1
+course: NMD3304
+world: aast-mbbs
+ask: According to the handout
+miss: This is not in this lecture.
+hits:
+- activity: 710
+  passage: NMD3304:file:710:Health education (source).pptx
+  quote: Apply components of health literacy and use them to analyze health education needs in vignette case studies.
+- activity: 712
+  passage: NMD3304:file:712:Diversity  Privilege.pptx
+  quote: Agents of oppression Members of the dominant social groups.
+- activity: 713
+  passage: NMD3304:file:713:Patient safety (narrated) - Copy.pptx
+  quote: Apply evidence-based strategies and tools to improve patient safety and quality of care.
+- activity: 714
+  passage: NMD3304:file:714:Professional safety - Copy.pptx
+  quote: Ergonomic risk Up to 72% of nurses are suffering from non-specific chronic low back pain.
+- activity: 718
+  passage: NMD3304:file:718:Pediatric communication.pdf
+  quote: A bit of social chatter or one or two non-medical questions can help put the child and accompanying adult(s) at ease.
+- activity: 720
+  passage: NMD3304:file:720:communication with elderly patient.pdf
+  quote: A physician recently saw an elderly patient with parkinsonism and depression.
+- activity: 721
+  passage: NMD3304:file:721:communication with  patient with special need...pdf
+  quote: A 30-year-old male patient with Down syndrome is admitted to your unit.
+- activity: 723
+  passage: NMD3304:file:723:Communication with difficult patients 3rd y-AAST_052917.pdf
+  quote: Aim to turn the confrontation into a conversation.
+- activity: 726
+  passage: NMD3304:file:726:respos towards community_074045.pdf
+  quote: Advocating for accountability, fairness, equity and justice in the provision of health care and the allocation of health care resources.
+- activity: 727
+  passage: NMD3304:file:727:intra-interprof - Copy_074143.pdf
+  quote: Active listening to encourage ideas and opinions of other team members.
+- activity: 710
+  passage: NMD3304:file:710:Health education (source).pptx
+  quote: Compare and differentiate various concepts of health promotion.
+- activity: 712
+  passage: NMD3304:file:712:Diversity  Privilege.pptx
+  quote: Allow others to finish their comments before speaking.
+- activity: 713
+  passage: NMD3304:file:713:Patient safety (narrated) - Copy.pptx
+  quote: Audit M easuring a clinical outcome or a process, against well-defined standards set on the principles of evidence-based medicine.
+- activity: 714
+  passage: NMD3304:file:714:Professional safety - Copy.pptx
+  quote: Heat stress can arise from pronged work in full personal protective equipment (coveralls, gowns, hoods, googles, boots, respirators).
+- activity: 718
+  passage: NMD3304:file:718:Pediatric communication.pdf
+  quote: A yes answer to, “Do you understand?” is not a reliable indicator of comprehension.
+- activity: 720
+  passage: NMD3304:file:720:communication with elderly patient.pdf
+  quote: Adequate lighting will help seniors see your facial expressions and body language, which are important in communication.
+- activity: 721
+  passage: NMD3304:file:721:communication with  patient with special need...pdf
+  quote: Adjust your method of communication as necessary depending on the individual's responses to you.
+- activity: 723
+  passage: NMD3304:file:723:Communication with difficult patients 3rd y-AAST_052917.pdf
+  quote: All these make p atients time-consuming and emotionally draining , convert the communication into a challenging task .
+- activity: 726
+  passage: NMD3304:file:726:respos towards community_074045.pdf
+  quote: Community and health resources that are available to abused persons.
+- activity: 727
+  passage: NMD3304:file:727:intra-interprof - Copy_074143.pdf
+  quote: 'Assessment: Share abnormal assessment findings and your evaluation of the current situation.'
+- activity: 710
+  passage: NMD3304:file:710:Health education (source).pptx
+  quote: Correlate health behavior theories with health education planning.
+- activity: 712
+  passage: NMD3304:file:712:Diversity  Privilege.pptx
+  quote: Are seen and treated as expendable and replaceable.
+- activity: 713
+  passage: NMD3304:file:713:Patient safety (narrated) - Copy.pptx
+  quote: 'Example 1: Home Medications Contribute to a Unique Opportunity for Error on Discharge from the Hospital.'
+- activity: 714
+  passage: NMD3304:file:714:Professional safety - Copy.pptx
+  quote: Organize first aid and emergency care procedures in case of accidental exposures Provide and ensure usage of appropriate well fitted PPE IV.
+- activity: 718
+  passage: NMD3304:file:718:Pediatric communication.pdf
+  quote: 'Active listening skills are as follows: Attentiveness Eliminating distractions whenever possible is important.'
+- activity: 720
+  passage: NMD3304:file:720:communication with elderly patient.pdf
+  quote: Although the patient had numerous criticisms of other physicians, the interviewer did not have to join in this criticism to build rapport.
+- activity: 721
+  passage: NMD3304:file:721:communication with  patient with special need...pdf
+  quote: Although there are similar signs and symptoms with some mental disorders, remember that no two patients are alike.
+- activity: 723
+  passage: NMD3304:file:723:Communication with difficult patients 3rd y-AAST_052917.pdf
+  quote: Any deviation by the patient from this model give a diffic ult patient who may elicit negative reactions from the physician.
+- activity: 726
+  passage: NMD3304:file:726:respos towards community_074045.pdf
+  quote: Consider abuse as a possible factor in the medical complaints.
+- activity: 727
+  passage: NMD3304:file:727:intra-interprof - Copy_074143.pdf
+  quote: Avoiding discipline-specific terminology when communicating information with patients, families, community members.
+- activity: 710
+  passage: NMD3304:file:710:Health education (source).pptx
+  quote: Health education program Ethical code LOs Define health, health education, and health literacy.
+- activity: 712
+  passage: NMD3304:file:712:Diversity  Privilege.pptx
+  quote: D MRCPsych Exercise Privilege This is our country, we have a stronger claim to jobs even if we are more lazy, incompetent, or more expensive.
+- activity: 713
+  passage: NMD3304:file:713:Patient safety (narrated) - Copy.pptx
+  quote: Identify the common causes and consequences of patient harm and how to prevent and manage them.
+- activity: 714
+  passage: NMD3304:file:714:Professional safety - Copy.pptx
+  quote: Poor lighting in work areas can cause injuries, eye strain and loss of vision.
+- activity: 718
+  passage: NMD3304:file:718:Pediatric communication.pdf
+  quote: After introductions and rapport-building, the clinician needs to ask the patient’s and parent’s concerns and reasons for the interview.
+- activity: 720
+  passage: NMD3304:file:720:communication with elderly patient.pdf
+  quote: By asking open-ended questions, you give them the opportunity to express their emotions more freely and openly.
+- activity: 721
+  passage: NMD3304:file:721:communication with  patient with special need...pdf
+  quote: As with Down syndrome, make no assumptions regarding the patient’s intelligence, level of understanding, or ability.
+- activity: 723
+  passage: NMD3304:file:723:Communication with difficult patients 3rd y-AAST_052917.pdf
+  quote: At that moment, stepping back can give both the doctor and patient a chance to restart the relationship.
+- activity: 726
+  passage: NMD3304:file:726:respos towards community_074045.pdf
+  quote: Define competency and explain how a physician could fulfill it.
+- activity: 727
+  passage: NMD3304:file:727:intra-interprof - Copy_074143.pdf
+  quote: Be sure to document communication in the patient’s chart.
+- activity: 710
+  passage: NMD3304:file:710:Health education (source).pptx
+  quote: Health is a resource for everyday life and not just the objective of living.
+- activity: 712
+  passage: NMD3304:file:712:Diversity  Privilege.pptx
+  quote: Exercise All that is said in the group is confidential and will be respected.
+- activity: 713
+  passage: NMD3304:file:713:Patient safety (narrated) - Copy.pptx
+  quote: Mode and Effect Analysis (FMEA) Incident report An incident report is used to formally document an event that involves an unusual occurance .
+- activity: 714
+  passage: NMD3304:file:714:Professional safety - Copy.pptx
+  quote: Up to 62% of health workers have experienced workplace violence.
+- activity: 718
+  passage: NMD3304:file:718:Pediatric communication.pdf
+  quote: Always address the patient and family members by name.
+- activity: 720
+  passage: NMD3304:file:720:communication with elderly patient.pdf
+  quote: By using reflection, you show that you are really listening and understanding what they are saying.
+- activity: 721
+  passage: NMD3304:file:721:communication with  patient with special need...pdf
+  quote: As you’re asking the patient questions, you realize that he has some learning deficits that are impeding the interview.
+- activity: 723
+  passage: NMD3304:file:723:Communication with difficult patients 3rd y-AAST_052917.pdf
+  quote: Avoid trying to make a situation better when it is grave as saying, “I’m sure things will not be as bad as you think.
+- activity: 726
+  passage: NMD3304:file:726:respos towards community_074045.pdf
+  quote: Describe the key responsibilities of physicians towards their communities.
+- activity: 727
+  passage: NMD3304:file:727:intra-interprof - Copy_074143.pdf
+  quote: Demonstrate effective communication Strategies for collaborating with other healthcare professionals.
+- activity: 710
+  passage: NMD3304:file:710:Health education (source).pptx
+  quote: Outline components of a successful health education program and apply them to evidence-based examples and vignette case studies.
+- activity: 712
+  passage: NMD3304:file:712:Diversity  Privilege.pptx
+  quote: Fewer “life chances” or benefits as a result of their membership in a particular social group.
+- activity: 713
+  passage: NMD3304:file:713:Patient safety (narrated) - Copy.pptx
+  quote: Recognize the role and responsibilities of health care professionals in ensuring patient safety and promoting a culture of safety.
+- activity: 714
+  passage: NMD3304:file:714:Professional safety - Copy.pptx
+  quote: Violence and harassment Violence and harassment affect all health worker groups and work settings in the health sector.
+- activity: 718
+  passage: NMD3304:file:718:Pediatric communication.pdf
+  quote: Are you sure that you agree? What would you like to do differently?
+- activity: 720
+  passage: NMD3304:file:720:communication with elderly patient.pdf
+  quote: Communication with elderly patients By Somaya Madkour Prof.
+- activity: 721
+  passage: NMD3304:file:721:communication with  patient with special need...pdf
+  quote: Ask the patient and his or her caregiver about activities of daily living routines to minimize anxiety and frustration.
+- activity: 723
+  passage: NMD3304:file:723:Communication with difficult patients 3rd y-AAST_052917.pdf
+  quote: Buster protocol It is used to minimize emotions, so they don’t rule the conversation.
+- activity: 726
+  passage: NMD3304:file:726:respos towards community_074045.pdf
+  quote: Discuss any suspicion of abuse sensitively with the patient.
+- activity: 727
+  passage: NMD3304:file:727:intra-interprof - Copy_074143.pdf
+  quote: Expedites initiation of treatment A substantial proportion of healthcare is marked by waiting periods.
+- activity: 710
+  passage: NMD3304:file:710:Health education (source).pptx
+  quote: Simulate responsibilities involved in a health education program.
+- activity: 712
+  passage: NMD3304:file:712:Diversity  Privilege.pptx
+  quote: Hala and Hassan both work at a large financial firm.
+- activity: 713
+  passage: NMD3304:file:713:Patient safety (narrated) - Copy.pptx
+  quote: Tracer method LOs Understand the concepts and principles of patient safety and how they apply to clinical practice.
+- activity: 714
+  passage: NMD3304:file:714:Professional safety - Copy.pptx
+  quote: Working outdoors in situations of extreme cold or heat can cause serious health damage.
+- activity: 718
+  passage: NMD3304:file:718:Pediatric communication.pdf
+  quote: Asking, “What questions do you have?” while remaining seated is more likely to elicit a meaningful response.
+- activity: 720
+  passage: NMD3304:file:720:communication with elderly patient.pdf
+  quote: Giving false hope to the elderly will only cause disappointment if these expectations are not met.
+- activity: 721
+  passage: NMD3304:file:721:communication with  patient with special need...pdf
+  quote: Ask the patient and his or her caregiver for input and assistance in determining approach, language, and needs assessment.
+- activity: 723
+  passage: NMD3304:file:723:Communication with difficult patients 3rd y-AAST_052917.pdf
+  quote: Communication With Difficult Patients Learning Objectives • Identify difficult patients.
+- activity: 726
+  passage: NMD3304:file:726:respos towards community_074045.pdf
+  quote: Discuss ethical conduct when sharing medical content on media.
+- activity: 727
+  passage: NMD3304:file:727:intra-interprof - Copy_074143.pdf
+  quote: Expressing one’s knowledge and opinions to team members with clarity, and respect to ensure common understanding of information.
+- activity: 710
+  passage: NMD3304:file:710:Health education (source).pptx
+  quote: irmity” Individuals or groups must be able to identify and realize aspirations, to satisfy needs, and to change or cope with the environment.
+- activity: 712
+  passage: NMD3304:file:712:Diversity  Privilege.pptx
+  quote: Hala is promoted to a senior management position, while Hassan continues to work in his current role with no clear path for advancement.
+- activity: 713
+  passage: NMD3304:file:713:Patient safety (narrated) - Copy.pptx
+  quote: 'analysis RCA Audits FMEA Thank you Stay safe Definitions Patient safety: A voiding harm to patients from care that is intended to help them.'
+- activity: 714
+  passage: NMD3304:file:714:Professional safety - Copy.pptx
+  quote: cause burnout, chronic fatigue, absenteeism, high staff turnover, reduced patient satisfaction, and increased diagnosis and treatment errors.
+- activity: 718
+  passage: NMD3304:file:718:Pediatric communication.pdf
+  quote: Communication with children and families Involving the Child in the Conversation The physicians’ approach had to be more child-centered.
+- activity: 720
+  passage: NMD3304:file:720:communication with elderly patient.pdf
+  quote: Good listening skills will help create a trusting relationship and will greatly benefit the care and well - being of the elderly.
+- activity: 721
+  passage: NMD3304:file:721:communication with  patient with special need...pdf
+  quote: Avoid giving too many directions at one time, which may be confusing.
+- activity: 723
+  passage: NMD3304:file:723:Communication with difficult patients 3rd y-AAST_052917.pdf
+  quote: Dealing with difficult patients can lead physicians to get out of control , this makes the patient get more and more frustrated.
+- activity: 726
+  passage: NMD3304:file:726:respos towards community_074045.pdf
+  quote: Discuss the ethical obligations to engage in disaster management.
+- activity: 727
+  passage: NMD3304:file:727:intra-interprof - Copy_074143.pdf
+  quote: Giving sensitive, constructive feedback to others about their performance on the team.
+- activity: 710
+  passage: NMD3304:file:710:Health education (source).pptx
+  quote: 'mplex issues Practitioners’ knowledge Low tech Vested interests Responsibilities and competencies Health education settings School: Teachers.'
+- activity: 712
+  passage: NMD3304:file:712:Diversity  Privilege.pptx
+  quote: Hala, who is from a privileged background and attended an elite university, has quickly moved up the corporate ladder.
+- activity: 713
+  passage: NMD3304:file:713:Patient safety (narrated) - Copy.pptx
+  quote: cation bottles Communication with community pharmacy Example 2 Endotracheal Tube Fallout in a Patient with Severe Obesity During Eye Surgery.
+- activity: 714
+  passage: NMD3304:file:714:Professional safety - Copy.pptx
+  quote: d organ shields Follow the measures recommended by the manufactures for use of medical devices with non-ionizing radiation (UV & lasers) Why?
+- activity: 718
+  passage: NMD3304:file:718:Pediatric communication.pdf
+  quote: Communication with pediatric patients By Somaya Madkour Prof.
+- activity: 720
+  passage: NMD3304:file:720:communication with elderly patient.pdf
+  quote: Greet them with a smile and speak in a gentle tone of voice to let them feel more relaxed and open to talking.
+- activity: 721
+  passage: NMD3304:file:721:communication with  patient with special need...pdf
+  quote: Avoid sensory overload by providing information gradually and clearly.
+- activity: 723
+  passage: NMD3304:file:723:Communication with difficult patients 3rd y-AAST_052917.pdf
+  quote: 'Dealing with difficult patients have several issues that can be summarized into three categories: 1.'
+- activity: 726
+  passage: NMD3304:file:726:respos towards community_074045.pdf
+  quote: E-Professionalism is the professional use of electronic platforms.
+- activity: 727
+  passage: NMD3304:file:727:intra-interprof - Copy_074143.pdf
+  quote: 'Interprofessional & Intraprofessional Relationships in Healthcare By the end of this lecture, students will be able to: 1.'
+- activity: 710
+  passage: NMD3304:file:710:Health education (source).pptx
+  quote: ng effectiveness Coordinating provision Acting as a resource person Communicating health and health education needs, concerns, and resources.
+- activity: 712
+  passage: NMD3304:file:712:Diversity  Privilege.pptx
+  quote: He has also faced subtle biases and microaggressions from some colleagues.
+- activity: 713
+  passage: NMD3304:file:713:Patient safety (narrated) - Copy.pptx
+  quote: lsheshai MD MRCPsych Psychiatrist Systems approach M ost errors reflect predictable human failings in the context of poorly designed systems.
+- activity: 714
+  passage: NMD3304:file:714:Professional safety - Copy.pptx
+  quote: d organize medical surveillance of exposed workers Provide workers with adequate PPE including protective aprons, gloves and organ shields V.
+- activity: 718
+  passage: NMD3304:file:718:Pediatric communication.pdf
+  quote: Engaging the child in the conversation in a meaningful way can be a challenge.
+misses:
+- activity: 712
+  quote: Apply components of health literacy and use them to analyze health education needs in vignette case studies.
+  absent: NMD3304:file:710:Health education (source).pptx
+- activity: 710
+  quote: Agents of oppression Members of the dominant social groups.
+  absent: NMD3304:file:712:Diversity  Privilege.pptx
+- activity: 710
+  quote: Apply evidence-based strategies and tools to improve patient safety and quality of care.
+  absent: NMD3304:file:713:Patient safety (narrated) - Copy.pptx
+- activity: 710
+  quote: Ergonomic risk Up to 72% of nurses are suffering from non-specific chronic low back pain.
+  absent: NMD3304:file:714:Professional safety - Copy.pptx
+- activity: 710
+  quote: A bit of social chatter or one or two non-medical questions can help put the child and accompanying adult(s) at ease.
+  absent: NMD3304:file:718:Pediatric communication.pdf

@@ -17,6 +17,8 @@
 #   migrate    - Run Django migrations
 #   shell      - Open Django shell
 #   test       - Run backend tests
+#   platforms  - List existing platforms and which one is current
+#   platform   - Switch platform (alias: brand). --apply restarts like ./manage.sh start
 #   killall    - Emergency force kill everything
 #   help       - Show help
 #
@@ -743,6 +745,7 @@ cmd_health() {
 # config/settings.py from DJANGO_BRAND. Frontend: .env.instance.<id>.
 cmd_brand() {
     local brand="${1:-}"
+    local apply="${2:-}"
     local -a BRAND_IDS=(aastmt nibras medos tectona eduos)
 
     # Mirrors BRAND_DB_NAMES in backend/config/settings.py
@@ -791,19 +794,21 @@ cmd_brand() {
     current=$(grep -E '^DJANGO_BRAND=' "$BACKEND_DIR/.env" 2>/dev/null | cut -d'=' -f2 | tr -d '[:space:]')
     current=${current:-aastmt}
 
-    if [[ -z "$brand" ]]; then
+    if [[ -z "$brand" || "$brand" == "list" ]]; then
         print_header
-        log_info "Current brand: ${MAGENTA}${current}${NC}  (DB: ${BRAND_DB[$current]:-${current}_dev})"
+        log_info "Current platform: ${MAGENTA}${current}${NC}  ${BRAND_PLATFORM_NAME[$current]:-}  (DB: ${BRAND_DB[$current]:-${current}_dev})"
         echo ""
+        printf "  %-4s %-10s %-24s %s\n" "" "id" "platform" "database"
         for b in "${BRAND_IDS[@]}"; do
             if [[ "$b" == "$current" ]]; then
-                echo -e "  ${GREEN}✓${NC} ${MAGENTA}${b}${NC}  →  ${BRAND_DB[$b]:-${b}_dev}"
+                printf "  ${GREEN}%-4s${NC} ${MAGENTA}%-10s${NC} %-24s %s\n" "*" "$b" "${BRAND_PLATFORM_NAME[$b]}" "${BRAND_DB[$b]:-${b}_dev}"
             else
-                echo -e "    ${b}  →  ${BRAND_DB[$b]:-${b}_dev}"
+                printf "  %-4s %-10s %-24s %s\n" "" "$b" "${BRAND_PLATFORM_NAME[$b]}" "${BRAND_DB[$b]:-${b}_dev}"
             fi
         done
         echo ""
-        log_info "Switch with: ./manage.sh brand <id>"
+        log_info "Switch: ./manage.sh platform <id>"
+        log_info "Restart the stack on it: ./manage.sh platform <id> --apply"
         return 0
     fi
 
@@ -812,12 +817,13 @@ cmd_brand() {
         [[ "$b" == "$brand" ]] && valid=1
     done
     if [[ -z "$valid" ]]; then
-        log_error "Unknown brand '$brand'. Valid: ${BRAND_IDS[*]}"
+        log_error "Unknown platform '$brand'. Valid: ${BRAND_IDS[*]}"
+        log_info "List them with: ./manage.sh platforms"
         return 1
     fi
 
     print_header
-    log_info "Switching brand → ${MAGENTA}${brand}${NC} (DB: ${BRAND_DB[$brand]:-${brand}_dev})"
+    log_info "Switching platform → ${MAGENTA}${brand}${NC}  ${BRAND_PLATFORM_NAME[$brand]}  (DB: ${BRAND_DB[$brand]:-${brand}_dev})"
     echo ""
 
     # 1) Backend: flip brand + all per-brand runtime scoping so switching is
@@ -858,9 +864,29 @@ cmd_brand() {
     fi
 
     echo ""
-    log_success "Brand switched to '${brand}' (DB: ${BRAND_DB[$brand]:-${brand}_dev})."
-    log_info "Run './manage.sh restart' to apply. DB already provisioned if you ran the one-time setup."
+    if [[ "$apply" == "--apply" ]]; then
+        log_step "Restarting backend and frontend (same as ./manage.sh start)"
+        cmd_start || return 1
+    else
+        log_success "Platform files set to '${brand}' (DB: ${BRAND_DB[$brand]:-${brand}_dev})."
+        log_info "The running server is unchanged. Apply with: ./manage.sh platform ${brand} --apply"
+    fi
     echo ""
+}
+
+# platform / platforms / brand share one switch. "switch" is an optional verb:
+#   ./manage.sh platforms
+#   ./manage.sh platform nibras [--apply]
+#   ./manage.sh platform switch nibras [--apply]
+cmd_platform() {
+    local action="${1:-}"
+    local target="${2:-}"
+    local flag="${3:-}"
+    if [[ "$action" == "switch" ]]; then
+        cmd_brand "$target" "$flag"
+    else
+        cmd_brand "$action" "$target"
+    fi
 }
 
 cmd_migrate() {
@@ -1088,7 +1114,9 @@ cmd_help() {
     echo "  migrate            Run Django migrations"
     echo "  shell              Open Django shell"
     echo "  createsuperuser    Create a Django superuser (interactive)"
-    echo "  brand [id]         Show current brand, or switch (aastmt|nibras|medos|tectona|eduos)"
+    echo "  platforms             List existing platforms and mark the current one"
+    echo "  platform [id] [--apply]  Switch platform (aastmt|nibras|medos|tectona|eduos). --apply restarts backend and frontend."
+    echo "  brand [id] [--apply]  Same as platform."
     echo "  test               Run backend tests (pytest)"
     echo "  schedules [--dry-run]  Materialize due plan schedules (W6-E F-29)"
     echo "  maintenance [--dry-run] [--loops]  Pulse heartbeat: consolidate/distill/decay"
@@ -1103,6 +1131,9 @@ cmd_help() {
     echo "  ./manage.sh clean-ports    # Kill whatever is holding the ports"
     echo "  ./manage.sh status         # Check what's running"
     echo "  ./manage.sh logs backend   # View backend logs"
+    echo "  ./manage.sh platforms      # List platforms"
+    echo "  ./manage.sh platform nibras          # Switch files to Nibras"
+    echo "  ./manage.sh platform nibras --apply  # Switch and restart backend + frontend"
     echo "  ./manage.sh migrate        # Run DB migrations"
     echo "  ./manage.sh schedules      # Fire due plan schedules (cron: */5 * * * *)"
     echo "  ./manage.sh maintenance    # Pulse heartbeat (cron: 0 2 * * *)"
@@ -1140,7 +1171,7 @@ main() {
         migrate)    cmd_migrate ;;
         shell)      cmd_shell ;;
         createsuperuser) cmd_createsuperuser ;;
-        brand)      cmd_brand "${2:-}" ;;
+        platforms|platform|brand) cmd_platform "${2:-}" "${3:-}" "${4:-}" ;;
         test)       cmd_test "$@" ;;
         schedules)  cmd_schedules "${2:-}" ;;
         maintenance) cmd_maintenance "${2:-}" "${3:-}" ;;

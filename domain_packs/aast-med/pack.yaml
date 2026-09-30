@@ -17,6 +17,8 @@ owns:
   section_asks: section_asks.yaml
   lecture_asks: lecture_asks.yaml
   fact_asks: fact_asks.yaml
+  identity_asks: identity_asks.yaml
+  course_asks: course_asks.yaml
   access_reasons: access_reasons.yaml
   courses: courses.yaml
   inventory: inventory.json
@@ -32,3 +34,15 @@ owns:
   gold_l5: gold/l5.yaml
   gold_nmd2101_restore: gold/nmd2101_restore.yaml
   keys_nmd1103: bank/course-keys-13/NMD1103.jsonl
+  keys_nmd1000: bank/course-keys-13/NMD1000.jsonl
+  keys_nmd1301: bank/course-keys-13/NMD1301.jsonl
+  keys_nmd2101: bank/course-keys-13/NMD2101.jsonl
+  keys_nmd3101: bank/course-keys-13/NMD3101.jsonl
+  keys_nmd4201: bank/course-keys-13/NMD4201.jsonl
+  keys_med520: bank/course-keys-13/MED520.jsonl
+  keys_nmd1402: bank/course-keys-13/NMD1402.jsonl
+  keys_med213: bank/course-keys-13/MED213.jsonl
+  keys_nmd2303: bank/course-keys-13/NMD2303.jsonl
+  keys_nmd2403: bank/course-keys-13/NMD2403.jsonl
+  keys_nmd3304: bank/course-keys-13/NMD3304.jsonl
+  keys_med5310: bank/course-keys-13/MED5310.jsonl

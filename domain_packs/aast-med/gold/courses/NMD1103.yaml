@@ -1,0 +1,284 @@
+# Verbatim sentence from this course bank. It cites one open file, or it is refused.
+version: 1
+course: NMD1103
+world: aast-mbbs
+ask: According to the handout
+miss: This is not in this lecture.
+hits:
+- activity: 1005
+  passage: NMD1103:file:1005:Virtual Tour in Hospital Facilities.pdf
+  quote: General hospitals are available in every capital of a governorate.
+- activity: 1007
+  passage: NMD1103:file:1007:interactive-diagram-hospital.pdf
+  quote: How many hazards can you find? Visit www.
+- activity: 1009
+  passage: NMD1103:file:1009:Hand Hygiene Skill lab (Academy) 2021-2022 (2).pptx
+  quote: After coming into contact with liquids or bodily excretions , mucosa, non- intact skin or wound dressings.
+- activity: 1010
+  passage: NMD1103:file:1010:PPE skill lab (Academy) 2021-2022 (1).pptx
+  quote: Adjust to fit without leaving gaps on the sides SURGICAL MASK How to doff a surgical mask?
+- activity: 1011
+  passage: NMD1103:file:1011:PPE reference (1).pdf
+  quote: As you are removing the gown, peel off your gloves at the same time, only touching the inside of the gloves and gown with your bare hands.
+- activity: 1012
+  passage: NMD1103:file:1012:Skill Lab.pptx
+  quote: Identify the components of skill lab What is a skill lab?
+- activity: 1018
+  passage: NMD1103:file:1018:final Measuring and recording Blood Pressure .pptx
+  quote: There is a difference in the procedure for measuring blood pressure.
+- activity: 1020
+  passage: NMD1103:file:1020:Vital Signs Radial Pulse and Arterial blood pressure (2).docx
+  quote: As the heart pushes blood through the arteries, the arteries expand and contract with the flow of the blood.
+- activity: 1028
+  passage: NMD1103:file:1028:HH.pdf
+  quote: Apply a palm-full of the product in a cuppedhand, covering all surfaces 2.
+- activity: 1218
+  passage: NMD1103:file:1218:History Taking.pptx
+  quote: Calculate the number of ‘ pack-years ‘ Ask if the patient regularly exercises and if so clarify the frequency and activity type of exercise.
+- activity: 1221
+  passage: NMD1103:file:1221:Vital Signs- Pulse .docx
+  quote: Any physiological or pathological changes in the body functions would be reflected in the vital signs .
+- activity: 1223
+  passage: 'NMD1103:file:1223: Clinical Skills Course Description.docx'
+  quote: Clinical skills 1 course is taught along semester 1 twice weekly .
+- activity: 1005
+  passage: NMD1103:file:1005:Virtual Tour in Hospital Facilities.pdf
+  quote: List different units and facilities in a hospital.
+- activity: 1007
+  passage: NMD1103:file:1007:interactive-diagram-hospital.pdf
+  quote: This is Interactive Diagram on detecting hazards in the hospital environment.
+- activity: 1009
+  passage: NMD1103:file:1009:Hand Hygiene Skill lab (Academy) 2021-2022 (2).pptx
+  quote: After coming into contact with the inanimate objects (including medical equipment) in patient’s immediate area.
+- activity: 1010
+  passage: NMD1103:file:1010:PPE skill lab (Academy) 2021-2022 (1).pptx
+  quote: Face shields – protect face, mouth, nose, and eyes.
+- activity: 1011
+  passage: NMD1103:file:1011:PPE reference (1).pdf
+  quote: GO WN • Fully cover torso from neck to knees, arms to end of wrists, and wrap around the back • Fasten in back of neck and waist 2.
+- activity: 1012
+  passage: NMD1103:file:1012:Skill Lab.pptx
+  quote: Low-fidelity manikins used to teach students how to insert an IV or how to perform CPR.
+- activity: 1018
+  passage: NMD1103:file:1018:final Measuring and recording Blood Pressure .pptx
+  quote: Why do we use Stethoscope? Stethoscope Try to put your stethoscope on your radial or brachial artery would you hear anything?
+- activity: 1020
+  passage: NMD1103:file:1020:Vital Signs Radial Pulse and Arterial blood pressure (2).docx
+  quote: 'CP: Competently performed P A performed with A ssistance NP ( not done) II.'
+- activity: 1028
+  passage: NMD1103:file:1028:HH.pdf
+  quote: Backs of fingers to opposing palms with fingersinterlocked 6.
+- activity: 1218
+  passage: NMD1103:file:1218:History Taking.pptx
+  quote: Have you noticed any side effects from the medication you currently take?
+- activity: 1221
+  passage: NMD1103:file:1221:Vital Signs- Pulse .docx
+  quote: As the heart pushes blood through the arteries, the arteries expand and contract with the blood flow .
+- activity: 1223
+  passage: 'NMD1103:file:1223: Clinical Skills Course Description.docx'
+  quote: The course provides opportunities for students to practice basic clinical and procedural skills for year 1 students .
+- activity: 1005
+  passage: NMD1103:file:1005:Virtual Tour in Hospital Facilities.pdf
+  quote: 'Secondary careuPatients are coming by referral from primary care unitsuContains different specialties: cardiology, endocrinology, oncology,….'
+- activity: 1009
+  passage: NMD1103:file:1009:Hand Hygiene Skill lab (Academy) 2021-2022 (2).pptx
+  quote: Before manipulating an invasive device , with or without gloves.
+- activity: 1010
+  passage: NMD1103:file:1010:PPE skill lab (Academy) 2021-2022 (1).pptx
+  quote: General rules of PPE use Don before contact with the patient.
+- activity: 1011
+  passage: NMD1103:file:1011:PPE reference (1).pdf
+  quote: GO WN • Gown front and sleeves are contaminated!
+- activity: 1012
+  passage: NMD1103:file:1012:Skill Lab.pptx
+  quote: Notice the difference between each one and try to guess what this manikin is for.
+- activity: 1018
+  passage: NMD1103:file:1018:final Measuring and recording Blood Pressure .pptx
+  quote: fter 5 minutes rest Back , leg and arm supported Ask the patients to expose the right arm by rolling up their sleeves What is blood pressure?
+- activity: 1020
+  passage: NMD1103:file:1020:Vital Signs Radial Pulse and Arterial blood pressure (2).docx
+  quote: Exercises, some illness and emotions could increase the heart rate.
+- activity: 1028
+  passage: NMD1103:file:1028:HH.pdf
+  quote: Backs of fingers to opposing palms withfingers interlocked 7.
+- activity: 1218
+  passage: NMD1103:file:1218:History Taking.pptx
+  quote: Past History Why is it important to take past history ?
+- activity: 1221
+  passage: NMD1103:file:1221:Vital Signs- Pulse .docx
+  quote: Exercises, some illnesses and emotions could increase the heart rate.
+- activity: 1223
+  passage: 'NMD1103:file:1223: Clinical Skills Course Description.docx'
+  quote: lood pressure both palpatory and auscultatory on simulated model using aneroid sphygmomanometer with precision 10 mmHg from actual measuring.
+- activity: 1005
+  passage: NMD1103:file:1005:Virtual Tour in Hospital Facilities.pdf
+  quote: What are the main healthcare facilities you need to know?
+- activity: 1009
+  passage: NMD1103:file:1009:Hand Hygiene Skill lab (Academy) 2021-2022 (2).pptx
+  quote: Hand Hygiene Why? When? How? With what? WHY? WHEN? Before and after direct contact with patients.
+- activity: 1010
+  passage: NMD1103:file:1010:PPE skill lab (Academy) 2021-2022 (1).pptx
+  quote: NON-STERILE GLOVES NON-STERILE GLOVES How to don gloves?
+- activity: 1011
+  passage: NMD1103:file:1011:PPE reference (1).pdf
+  quote: GOGGLES OR FA CE SHIELD • Outside of goggles or face shield are contaminated!
+- activity: 1012
+  passage: NMD1103:file:1012:Skill Lab.pptx
+  quote: Try the AR mode!) Objectives Know the rules and the ethics of the skill lab Know what skill lab is.
+- activity: 1018
+  passage: NMD1103:file:1018:final Measuring and recording Blood Pressure .pptx
+  quote: ic blood pressure Palpate the patient’s radial pulse Inflate the blood pressure cuff until you can no longer feel the patient's radial pulse.
+- activity: 1020
+  passage: NMD1103:file:1020:Vital Signs Radial Pulse and Arterial blood pressure (2).docx
+  quote: If the patient has a history of postural hypotension.
+- activity: 1028
+  passage: NMD1103:file:1028:HH.pdf
+  quote: Right palm over left dorsum with interlacedfingers and vice versa 4.
+- activity: 1218
+  passage: NMD1103:file:1218:History Taking.pptx
+  quote: Predict course and possible complication of the disease N arrow differential diagnosis What are the items of past History ?
+- activity: 1221
+  passage: NMD1103:file:1221:Vital Signs- Pulse .docx
+  quote: On the other hand, runners who do a lot of cardiovascular conditions may have a slower heart rate of 40 beats per minute.
+- activity: 1223
+  passage: 'NMD1103:file:1223: Clinical Skills Course Description.docx'
+  quote: offers an early clinical exposure for year 1 students through introduc ing them to basic clinical and procedural skills needed for year 1.
+- activity: 1005
+  passage: NMD1103:file:1005:Virtual Tour in Hospital Facilities.pdf
+  quote: ed in urban areas and include specialties such as eye, psychiatric, chest, fever, heart ophthalmology, tumors, and gynecology and obstetrics.
+- activity: 1009
+  passage: NMD1103:file:1009:Hand Hygiene Skill lab (Academy) 2021-2022 (2).pptx
+  quote: Identify the WHO five moments for hand hygiene.
+- activity: 1010
+  passage: NMD1103:file:1010:PPE skill lab (Academy) 2021-2022 (1).pptx
+  quote: Perform Hand hygiene Untie the bottom, then top, tie Pull the face mask forward off the face to remove.
+- activity: 1011
+  passage: NMD1103:file:1011:PPE reference (1).pdf
+  quote: GOGGLES OR FA CE SHIELD • Place over face and eyes and adjust to fit 4.
+- activity: 1012
+  passage: NMD1103:file:1012:Skill Lab.pptx
+  quote: What are other types of simulation you may use in your study?
+- activity: 1018
+  passage: NMD1103:file:1018:final Measuring and recording Blood Pressure .pptx
+  quote: manometer These devices use an electronic pressure sensor to measure the blood pressure, and the readings are presented on a digital display.
+- activity: 1020
+  passage: NMD1103:file:1020:Vital Signs Radial Pulse and Arterial blood pressure (2).docx
+  quote: Measuring Blood Pressure Auscultatory Method Place the stethoscope over the brachial artery pulse, ensuring that it does not touch the cuff.
+- activity: 1028
+  passage: NMD1103:file:1028:HH.pdf
+  quote: Right palm over left dorsum withinterlaced fingers and vice versa 5.
+- activity: 1218
+  passage: NMD1103:file:1218:History Taking.pptx
+  quote: 'ations: prescriptions, over-the-counter, herbal remedies “Are you currently taking any prescribed medications or over-the-counter treatments?'
+- activity: 1221
+  passage: NMD1103:file:1221:Vital Signs- Pulse .docx
+  quote: 'Pulse Rate: is measuring heartbeat by palpating a peripheral artery with the fingertip.'
+- activity: 1223
+  passage: 'NMD1103:file:1223: Clinical Skills Course Description.docx'
+  quote: palpatory and auscultatory on right arm of Standardized patient using mercury sphygmomanometer with precision 10 mmHg from actual measuring.
+- activity: 1005
+  passage: NMD1103:file:1005:Virtual Tour in Hospital Facilities.pdf
+  quote: uTertiary careuFor cases that needs higher level of specialty care.
+- activity: 1009
+  passage: NMD1103:file:1009:Hand Hygiene Skill lab (Academy) 2021-2022 (2).pptx
+  quote: It is faster , more effective, and better tolerated by your hands than washing with soap and water.
+- activity: 1010
+  passage: NMD1103:file:1010:PPE skill lab (Academy) 2021-2022 (1).pptx
+  quote: Practice how to safely don and doff N95 .
+- activity: 1011
+  passage: NMD1103:file:1011:PPE reference (1).pdf
+  quote: GOWN AND GLOVES • Gown front and sleeves and the outside of gloves are contaminated!
+- activity: 1012
+  passage: NMD1103:file:1012:Skill Lab.pptx
+  quote: es real-life situations – the equipment included in the skill lab are simulation of real life items (organs, skeletons, medical devices,…etc.
+- activity: 1018
+  passage: NMD1103:file:1018:final Measuring and recording Blood Pressure .pptx
+  quote: omanometer Mercury Sphygmomanometer Are made up of manually inflatable cuffs that are attached to measuring units with mercury-infused tubes.
+- activity: 1020
+  passage: NMD1103:file:1020:Vital Signs Radial Pulse and Arterial blood pressure (2).docx
+  quote: 'Measuring Blood Pressure STEP/TASK CP AP NP Getting ready: Wash your hand Introduce yourself to the patient.'
+- activity: 1028
+  passage: NMD1103:file:1028:HH.pdf
+  quote: Rotational rubbing of left thumb clasped inright palm and vice versa 7.
+- activity: 1221
+  passage: NMD1103:file:1221:Vital Signs- Pulse .docx
+  quote: 'Pulse could be recorded from accessible arteries such as: Carotid Temporal Brachial Radial How to measure Radial pulse ?'
+- activity: 1223
+  passage: 'NMD1103:file:1223: Clinical Skills Course Description.docx'
+  quote: students will become aware of rules and regulations in clinical skills lab , safety measures and what is expected from them in this course .
+- activity: 1009
+  passage: NMD1103:file:1009:Hand Hygiene Skill lab (Academy) 2021-2022 (2).pptx
+  quote: Perform alcohol hand rub using the correct procedure.
+- activity: 1010
+  passage: NMD1103:file:1010:PPE skill lab (Academy) 2021-2022 (1).pptx
+  quote: Practice how to safely don and doff disposable gown .
+- activity: 1011
+  passage: NMD1103:file:1011:PPE reference (1).pdf
+  quote: MASK OR RESPIRATOR • Front of mask/respirator is contaminated — DO NOT TOUCH!
+- activity: 1012
+  passage: NMD1103:file:1012:Skill Lab.pptx
+  quote: idelity Low-Fidelity High-fidelity manikins used to teach students how to deal with a patient who is coding or was a part of deadly incident.
+- activity: 1018
+  passage: NMD1103:file:1018:final Measuring and recording Blood Pressure .pptx
+  quote: to get actual systolic and diastolic reading Place the stethoscope over the brachial artery pulse, ensuring that it does not touch the cuff.
+- activity: 1020
+  passage: NMD1103:file:1020:Vital Signs Radial Pulse and Arterial blood pressure (2).docx
+  quote: Measuring blood pressure Position the BP measuring device so that it is roughly at the level of the patient’s heart.
+- activity: 1028
+  passage: NMD1103:file:1028:HH.pdf
+  quote: Rotational rubbing of left thumbclasped in right palm and vice versa 8.
+- activity: 1221
+  passage: NMD1103:file:1221:Vital Signs- Pulse .docx
+  quote: 'STEP CP PA NP Getting ready Prepare equipment: Watch or clock with a counter for seconds.'
+- activity: 1223
+  passage: 'NMD1103:file:1223: Clinical Skills Course Description.docx'
+  quote: tective E quipment, principles of history taking and patient consultation and finally recording vital signs such as pulse and blood pressure.
+- activity: 1009
+  passage: NMD1103:file:1009:Hand Hygiene Skill lab (Academy) 2021-2022 (2).pptx
+  quote: Perform routine hand wash using the correct procedure.
+- activity: 1010
+  passage: NMD1103:file:1010:PPE skill lab (Academy) 2021-2022 (1).pptx
+  quote: Practice how to safely don and doff surgical masks .
+- activity: 1011
+  passage: NMD1103:file:1011:PPE reference (1).pdf
+  quote: Remove all PPE before exiting the patient room except a respirator, if worn.
+- activity: 1012
+  passage: NMD1103:file:1012:Skill Lab.pptx
+  quote: ind the VR headset and look at its components (the headset, the VR hands) Find the iPad and use Complete Anatomy app to see virtual manikins.
+- activity: 1020
+  passage: NMD1103:file:1020:Vital Signs Radial Pulse and Arterial blood pressure (2).docx
+  quote: Note the reading on the sphygmomanometer at the point at which the radial pulse becomes impalpable.
+- activity: 1028
+  passage: NMD1103:file:1028:HH.pdf
+  quote: Rotational rubbing, backwards and forwardswith clasped fingers of right hand in left palm and vice versa 8.
+- activity: 1221
+  passage: NMD1103:file:1221:Vital Signs- Pulse .docx
+  quote: 'roviders include: Body temperature Pulse rate Breathing rate (respiration) Blood pressure We will start by pulse rate What is the pulse rate?'
+- activity: 1009
+  passage: NMD1103:file:1009:Hand Hygiene Skill lab (Academy) 2021-2022 (2).pptx
+  quote: State the indications for hand washing and antisepsis.
+- activity: 1010
+  passage: NMD1103:file:1010:PPE skill lab (Academy) 2021-2022 (1).pptx
+  quote: SURGICAL MASK How to don a surgical mask?
+- activity: 1011
+  passage: NMD1103:file:1011:PPE reference (1).pdf
+  quote: Remove the respirator after leaving the patient room and closing the door.
+- activity: 1012
+  passage: NMD1103:file:1012:Skill Lab.pptx
+  quote: s Body-Interact VR Simulations AR Simulations Skill Lab Rules and Ethics Skill Lab Activity Rotate on the manikins included in the skill lab.
+- activity: 1020
+  passage: NMD1103:file:1020:Vital Signs Radial Pulse and Arterial blood pressure (2).docx
+  quote: On the other hand, runners who do a lot of cardiovascular conditions may have slower heart rate with 40 beats per minute.
+- activity: 1028
+  passage: NMD1103:file:1028:HH.pdf
+  quote: Rotational rubbing, backwards andforwards with clasped fingers of right hand in left palm and vice versa 9.
+- activity: 1221
+  passage: NMD1103:file:1221:Vital Signs- Pulse .docx
+  quote: suring Radial Pulse before clinical skills session on Vital Signs Radial Pulse Vital signs are indicators of the basic functions of the body.
+- activity: 1009
+  passage: NMD1103:file:1009:Hand Hygiene Skill lab (Academy) 2021-2022 (2).pptx
+  quote: WHO Five moments of HH WHEN & WHY? HOW? Techniques of Hand Hygiene PREPARATION (PRE-REQUISITE) Keep natural nails short (less than 0.
+misses:
+- activity: 1007
+  quote: General hospitals are available in every capital of a governorate.
+  absent: NMD1103:file:1005:Virtual Tour in Hospital Facilities.pdf

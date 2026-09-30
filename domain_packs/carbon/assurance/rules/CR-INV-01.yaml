@@ -18,3 +18,8 @@ catalogue: planned
 residual: >
   GHG Protocol Corporate Standard version 3 is a draft. Do not treat it as
   the binding method. Do not add CR-INV-01 to blocks_release.
+target: O1
+product: Carbon on AASTMT
+evidence: InventorySource.SCOPE_CHOICES and pack.yaml blocks_release empty
+locked: 2026-09-29
+limit: Does not say AASTMT has a populated period. Does not block a release. Does not freeze Corporate Standard v3.

@@ -1,10 +1,11 @@
 // src/App.jsx
 import React, { Suspense } from "react";
-import { BrowserRouter, Routes, Route, Navigate, Outlet, useParams } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useParams, useLocation } from "react-router-dom";
 import { useAuth } from "./auth/AuthContext";
 import Login from "./pages/Login";
 import LocaleAwareLocalizationProvider from "./i18n/LocaleAwareLocalizationProvider";
 const ForgotPasswordPage = React.lazy(() => import("./pages/ForgotPasswordPage"));
+const ChangePasswordPage = React.lazy(() => import("./pages/ChangePasswordPage"));
 const ResetPasswordPage = React.lazy(() => import("./pages/ResetPasswordPage"));
 const NotFound = React.lazy(() => import("./pages/NotFound"));
 import { Shell } from "./shell/Shell";
@@ -81,6 +82,7 @@ const CarbonDashboardPage = React.lazy(() => import("./pages/carbon/CarbonDashbo
 const AnalyticsDashboard = React.lazy(() => import("./pages/dashboards/AnalyticsDashboard"));
 const ChairmanDashboard = React.lazy(() => import("./pages/carbon/ChairmanDashboard"));
 const OnboardingPage = React.lazy(() => import("./pages/carbon/OnboardingPage"));
+const GuidePage = React.lazy(() => import("./pages/guide/GuidePage"));
 const ReportsPage = React.lazy(() => import("./pages/carbon/ReportsPage"));
 const MyDataPage = React.lazy(() => import("./pages/carbon/MyDataPage"));
 const ModuleWorkspacePage = React.lazy(() => import("./pages/carbon/ModuleWorkspacePage"));
@@ -210,9 +212,14 @@ function RedirectTeachRun() {
 /**
  * Protects all routes that require authentication.
  */
-function RequireAuth() {  const { user, loading } = useAuth();
+function RequireAuth() {
+  const { user, loading } = useAuth();
+  const location = useLocation();
   if (loading) return <div className="centered">Loading authentication...</div>;
   if (!user) return <Navigate to="/login" replace />;
+  if (user.must_change_password && location.pathname !== "/change-password") {
+    return <Navigate to="/change-password" replace />;
+  }
   return <Outlet />;
 }
 
@@ -255,6 +262,7 @@ export default function App() {
                 <Route path="/forgot-password" element={<ForgotPasswordPage />} />
                 <Route path="/reset-password/:uidb64/:token" element={<ResetPasswordPage />} />
                 <Route element={<RequireAuth />}>
+                  <Route path="/change-password" element={<ChangePasswordPage />} />
                   <Route element={<RequireContext />}>
                     <Route element={<RootLayout />}>
                 <Route path="help" element={<Help />} />
@@ -292,6 +300,9 @@ export default function App() {
                 {/* Namespace root redirect — hitting the bare /carbon root (e.g. the
                     /carbon/ deployment mount path) must never 404. RULE_22. */}
                 <Route path="/carbon" element={<AppEnabledRoute appId="carbon"><Navigate to="/carbon/chairman" replace /></AppEnabledRoute>} />
+                {/* Guide: one pack-driven page for every domain app that ships a guide pack. */}
+                <Route path="/guide/:appId" element={<GuidePage />} />
+                <Route path="/guide/:appId/:lessonId" element={<GuidePage />} />
                 <Route path="/carbon/onboarding" element={<AppEnabledRoute appId="carbon"><OnboardingPage /></AppEnabledRoute>} />
                 <Route path="/carbon/chairman" element={<AppEnabledRoute appId="carbon"><ChairmanDashboard /></AppEnabledRoute>} />
                 <Route path="/carbon/console" element={<AppEnabledRoute appId="carbon"><CarbonConsolePage /></AppEnabledRoute>} />

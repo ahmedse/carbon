@@ -21,5 +21,14 @@ confidence: high-code
 catalogue: planned
 residual: >
   get_chairman_overview divides kg by 1000 for tonnes. Quoting that payload
-  is legal. Quoting the July 2026 deployment sketch is not. There is no live
-  O1 payload on 2026-09-29.
+  is legal. Quoting the July 2026 deployment sketch is not. The O1 checklist
+  summary_kg is the sum of Calculations on the two O1 sources' linked tables
+  for the open period. It is not CalculationSummaryService.get_summary.
+  Chat may repeat a number only when that number is in this turn's tool
+  payload. The period-wide summary is not the Smart Village footprint.
+  not_assured stays unmet.
+target: O1
+product: Carbon on AASTMT
+evidence: summary_kg on GET /carbon-api/carbon/onboarding/o1/. Forbid 405271.000000 and 5269592.116320 as the O1 quote.
+locked: 2026-09-29
+limit: The period-wide summary is not the Smart Village footprint. not_assured stays unmet. Does not open P2.

@@ -5,7 +5,7 @@ import { Box, Typography, Button } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import UploadIcon from "@mui/icons-material/Upload";
 import DownloadIcon from "@mui/icons-material/Download";
-import { API_BASE_URL } from "../config";
+import { API_ROUTES } from "../config";
 import { authFetch } from "../api/api";
 import {
   fetchDataSchemaTables,
@@ -240,7 +240,7 @@ export default function TableDataPage({
   const handleDownloadTemplate = async () => {
     try {
       const includeExample = window.confirm(t("confirmTemplateExample"));
-      const endpoint = `datarows/download-template/?data_table=${tableId}&include_example=${includeExample}`;
+      const endpoint = `${API_ROUTES.rows}download-template/?data_table=${tableId}&include_example=${includeExample ? "true" : "false"}`;
       
       const response = await authFetch(endpoint, {
         method: 'GET',

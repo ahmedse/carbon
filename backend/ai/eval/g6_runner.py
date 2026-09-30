@@ -206,6 +206,11 @@ def _matches_expect(decision: dict[str, str], case: dict[str, Any]) -> bool:
     expect_process = str(case.get("expect_process") or "")
     if expect_process and decision.get("process", "") != expect_process:
         return False
+    # ADR-0056 Amendment 1: what an answer rests on decides whether it is one
+    # call. Only a scored Decision carries it; the lexical ladder has none.
+    expect_source = str(case.get("expect_source") or "")
+    if expect_source and "source" in decision and decision["source"] != expect_source:
+        return False
     # Several reads are equally right (e.g. a total or a breakdown first).
     any_api = [str(a) for a in case.get("expect_api_any") or []]
     if any_api:
@@ -363,6 +368,7 @@ def _decision_to_dict(decision: Any, state: Any = None) -> dict[str, str]:
         "api": api,
         "render": decision_render(decision),
         "process": str(getattr(first, "process_id", "") or "") if op == "handoff_agent" else "",
+        "source": str(getattr(first, "source", "") or "") if op == "answer" else "",
         "repaired": bool(getattr(decision, "repaired", False)),
     }
 

@@ -343,6 +343,8 @@ function AIMessageBubble({
   onReplyInThread,
   /** Current Ask|Plan dial — hide "Switch to Plan" when already on Plan. */
   composerProcess = 'ask',
+  /** Medicine host has no Plan. The control can return later. */
+  lockAsk = false,
   /** The open draft card belongs on the latest reply. Older bubbles keep the text. */
   liveProposal = true,
 }) {
@@ -916,7 +918,7 @@ function AIMessageBubble({
         ? [metadata.action]
         : [];
   const navigateActions = rawActions.filter(
-    (a) => a?.type === 'navigate' && isSafeInternalRoute(a.route),
+    (a) => !lockAsk && a?.type === 'navigate' && isSafeInternalRoute(a.route),
   );
   // download action → a generated file (Word/Excel) the user can download.
   const downloadActions = rawActions.filter((a) => a?.type === 'download');
@@ -926,6 +928,7 @@ function AIMessageBubble({
   // Panel=plan is the Ask→Plan dial CTA — hide it when already on Plan.
   const panelActions = rawActions.filter((a) => {
     if (a?.type !== 'open_panel') return false;
+    if (lockAsk && (a.panel === 'plan' || a.panel === 'tasks')) return false;
     if (a.panel === 'plan' && composerProcess === 'plan') return false;
     return true;
   });
@@ -1856,6 +1859,7 @@ AIMessageBubble.propTypes = {
   onStartThreadFromHere: PropTypes.func,
   onReplyInThread: PropTypes.func,
   composerProcess: PropTypes.oneOf(['ask', 'plan']),
+  lockAsk: PropTypes.bool,
 };
 
 export default AIMessageBubble;

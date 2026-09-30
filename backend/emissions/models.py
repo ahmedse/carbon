@@ -1608,3 +1608,4 @@ class CoverageAction(models.Model):
 
     def __str__(self):
         return f"{self.get_action_type_display()} — {self.source}"
+

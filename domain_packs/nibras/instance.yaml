@@ -11,6 +11,11 @@
 
 display_name: "Nibras — People & Payroll"
 
+dials:
+  - ask
+  - plan
+  - agent
+
 description: >
   Nibras is the People & Payroll (HRMS) assistant for GOFSCO and connected
   organisations. It covers the full HR lifecycle: employee onboarding,

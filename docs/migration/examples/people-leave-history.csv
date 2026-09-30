@@ -1,0 +1,3 @@
+employee_no,leave_type,start_date,end_date,days,status
+DMSDEV9001,annual,2026-03-01,2026-03-02,2,approved
+DMSDEV9001,sick,2026-04-10,2026-04-10,1,approved

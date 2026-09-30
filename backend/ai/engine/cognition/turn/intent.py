@@ -101,11 +101,15 @@ def _is_mutation_request(text: str) -> bool:
         return False
     from ai.engine.text.word_match import contains_any_phrase, has_any_word
 
+    write_match = _LEAVE_MUTATION_RE.search(text)
+    # An empty pack fragment compiles to a zero-width match, which hits every
+    # sentence. A match with no text is not a write.
     return (
         has_any_word(text, _MUTATION_VERBS)
         or contains_any_phrase(text, _MUTATION_PHRASES)
         or contains_any_phrase(text, _NEW_THING_PHRASES)
-        or bool(_LEAVE_MUTATION_RE.search(text) or leave_mutation_ar(text))
+        or bool(write_match and write_match.group(0))
+        or bool(leave_mutation_ar(text))
     )
 
 

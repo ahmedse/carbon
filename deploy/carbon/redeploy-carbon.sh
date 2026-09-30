@@ -74,6 +74,11 @@ header "Frontend"
 cd "$FRONTEND_DIR"
 cat > .env.production <<EOF
 VITE_API_BASE_URL=/carbon-api/
+VITE_PLATFORM_NAME=Data Trust Platform
+VITE_PLATFORM_SHORT=Data Trust
+VITE_PLATFORM_TITLE=AASTMT · Data Trust Platform
+VITE_PLATFORM_DESCRIPTION=A governed data platform for data catalog, master data management, data quality, and domain applications.
+VITE_CANONICAL_URL=https://${DOMAIN}
 EOF
 npm ci --silent 2>/dev/null
 npm run build

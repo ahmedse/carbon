@@ -254,6 +254,24 @@ def test_chat_ess_write_intent_detects_leave_not_balance():
     assert not is_ess_write_intent("hello")
 
 
+def test_handoff_draft_table_stores_the_resolved_label():
+    import json
+
+    from ai.engine.agent.chat_surface import build_handoff_envelope
+    from ai.engine.pack_vocab import bind_pack
+
+    with bind_pack("nibras"):
+        envelope = build_handoff_envelope(
+            {"topic_en": "request", "topic_ar": "طلب"},
+            draft={"leave_type": "annual"},
+            locale="en",
+        )
+    row = envelope["tables"][0]["rows"][0]
+    assert row == ["Leave type", "annual"]
+    assert all(isinstance(cell, str) for cell in row)
+    json.dumps(envelope)
+
+
 def test_leave_handoff_spec():
     spec = handoff_spec_for_api("submit_my_leave")
     assert spec["process"] == "leave.request.lifecycle"

@@ -22,3 +22,8 @@ residual: >
   Org-unit rows for the four campuses are not seeded by this rule. The boundary
   can name them in description until OrgUnit records exist. That description is
   not a tonne figure.
+target: O1
+product: Carbon on AASTMT
+evidence: GET /carbon-api/carbon/onboarding/o1/ codes boundary_missing, boundary_approach, boundary_met
+locked: 2026-09-29
+limit: Does not seed org units. A boundary description is not a tonne. Does not close O2–P2.

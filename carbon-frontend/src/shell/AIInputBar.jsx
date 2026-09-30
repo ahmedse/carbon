@@ -173,6 +173,7 @@ function AIInputBar({
   const [maxRows, setMaxRows] = useState(10);
   const [maxHeightPx, setMaxHeightPx] = useState(360);
   const [composerHeight, setComposerHeight] = useState(() => {
+    if (lockAsk) return null;
     try {
       const n = Number(localStorage.getItem(COMPOSER_HEIGHT_KEY));
       return Number.isFinite(n) && n >= COMPOSER_MIN_PX ? n : null;
@@ -586,6 +587,7 @@ function AIInputBar({
           overflow: 'hidden',
         }}
       >
+        {!lockAsk && (
         <Box
           role="separator"
           aria-orientation="horizontal"
@@ -614,6 +616,7 @@ function AIInputBar({
             }}
           />
         </Box>
+        )}
         <Box
           sx={{
             display: 'flex',

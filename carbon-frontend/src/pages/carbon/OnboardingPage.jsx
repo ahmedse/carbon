@@ -193,6 +193,7 @@ export default function OnboardingPage() {
       <PageHeader
         icon={AssignmentTurnedInIcon}
         title={t('onboarding.title')}
+        titleComponent="h1"
         subtitle={t('onboarding.subtitle')}
         description={t('onboarding.description')}
         actions={(

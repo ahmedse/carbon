@@ -50,3 +50,8 @@ catalogue: planned
 residual: >
   not_material is a legal reason later. It is not the O1 default. Using it
   in O1 fails this rule.
+target: O1
+product: Carbon on AASTMT
+evidence: Codes other_campus_excluded, other_campus_excluded_notes, other_campus_not_material, other_campus_covered
+locked: 2026-09-29
+limit: Does not open O2, O3, or O4. not_material is not the O1 default. Reason other requires notes.

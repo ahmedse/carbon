@@ -10,6 +10,11 @@
 
 display_name: "Carbon Data Trust Platform"
 
+dials:
+  - ask
+  - plan
+  - agent
+
 description: >
   A data trust platform for the organisation's data workflows —
   the assistant helps with the data areas the user can access.

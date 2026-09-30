@@ -470,20 +470,21 @@ class PDP:
         instance_id: str = "",
         host_user_id: str | None = None,
     ) -> PolicyDecision:
+        from ai.engine.pack_vocab import as_data
         from ai.models.pdp import PolicyDecisionRow
 
         await sync_to_async(PolicyDecisionRow.objects.create, thread_sensitive=True)(
-            principal=principal,
-            action=action,
-            resource_objects=objects,
+            principal=as_data(principal),
+            action=as_data(action),
+            resource_objects=as_data(objects),
             decision=decision.value,
-            reason=reason,
+            reason=as_data(reason),
             policy_version=self._policy_version,
             autonomy=autonomy,
             stage="pdp",
-            process_state=process_state,
-            budget=budget,
-            actor_chain=list(actor_chain or []),
+            process_state=as_data(process_state),
+            budget=as_data(budget),
+            actor_chain=as_data(list(actor_chain or [])),
             request_id=request_id or "",
             instance_id=instance_id or "",
             host_user_id=host_user_id,

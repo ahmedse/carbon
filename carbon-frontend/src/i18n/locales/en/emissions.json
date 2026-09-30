@@ -390,5 +390,32 @@
     "stepCoverHint": "Covered needs linked tables on this period. Other campuses use insufficient data, not silence.",
     "stepQuote": "Quote only the summary",
     "stepQuoteHint": "Chat may repeat a figure only when this turn's calculation summary contains it. Otherwise say the period is opening."
+  },
+  "myData": {
+    "title": "My Data",
+    "sourceName": "Source name",
+    "description": "Your data owner workspace. Select a source to inspect row counts, data quality scores, and activity. Open the workspace to edit tables row by row.",
+    "search": "Search sources…",
+    "scope": "Scope",
+    "status": "Status",
+    "passing": "Passing",
+    "warning": "Warning",
+    "failing": "Failing",
+    "noData": "No Data",
+    "tables": "Tables",
+    "rows": "Rows",
+    "lastEntry": "Last entry",
+    "openWorkspace": "Open workspace",
+    "empty": "No sources match your filters",
+    "emptyHint": "Try adjusting the search or filters.",
+    "loadError": "Failed to load My Data",
+    "count": "{{shown}} of {{total}}",
+    "never": "Never",
+    "dq": "DQ%",
+    "refresh": "Refresh"
+  },
+  "chairman": {
+    "notO1Footprint": "These figures are platform-wide. They are not the O1 Smart Village footprint. Quote a kilogram only from this period's calculation summary.",
+    "openOnboarding": "Inventory onboarding"
   }
 }

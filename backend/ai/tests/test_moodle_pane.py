@@ -44,6 +44,31 @@ def test_lecture_questions_name_the_open_activity():
             assert door_answer(message, restored) == lecture_answer(message, snapshot)
 
 
+def test_which_course_names_the_open_course():
+    snapshot = {
+        "course": {"shortname": "NMD3101", "fullname": "Principles of Infection", "visible_to_user": True},
+        "sections": [{"number": 0, "name": "General", "visible": True}],
+    }
+    answer = door_answer("which course", _page(snapshot))
+    assert answer == "This course is Principles of Infection (NMD3101)."
+    assert "Open My" not in answer
+    assert "Plan" not in answer
+
+
+def test_who_are_you_stays_on_this_page():
+    snapshot = {
+        "course": {"shortname": "NMD1103", "fullname": "Clinical Skills 1", "visible_to_user": True},
+        "sections": [{"number": 0, "name": "General", "visible": True}],
+    }
+    answer = door_answer("who are you ?", _page(snapshot))
+    assert answer == (
+        "I am Pulse on this course page. I answer from the lecture you have open. "
+        "I do not change Moodle."
+    )
+    assert "Open My" not in answer
+    assert "Plan" not in answer
+
+
 def test_a_greeting_is_not_a_door_answer():
     snapshot = {
         "course": {"shortname": "NMD1103", "fullname": "Clinical Skills 1", "visible_to_user": True},

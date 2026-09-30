@@ -71,7 +71,7 @@ import {
   rememberConversationProcess,
   withHostPayload,
 } from './pulseProcessThreads';
-import { usePulseHost } from './pulseHostContext';
+import { courseThreadId, moodleCourseId, moodleThreadKey, usePulseHost } from './pulseHostContext';
 import { AGENT_VIEW_KEY, readActivePlanId } from './sessionRestore';
 
 const LOCAL_STORAGE_KEY = 'carbon-ai-active-conversation';
@@ -370,10 +370,16 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
   // fresh session with no stored selection, or the active tab was just closed.
   const effectiveActiveId = useMemo(() => {
     if (visibleIds.includes(activeId)) return activeId;
-    // The Moodle pane starts on the open course, not the last thread.
-    if (embedded) return null;
+    // The Moodle pane stays on this course's thread, including an activity page.
+    if (embedded) {
+      return courseThreadId(
+        host?.pageContext,
+        visibleIds,
+        (key) => sessionStorage.getItem(key),
+      ) || null;
+    }
     return visibleIds[0] || null;
-  }, [visibleIds, activeId, embedded]);
+  }, [visibleIds, activeId, embedded, host?.pageContext]);
 
   // Persist the effective id into state so localStorage and the activeRef
   // (Ctrl+W archive target) stay in sync with what's actually rendered.
@@ -387,6 +393,30 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
       setActiveId(effectiveActiveId);
     }
   }, [loading, activeId, effectiveActiveId]);
+
+  // One Ask thread per course. A new activity page must not start a blank pane.
+  const courseThread = embedded ? moodleCourseId(host?.pageContext) : '';
+  useEffect(() => {
+    if (!embedded || loading || !courseThread) return;
+    const key = moodleThreadKey(courseThread);
+    if (activeId) {
+      try {
+        sessionStorage.setItem(key, String(activeId));
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+    let stored = '';
+    try {
+      stored = sessionStorage.getItem(key) || '';
+    } catch {
+      stored = '';
+    }
+    if (stored && visibleIds.includes(stored)) {
+      setActiveId(stored);
+    }
+  }, [embedded, loading, courseThread, activeId, visibleIds]);
 
   // No chat threads left, but a Task was open last time → reopen Tasks on that plan.
   const lastTaskFallbackRef = useRef(false);

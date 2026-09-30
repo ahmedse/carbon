@@ -53,6 +53,25 @@ def classify_llm_error(exc: Exception) -> str:
     return "permanent"
 
 
+# A healthy Flash call returns in 1–2 s (C8 replay, 2026-09-29). The 120 s
+# budget was for DeepSeek thinking, which streamed past 30 s and got the
+# worker killed. Thinking is off unless the caller turns it on, so a stuck
+# socket must not hold a Chat turn for two minutes.
+CHAT_READ_TIMEOUT_S = 15.0
+THINKING_READ_TIMEOUT_S = 120.0
+OTHER_READ_TIMEOUT_S = 30.0
+
+
+def request_timeout(base_url: str | None, extra_body: dict | None = None) -> float:
+    """Per-call read budget. Thinking keeps the long budget; everything else does not."""
+    thinking = extra_body.get("thinking") if isinstance(extra_body, dict) else None
+    if isinstance(thinking, dict) and thinking.get("type") == "enabled":
+        return THINKING_READ_TIMEOUT_S
+    if _is_deepseek_endpoint(base_url):
+        return CHAT_READ_TIMEOUT_S
+    return OTHER_READ_TIMEOUT_S
+
+
 def _is_deepseek_endpoint(base_url: str | None = None) -> bool:
     """True when the configured LLM endpoint is DeepSeek's OpenAI-compatible API."""
     url = (base_url if base_url is not None else get_settings().LLM_BASE_URL) or ""
@@ -124,17 +143,21 @@ async def create_completion(client: AsyncOpenAI, **kwargs):
         kwargs["messages"] = as_data(kwargs["messages"])
     if "tools" in kwargs:
         kwargs["tools"] = as_data(kwargs["tools"])
-    return await client.chat.completions.create(
-        **_apply_provider_kwargs(kwargs, str(base_url) if base_url is not None else None)
+    prepared = _apply_provider_kwargs(kwargs, str(base_url) if base_url is not None else None)
+    prepared["timeout"] = request_timeout(
+        str(base_url) if base_url is not None else None,
+        prepared.get("extra_body"),
     )
+    return await client.chat.completions.create(**prepared)
 
 
 def _openai_client(api_key: str, base_url: str) -> AsyncOpenAI:
-    timeout = 120.0 if _is_deepseek_endpoint(base_url) else 30.0
+    # The per-call timeout in create_completion wins. This default covers the
+    # private seams, which never enable thinking.
     return AsyncOpenAI(
         api_key=api_key,
         base_url=base_url,
-        timeout=timeout,
+        timeout=request_timeout(base_url),
         max_retries=0,
     )
 
@@ -142,15 +165,15 @@ def _openai_client(api_key: str, base_url: str) -> AsyncOpenAI:
 def get_llm_client() -> AsyncOpenAI:
     """Create an AsyncOpenAI client from settings."""
     settings = get_settings()
-    # DeepSeek thinking (when re-enabled) and tool loops need headroom;
-    # 30s caused APITimeoutError → retries → gunicorn WORKER TIMEOUT.
+    # DeepSeek thinking (when the caller turns it on) keeps a 120 s budget
+    # inside create_completion. The client default is the short one.
     return _openai_client(settings.LLM_API_KEY, settings.LLM_BASE_URL)
 
 
-def client_for_model(model: str | None) -> tuple[AsyncOpenAI, str, str]:
-    """Return ``(client, wire model, base url)`` for this model id.
+def resolve_model_endpoint(model: str | None) -> tuple[str, str]:
+    """Return ``(wire model, base url)`` without opening a client.
 
-    A deepseek id uses the direct DeepSeek key when one is configured.
+    A deepseek id uses the direct DeepSeek endpoint when a key is configured.
     Anything else stays on the primary provider.
     """
     settings = get_settings()
@@ -158,10 +181,20 @@ def client_for_model(model: str | None) -> tuple[AsyncOpenAI, str, str]:
     low = name.lower()
     key = (settings.DEEPSEEK_API_KEY or "").strip()
     if key and "deepseek" in low:
-        wire = "deepseek-flash" if "pro" not in low else "deepseek-v4-pro"
+        wire = "deepseek-v4-pro" if "pro" in low else "deepseek-flash"
         base = (settings.DEEPSEEK_BASE_URL or "https://api.deepseek.com/v1").strip()
+        return wire, base
+    return name, settings.LLM_BASE_URL
+
+
+def client_for_model(model: str | None) -> tuple[AsyncOpenAI, str, str]:
+    """Return ``(client, wire model, base url)`` for this model id."""
+    settings = get_settings()
+    wire, base = resolve_model_endpoint(model)
+    key = (settings.DEEPSEEK_API_KEY or "").strip()
+    if key and "deepseek.com" in base:
         return _openai_client(key, base), wire, base
-    return get_llm_client(), name, settings.LLM_BASE_URL
+    return get_llm_client(), wire, base
 
 
 @_retry_decorator
@@ -178,8 +211,7 @@ async def _chat_completion(
     Non-retryable errors (auth, bad request) fail immediately.
     """
     settings = get_settings()
-    client = get_llm_client()
-    model = model or settings.LLM_MODEL
+    client, model, base_url = client_for_model(model or settings.LLM_MODEL)
     logger.debug(f"_chat_completion: model={model}  messages={len(messages)}")
 
     from ai.engine.pack_vocab import as_data
@@ -192,7 +224,7 @@ async def _chat_completion(
     if response_format:
         kwargs["response_format"] = response_format
 
-    response = await client.chat.completions.create(**_apply_provider_kwargs(kwargs))
+    response = await client.chat.completions.create(**_apply_provider_kwargs(kwargs, base_url))
     text = response.choices[0].message.content
     logger.debug(f"_chat_completion done: {len(text or '')} chars")
     return text
@@ -213,8 +245,7 @@ async def _chat_completion_with_tools(
     Non-retryable errors (auth, bad request) fail immediately.
     """
     settings = get_settings()
-    client = get_llm_client()
-    model = model or settings.LLM_MODEL
+    client, model, base_url = client_for_model(model or settings.LLM_MODEL)
 
     from ai.engine.pack_vocab import as_data
 
@@ -227,7 +258,7 @@ async def _chat_completion_with_tools(
     if response_format:
         kwargs["response_format"] = response_format
 
-    response = await client.chat.completions.create(**_apply_provider_kwargs(kwargs))
+    response = await client.chat.completions.create(**_apply_provider_kwargs(kwargs, base_url))
     choice = response.choices[0]
     result = {
         "content": choice.message.content,

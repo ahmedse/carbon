@@ -102,6 +102,11 @@ const ROUTE_CONFIG = {
     icon: DashboardIcon,
     parent: '/carbon/console',
   },
+  '/guide/carbon': {
+    label: 'My guide',
+    icon: DashboardIcon,
+    parent: '/carbon/console',
+  },
   '/carbon/dashboard': {
     label: 'Emissions Dashboard',
     icon: DashboardIcon,

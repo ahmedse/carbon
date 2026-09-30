@@ -18,6 +18,54 @@ def test_decompose_prompt_lists_host_api_catalog():
     assert "NEVER put a catalog name in" in _DECOMPOSE_AGENT_PROMPT
 
 
+def test_decompose_template_is_empty_until_a_pack_is_bound():
+    """The live plan create does not sit inside a chat turn.
+
+    ``LV`` resolves to an empty string when no pack is bound. Formatting
+    that empty template drops the JSON schema, and the model answers in
+    prose. File 205750's failing calls sent ~484 input tokens. A bound
+    call of the same template sends ~3,200.
+    """
+    from ai.engine.pack_vocab import _active_pack
+
+    token = _active_pack.set("")
+    try:
+        from ai.engine.cognition.plan.planner import _DECOMPOSE_AGENT_PROMPT
+
+        assert str(_DECOMPOSE_AGENT_PROMPT) == ""
+    finally:
+        _active_pack.reset(token)
+
+
+@pytest.mark.asyncio
+async def test_llm_decompose_binds_the_instance_pack_before_the_model_call(monkeypatch):
+    from ai.engine.cognition.plan.planner import SkillAwarePlanner
+    from ai.engine.pack_vocab import _active_pack
+
+    seen: dict[str, str] = {}
+
+    async def fake_route(**kwargs):
+        seen["system"] = kwargs["messages"][0]["content"]
+        return {"content": '{"pattern":"custom","steps":[]}'}
+
+    monkeypatch.setattr("ai.engine.llm.router.route_chat", fake_route)
+    token = _active_pack.set("")
+    try:
+        planner = SkillAwarePlanner(llm_client=object(), model="deepseek-flash")
+        await planner._llm_decompose(
+            "Read the profile, then stop.",
+            object(),
+            "deepseek-flash",
+            instance_id="nibras",
+            skills=[],
+            user_id="13",
+        )
+    finally:
+        _active_pack.reset(token)
+    assert "Return ONLY valid" in seen["system"]
+    assert "User task:" in seen["system"]
+
+
 def test_decompose_prompt_task_and_schema_survive_clip_on_a_large_catalog():
     """Wave 2 (R3, part 2): a catalog-heavy instance (nibras, 48 host APIs)
     pushes the filled decompose prompt past ``TASK_BLOCK_MAX_CHARS``.

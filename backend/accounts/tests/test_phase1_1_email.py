@@ -83,11 +83,11 @@ class TestPasswordPolicy:
         """load() should create a singleton with sensible defaults."""
         policy = PasswordPolicy.load()
         assert policy.pk == 1
-        assert policy.min_length == 12
-        assert policy.require_uppercase is True
+        assert policy.min_length == 10
+        assert policy.require_uppercase is False
         assert policy.require_lowercase is True
         assert policy.require_number is True
-        assert policy.require_special is True
+        assert policy.require_special is False
         assert policy.max_age_days == 90
         assert policy.lockout_after_n == 5
 

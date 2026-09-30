@@ -1659,6 +1659,7 @@ function AIConversationView({
               onDeclineExecution={handleDeclineExecution}
               onOpenPanel={handleBubbleOpenPanel}
               composerProcess={process}
+              lockAsk={lockAsk}
               onRetry={isOwner ? handleRetryMessage : undefined}
               onEdit={isOwner ? handleEditMessage : undefined}
               onDelete={isOwner ? handleDeleteMessage : undefined}
@@ -1713,6 +1714,7 @@ function AIConversationView({
                 onDeclineExecution={handleDeclineExecution}
                 onOpenPanel={handleBubbleOpenPanel}
                 composerProcess={process}
+                lockAsk={lockAsk}
                 onRetry={isOwner ? handleRetryMessage : undefined}
                 onEdit={isOwner ? handleEditMessage : undefined}
                 onDelete={isOwner ? handleDeleteMessage : undefined}

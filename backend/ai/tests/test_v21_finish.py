@@ -58,6 +58,7 @@ def turn(monkeypatch):
     async def fake_retrieve(self, *args, **kwargs):
         from ai.engine.cognition.turn.witnesses import RetrievalResult
 
+        seen.setdefault("retrieve", []).append(kwargs)
         return RetrievalResult()
 
     monkeypatch.setattr(
@@ -78,7 +79,7 @@ def turn(monkeypatch):
 
     monkeypatch.setattr("ai.envelope_service.synthesize_envelope", fake_envelope)
 
-    def run(decision: Decision, *, surface="chat", process_mode="ask", answer=None):
+    def run(decision: Decision, *, surface="chat", process_mode="ask", answer=None, state=None):
         if answer is not None:
             seen["answer"] = answer
 
@@ -99,6 +100,7 @@ def turn(monkeypatch):
             t0=0.0,
             surface=surface,
             process_mode=process_mode,
+            state_ctx=SimpleNamespace(state=state) if state is not None else None,
         ))
         return out, ledger, seen
 
@@ -121,6 +123,76 @@ def test_answer_is_written_by_v21_not_the_legacy_draft(turn):
     assert len(seen["writer"]) == 1
     assert not seen["writer"][0].get("tools")
     assert not _fell_through(ledger)
+
+
+def test_a_conversation_answer_is_one_call(turn):
+    out, ledger, seen = turn(Decision(
+        commands=[Command(op="answer", text="Hello.", source="conversation")],
+        reason="A greeting.", confidence=0.9,
+    ))
+    assert out is not None
+    assert out[0].text == "Hello."
+    assert not seen["writer"], "the Decision's own reply needs no writer call"
+    assert not _fell_through(ledger)
+
+
+def test_retrieval_follows_the_answer_source_not_a_prior_read(turn):
+    """RC3: retrieval follows source. A prior read does not turn it on or off."""
+    out, _, seen = turn(Decision(
+        commands=[Command(op="answer", text="Hello.", source="knowledge")],
+        reason="A policy.", confidence=0.9,
+    ))
+    assert out[0].text == "Hello — how can I help?"
+    assert len(seen["writer"]) == 1
+    assert seen["retrieve"], "a knowledge answer retrieves even when nothing was read"
+
+    seen["writer"].clear()
+    seen["retrieve"].clear()
+    prior = SimpleNamespace(last_results=[{"digest": "headcount 555"}])
+    out, _, seen = turn(Decision(
+        commands=[Command(op="answer", text="555", source="conversation")],
+        reason="The count.", confidence=0.9,
+    ), state=prior)
+    assert out[0].text == "555"
+    assert not seen["writer"]
+    assert not seen["retrieve"], "a prior read does not pull retrieval in"
+
+
+def test_an_arabic_followup_after_a_read_does_not_reach_the_writer(turn):
+    """RC4: the third call was a writer retry of a bare figure. Arabic text is the reply."""
+    prior = SimpleNamespace(last_results=[{"digest": "headcount 555"}])
+    out, _, seen = turn(Decision(
+        commands=[Command(op="answer", text="العدد 555", source="conversation")],
+        language="ar", confidence=0.9,
+    ), state=prior)
+    assert out[0].text == "العدد 555"
+    assert not seen["writer"]
+
+
+def test_the_writer_is_told_the_decided_language(monkeypatch):
+    from ai.engine.cognition.turn.finish import write_answer
+
+    systems: list[str] = []
+
+    async def fake_route_chat(**kwargs):
+        systems.append(kwargs["messages"][0]["content"])
+        return {"content": "العدد 555", "model": "stub"}
+
+    monkeypatch.setattr("ai.engine.llm.router.route_chat", fake_route_chat)
+    text, _ = asyncio.run(write_answer(
+        Decision(commands=[Command(op="answer")], language="ar", confidence=0.9),
+        user_message="كم العدد؟ 555",
+        conversation_history=[],
+        state=None,
+        user_info=None,
+        instance_config=None,
+        retrieval=None,
+        instance_id="nibras",
+        conversation_id="c-lang",
+    ))
+    assert text == "العدد 555"
+    assert len(systems) == 1
+    assert "Reply in Arabic" in systems[0]
 
 
 def test_an_empty_answer_is_a_visible_error(turn):
