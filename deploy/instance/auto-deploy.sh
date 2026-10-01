@@ -119,12 +119,18 @@ PY
 
 assert_nibras_pack_gate() {
     [[ "$INSTANCE" == "nibras" ]] || return 0
-    BACKEND_PORT="$BACKEND_PORT" python3 - <<'PY'
-import json, os, sys, urllib.request
-port = os.environ["BACKEND_PORT"]
-url = f"http://127.0.0.1:{port}/carbon-api/health/"
-with urllib.request.urlopen(url, timeout=15) as resp:
-    data = json.load(resp)
+    # Plain HTTP on the published port is redirected to HTTPS. Nginx reaches
+    # Gunicorn with X-Forwarded-Proto, and docker healthcheck uses the
+    # exempt loopback path. Read the JSON here; do not follow that redirect.
+    local body
+    body=$(curl -sf -H 'X-Forwarded-Proto: https' \
+        "http://127.0.0.1:${BACKEND_PORT}/carbon-api/health/") || {
+        log "ERROR: nibras health document unavailable for the pack gate"
+        exit 1
+    }
+    HEALTH_JSON="$body" python3 - <<'PY'
+import json, os, sys
+data = json.loads(os.environ["HEALTH_JSON"])
 rel = data.get("release") or {}
 pack = rel.get("pack")
 brand = rel.get("process_brand")
@@ -251,7 +257,8 @@ if [[ "$INSTANCE" == "nibras" ]]; then
     WAIT_TICKS=60
 fi
 for i in $(seq 1 "$WAIT_TICKS"); do
-    if curl -sf "http://127.0.0.1:${BACKEND_PORT}/carbon-api/health/" >/dev/null 2>&1; then
+    if curl -sf -H 'X-Forwarded-Proto: https' \
+        "http://127.0.0.1:${BACKEND_PORT}/carbon-api/health/" >/dev/null 2>&1; then
         log "Backend healthy!"
         HEALTHY=1
         break

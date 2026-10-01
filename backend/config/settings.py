@@ -598,6 +598,9 @@ if SECURE_SSL_REDIRECT:
 # endpoints must stay reachable over plain HTTP on the loopback — exempt them
 # from the HTTPS redirect.
 SECURE_REDIRECT_EXEMPT = [
+    # Loopback probes (docker healthcheck, auto-deploy) do not follow the
+    # HTTPS redirect. Metrics stay exempt; so does the health document.
+    rf'^/{API_PREFIX.strip("/")}/health/?$',
     rf'^/{API_PREFIX.strip("/")}/health/(metrics/|prometheus/)',
 ]
 
