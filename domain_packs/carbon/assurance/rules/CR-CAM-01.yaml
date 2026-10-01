@@ -1,0 +1,40 @@
+id: CR-CAM-01
+journey: INV
+meaning: >
+  O2, O3, and O4 each lock two exact InventorySource names, scopes, units,
+  and one diesel stream word. Org-unit match is the campus string in
+  CR-EXC-01 (South Valley, Abu Qir, Alamein). The leaf stays closed until
+  the named source file exists. Covering the campus without that file, or
+  inventing kilograms, fails. A second ReportingPeriod must not be opened
+  for the leaf (CR-PER-01 still holds).
+source: >
+  domain_packs/carbon/assurance/benchmarks/O2-south-valley.yaml,
+  O3-abu-qir.yaml, O4-new-alamein.yaml
+owner: carbon-inventory-lead
+failure: >
+  A campus leaf is marked passed without its named file, a kilogram is
+  invented, source names differ from the pack, or a second period is
+  opened to host the campus.
+validation: >
+  Each benchmark YAML names sources, units, scopes, stream, org match,
+  expected file path, status closed, and the five P-12 fields. Tests
+  assert the files are absent and status is closed. evaluate_o1 is not
+  reused as the O2 checklist.
+implementation: >
+  Until the file exists, keep the campus excluded insufficient_data on
+  the single open period. Campus data owner is data.southvalley,
+  data.abuqir, or data.alamein (CR-OWN-01).
+confidence: high-spec
+catalogue: planned
+residual: >
+  No South Valley, Abu Qir, or New Alamein inventory file exists in
+  raw/Carbon footprint app/csv/ on 2026-09-30. Do not create one to pass.
+target: O2
+product: Carbon on AASTMT
+evidence: >
+  O2-south-valley.yaml, O3-abu-qir.yaml, O4-new-alamein.yaml status closed.
+  test_onboarding_contract.py test_closed_campus_leaves_name_sources.
+locked: 2026-09-30
+limit: >
+  Does not invent kg. Does not open O2, O3, or O4. Does not write a
+  second evaluator that replaces evaluate_o1.

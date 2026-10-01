@@ -26,7 +26,6 @@ import {
   Refresh as RefreshIcon,
 } from '@mui/icons-material';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
-import { FONT } from '../../theme/themeTokens';
 import PageContainer from '../../components/layout/PageContainer';
 import { useAuth } from '../../auth/AuthContext';
 import {
@@ -42,6 +41,7 @@ import { useNotes } from '../../notes/NotesContext';
 import {
   registerCalculationInspectorTabs,
   ScopeBadge,
+  Scope2MethodChip,
   StatusChip,
   fmtDate,
   fmtNum,
@@ -146,7 +146,7 @@ export default function CalculationsPage() {
       flex: 1.2,
       minWidth: 140,
       renderCell: (params) => (
-        <Typography sx={{ ...FONT.body, fontWeight: 500 }}>{params.value || params.row.period || '—'}</Typography>
+        <Typography variant="body2">{params.value || params.row.period || '—'}</Typography>
       ),
     },
     {
@@ -154,6 +154,14 @@ export default function CalculationsPage() {
       headerName: 'Scope',
       width: 100,
       renderCell: (params) => <ScopeBadge value={params.value} />,
+    },
+    {
+      field: 'scope2_method',
+      headerName: 'Scope 2 method',
+      width: 150,
+      renderCell: (params) => (
+        <Scope2MethodChip method={params.value} scope={params.row.scope} />
+      ),
     },
     {
       field: 'status',
@@ -175,7 +183,7 @@ export default function CalculationsPage() {
       flex: 1,
       minWidth: 130,
       renderCell: (params) => (
-        <Typography sx={{ ...FONT.body }}>{params.value || params.row.rule || '—'}</Typography>
+        <Typography variant="body2">{params.value || params.row.rule || '—'}</Typography>
       ),
     },
     {
@@ -342,27 +350,27 @@ export default function CalculationsPage() {
         <DialogTitle>Confirm Recalculation</DialogTitle>
         <DialogContent>
           {recalcConfirm === 'single' && recalcTarget && (
-            <Typography sx={{ ...FONT.body }}>
+            <Typography variant="body2">
               Trigger recalculation for <strong>{recalcTarget.period_name || recalcTarget.id}</strong>?
-              <Box component="span" sx={{ display: 'block', mt: 1, ...FONT.bodySmall, color: 'text.secondary' }}>
+              <Typography component="span" variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
                 This will re-run the calculation rules and update the emission values.
-              </Box>
+              </Typography>
             </Typography>
           )}
           {recalcConfirm === 'batch' && (
-            <Typography sx={{ ...FONT.body }}>
+            <Typography variant="body2">
               Trigger recalculation for <strong>{selectedRows.length} selected</strong> calculation(s)?
-              <Box component="span" sx={{ display: 'block', mt: 1, ...FONT.bodySmall, color: 'text.secondary' }}>
+              <Typography component="span" variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
                 All selected calculations will be re-processed.
-              </Box>
+              </Typography>
             </Typography>
           )}
           {recalcConfirm === 'all' && (
-            <Typography sx={{ ...FONT.body }}>
+            <Typography variant="body2">
               Trigger recalculation for <strong>all {calculations.length} calculations</strong>?
-              <Box component="span" sx={{ display: 'block', mt: 1, ...FONT.bodySmall, color: 'text.secondary' }}>
+              <Typography component="span" variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
                 This may take some time depending on the number of calculations.
-              </Box>
+              </Typography>
             </Typography>
           )}
         </DialogContent>

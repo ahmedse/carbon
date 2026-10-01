@@ -1,0 +1,27 @@
+id: CR-OFF-01
+journey: INV
+meaning: >
+  Calculation must not subtract credits, RECs, or EACs. Inventory kilograms
+  are activity × factor. If a credit, offset, REC, or EAC field exists on a
+  DataRow, inventory math ignores it. If the activity field itself is an
+  offset field, the rule produces no Calculation.
+source: backend/emissions/inventory_math.py; Calculation.create_from_data_row; CalculationRule.calculate_for_row
+owner: carbon-inventory-lead
+failure: A footprint kilogram is net of an offset, credit, REC, or EAC.
+validation: >
+  inventory_kg never subtracts offset keys. Tests feed offset_kg / rec / eac
+  on the row and assert co2e_kg equals activity × factor. An activity field
+  named offset is skipped.
+implementation: >
+  No credit object on Calculation. Egypt FRA Decree 31/2024 stays a different
+  product. Credits are not assurance (P-19).
+confidence: high-code
+catalogue: planned
+residual: >
+  A person who types a net figure into the kWh field cannot be detected here.
+  The rule stops field-level subtraction, not a pre-netted activity quantity.
+target: O1
+product: Carbon on AASTMT
+evidence: emissions/tests/test_domain_app_rules.py CR-OFF-01. inventory_math.inventory_kg.
+locked: 2026-09-30
+limit: Does not build a credit registry. Does not treat a listed credit as a footprint reduction.

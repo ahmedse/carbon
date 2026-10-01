@@ -107,12 +107,12 @@ describe('Inventory onboarding', () => {
       benchmark: 'O1',
       open_period_id: 7,
       checks: [
-        { id: 'CR-PULSE-01', code: 'summary_kg', met: true, scope: '2', kg: '1500' },
+        { id: 'CR-PULSE-01', code: 'summary_kg', met: true, scope: '2', kg: '1500', method: 'location-based' },
         { id: 'CR-PULSE-01', code: 'not_assured', met: false },
       ],
     });
     renderPage();
-    expect(await screen.findByText(/1500 kg CO2e, scope 2/)).toBeInTheDocument();
+    expect(await screen.findByText(/1500 kg CO2e, scope 2 \(location-based\)/)).toBeInTheDocument();
     expect(screen.getByText(/not external assurance/)).toBeInTheDocument();
   });
 
@@ -158,5 +158,20 @@ describe('Inventory onboarding', () => {
     expect(screen.queryByText(/0\.42/)).not.toBeInTheDocument();
     expect(screen.queryByText(/CR-FAC-01/)).not.toBeInTheDocument();
     expect(screen.queryByText(/%/)).not.toBeInTheDocument();
+  });
+
+  it('names closed leaves and does not show a tonne', async () => {
+    fetchOnboardingO1.mockResolvedValue({
+      benchmark: 'O1',
+      open_period_id: 1,
+      checks: [],
+    });
+    renderPage();
+    expect(await screen.findByText(/south_valley_inventory.csv is absent/)).toBeInTheDocument();
+    expect(screen.getByText(/abu_qir_inventory.csv is absent/)).toBeInTheDocument();
+    expect(screen.getByText(/new_alamein_inventory.csv is absent/)).toBeInTheDocument();
+    expect(screen.getByText(/shape_only/)).toBeInTheDocument();
+    expect(screen.getByText(/No tonne is shown/)).toBeInTheDocument();
+    expect(screen.queryByText(/kg CO2e/)).not.toBeInTheDocument();
   });
 });

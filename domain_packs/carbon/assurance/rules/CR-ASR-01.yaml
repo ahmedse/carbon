@@ -1,0 +1,38 @@
+id: CR-ASR-01
+journey: INV
+meaning: >
+  P1 (assurance) stays closed while evaluate_o1 code not_assured is unmet.
+  A close requires a named VVB pack on the quoted period: assurer_name
+  (legal name of the verification body), engagement_type limited or
+  reasonable, standard ISO 14064-3, opinion_date, statement_id. Credits,
+  RECs, EACs, a verification UI badge, and period status verified are
+  not that pack.
+source: >
+  domain_packs/carbon/assurance/benchmarks/P1-assurance.yaml;
+  emissions/onboarding_o1.py code not_assured
+owner: carbon-inventory-lead
+failure: >
+  not_assured is hidden, marked met, or treated as closed because a
+  credit, a VerificationRecord without the five pack fields, or a UI
+  badge exists.
+validation: >
+  evaluate_o1 always emits not_assured met false until the pack fields
+  exist. P1-assurance.yaml status closed. Tests assert the five field
+  names and that credits are rejected (CR-OFF-01).
+implementation: >
+  Host verification screens remain the workflow. They do not close P1.
+  Pulse must not say the inventory is assured.
+confidence: high-spec
+catalogue: planned
+residual: >
+  No VVB is named on carbon_dev on 2026-09-30. Do not invent one.
+  Egypt FRA Decree 31/2024 VVBs are for listed credits, not this inventory.
+target: P1
+product: Carbon on AASTMT
+evidence: >
+  evaluate_o1 code not_assured met false. P1-assurance.yaml.
+  test_onboarding_o1.py O1-COR-QUOTE. CR-OFF-01.
+locked: 2026-09-30
+limit: >
+  Does not invent a VVB. Does not treat credits as assurance. Does not
+  mark P1 passed.

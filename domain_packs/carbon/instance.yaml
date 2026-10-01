@@ -74,6 +74,7 @@ domain_context_enabled: true
 
 api_catalog:
   - name: get_data_product_details
+    app: carbon
     method: GET
     path: /carbon-api/dataschema/tables/?module_id={id}
     description: >
@@ -83,6 +84,7 @@ api_catalog:
     requires_confirmation: false
 
   - name: list_data_tables
+    app: carbon
     method: GET
     path: /carbon-api/dataschema/tables/
     description: >
@@ -92,6 +94,7 @@ api_catalog:
     requires_confirmation: false
 
   - name: list_dq_rules
+    app: carbon
     method: GET
     path: /carbon-api/dq/rules/
     description: >
@@ -101,6 +104,7 @@ api_catalog:
     requires_confirmation: false
 
   - name: create_table
+    app: carbon
     method: POST
     path: /carbon-api/dataschema/tables/
     description: >
@@ -113,6 +117,7 @@ api_catalog:
     requires_confirmation: true
 
   - name: create_dq_rule
+    app: carbon
     method: POST
     path: /carbon-api/dq/rules/
     description: >
@@ -128,6 +133,7 @@ api_catalog:
     requires_confirmation: true
 
   - name: bind_dq_rules
+    app: carbon
     method: POST
     path: /carbon-api/dq/rule-assignments/
     description: >
@@ -138,6 +144,7 @@ api_catalog:
     requires_confirmation: true
 
   - name: list_emission_factors
+    app: carbon
     method: GET
     path: /carbon-api/carbon/factors
     description: >
@@ -148,6 +155,7 @@ api_catalog:
     requires_confirmation: false
 
   - name: list_gwp_gases
+    app: carbon
     method: GET
     path: /carbon-api/carbon/gwp
     description: >
@@ -157,6 +165,7 @@ api_catalog:
     requires_confirmation: false
 
   - name: list_reporting_periods
+    app: carbon
     method: GET
     path: /carbon-api/carbon/periods
     description: >
@@ -166,13 +175,18 @@ api_catalog:
     requires_confirmation: false
 
   - name: get_calculation_summary
+    app: carbon
     method: GET
     path: /carbon-api/carbon/calculations/summary
     description: >
       Aggregated calculation summary for the reporting period given by
       optional query param reporting_period_id. Totals are in kg CO2e
       broken down by scope, status, and MODULE (branch/campus — e.g.
-      South Valley, Smart Village, Abu Qir, Alamein). This is the endpoint
+      South Valley, Smart Village, Abu Qir, Alamein). Scope 2 totals
+      include scope2_method (location-based or market-based) and
+      by_scope2_method. O1 electricity is location-based. Do not invent
+      a residual mix. Chat may quote a kilogram only when that number is
+      in this turn's payload. This is the endpoint
       for questions about a specific branch's emissions/footprint: filter
       the by_module breakdown to the named branch. Plus latest run and
       last audit.
@@ -180,6 +194,7 @@ api_catalog:
     requires_confirmation: false
 
   - name: get_chairman_overview
+    app: carbon
     method: GET
     path: /carbon-api/carbon/chairman
     description: >
@@ -190,6 +205,7 @@ api_catalog:
     requires_confirmation: false
 
   - name: list_organizational_boundaries
+    app: carbon
     method: GET
     path: /carbon-api/carbon/boundaries/
     description: >
@@ -200,6 +216,7 @@ api_catalog:
     requires_confirmation: false
 
   - name: list_inventory_sources
+    app: carbon
     method: GET
     path: /carbon-api/carbon/inventory-sources/
     description: >
@@ -209,6 +226,7 @@ api_catalog:
     requires_confirmation: false
 
   - name: get_inventory_coverage
+    app: carbon
     method: GET
     path: /carbon-api/carbon/coverage/
     description: >
@@ -220,6 +238,7 @@ api_catalog:
 
 navigation_routes:
   - name: carbon_onboarding
+    app: carbon
     type: page
     path: /carbon/onboarding
     description: >
@@ -231,6 +250,7 @@ navigation_routes:
       ar: [التهيئة, تهيئة المخزون, تهيئة البصمة, القرية الذكية]
 
   - name: carbon_home
+    app: carbon
     type: app
     path: /carbon/chairman
     description: Carbon footprint app home (chairman dashboard).
@@ -240,6 +260,7 @@ navigation_routes:
       ar: [الكربون, البصمة الكربونية, لوحة الرئيس, الانبعاثات, البصمة]
 
   - name: carbon_dashboard
+    app: carbon
     type: page
     path: /carbon/dashboard
     description: Carbon analytics dashboard.
@@ -249,6 +270,7 @@ navigation_routes:
       ar: [لوحة التحليلات, تحليلات الكربون, لوحة الانبعاثات]
 
   - name: dq_home
+    app: carbon
     type: app
     path: /dq
     description: Data-quality workspace (rules, results, reference sets).
@@ -258,6 +280,7 @@ navigation_routes:
       ar: [جودة البيانات, جودة, قواعد الجودة]
 
   - name: catalog_home
+    app: carbon
     type: app
     path: /catalog
     description: Data catalog (products, tables, metadata, mdm).
@@ -267,6 +290,7 @@ navigation_routes:
       ar: [الكتالوج, فهرس البيانات, البيانات الوصفية, منتجات البيانات]
 
   - name: emissions_home
+    app: carbon
     type: app
     path: /emissions
     description: Emissions dashboard and reporting.
@@ -276,11 +300,13 @@ navigation_routes:
       ar: [الانبعاثات, تقارير الانبعاثات]
 
   - name: dq_rule_detail
+    app: carbon
     type: entity
     path: /dq/rules/{id}
     description: Data-quality rule detail page.
 
   - name: dq_rule_results
+    app: carbon
     type: entity
     path: /dq/rules/{id}/results
     description: Data-quality rule results page.

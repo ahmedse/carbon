@@ -38,6 +38,8 @@ class VerificationRecordSerializer(serializers.ModelSerializer):
     period_label = serializers.SerializerMethodField(read_only=True)
     total_co2e_tonnes = serializers.SerializerMethodField(read_only=True)
     scope_summary = serializers.SerializerMethodField(read_only=True)
+    scope2_method = serializers.SerializerMethodField(read_only=True)
+    market_based = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = VerificationRecord
@@ -45,7 +47,7 @@ class VerificationRecordSerializer(serializers.ModelSerializer):
         read_only_fields = [
             'created_at', 'verifier_name', 'period_name', 'period_status',
             'period_start_date', 'period_end_date', 'period_label',
-            'total_co2e_tonnes', 'scope_summary',
+            'total_co2e_tonnes', 'scope_summary', 'scope2_method', 'market_based',
         ]
 
     def get_period_label(self, obj):
@@ -53,8 +55,9 @@ class VerificationRecordSerializer(serializers.ModelSerializer):
 
     def get_total_co2e_tonnes(self, obj):
         from .models import Calculation
-        total = Calculation.objects.filter(
-            reporting_period=obj.reporting_period
+        from .services import headline_calculations
+        total = headline_calculations(
+            Calculation.objects.filter(reporting_period=obj.reporting_period)
         ).aggregate(total=Sum('co2e_kg'))['total']
         if total is None:
             return None
@@ -62,13 +65,27 @@ class VerificationRecordSerializer(serializers.ModelSerializer):
 
     def get_scope_summary(self, obj):
         from .models import Calculation
-        scopes = Calculation.objects.filter(
-            reporting_period=obj.reporting_period
+        from .services import headline_calculations
+        scopes = headline_calculations(
+            Calculation.objects.filter(reporting_period=obj.reporting_period)
         ).values('scope').annotate(total_kg=Sum('co2e_kg'))
         return {
             s['scope']: round((s['total_kg'] or 0) / 1000, 2)
             for s in scopes
         }
+
+    def get_scope2_method(self, obj):
+        summary = self.get_scope_summary(obj)
+        if 2 in summary or '2' in summary:
+            return 'location-based'
+        return None
+
+    def get_market_based(self, obj):
+        from .models import Calculation
+        from .services import scope2_method_split
+        return scope2_method_split(
+            Calculation.objects.filter(reporting_period=obj.reporting_period)
+        ).get('market_based')
 
 
 class EmissionFactorSerializer(serializers.ModelSerializer):

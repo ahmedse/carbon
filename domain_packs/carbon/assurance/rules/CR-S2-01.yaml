@@ -1,0 +1,32 @@
+id: CR-S2-01
+journey: INV
+meaning: >
+  Every Scope 2 total names location-based or market-based. O1 electricity is
+  location-based and that method is persisted on InventorySource.scope2_method
+  and Calculation.scope2_method. Unlabelled Scope 2 kilograms are not mixed
+  into a labelled total. A market-based row is created only when a distinct
+  contractual factor exists. Dual reporting without that factor is
+  location-based only.
+source: backend/emissions/models.py InventorySource.scope2_method Calculation.scope2_method; emissions/inventory_math.py
+owner: carbon-inventory-lead
+failure: A Scope 2 kilogram is shown without a method, or a market-based total is invented from the Egypt grid factor.
+validation: >
+  Scope 2 InventorySource rows persist location_based or market_based.
+  Calculation rows with scope 2 persist the same. GET calculations/summary
+  emits by_scope2_method. market_based is omitted unless labelled rows exist.
+  evaluate_o1 copies the method onto the electricity source check.
+implementation: >
+  Host screens My Data, calculations, chairman, and onboarding quote the
+  method. Pulse get_calculation_summary includes the label in this turn's
+  payload. Chat still may only quote kg from that payload.
+confidence: high-code
+catalogue: planned
+residual: >
+  Do not invent a residual mix for Egypt. Do not add a fake market-based total.
+  Dual Scope 2 as a product feature stays not built until a contractual factor
+  exists.
+target: O1
+product: Carbon on AASTMT
+evidence: InventorySource.scope2_method, Calculation.scope2_method, GET /carbon-api/carbon/calculations/summary by_scope2_method, evaluate_o1 code scope2_method
+locked: 2026-09-30
+limit: Does not invent a residual mix. Does not open dual reporting. Does not close O2–P2.

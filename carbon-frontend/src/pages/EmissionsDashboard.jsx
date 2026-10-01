@@ -9,7 +9,6 @@ import {
   Grid,
   Card,
   CardContent,
-  CircularProgress,
   Alert,
   Chip,
   Divider,
@@ -30,7 +29,7 @@ import {
   TableHead,
   TableRow,
 } from "@mui/material";
-import { useTheme } from "@mui/material/styles";
+import { alpha, useTheme } from "@mui/material/styles";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -64,8 +63,11 @@ import useDocumentTitle from "../hooks/useDocumentTitle";
 import { useEnabledApps } from "../hooks/useEnabledApps";
 import { useNotes } from "../notes/NotesContext";
 import PageContainer from "../components/layout/PageContainer";
-import { FONT, SPACING } from "../theme/themeTokens";
-import { chartPalette } from "../theme/carbonTheme";
+import PageHeader from "../components/Page/PageHeader";
+import EmptyState from "../components/Page/EmptyState";
+import LoadingSkeleton from "../components/Page/LoadingSkeleton";
+import { SPACING } from "../theme/themeTokens";
+import { MarketBasedAbsentAlert, Scope2MethodChip, scope2MethodLabel } from "./carbon/Scope2Labels";
 
 // Register Chart.js components
 ChartJS.register(
@@ -106,7 +108,7 @@ const StatCard = ({ title, value, unit, subtitle, icon, color, trend, trendValue
           sx={{
             width: 36, height: 36, borderRadius: 1,
             display: "flex", alignItems: "center", justifyContent: "center",
-            bgcolor: `${color}18`, color,
+            bgcolor: alpha(color, 0.09), color,
           }}
         >
           {icon}
@@ -114,23 +116,23 @@ const StatCard = ({ title, value, unit, subtitle, icon, color, trend, trendValue
         {trend && (
           <Chip
             size="small"
-            icon={trend === "up" ? <TrendingUp sx={{ fontSize: '0.75rem' }} /> : <TrendingDown sx={{ fontSize: '0.75rem' }} />}
+            icon={trend === "up" ? <TrendingUp fontSize="small" /> : <TrendingDown fontSize="small" />}
             label={trendValue}
-            sx={{ ...FONT.chip, bgcolor: trend === "up" ? "error.light" : "success.light", color: trend === "up" ? "error.dark" : "success.dark" }}
+            sx={{ bgcolor: trend === "up" ? "error.light" : "success.light", color: trend === "up" ? "error.dark" : "success.dark" }}
           />
         )}
       </Box>
-      <Typography sx={{ ...FONT.statValue, color: "text.primary", mb: 0.25 }}>
+      <Typography variant="h3" component="p" color="text.primary" sx={{ mb: 0.25 }}>
         {typeof value === "number" ? value.toLocaleString() : value}
-        <Typography component="span" sx={{ ml: 0.75, ...FONT.bodySmall, color: "text.secondary" }}>
+        <Typography component="span" variant="caption" sx={{ ml: 0.75 }} color="text.secondary">
           {unit}
         </Typography>
       </Typography>
-      <Typography sx={{ ...FONT.statLabel, color: "text.secondary" }}>
+      <Typography variant="overline" color="text.secondary" display="block">
         {title}
       </Typography>
       {subtitle && (
-        <Typography sx={{ ...FONT.chip, color: "text.disabled", mt: 0.25 }}>
+        <Typography variant="caption" color="text.disabled" display="block" sx={{ mt: 0.25 }}>
           {subtitle}
         </Typography>
       )}
@@ -138,19 +140,22 @@ const StatCard = ({ title, value, unit, subtitle, icon, color, trend, trendValue
   </GlassCard>
 );
 
-const ScopeCard = ({ name, value, percentage, color }) => {
+const ScopeCard = ({ name, value, percentage, color, scope2Method, scope }) => {
   const { t } = useTranslation("emissions");
   return (
     <Box sx={{ flex: 1, minWidth: 180 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75 }}>
         <Box sx={{ width: 1.25, height: 1.25, borderRadius: "50%", bgcolor: color }} />
-        <Typography sx={{ ...FONT.cardTitle, color: "text.primary" }}>
+        <Typography variant="subtitle2" color="text.primary">
           {name}
         </Typography>
+        {Number(scope) === 2 && (
+          <Scope2MethodChip method={scope2Method} scope={2} />
+        )}
       </Box>
-      <Typography sx={{ ...FONT.statValue, color: "text.primary", mb: 0.25 }}>
+      <Typography variant="h3" component="p" color="text.primary" sx={{ mb: 0.25 }}>
         {value.toLocaleString()}
-        <Typography component="span" sx={{ ml: 0.5, ...FONT.bodySmall, color: "text.secondary" }}>
+        <Typography component="span" variant="caption" sx={{ ml: 0.5 }} color="text.secondary">
           {t("tCo2eUnit")}
         </Typography>
       </Typography>
@@ -160,11 +165,11 @@ const ScopeCard = ({ name, value, percentage, color }) => {
           value={percentage}
           sx={{
             flex: 1, height: 4, borderRadius: 2,
-            bgcolor: `${color}20`,
+            bgcolor: alpha(color, 0.12),
             "& .MuiLinearProgress-bar": { bgcolor: color, borderRadius: 2 },
           }}
         />
-        <Typography sx={{ ...FONT.chip, color: "text.secondary", minWidth: 36 }}>
+        <Typography variant="caption" color="text.secondary" sx={{ minWidth: 36 }}>
           {percentage.toFixed(1)}%
         </Typography>
       </Box>
@@ -287,17 +292,20 @@ export default function EmissionsDashboard({ projectId }) {
           label: t("scope1"),
           data: data.monthly_trend.map((m) => m.scope1),
           borderColor: scopeColors[1],
-          backgroundColor: `${scopeColors[1]}20`,
+          backgroundColor: alpha(scopeColors[1], 0.12),
           fill: true,
           tension: 0.4,
           pointRadius: 4,
           pointHoverRadius: 6,
         },
         {
-          label: t("scope2"),
+          label: `${t("scope2")} (${scope2MethodLabel(
+            data.scope_breakdown?.find((s) => Number(s.scope) === 2)?.scope2_method,
+            t,
+          )})`,
           data: data.monthly_trend.map((m) => m.scope2),
           borderColor: scopeColors[2],
-          backgroundColor: `${scopeColors[2]}20`,
+          backgroundColor: alpha(scopeColors[2], 0.12),
           fill: true,
           tension: 0.4,
           pointRadius: 4,
@@ -307,7 +315,7 @@ export default function EmissionsDashboard({ projectId }) {
           label: t("scope3"),
           data: data.monthly_trend.map((m) => m.scope3),
           borderColor: scopeColors[3],
-          backgroundColor: `${scopeColors[3]}20`,
+          backgroundColor: alpha(scopeColors[3], 0.12),
           fill: true,
           tension: 0.4,
           pointRadius: 4,
@@ -321,7 +329,11 @@ export default function EmissionsDashboard({ projectId }) {
     if (!data?.scope_breakdown) return null;
 
     return {
-      labels: data.scope_breakdown.map((s) => s.scope_name),
+      labels: data.scope_breakdown.map((s) => (
+        Number(s.scope) === 2
+          ? `${s.scope_name} (${scope2MethodLabel(s.scope2_method, t)})`
+          : s.scope_name
+      )),
       datasets: [
         {
           data: data.scope_breakdown.map((s) => s.co2e_tonnes),
@@ -332,7 +344,7 @@ export default function EmissionsDashboard({ projectId }) {
         },
       ],
     };
-  }, [data, scopeColors, theme]);
+  }, [data, scopeColors, theme, t]);
 
   const categoryBarChart = useMemo(() => {
     if (!data?.category_breakdown) return null;
@@ -481,19 +493,19 @@ export default function EmissionsDashboard({ projectId }) {
   // Loading state
   if (loading) {
     return (
-      <PageContainer sx={{ alignItems: "center", justifyContent: "center" }}>
-        <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: 400 }}>
-          <CircularProgress size={48} sx={{ color: "success.main" }} />
-        </Box>
+      <PageContainer>
+        <LoadingSkeleton />
       </PageContainer>
     );
   }
 
-  // Error state
   if (error) {
     return (
       <PageContainer>
-        <Alert severity="error" sx={{ m: 2 }}>
+        <Alert
+          severity="error"
+          action={<Button size="small" onClick={() => window.location.reload()}>{t("common:retry", { defaultValue: "Retry" })}</Button>}
+        >
           {error}
         </Alert>
       </PageContainer>
@@ -504,23 +516,14 @@ export default function EmissionsDashboard({ projectId }) {
   if (!data || data.calculation_count === 0) {
     return (
       <PageContainer>
-        <Paper variant="outlined" sx={{ p: 2.5, textAlign: "center", borderRadius: 1.5 }}>
-          <CloudQueue sx={{ fontSize: '3rem', color: "text.disabled", mb: SPACING.md }} />
-          <Typography sx={{ ...FONT.cardTitle, color: "text.secondary", mb: 0.5 }}>
-            {t("noEmissionsData")}
-          </Typography>
-          <Typography sx={{ ...FONT.bodySmall, color: "text.disabled", mb: SPACING.lg }}>
-            {t("noEmissionsSubtext")}
-          </Typography>
-          <Button
-            variant="contained"
-            startIcon={<Refresh />}
-            onClick={handleRecalculate}
-            sx={{ borderRadius: 1.5, px: SPACING.lg }}
-          >
-            {t("calculateEmissions")}
-          </Button>
-        </Paper>
+        <PageHeader title={t("emissionsDashboard")} />
+        <EmptyState
+          icon={<CloudQueue />}
+          title={t("noEmissionsData")}
+          description={t("noEmissionsSubtext")}
+          actionLabel={t("calculateEmissions")}
+          onAction={handleRecalculate}
+        />
       </PageContainer>
     );
   }
@@ -528,18 +531,12 @@ export default function EmissionsDashboard({ projectId }) {
   return (
     <PageContainer sx={{ height: '100%', overflow: 'auto' }}>
       {/* Header */}
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", mb: SPACING.lg }}>
-        <Box>
-          <Typography variant="h2" sx={{ mb: 0.25 }}>
-            {t("emissionsDashboard")}
-          </Typography>
-          <Typography sx={{ ...FONT.bodySmall, color: 'text.secondary' }}>
-            {data.reporting_period?.name || t("yearN", { year: selectedYear })} {t("lastUpdated")}{" "}
-            {data.last_updated
-              ? new Date(data.last_updated).toLocaleDateString()
-              : "N/A"}
-          </Typography>
-        </Box>
+      <PageHeader
+        title={t("emissionsDashboard")}
+        subtitle={`${data.reporting_period?.name || t("yearN", { year: selectedYear })} ${t("lastUpdated")} ${
+          data.last_updated ? new Date(data.last_updated).toLocaleDateString() : "N/A"
+        }`}
+        actions={(
         <Stack direction="row" spacing={2}>
           <FormControl size="small" sx={{ minWidth: 120 }}>
             <InputLabel>{t("yearLabel")}</InputLabel>
@@ -582,7 +579,10 @@ export default function EmissionsDashboard({ projectId }) {
             </IconButton>
           </Tooltip>
         </Stack>
-      </Box>
+        )}
+      />
+
+      <MarketBasedAbsentAlert payload={data} />
 
       {/* Top Stats */}
       <Grid container spacing={SPACING.sm} sx={{ mb: SPACING.lg }}>
@@ -592,7 +592,7 @@ export default function EmissionsDashboard({ projectId }) {
             value={data.total_co2e_tonnes}
             unit={t("tCo2eUnit")}
             subtitle={t("dataPoints", { count: data.calculation_count })}
-            icon={<Nature sx={{ fontSize: '1.75rem' }} />}
+            icon={<Nature fontSize="large" />}
             color={scopeColors[1]}
           />
         </Grid>
@@ -602,7 +602,7 @@ export default function EmissionsDashboard({ projectId }) {
             value={data.data_quality_score}
             unit="%"
             subtitle={t("basedOnCompleteness")}
-            icon={<Speed sx={{ fontSize: '1.75rem' }} />}
+            icon={<Speed fontSize="large" />}
             color={scopeColors[2]}
           />
         </Grid>
@@ -619,8 +619,8 @@ export default function EmissionsDashboard({ projectId }) {
                   })
                 : t("calendarYear")
             }
-            icon={<CalendarMonth sx={{ fontSize: '1.75rem' }} />}
-            color={chartPalette.purple}
+            icon={<CalendarMonth fontSize="large" />}
+            color={theme.palette.secondary.main}
           />
         </Grid>
       </Grid>
@@ -639,6 +639,7 @@ export default function EmissionsDashboard({ projectId }) {
               value={scope.co2e_tonnes}
               percentage={scope.percentage}
               color={scopeColors[scope.scope]}
+              scope2Method={scope.scope2_method}
             />
           ))}
         </Box>
@@ -700,16 +701,16 @@ export default function EmissionsDashboard({ projectId }) {
               <Table size="small">
                 <TableHead>
                   <TableRow sx={{ bgcolor: "background.default" }}>
-                    <TableCell sx={{ ...FONT.bodySmall, fontWeight: 600, color: "text.secondary" }}>
+                    <TableCell sx={{ fontWeight: 600, color: "text.secondary" }}>
                       {t("categoryCol")}
                     </TableCell>
-                    <TableCell align="center" sx={{ ...FONT.bodySmall, fontWeight: 600, color: "text.secondary" }}>
+                    <TableCell align="center" sx={{ fontWeight: 600, color: "text.secondary" }}>
                       {t("scopeCol")}
                     </TableCell>
-                    <TableCell align="right" sx={{ ...FONT.bodySmall, fontWeight: 600, color: "text.secondary" }}>
+                    <TableCell align="right" sx={{ fontWeight: 600, color: "text.secondary" }}>
                       {t("emissionsCol")}
                     </TableCell>
-                    <TableCell align="right" sx={{ ...FONT.bodySmall, fontWeight: 600, color: "text.secondary" }}>
+                    <TableCell align="right" sx={{ fontWeight: 600, color: "text.secondary" }}>
                       {t("dataPointsCol")}
                     </TableCell>
                   </TableRow>
@@ -717,22 +718,27 @@ export default function EmissionsDashboard({ projectId }) {
                 <TableBody>
                   {data.category_breakdown?.map((cat, idx) => (
                     <TableRow key={idx} sx={{ "&:last-child th, &:last-child td": { border: 0 } }}>
-                      <TableCell sx={{ ...FONT.body }}>{cat.category_name}</TableCell>
+                      <TableCell>{cat.category_name}</TableCell>
                       <TableCell align="center">
                         <Chip
-                          label={t("scopeChip", { scope: cat.scope })}
+                          label={Number(cat.scope) === 2
+                            ? `${t("scopeChip", { scope: cat.scope })} (${scope2MethodLabel(
+                              data.scope_breakdown?.find((s) => Number(s.scope) === 2)?.scope2_method,
+                              t,
+                            )})`
+                            : t("scopeChip", { scope: cat.scope })}
                           size="small"
                           sx={{
-                            bgcolor: `${scopeColors[cat.scope]}20`,
+                            bgcolor: alpha(scopeColors[cat.scope], 0.12),
                             color: scopeColors[cat.scope],
                             fontWeight: 600,
                           }}
                         />
                       </TableCell>
-                      <TableCell align="right" sx={{ ...FONT.body, fontWeight: 600 }}>
+                      <TableCell align="right" sx={{ fontWeight: 600 }}>
                         {cat.co2e_tonnes.toLocaleString()}
                       </TableCell>
-                      <TableCell align="right" sx={{ ...FONT.body, color: "text.secondary" }}>
+                      <TableCell align="right" sx={{ color: "text.secondary" }}>
                         {cat.count.toLocaleString()}
                       </TableCell>
                     </TableRow>

@@ -8,7 +8,6 @@ import {
   Typography,
   Card,
   CardContent,
-  Skeleton,
   Alert,
   Chip,
   Button,
@@ -30,11 +29,12 @@ import {
   TableHead,
   TableRow,
 } from "@mui/material";
-import { useTheme } from "@mui/material/styles";
+import { alpha, useTheme } from "@mui/material/styles";
 import { DatePicker, LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import dayjs from "dayjs";
 import { useTranslation, Trans } from "react-i18next";
+import { MarketBasedAbsentAlert, Scope2MethodChip, scope2MethodLabel } from "../carbon/Scope2Labels";
 import {
   TrendingDown,
   TrendingUp,
@@ -65,7 +65,8 @@ import {
 import { fetchEmissionsDashboard } from "../../api/emissions";
 import { useAuth } from "../../auth/AuthContext";
 import PageContainer from "../../components/layout/PageContainer";
-import { FONT } from "../../theme/themeTokens";
+import PageHeader from "../../components/Page/PageHeader";
+import LoadingSkeleton from "../../components/Page/LoadingSkeleton";
 
 Chart.register(
   ArcElement,
@@ -194,7 +195,7 @@ const DateRangeSelector = ({ startDate, endDate, onStartChange, onEndChange, qui
 
 // ============ Metric Cards ============
 
-const MetricCard = ({ title, value, unit, change, changeLabel, icon: _Icon, color = null }) => {
+const MetricCard = ({ title, value, unit, change, changeLabel, icon: _Icon, color = null, extra }) => {
   const theme = useTheme();
   const { t } = useTranslation('common');
   const accent = color || theme.palette.primary.light;
@@ -209,13 +210,13 @@ const MetricCard = ({ title, value, unit, change, changeLabel, icon: _Icon, colo
               width: 5,
               height: 5,
               borderRadius: 1,
-              bgcolor: `${accent}15`,
+              bgcolor: alpha(accent, 0.08),
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
             }}
           >
-            <_Icon sx={{ color: accent, fontSize: '1.375rem' }} />
+            <_Icon sx={{ color: accent }} fontSize="medium" />
           </Box>
           <Typography variant="subtitle2" color="text.secondary" fontWeight={500}>
             {title}
@@ -229,6 +230,7 @@ const MetricCard = ({ title, value, unit, change, changeLabel, icon: _Icon, colo
           </Typography>
         </Typography>
         
+        {extra}
         {change !== undefined && (
           <Chip
             size="small"
@@ -249,9 +251,11 @@ const MetricCard = ({ title, value, unit, change, changeLabel, icon: _Icon, colo
 
 // ============ Chart Components ============
 
-const MonthlyTrendChart = ({ monthlyTrend, showComparison: _showComparison }) => {
+const MonthlyTrendChart = ({ monthlyTrend, showComparison: _showComparison, scopeFilter = 'all', scope2Method = '' }) => {
   const theme = useTheme();
   const { t } = useTranslation('common');
+  const { t: te } = useTranslation('emissions');
+  const showScope = (n) => scopeFilter === 'all' || scopeFilter === String(n);
   const scopeColors = {
     1: theme.palette.success.main,
     2: theme.palette.primary.light,
@@ -264,28 +268,28 @@ const MonthlyTrendChart = ({ monthlyTrend, showComparison: _showComparison }) =>
   const chartData = {
     labels: months,
     datasets: [
-      {
+      ...(scopeFilter === 'all' ? [{
         label: t("chartTotalEmissions"),
         data: monthlyTotals,
         borderColor: theme.palette.primary.light,
-        backgroundColor: `${theme.palette.primary.light}1A`,
+        backgroundColor: alpha(theme.palette.primary.light, 0.1),
         fill: true,
         tension: 0.4,
         pointRadius: 4,
         pointBackgroundColor: theme.palette.primary.light,
-      },
+      }] : []),
       // Scope breakdown lines
-      {
-        label: "Scope 1",
+      ...(showScope(1) ? [{
+        label: te("scope1"),
         data: monthlyTrend?.map(m => m.scope1) || [],
         borderColor: scopeColors[1],
         backgroundColor: "transparent",
         tension: 0.4,
         pointRadius: 2,
         borderWidth: 2,
-      },
-      {
-        label: "Scope 2",
+      }] : []),
+      ...(showScope(2) ? [{
+        label: `${te("scope2")} (${scope2MethodLabel(scope2Method, te)})`,
         data: monthlyTrend?.map(m => m.scope2) || [],
         borderColor: scopeColors[2],
         backgroundColor: "transparent",
@@ -293,9 +297,9 @@ const MonthlyTrendChart = ({ monthlyTrend, showComparison: _showComparison }) =>
         pointRadius: 2,
         borderWidth: 2,
         borderDash: [5, 5],
-      },
-      {
-        label: "Scope 3",
+      }] : []),
+      ...(showScope(3) ? [{
+        label: te("scope3"),
         data: monthlyTrend?.map(m => m.scope3) || [],
         borderColor: scopeColors[3],
         backgroundColor: "transparent",
@@ -303,7 +307,7 @@ const MonthlyTrendChart = ({ monthlyTrend, showComparison: _showComparison }) =>
         pointRadius: 2,
         borderWidth: 2,
         borderDash: [2, 2],
-      },
+      }] : []),
     ],
   };
   
@@ -355,21 +359,28 @@ const MonthlyTrendChart = ({ monthlyTrend, showComparison: _showComparison }) =>
   );
 };
 
-const ScopeDistributionChart = ({ scope1, scope2, scope3 }) => {
+const ScopeDistributionChart = ({ scope1, scope2, scope3, scopeFilter = 'all', scope2Method = '' }) => {
   const theme = useTheme();
   const { t } = useTranslation('common');
-  const total = scope1 + scope2 + scope3;
-  const scopeColors = {
-    scope1: { main: theme.palette.success.main, label: t("anScope1Direct") },
-    scope2: { main: theme.palette.primary.light, label: t("anScope2Energy") },
-    scope3: { main: theme.palette.warning.main, label: t("anScope3ValueChain") },
-  };
+  const { t: te } = useTranslation('emissions');
+  const showScope = (n) => scopeFilter === 'all' || scopeFilter === String(n);
+  const rows = [
+    showScope(1) ? { key: 'scope1', value: scope1, main: theme.palette.success.main, label: t('anScope1Direct') } : null,
+    showScope(2) ? {
+      key: 'scope2',
+      value: scope2,
+      main: theme.palette.primary.light,
+      label: `${t('anScope2Energy')} (${scope2MethodLabel(scope2Method, te)})`,
+    } : null,
+    showScope(3) ? { key: 'scope3', value: scope3, main: theme.palette.warning.main, label: t('anScope3ValueChain') } : null,
+  ].filter(Boolean);
+  const total = rows.reduce((sum, row) => sum + row.value, 0);
   
   const data = {
-    labels: ["Scope 1", "Scope 2", "Scope 3"],
+    labels: rows.map((row) => row.label),
     datasets: [{
-      data: [scope1, scope2, scope3],
-      backgroundColor: [scopeColors.scope1.main, scopeColors.scope2.main, scopeColors.scope3.main],
+      data: rows.map((row) => row.value),
+      backgroundColor: rows.map((row) => row.main),
       borderColor: theme.palette.background.paper,
       borderWidth: 3,
     }],
@@ -383,7 +394,7 @@ const ScopeDistributionChart = ({ scope1, scope2, scope3 }) => {
       legend: { display: false },
       tooltip: {
         callbacks: {
-          label: (ctx) => `${ctx.label}: ${ctx.parsed.toLocaleString()} t (${((ctx.parsed / total) * 100).toFixed(1)}%)`,
+          label: (ctx) => `${ctx.label}: ${ctx.parsed.toLocaleString()} ${te('tCo2eUnit')} (${total > 0 ? ((ctx.parsed / total) * 100).toFixed(1) : '0.0'}%)`,
         },
       },
     },
@@ -404,16 +415,15 @@ const ScopeDistributionChart = ({ scope1, scope2, scope3 }) => {
           </Grid>
           <Grid size={7}>
             <Stack spacing={2} sx={{ height: "100%", justifyContent: "center" }}>
-              {Object.entries(scopeColors).map(([key, config]) => {
-                const value = key === "scope1" ? scope1 : key === "scope2" ? scope2 : scope3;
-                const pct = ((value / total) * 100).toFixed(1);
+              {rows.map((row) => {
+                const pct = total > 0 ? ((row.value / total) * 100).toFixed(1) : '0.0';
                 return (
-                  <Box key={key}>
+                  <Box key={row.key}>
                     <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.5 }}>
                       <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                        <Box sx={{ width: 1.5, height: 1.5, borderRadius: "50%", bgcolor: config.main }} />
+                        <Box sx={{ width: 1.5, height: 1.5, borderRadius: "50%", bgcolor: row.main }} />
                         <Typography variant="body2" fontWeight={500} color="text.primary">
-                          {config.label}
+                          {row.label}
                         </Typography>
                       </Box>
                       <Typography variant="body2" fontWeight={600} color="text.primary">
@@ -421,7 +431,7 @@ const ScopeDistributionChart = ({ scope1, scope2, scope3 }) => {
                       </Typography>
                     </Box>
                     <Typography variant="caption" color="text.secondary">
-                      {value.toLocaleString()} t CO₂e
+                      {row.value.toLocaleString()} {te('tCo2eUnit')}
                     </Typography>
                   </Box>
                 );
@@ -437,6 +447,7 @@ const ScopeDistributionChart = ({ scope1, scope2, scope3 }) => {
 const CategoryBreakdownChart = ({ categories }) => {
   const theme = useTheme();
   const { t } = useTranslation('common');
+  const { t: te } = useTranslation('emissions');
   const data = {
     labels: categories.map((c) => c.name),
     datasets: [{
@@ -464,7 +475,7 @@ const CategoryBreakdownChart = ({ categories }) => {
       legend: { display: false },
       tooltip: {
         callbacks: {
-          label: (ctx) => `${ctx.parsed.x.toLocaleString()} t CO₂e`,
+          label: (ctx) => `${ctx.parsed.x.toLocaleString()} ${te('tCo2eUnit')}`,
         },
       },
     },
@@ -494,9 +505,10 @@ const CategoryBreakdownChart = ({ categories }) => {
   );
 };
 
-const DetailedTable = ({ data }) => {
+const DetailedTable = ({ data, scope2Method = '' }) => {
   const theme = useTheme();
   const { t } = useTranslation('common');
+  const { t: te } = useTranslation('emissions');
   const scopeChipColors = {
     1: { bg: theme.palette.success.light, fg: theme.palette.success.dark },
     2: { bg: theme.palette.primary.light, fg: theme.palette.primary.dark },
@@ -530,7 +542,9 @@ const DetailedTable = ({ data }) => {
                   <TableCell>
                     <Chip
                       size="small"
-                      label={t('anScopeChip', { scope: row.scope })}
+                      label={Number(row.scope) === 2
+                        ? `${t('anScopeChip', { scope: row.scope })} (${scope2MethodLabel(scope2Method, te)})`
+                        : t('anScopeChip', { scope: row.scope })}
                       sx={{
                         bgcolor: scopeChipColors[row.scope]?.bg || theme.palette.secondary.light,
                         color: scopeChipColors[row.scope]?.fg || theme.palette.secondary.main,
@@ -563,10 +577,28 @@ const DetailedTable = ({ data }) => {
   );
 };
 
+function csvCell(value) {
+  const text = String(value ?? '');
+  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function downloadVisibleCsv(rows) {
+  const header = ['category', 'scope', 'co2e_tonnes', 'percent_of_period'];
+  const body = rows.map((row) => [row.category, row.scope, row.value, row.percentage].map(csvCell).join(','));
+  const blob = new Blob([[header.join(','), ...body].join('\n')], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = 'carbon-analytics.csv';
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
 // ============ Main Component ============
 
 export default function AnalyticsDashboard() {
   const { t } = useTranslation('common');
+  const { t: te } = useTranslation('emissions');
   useDocumentTitle(t("analyticsTitle"));
   const theme = useTheme();
   const { user, context } = useAuth();
@@ -580,10 +612,13 @@ export default function AnalyticsDashboard() {
   const [endDate, setEndDate] = useState(dayjs());
   const [_showComparison, _setShowComparison] = useState(false);
   const [viewMode, setViewMode] = useState("charts");
+  const [scopeFilter, setScopeFilter] = useState('all');
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
+      setError(null);
       try {
         const year = endDate.year();
         const result = await fetchEmissionsDashboard(
@@ -598,7 +633,7 @@ export default function AnalyticsDashboard() {
       }
     };
     loadData();
-  }, [endDate, user?.token, context?.projectId]);
+  }, [endDate, user?.token, context?.projectId, reloadKey]);
 
   const handleQuickSelectChange = (value) => {
     setQuickSelect(value);
@@ -629,15 +664,7 @@ export default function AnalyticsDashboard() {
   if (loading) {
     return (
       <PageContainer>
-        <Skeleton variant="rectangular" height={60} sx={{ borderRadius: 1.5, mb: 3 }} />
-        <Skeleton variant="rectangular" height={60} sx={{ borderRadius: 1.5, mb: 3 }} />
-        <Grid container spacing={3}>
-          {[1, 2, 3, 4].map((i) => (
-            <Grid size={{ xs: 12, md: 6, lg: 3 }} key={i}>
-              <Skeleton variant="rectangular" height={160} sx={{ borderRadius: 1.5 }} />
-            </Grid>
-          ))}
-        </Grid>
+        <LoadingSkeleton variant="console" />
       </PageContainer>
     );
   }
@@ -645,7 +672,12 @@ export default function AnalyticsDashboard() {
   if (error) {
     return (
       <PageContainer>
-        <Alert severity="error">{t('anLoadFailed')}{error}</Alert>
+        <Alert
+          severity="error"
+          action={<Button size="small" onClick={() => setReloadKey((n) => n + 1)}>{te('common:retry', { defaultValue: 'Retry' })}</Button>}
+        >
+          {t('anLoadFailed')}{error}
+        </Alert>
       </PageContainer>
     );
   }
@@ -683,65 +715,64 @@ export default function AnalyticsDashboard() {
       change: 0, // Would need historical comparison
     };
   });
+  const scope2Method = (data?.scope_breakdown || []).find((row) => Number(row.scope) === 2)?.scope2_method || '';
+  const showScope = (n) => scopeFilter === 'all' || scopeFilter === String(n);
+  const visibleCategories = categories.filter((cat) => showScope(cat.scope));
+  const visibleTable = tableData.filter((row) => showScope(row.scope));
 
   return (
     <PageContainer sx={{ maxWidth: 1400, mx: "auto", overflow: "auto" }}>
-      {/* Header */}
-      <Box sx={{ mb: 2.5, pb: 2, borderBottom: `1px solid ${theme.palette.divider}` }}>
-        <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ sm: 'flex-start' }} justifyContent="space-between" gap={1.5}>
-          <Box>
-            <Typography variant="h5" fontWeight={700} gutterBottom>
-              {t('analyticsTitle')}
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 680, lineHeight: 1.6 }}>
-              {t('anDescription')}{" "}
-              <Trans i18nKey="anDescriptionKpis" ns="common">For board-level KPIs see <strong>Chairman Overview</strong>.</Trans>
-            </Typography>
-          </Box>
-          {/* Export toolbar */}
+      <PageHeader
+        title={t('analyticsTitle')}
+        subtitle={t('anDescription')}
+        actions={(
           <Stack direction="row" gap={1} flexShrink={0} alignItems="center">
             <Tooltip title={t('exportCurrentView')}>
               <Button size="small" variant="outlined" startIcon={<Download fontSize="small" />}
-                sx={{ fontSize: '0.7rem', borderColor: 'divider', color: 'text.secondary', height: 30 }}>
+                onClick={() => downloadVisibleCsv(visibleTable)}>
                 {t('exportCsv')}
               </Button>
             </Tooltip>
             <Tooltip title={t('refreshData')}>
               <Button size="small" variant="outlined" startIcon={<Refresh fontSize="small" />}
-                onClick={() => { setData(null); }}
-                sx={{ fontSize: '0.7rem', borderColor: 'divider', color: 'text.secondary', height: 30 }}>
+                onClick={() => setReloadKey((n) => n + 1)}>
                 {t('refresh')}
               </Button>
             </Tooltip>
           </Stack>
-        </Stack>
-      </Box>
+        )}
+      />
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2, maxWidth: 680 }}>
+        <Trans i18nKey="anDescriptionKpis" ns="common">For board-level KPIs see <strong>Chairman Overview</strong>.</Trans>
+      </Typography>
 
       {/* Scope filter chips */}
       <Box sx={{ mb: 2.5 }}>
-        <Typography sx={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'text.disabled', mb: 0.75 }}>
+        <Typography variant="overline" color="text.disabled" display="block" sx={{ mb: 0.75 }}>
           {t('filterByScope')}
         </Typography>
         <Stack direction="row" gap={0.75} flexWrap="wrap">
           {[
-            { label: t('allScopes'), value: 'all', color: undefined },
-            { label: t('scope1Combustion'), value: '1', color: theme.palette.success.main },
-            { label: t('scope2Purchased'), value: '2', color: theme.palette.primary.main },
-            { label: t('scope3Chain'), value: '3', color: theme.palette.warning.main },
+            { label: t('allScopes'), value: 'all', color: 'default' },
+            { label: t('scope1Combustion'), value: '1', color: 'success' },
+            { label: `${t('scope2Purchased')} (${scope2MethodLabel(scope2Method, te)})`, value: '2', color: 'primary' },
+            { label: t('scope3Chain'), value: '3', color: 'warning' },
           ].map((s) => (
-            <Chip key={s.value} label={s.label} size="small" variant="outlined"
-              sx={{ fontSize: '0.7rem', cursor: 'pointer',
-                borderColor: s.color || 'divider',
-                color: s.color ? s.color : 'text.secondary',
-                '&:hover': { bgcolor: s.color ? `${s.color}12` : 'action.hover' },
-              }} />
+            <Chip
+              key={s.value}
+              label={s.label}
+              size="small"
+              color={s.color}
+              variant={scopeFilter === s.value ? 'filled' : 'outlined'}
+              onClick={() => setScopeFilter(s.value)}
+            />
           ))}
         </Stack>
       </Box>
 
       {/* Date Range Selector */}
       <Box sx={{ mb: 2 }}>
-        <Typography sx={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'text.disabled', mb: 0.75 }}>
+        <Typography variant="overline" color="text.disabled" display="block" sx={{ mb: 0.75 }}>
           {t('dateRange')}
         </Typography>
         <DateRangeSelector
@@ -760,7 +791,7 @@ export default function AnalyticsDashboard() {
           label={`${startDate.format("MMM D, YYYY")} — ${endDate.format("MMM D, YYYY")}`}
           size="small"
           icon={<CalendarMonth fontSize="small" />}
-          sx={{ bgcolor: 'background.dark', color: 'text.secondary', fontWeight: 500, fontSize: '0.72rem' }}
+          sx={{ bgcolor: 'action.hover', color: 'text.secondary', fontWeight: 500 }}
         />
         
         <ToggleButtonGroup
@@ -778,51 +809,62 @@ export default function AnalyticsDashboard() {
         </ToggleButtonGroup>
       </Box>
 
+      <MarketBasedAbsentAlert payload={data} />
+
       {/* Key Metrics — section label */}
       <Box sx={{ mb: 1 }}>
-        <Typography sx={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'text.disabled' }}>
+        <Typography variant="overline" color="text.disabled" display="block">
           {t('periodTotals')}
         </Typography>
-        <Typography sx={{ fontSize: '0.63rem', color: 'text.disabled' }}>{t('periodTotalsDesc')}</Typography>
+        <Typography variant="caption" color="text.disabled">{t('periodTotalsDesc')}</Typography>
       </Box>
       {/* Key Metrics */}
       <Grid container spacing={3} sx={{ mb: 3 }}>
+        {showScope('all') && scopeFilter === 'all' && (
         <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
           <MetricCard
             title={t('metricTotalEmissions')}
             value={emissions.total}
-            unit="t CO₂e"
+            unit={te('tCo2eUnit')}
             icon={TrendingDown}
             color={theme.palette.success.main}
           />
         </Grid>
+        )}
+        {showScope(1) && (
         <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
           <MetricCard
             title={t('metricScope1')}
             value={emissions.scope1}
-            unit="t CO₂e"
+            unit={te('tCo2eUnit')}
             icon={ShowChart}
             color={theme.palette.success.main}
           />
         </Grid>
+        )}
+        {showScope(2) && (
         <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
           <MetricCard
             title={t('metricScope2')}
             value={emissions.scope2}
-            unit="t CO₂e"
+            unit={te('tCo2eUnit')}
             icon={ShowChart}
             color={theme.palette.primary.light}
+            extra={<Scope2MethodChip method={scope2Method} scope={2} />}
           />
         </Grid>
+        )}
+        {showScope(3) && (
         <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
           <MetricCard
             title={t('metricScope3')}
             value={emissions.scope3}
-            unit="t CO₂e"
+            unit={te('tCo2eUnit')}
             icon={ShowChart}
             color={theme.palette.warning.main}
           />
         </Grid>
+        )}
       </Grid>
 
       {/* Charts or Table View */}
@@ -830,46 +872,53 @@ export default function AnalyticsDashboard() {
         <>
           {/* Trend Analysis section */}
           <Box sx={{ mb: 1, mt: 1 }}>
-            <Typography sx={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'text.disabled' }}>
+            <Typography variant="overline" color="text.disabled" display="block">
               {t('trendAnalysis')}
             </Typography>
-            <Typography sx={{ fontSize: '0.63rem', color: 'text.disabled' }}>{t('trendAnalysisDesc')}</Typography>
+            <Typography variant="caption" color="text.disabled">{t('trendAnalysisDesc')}</Typography>
           </Box>
           <Grid container spacing={3} sx={{ mb: 3 }}>
             <Grid size={{ xs: 12, lg: 8 }}>
-              <MonthlyTrendChart monthlyTrend={data?.monthly_trend} showComparison={_showComparison} />
+              <MonthlyTrendChart
+                monthlyTrend={data?.monthly_trend}
+                showComparison={_showComparison}
+                scopeFilter={scopeFilter}
+                scope2Method={scope2Method}
+              />
             </Grid>
             <Grid size={{ xs: 12, lg: 4 }}>
               <ScopeDistributionChart
                 scope1={emissions.scope1}
                 scope2={emissions.scope2}
                 scope3={emissions.scope3}
+                scopeFilter={scopeFilter}
+                scope2Method={scope2Method}
               />
             </Grid>
           </Grid>
 
           {/* Category Breakdown section */}
           <Box sx={{ mb: 1 }}>
-            <Typography sx={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'text.disabled' }}>
+            <Typography variant="overline" color="text.disabled" display="block">
               {t('categoryBreakdown')}
             </Typography>
-            <Typography sx={{ fontSize: '0.63rem', color: 'text.disabled' }}>{t('categoryBreakdownDesc')}</Typography>
+            <Typography variant="caption" color="text.disabled">{t('categoryBreakdownDesc')}</Typography>
           </Box>
           <Grid container spacing={3}>
             <Grid size={12}>
-              <CategoryBreakdownChart categories={categories} />
+              <CategoryBreakdownChart categories={visibleCategories} />
             </Grid>
           </Grid>
         </>
       ) : (
-        <DetailedTable data={tableData} />
+        <DetailedTable data={visibleTable} scope2Method={scope2Method} />
       )}
 
       {/* Footer */}
       <Box sx={{ mt: 4, pt: 3, borderTop: '1px solid', borderColor: 'divider' }}>
         <Typography variant="body2" color="text.disabled" textAlign="center">
           {t('dataRefreshed')}{dayjs().format("MMM D, YYYY h:mm A")} • 
-          <Button size="small" startIcon={<Refresh fontSize="small" />} sx={{ ml: 1 }}>
+          <Button size="small" startIcon={<Refresh fontSize="small" />} sx={{ ml: 1 }} onClick={() => setReloadKey((n) => n + 1)}>
             {t('refresh')}
           </Button>
         </Typography>

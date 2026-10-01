@@ -1,0 +1,26 @@
+id: CR-OWN-01
+journey: INV
+meaning: >
+  Campus-scoped dataowners_group is the writer for that org. carbon:enter_data
+  for a campus user is org-scoped. Do not grant global enter_data to campus
+  users. Do not grant people:view to emp_1067.
+source: accounts.rbac_utils.org_scope_for_capability; GROUP_CAPABILITIES dataowners_group; ScopedRole.org_unit
+owner: carbon-inventory-lead
+failure: A campus user writes another campus, or receives unrestricted carbon:enter_data.
+validation: >
+  A dataowners_group ScopedRole with org_unit set yields carbon:enter_data
+  only on that org (and children). org_scope_for_capability.unrestricted is
+  false. emp_1067 is not granted people:view by this pack.
+implementation: >
+  Seed campus accounts as data.<campus> with dataowners_group bound to that
+  org unit. Academy lead (carbon_lead / ahmed) is separate.
+confidence: high-code
+catalogue: planned
+residual: >
+  Superuser ahmed remains unrestricted by design. Brand admin is not a campus
+  data owner. emp_1067 is a Nibras ESS identity and stays without people:view.
+target: O1
+product: Carbon on AASTMT
+evidence: emissions/tests/test_domain_app_rules.py CR-OWN-01. seed_aastmt_org ScopedRole org_unit set.
+locked: 2026-09-30
+limit: Does not grant people:view to emp_1067. Does not demote ahmed. Does not make campus owners Django superusers.

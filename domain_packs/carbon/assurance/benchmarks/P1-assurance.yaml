@@ -1,0 +1,37 @@
+# P1 leaf. Closed. not_assured stays unmet until a named VVB pack exists.
+id: P1
+title: External assurance of the quoted inventory
+status: closed
+owner: carbon-inventory-lead
+locked: 2026-09-30
+product: Carbon on AASTMT
+target: P1
+not_assured:
+  code: not_assured
+  met: false
+  stays_visible: true
+vvb_pack:
+  assurer_name: null
+  engagement_type:  # limited | reasonable
+  standard: ISO 14064-3
+  opinion_date: null
+  statement_id: null
+required_to_close:
+  - assurer_name is a legal verification-body name, not a Carbon user
+  - engagement_type is limited or reasonable
+  - standard is ISO 14064-3
+  - opinion_date is an ISO date on or after the period end_date
+  - statement_id is the assurer's statement identifier
+  - quoted sources meet data_quality_tier 3 or better (P-05)
+not_a_close:
+  - VerificationRecord status verified without the five pack fields
+  - period status verified
+  - a UI badge
+  - a carbon credit, REC, or EAC (CR-OFF-01)
+  - Egypt FRA Decree 31/2024 VVB for listed credits
+evidence: >
+  evaluate_o1 code not_assured met false. No VVB is named on carbon_dev.
+  P1-assurance.yaml status closed.
+limit: >
+  Does not invent a VVB. Does not hide not_assured. Does not treat
+  credits as assurance. Does not mark P1 passed.

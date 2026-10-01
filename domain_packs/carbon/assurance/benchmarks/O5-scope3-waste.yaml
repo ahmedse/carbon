@@ -1,0 +1,48 @@
+# O5 leaf. Closed until the named source and a matching factor exist.
+# Do not convert the 73 tonne activity line to kg.
+id: O5
+title: Smart Village waste disposal (Scope 3 category 5)
+status: closed
+owner: carbon-inventory-lead
+locked: 2026-09-30
+product: Carbon on AASTMT
+target: O5
+campus: Smart Village
+campus_code: AASTMT-SV
+scope3:
+  standard: GHG Protocol Corporate Value Chain (Scope 3) Standard 2011
+  category: 5
+  category_name: Waste generated in operations
+sources:
+  - name: Smart Village waste disposal
+    scope: 3
+    scope3_category: 5
+    activity_unit: tonne
+    org_unit_name: Smart Village
+not_this_category:
+  - Smart Village purchased paper (category 1)
+  - envelopes, inks, soap, tissues, meals (category 1 soup)
+  - student or employee commuting (category 7)
+  - air tickets (category 6)
+  - rented-vehicle diesel 12900 L (category 8)
+  - water 11490 m3 and chilled water TR (not category 5)
+activity_line:
+  file: raw/Carbon footprint app/csv/smart_village_inventory_fy2324.csv
+  row: Waste Disposal
+  quantity: 73.0
+  unit: ton
+  kilograms: null
+  note: >
+    The line is activity evidence that a waste stream was recorded. It is
+    not a Calculation and not an O5 close.
+close:
+  requires:
+    - InventorySource "Smart Village waste disposal" scope 3 category 5
+    - EmissionFactor activity_unit tonne, scope 3, sourced, active
+    - DataRow in tonne for the open period
+    - Calculation.co2e_kg from activity × factor (CR-OFF-01, CR-DQ-01)
+  kilograms: null
+evidence: O5-scope3-waste.yaml status closed. 73.0 ton is not stored as kg.
+limit: >
+  Does not invent kg from 73 tonne. Does not open a 15-category inventory.
+  Does not treat a sector average as the academy footprint (P-05 tier 5).

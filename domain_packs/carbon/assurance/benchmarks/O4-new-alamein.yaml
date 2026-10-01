@@ -1,0 +1,61 @@
+# O4 leaf. Closed until the named source file exists. Do not invent kg.
+# CR-EXC-01 campus string remains "Alamein" (substring of New Alamein).
+id: O4
+title: New Alamein electricity and diesel
+status: closed
+owner: carbon-inventory-lead
+locked: 2026-09-30
+product: Carbon on AASTMT
+target: O4
+campus: New Alamein
+campus_code: AASTMT-ALM
+org_unit_match: Alamein
+org_unit_host_name: New Alamein
+data_owner: data.alamein
+period:
+  count_open: 1
+  status: open
+  period_type: annual
+  start_before_end: true
+  boundary_required: true
+  same_open_period_as_academy: true
+  second_period_is_fail: true
+sources:
+  - name: New Alamein electricity
+    scope: 2
+    scope3_category: null
+    approach: location-based
+    scope2_method: location_based
+    activity_unit: kWh
+    org_unit_name: New Alamein
+  - name: New Alamein diesel
+    scope: 1
+    scope3_category: null
+    activity_unit: litre
+    stream:
+      field: description
+      exactly_one_of: [generators, fleet]
+      both_is_fail: true
+      empty_is_fail: true
+    org_unit_name: New Alamein
+coverage:
+  goal_scope: "1+2"
+  min_quality_tier: 4
+  covered_requires:
+    - named source file exists
+    - linked_tables non-empty on this period's InventorySourceStatus
+    - a Calculation row for the same reporting_period
+close:
+  evidence_file: raw/Carbon footprint app/csv/new_alamein_inventory.csv
+  evidence_file_exists: false
+  kilograms: null
+  diesel_stream: null
+gate: >
+  Opens only after O1 remains passed and new_alamein_inventory.csv exists
+  with named kWh months and one diesel stream. Until then the campus stays
+  declared or excluded insufficient_data (CR-EXC-01). Source names contain
+  Alamein so CR-EXC-01 still matches.
+evidence: domain_packs/carbon/assurance/benchmarks/O4-new-alamein.yaml status closed. File new_alamein_inventory.csv is absent.
+limit: >
+  Does not invent kg. Does not open a second ReportingPeriod.
+  evaluate_o1 is not this checklist. Does not pass O2 or O3.

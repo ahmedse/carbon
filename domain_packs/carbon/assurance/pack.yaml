@@ -10,3 +10,6 @@ blocks_release: []
 # Planned rules are not release gates. A rule enters blocks_release only after
 # its catalogue is configured and a fault-demonstrated event exists.
 # 2026-09-29: CR-INV-01 through CR-WRITE-01 are catalogue planned.
+# 2026-09-30: CR-S2-01, CR-OFF-01, CR-REST-01, CR-OWN-01 are catalogue planned.
+# 2026-09-30 lock: CR-S2-02, CR-CAM-01, CR-S3-01, CR-ASR-01, CR-DIS-01 are
+# catalogue planned. Dual Scope 2, O2–O4, O5, P1, P2 stay closed until evidence.

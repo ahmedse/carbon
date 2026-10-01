@@ -28,7 +28,11 @@ import useDocumentTitle from '../../hooks/useDocumentTitle';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import { useAuth } from '../../auth/AuthContext';
 import { useAITaskTransfer } from '../../shell/useAITaskTransfer';
-import { fetchReportingPeriods, generateReport, downloadReportCsv, createReportConfig } from '../../api/emissions-extended';
+import { fetchReportingPeriods, generateReport, downloadReportCsv, createReportConfig, fetchDisclosureExport } from '../../api/emissions-extended';
+import PageContainer from '../../components/layout/PageContainer';
+import PageHeader from '../../components/Page/PageHeader';
+import { FONT } from '../../theme/themeTokens';
+import { MarketBasedAbsentAlert, Scope2MethodChip } from '../carbon/Scope2Labels';
 
 export default function ReportGeneratorPage() {
   const { t } = useTranslation('emissions');
@@ -89,6 +93,33 @@ export default function ReportGeneratorPage() {
       const data = await generateReport(state, token);
       setReportData(data);
       setShowPreview(true);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDisclosure = async (framework) => {
+    if (!state.reporting_period_id) {
+      setError(t('disclosureShapeOnly'));
+      return;
+    }
+    try {
+      setLoading(true);
+      const payload = await fetchDisclosureExport(
+        { framework, reporting_period_id: state.reporting_period_id },
+        token,
+      );
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `disclosure-${framework}-${state.reporting_period_id}.json`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -161,20 +192,21 @@ export default function ReportGeneratorPage() {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
-        <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
-          {t('reportGenerator')}
-        </Typography>
-        <Button
-          size="small"
-          variant="outlined"
-          startIcon={<AutoAwesomeIcon />}
-          onClick={handleAskAI}
-        >
-          {t('askAi')}
-        </Button>
-      </Box>
+    <PageContainer>
+      <PageHeader
+        title={t('reportGenerator')}
+        description={t('disclosureShapeOnly')}
+        actions={(
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<AutoAwesomeIcon />}
+            onClick={handleAskAI}
+          >
+            {t('askAi')}
+          </Button>
+        )}
+      />
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
@@ -182,7 +214,7 @@ export default function ReportGeneratorPage() {
         {/* Configuration Section */}
         <Card>
           <CardContent>
-            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>
+            <Typography sx={{ ...FONT.heading, mb: 2 }}>
               {t('reportConfiguration')}
             </Typography>
 
@@ -225,7 +257,7 @@ export default function ReportGeneratorPage() {
 
               {/* Scopes */}
               <Box>
-                <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>
+                <Typography sx={{ ...FONT.statLabel, mb: 1 }}>
                   {t('ghgScopes')}
                 </Typography>
                 <FormGroup row>
@@ -272,33 +304,42 @@ export default function ReportGeneratorPage() {
         {showPreview && reportData && (
           <Card>
             <CardContent>
-              <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>
+              <Typography sx={{ ...FONT.heading, mb: 2 }}>
                 {t('reportPreview')}
               </Typography>
 
+              <MarketBasedAbsentAlert payload={reportData} />
+
               <Box sx={{ mb: 2, p: 2, bgcolor: 'background.dark', borderRadius: 1 }}>
                 <Typography variant="body2">
-                  <strong>{t('totalEmissions')}</strong> {reportData.total_co2e_tonnes?.toFixed(2) || 0} {t('tonnesCo2e')}
+                  <strong>{t('totalEmissions')}</strong> {reportData.summary?.total_emissions_tonnes ?? reportData.total_co2e_tonnes ?? 0} {t('tonnesCo2e')}
                 </Typography>
+                <Typography variant="body2">{t('scope2HeadlineLocation')}</Typography>
               </Box>
 
               {/* Scope Breakdown Table */}
-              {reportData.scope_breakdown && (
+              {(reportData.summary?.scope_breakdown || reportData.scope_details) && (
                 <TableContainer component={Paper} sx={{ mb: 2 }}>
                   <Table size="small">
                     <TableHead sx={{ bgcolor: 'background.dark' }}>
                       <TableRow>
                         <TableCell sx={{ fontWeight: 'bold' }}>{t('scope')}</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold' }}>{t('scope2MethodCol')}</TableCell>
                         <TableCell align="right" sx={{ fontWeight: 'bold' }}>{t('co2eTonnes')}</TableCell>
                         <TableCell align="right" sx={{ fontWeight: 'bold' }}>{t('records')}</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {Object.entries(reportData.scope_breakdown).map(([scope, data]) => (
-                        <TableRow key={scope}>
-                          <TableCell>{t('scopeChip', { scope })}</TableCell>
-                          <TableCell align="right">{data.total_co2e_tonnes?.toFixed(2) || 0}</TableCell>
-                          <TableCell align="right">{data.count || 0}</TableCell>
+                      {(reportData.summary?.scope_breakdown || []).map((row) => (
+                        <TableRow key={row.scope}>
+                          <TableCell>{t('scopeChip', { scope: row.scope })}</TableCell>
+                          <TableCell>
+                            {Number(row.scope) === 2
+                              ? <Scope2MethodChip method={row.scope2_method || 'location_based'} scope={2} />
+                              : '—'}
+                          </TableCell>
+                          <TableCell align="right">{row.emissions_tonnes ?? 0}</TableCell>
+                          <TableCell align="right">{row.calculation_count || 0}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -306,9 +347,18 @@ export default function ReportGeneratorPage() {
                 </TableContainer>
               )}
 
-              <Stack direction="row" spacing={2}>
+              <Stack direction="row" spacing={2} flexWrap="wrap">
                 <Button variant="contained" onClick={handleDownloadCsv}>
                   {t('downloadCsv')}
+                </Button>
+                <Button variant="outlined" onClick={() => handleDisclosure('esrs_e1')}>
+                  {t('disclosureEsrs')}
+                </Button>
+                <Button variant="outlined" onClick={() => handleDisclosure('ifrs_s2')}>
+                  {t('disclosureIfrs')}
+                </Button>
+                <Button variant="outlined" onClick={() => handleDisclosure('cdp')}>
+                  {t('disclosureCdp')}
                 </Button>
                 <Button variant="outlined" onClick={() => setShowPreview(false)}>
                   {t('backToConfig')}
@@ -322,7 +372,7 @@ export default function ReportGeneratorPage() {
         {showPreview && reportData && (
           <Card>
             <CardContent>
-              <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>
+              <Typography sx={{ ...FONT.heading, mb: 2 }}>
                 {t('saveConfigForReuse')}
               </Typography>
 
@@ -354,6 +404,6 @@ export default function ReportGeneratorPage() {
         onClose={() => setSnackbar(null)}
         message={snackbar?.message}
       />
-    </Box>
+    </PageContainer>
   );
 }

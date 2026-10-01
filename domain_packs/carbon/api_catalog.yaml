@@ -6,76 +6,91 @@ default_source_type: carbon_api
 # kind: read | write | confirm
 tools:
   - name: create_dq_rule
+    app: carbon
     kind: write
     requires_confirmation: true
     source_type: carbon_api
 
   - name: search_knowledge
+    app: carbon
     kind: read
     requires_confirmation: false
     source_type: knowledge_graph
 
   - name: get_entity_details
+    app: carbon
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   - name: list_my_capabilities
+    app: carbon
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   - name: plan_task
+    app: carbon
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   - name: list_dq_rules
+    app: carbon
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   - name: bind_dq_rules
+    app: carbon
     kind: write
     requires_confirmation: true
     source_type: carbon_api
 
   - name: create_table
+    app: carbon
     kind: write
     requires_confirmation: true
     source_type: carbon_api
 
   - name: list_data_tables
+    app: carbon
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   - name: get_data_product_details
+    app: carbon
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   - name: list_reporting_periods
+    app: carbon
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   - name: list_emission_factors
+    app: carbon
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   - name: list_gwp_gases
+    app: carbon
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   - name: get_calculation_summary
+    app: carbon
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   - name: get_chairman_overview
+    app: carbon
     kind: read
     requires_confirmation: false
     source_type: carbon_api

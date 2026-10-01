@@ -1,0 +1,35 @@
+# Dual Scope 2 market-based leaf. Closed. Absent is not zero.
+id: S2MB
+title: Market-based Scope 2 total
+status: closed
+owner: carbon-inventory-lead
+locked: 2026-10-01
+product: Carbon on AASTMT
+target: O1
+method: market-based
+blocker: >
+  Market-based Scope 2 is absent until CalculationRule.factor_selector_mapping
+  __market__ names an active Scope 2 EmissionFactor whose primary key is
+  not the Egypt grid factor used for location-based. No such contractual
+  factor is stored. Do not copy the grid factor. Do not invent an Egypt
+  residual mix. Do not store 0 kg as the market-based total.
+location_based:
+  label: location-based
+  source: Smart Village electricity
+  activity_unit: kWh
+  quote_kg: "1239599.320800"
+  activity_kwh: 2704187
+market_based:
+  present: false
+  total_co2e_kg: null
+  reason: no_distinct_contractual_factor
+  contractual_factor_id: null
+evidence: >
+  domain_packs/carbon/assurance/benchmarks/S2-market-based.yaml status
+  closed. CR-S2-02. GET calculations/summary by_scope2_method.market_based
+  present false. emissions/tests/test_domain_app_rules.py
+  test_market_based_absent_is_not_zero.
+limit: >
+  Does not open dual reporting as a passed benchmark. Does not add the
+  location-based kilogram into a market-based column. Headline totals
+  must not mix the two methods. Does not pass O2–P2.

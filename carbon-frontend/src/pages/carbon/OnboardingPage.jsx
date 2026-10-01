@@ -25,6 +25,16 @@ import LoadingSkeleton from '../../components/Page/LoadingSkeleton';
 import WorkflowCard from '../../components/Cards/WorkflowCard';
 import { fetchOnboardingO1 } from '../../api/emissions-extended';
 
+const CLOSED_LEAVES = [
+  'onboarding.closedO2',
+  'onboarding.closedO3',
+  'onboarding.closedO4',
+  'onboarding.closedO5',
+  'onboarding.closedS2',
+  'onboarding.closedP1',
+  'onboarding.closedP2',
+];
+
 const STEPS = [
   { id: 'name_boundary', title: 'onboarding.stepBoundary', hint: 'onboarding.stepBoundaryHint', path: '/carbon/admin/boundaries', icon: <AccountTreeIcon /> },
   { id: 'open_period', title: 'onboarding.stepPeriod', hint: 'onboarding.stepPeriodHint', path: '/carbon/reporting/periods', icon: <EventAvailableIcon /> },
@@ -53,6 +63,8 @@ const COPY = {
   diesel_stream_missing: 'onboarding.dieselStreamMissing',
   diesel_stream_both: 'onboarding.dieselStreamBoth',
   diesel_stream_met: 'onboarding.dieselStreamMet',
+  scope2_method: 'onboarding.scope2Method',
+  scope2_method_unlabelled: 'onboarding.scope2MethodUnlabelled',
   no_calculation: 'onboarding.noCalculation',
   summary_kg: 'onboarding.kgFromSummary',
   not_assured: 'onboarding.notAssured',
@@ -148,6 +160,8 @@ function checkText(t, check, language) {
     completeness: check.completeness,
     tier: check.tier,
     target_year: check.target_year,
+    method: check.method,
+    methodLabel: check.method ? ` (${check.method})` : '',
   });
 }
 
@@ -237,7 +251,7 @@ export default function OnboardingPage() {
           )}
         >
           {t('onboarding.tooManyOpen')}
-          <Typography component="div" sx={{ fontSize: '0.8125rem', mt: 0.5 }}>
+          <Typography component="div" variant="body2" sx={{ mt: 0.5 }}>
             {t('onboarding.tooManyOpenHint')}
           </Typography>
         </Alert>
@@ -249,7 +263,8 @@ export default function OnboardingPage() {
             <Typography
               key={item.key}
               component="li"
-              sx={{ fontSize: '0.8125rem', color: item.color }}
+              variant="body2"
+              sx={{ color: item.color }}
             >
               {item.text}
             </Typography>
@@ -259,7 +274,7 @@ export default function OnboardingPage() {
 
       {phase === 'loaded' && (
         <Box sx={{ display: 'grid', gap: 1, mt: 1.5 }}>
-          <Typography sx={{ fontSize: '0.75rem', fontWeight: 600 }}>
+          <Typography variant="subtitle2">
             {t('onboarding.stepsTitle')}
           </Typography>
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1 }}>
@@ -273,6 +288,19 @@ export default function OnboardingPage() {
               />
             ))}
           </Box>
+        </Box>
+      )}
+
+      {phase !== 'loading' && (
+        <Box
+          component="section"
+          aria-label={t('onboarding.closedLeavesTitle')}
+          sx={{ display: 'grid', gap: 1, mt: 2, p: 1.5, border: 1, borderColor: 'divider', borderRadius: 1 }}
+        >
+          <Typography variant="subtitle2">{t('onboarding.closedLeavesTitle')}</Typography>
+          {CLOSED_LEAVES.map((key) => (
+            <Typography key={key} variant="body2" color="text.secondary">{t(key)}</Typography>
+          ))}
         </Box>
       )}
     </PageContainer>

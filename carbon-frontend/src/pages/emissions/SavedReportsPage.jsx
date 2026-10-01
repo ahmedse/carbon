@@ -36,6 +36,11 @@ import {
 } from '@mui/icons-material';
 import { useAuth } from '../../auth/AuthContext';
 import { fetchReportConfigs, runReportConfig, deleteReportConfig, downloadReportCsv } from '../../api/emissions-extended';
+import { MarketBasedAbsentAlert, Scope2MethodChip } from '../carbon/Scope2Labels';
+import PageContainer from '../../components/layout/PageContainer';
+import PageHeader from '../../components/Page/PageHeader';
+import LoadingSkeleton from '../../components/Page/LoadingSkeleton';
+import { FONT } from '../../theme/themeTokens';
 
 const formatRelativeTime = (dateString, t) => {
   if (!dateString) return t('never');
@@ -78,28 +83,47 @@ const ReportResultPanel = ({ report, loading }) => {
 
   if (!report) return null;
 
+  const breakdown = Array.isArray(report.scope_breakdown)
+    ? report.scope_breakdown
+    : Object.entries(report.scope_breakdown || {}).map(([scope, data]) => ({
+        scope,
+        ...data,
+      }));
+
   return (
     <Paper sx={{ p: 2, backgroundColor: 'background.dark' }}>
       <Stack spacing={2}>
+        <MarketBasedAbsentAlert payload={report} />
         <Box>
-          <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
+          <Typography sx={{ ...FONT.statLabel }}>
             {t('totalEmissions')} {report.total_co2e_tonnes?.toFixed(2) || 0} {t('tonnesCo2e')}
+          </Typography>
+          <Typography sx={{ ...FONT.caption, color: 'text.secondary' }}>
+            {t('scope2HeadlineLocation')}
           </Typography>
         </Box>
 
-        {report.scope_breakdown && Object.keys(report.scope_breakdown).length > 0 && (
+        {breakdown.length > 0 && (
           <Box>
-            <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>
+            <Typography sx={{ ...FONT.statLabel, mb: 1 }}>
               {t('scopeBreakdown')}
             </Typography>
             <Stack spacing={1}>
-              {Object.entries(report.scope_breakdown).map(([scope, data]) => (
-                <Box key={scope} sx={{ display: 'flex', justifyContent: 'space-between', pl: 2 }}>
-                  <Typography variant="body2">
-                    <ScopeChip scope={parseInt(scope)} />
-                  </Typography>
-                  <Typography variant="body2">
-                    {data.total_co2e_tonnes?.toFixed(2) || 0} {t('tonnesCo2e')} ({t('recordCount', { count: data.count || 0 })})
+              {breakdown.map((row) => (
+                <Box key={row.scope} sx={{ display: 'flex', justifyContent: 'space-between', pl: 2, gap: 1 }}>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <ScopeChip scope={parseInt(row.scope, 10)} />
+                    {Number(row.scope) === 2 && (
+                      <Scope2MethodChip method={row.scope2_method || 'location_based'} scope={2} />
+                    )}
+                  </Stack>
+                  <Typography sx={{ ...FONT.body }}>
+                    {(row.co2e_tonnes ?? row.total_co2e_tonnes ?? 0).toFixed
+                      ? (row.co2e_tonnes ?? row.total_co2e_tonnes).toFixed(2)
+                      : (row.co2e_tonnes ?? row.total_co2e_tonnes ?? 0)} {t('tonnesCo2e')}
+                    {row.calculation_count != null || row.count != null
+                      ? ` (${t('recordCount', { count: row.calculation_count || row.count || 0 })})`
+                      : ''}
                   </Typography>
                 </Box>
               ))}
@@ -197,9 +221,9 @@ export default function SavedReportsPage() {
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
-        <CircularProgress />
-      </Box>
+      <PageContainer>
+        <LoadingSkeleton />
+      </PageContainer>
     );
   }
 

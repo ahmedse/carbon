@@ -38,9 +38,10 @@ import {
   Refresh as RefreshIcon,
   VerifiedUser as ApprovedIcon,
 } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import PageContainer from '../../components/layout/PageContainer';
-import { FONT } from '../../theme/themeTokens';
+import { Scope2MethodChip, MarketBasedAbsentAlert } from './Scope2Labels';
 import { useAuth } from '../../auth/AuthContext';
 import {
   fetchVerificationRecords,
@@ -53,9 +54,9 @@ import ErrorAlert from '../../components/Page/ErrorAlert';
 // ── Tab config ──────────────────────────────────────────────────────────
 
 const VERIFICATION_TABS = [
-  { label: 'Pending Review', key: 'pending',  icon: <ReviewIcon />, status: 'pending' },
-  { label: 'Verified',       key: 'verified', icon: <ApprovedIcon />, status: 'verified' },
-  { label: 'All Periods',    key: 'all',      icon: null,                                   status: null },
+  { labelKey: 'pendingReview', key: 'pending',  icon: <ReviewIcon />, status: 'pending' },
+  { labelKey: 'verifiedTab',   key: 'verified', icon: <ApprovedIcon />, status: 'verified' },
+  { labelKey: 'allPeriodsTab', key: 'all',      icon: null,                                   status: null },
 ];
 
 // ── Scope config ─────────────────────────────────────────────────────────
@@ -124,7 +125,7 @@ function RejectDialog({ open, record, onClose, onConfirm, loading }) {
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>Reject Period</DialogTitle>
       <DialogContent>
-        <Typography sx={{ ...FONT.body, mb: 2 }}>
+        <Typography variant="body2" sx={{ mb: 2 }}>
           Reject verification for <strong>{record?.period_label || record?.period_name || record?.id}</strong>?
         </Typography>
         <TextField
@@ -136,7 +137,6 @@ function RejectDialog({ open, record, onClose, onConfirm, loading }) {
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           placeholder="Provide a reason for rejection…"
-          sx={{ '& .MuiInputBase-root': { ...FONT.body } }}
         />
       </DialogContent>
       <DialogActions>
@@ -162,11 +162,11 @@ function ApproveDialog({ open, record, onClose, onConfirm, loading }) {
     <Dialog open={open} onClose={onClose} maxWidth="xs">
       <DialogTitle>Confirm Approval</DialogTitle>
       <DialogContent>
-        <Typography sx={{ ...FONT.body }}>
+        <Typography variant="body2">
           Approve verification for <strong>{record?.period_label || record?.period_name || record?.id}</strong>?
-          <Box component="span" sx={{ display: 'block', mt: 1, ...FONT.bodySmall, color: 'text.secondary' }}>
+          <Typography component="span" variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
             This confirms the calculation data is accurate and complete.
-          </Box>
+          </Typography>
         </Typography>
       </DialogContent>
       <DialogActions>
@@ -188,7 +188,8 @@ function ApproveDialog({ open, record, onClose, onConfirm, loading }) {
 // ── Main Component ─────────────────────────────────────────────────────
 
 export default function VerificationPage() {
-  useDocumentTitle("Verification");
+  const { t } = useTranslation('emissions');
+  useDocumentTitle(t('verificationTitle'));
   const { token } = useAuth();
   const [activeTab, setActiveTab] = useState(0);
 
@@ -284,7 +285,7 @@ export default function VerificationPage() {
         flex: 1.5,
         minWidth: 220,
         renderCell: (params) => (
-          <Typography sx={{ ...FONT.body, fontWeight: 500 }}>
+          <Typography variant="body2">
             {params.value || params.row.period_name || '—'}
           </Typography>
         ),
@@ -307,6 +308,16 @@ export default function VerificationPage() {
         valueFormatter: (value) => fmtNum(value),
       },
       {
+        field: 'scope2_method',
+        headerName: t('scope2MethodCol'),
+        width: 160,
+        renderCell: (params) => (
+          params.row.scope2_method
+            ? <Scope2MethodChip method={params.row.scope2_method} scope={2} />
+            : '—'
+        ),
+      },
+      {
         field: 'scope_summary',
         headerName: 'Scope Summary',
         flex: 1,
@@ -314,18 +325,31 @@ export default function VerificationPage() {
         renderCell: (params) => {
           const summary = params.value;
           if (!summary || typeof summary !== 'object' || Object.keys(summary).length === 0) {
-            return <Typography sx={{ ...FONT.bodySmall, color: 'text.secondary' }}>—</Typography>;
+            return <Typography variant="caption" color="text.secondary">—</Typography>;
           }
           return (
             <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
-              {Object.entries(summary).map(([scope, tonnes]) => (
-                <Chip
-                  key={scope}
-                  label={`S${scope}: ${fmtNum(tonnes)}`}
-                  size="small"
-                  color={SCOPE_META[Number(scope)]?.color}
-                />
-              ))}
+              {Object.entries(summary).map(([scope, tonnes]) => {
+                const scopeNum = Number(scope);
+                let label = `S${scope}: ${fmtNum(tonnes)}`;
+                if (scopeNum === 2) {
+                  const raw = String(params.row.scope2_method || '').toLowerCase().replace(/-/g, '_');
+                  const method = raw === 'market_based'
+                    ? t('scope2MarketBased')
+                    : raw === 'location_based'
+                      ? t('scope2LocationBased')
+                      : t('chairman.scope2Unlabelled');
+                  label = `S2 ${method}: ${fmtNum(tonnes)}`;
+                }
+                return (
+                  <Chip
+                    key={scope}
+                    label={label}
+                    size="small"
+                    color={SCOPE_META[scopeNum]?.color}
+                  />
+                );
+              })}
             </Stack>
           );
         },
@@ -341,7 +365,7 @@ export default function VerificationPage() {
         headerName: 'Verifier',
         width: 130,
         renderCell: (params) => (
-          <Typography sx={{ ...FONT.body }}>{params.value || '—'}</Typography>
+          <Typography variant="body2">{params.value || '—'}</Typography>
         ),
       },
       {
@@ -370,7 +394,7 @@ export default function VerificationPage() {
         flex: 1,
         minWidth: 120,
         renderCell: (params) => (
-          <Typography sx={{ ...FONT.bodySmall, color: 'text.secondary', fontStyle: 'italic' }}>
+          <Typography variant="caption" color="text.secondary">
             {params.value || '—'}
           </Typography>
         ),
@@ -395,7 +419,7 @@ export default function VerificationPage() {
                   setApproveDialog({ open: true, record: params.row });
                 }}
               >
-                <ApproveIcon sx={{ fontSize: '1.125rem' }} />
+                <ApproveIcon fontSize="medium" />
               </IconButton>
             </Tooltip>
             <Tooltip title="Reject">
@@ -407,7 +431,7 @@ export default function VerificationPage() {
                   setRejectDialog({ open: true, record: params.row });
                 }}
               >
-                <RejectIcon sx={{ fontSize: '1.125rem' }} />
+                <RejectIcon fontSize="medium" />
               </IconButton>
             </Tooltip>
           </Stack>
@@ -416,7 +440,7 @@ export default function VerificationPage() {
     }
 
     return base;
-  }, [isPendingTab]);
+  }, [isPendingTab, t]);
 
   // ── Render ────────────────────────────────────────────────────────────
 
@@ -425,9 +449,9 @@ export default function VerificationPage() {
       {/* Header */}
       <Box sx={{ px: 2.5, pt: 2, pb: 0 }}>
         <PageHeader
-          title="Verification Workflow"
-          subtitle="Review, approve, or reject period-level emission calculations"
-          description="Independent verification of emission results with auditor workflow. Review calculation evidence, approve valid results, and reject discrepancies with documented justification."
+          title={t('verificationTitle')}
+          subtitle={t('verificationSubtitle')}
+          description={t('verificationDescription')}
           actions={
             <Tooltip title="Refresh">
               <span>
@@ -440,13 +464,17 @@ export default function VerificationPage() {
         />
       </Box>
 
+      <Box sx={{ px: 2.5, pt: 1 }}>
+        <MarketBasedAbsentAlert payload={records?.[0]} />
+      </Box>
+
       {/* Tabs */}
       <Box sx={{ px: 2.5, borderBottom: '1px solid', borderColor: 'divider' }}>
         <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)}>
           {VERIFICATION_TABS.map((tab) => (
             <Tab
               key={tab.key}
-              label={tab.label}
+              label={t(tab.labelKey)}
               icon={tab.icon}
               iconPosition="start"
             />
@@ -469,7 +497,7 @@ export default function VerificationPage() {
         loading={loading}
         searchValue={search}
         onSearchChange={setSearch}
-        searchPlaceholder="Search periods…"
+        searchPlaceholder={t('searchPeriods')}
         filterDefs={[{
           key: 'scope',
           label: 'Scope',

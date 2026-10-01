@@ -1,0 +1,40 @@
+id: CR-S2-02
+journey: INV
+meaning: >
+  A market-based Calculation is created only when
+  CalculationRule.factor_selector_mapping.__market__ names an active
+  EmissionFactor whose primary key differs from the location-based /
+  grid factor on the rule. The market factor must itself be Scope 2.
+  Copying the Egypt grid factor, inventing a residual mix, or writing
+  co2e_kg 0 because no contractual factor exists, all fail.
+source: backend/emissions/models.py CalculationRule.calculate_for_row; emissions/inventory_math.py MARKET_BASED
+owner: carbon-inventory-lead
+failure: >
+  A market-based kilogram is produced from the same EmissionFactor as
+  location-based, or from a residual mix that is not a stored factor row,
+  or market-based is published as 0 kg when no distinct factor exists.
+validation: >
+  calculate_for_row with scope2_calculation_method market_based or dual
+  returns no market-based Calculation unless __market__ resolves to a
+  different active Scope 2 EmissionFactor. GET calculations/summary
+  emits by_scope2_method.market_based.present false and omits total_co2e_kg
+  when that factor is missing. Tests refuse a grid-copy.
+implementation: >
+  Host screens say market-based is absent. They do not render 0 kg as
+  the market-based total. Pulse may quote a market-based kg only when
+  it is in this turn's payload.
+confidence: high-code
+catalogue: planned
+residual: >
+  Egypt has no residual-mix factor in this product. Unbundled RECs are
+  not a contractual factor. A PPA or supplier-specific factor, when one
+  exists as an EmissionFactor row, is the only legal market-based input.
+target: O1
+product: Carbon on AASTMT
+evidence: >
+  emissions/tests/test_domain_app_rules.py test_market_based_without_distinct_factor_is_not_invented
+  and test_market_based_absent_is_not_zero. GET calculations/summary.
+locked: 2026-09-30
+limit: >
+  Does not invent an Egypt residual mix. Does not treat a REC as used
+  electricity. Does not open dual reporting as a passed benchmark.

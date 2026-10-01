@@ -1,0 +1,346 @@
+# Excellence ladder cells for Carbon on AASTMT.
+# Honest levels only. Do not claim L6/L7. Do not --write the gauge.
+# Journey L5 on carbon_dev is not production scored.
+# 2026-10-01: carbon.ui L2 RULE 8 clause matches the worktree. The rank
+# stays L2. Do not raise it. Production image 696dae7b was not redeployed.
+id: carbon-ladder-cells
+product: Carbon on AASTMT
+locked: 2026-10-01
+owner: carbon-inventory-lead
+do_not_claim: [L6, L7]
+do_not: >
+  python -m ai.eval.pulse_gauge --write. Overwrite night 2026-09-23 FAIL.
+  Score production from carbon.clearturn.tech. Merge O1 board scores.
+
+subjects:
+  - id: carbon.module.emissions
+    kind: module
+    current_honest_level: L2
+    target: carbon.module.emissions
+    product: Carbon on AASTMT
+    evidence: assurance/carbon/ladder.yaml subject carbon.module.emissions; docs/carbon/CARBON-MODULE-SPEC.md
+    locked: 2026-09-30
+    limit: Rank 4 is not claimed from headings. Live O1 belongs to the journey subject.
+    cells:
+      - level: L0
+        name: Unmanaged
+        meaning: Screens exist with no storage ADR and no module spec.
+        evidence: Past. ADR-0025 exists.
+        claim: past
+      - level: L1
+        name: Declared
+        meaning: Subject id, owner, and paths exist on the ladder.
+        evidence: assurance/carbon/ladder.yaml subjects carbon.module.emissions
+        claim: past
+      - level: L2
+        name: Specified / Built
+        claim: current
+        target: carbon.module.emissions
+        product: Carbon on AASTMT
+        locked: 2026-10-01
+        meaning: >
+          CARBON-MODULE-SPEC.md has Test plan, Capabilities, Failure modes,
+          Budget, Module boundary, and Signal threshold. CARBON-MOD-*-02
+          checks those headings. This sentence is rank 2.
+        evidence: >
+          docs/carbon/CARBON-MODULE-SPEC.md section headings.
+          assurance/carbon/ladder.yaml checks CARBON-MOD-COR-02 through
+          CARBON-MOD-OBS-02.
+        limit: >
+          Rank stays L2. Headings are not rank 4. Live O1 belongs to
+          carbon.journey.onboarding. Do not claim L6 or L7. Do not
+          --write the gauge.
+      - level: L3
+        name: Proven
+        meaning: Named suites on this SHA fail when the rule breaks, including test_domain_app_rules.py.
+        evidence: backend/emissions/tests
+        claim: partial
+      - level: L4
+        name: Proven live
+        meaning: Nightly / host evidence on HEAD for this subject.
+        evidence: Not claimed. Onboarding nightly is the journey subject.
+        claim: not_claimed
+      - level: L5
+        name: Operated
+        meaning: Nine dimensions at 5 on a collect that was written.
+        evidence: Do not --write the gauge to claim this.
+        claim: not_claimed
+      - level: L6
+        name: Excellent
+        claim: forbidden
+        target: carbon.module.emissions
+        product: Carbon on AASTMT
+        locked: 2026-10-01
+        meaning: >
+          L6 Excellent is forbidden. No named gate for the emissions
+          module has been bitten across a dated window. A heading in
+          CARBON-MODULE-SPEC.md is not that window.
+        evidence: none
+        limit: Do not claim L6. Do not --write the gauge. Do not raise this cell.
+      - level: L7
+        name: Gates held
+        claim: forbidden
+        target: carbon.module.emissions
+        product: Carbon on AASTMT
+        locked: 2026-10-01
+        meaning: >
+          L7 Gates held is forbidden. There is no sustained window in
+          which every emissions-module gate stayed closed.
+        evidence: none
+        limit: Do not claim L7. Production image 696dae7b is not this score.
+
+  - id: carbon.ui
+    kind: journey
+    current_honest_level: L2
+    target: carbon.ui
+    product: Carbon on AASTMT
+    evidence: >
+      docs/carbon/CARBON-UI-SHELL-SPEC.md and
+      carbon-frontend/src/apps/carbon/manifest.js exist.
+      ChairmanDashboard.jsx and CarbonConsolePage.jsx use theme
+      typography variants and do not set page-local fontSize.
+      ChairmanDashboard.test.jsx asserts that. Production image
+      696dae7b was not redeployed.
+    locked: 2026-10-01
+    limit: >
+      The file rank stays L2. Do not raise it to L3. Onboarding stays
+      on carbon.journey.onboarding. L6 and L7 stay forbidden. A clean
+      worktree is not a production score.
+    cells:
+      - level: L0
+        name: Unmanaged
+        meaning: Carbon routes exist with no shell spec.
+        evidence: Past.
+        claim: past
+      - level: L1
+        name: Declared
+        meaning: Manifest id carbon and owner exist.
+        evidence: carbon-frontend/src/apps/carbon/manifest.js
+        claim: past
+      - level: L2
+        name: Specified / Built
+        claim: current
+        target: carbon.ui
+        product: Carbon on AASTMT
+        locked: 2026-10-01
+        meaning: >
+          L2 Specified matches the worktree on 1 Oct 2026.
+          ChairmanDashboard.jsx and CarbonConsolePage.jsx use theme
+          typography variants and do not set page-local fontSize
+          (RULE 8 / ADR-0037). The shell spec and the manifest exist.
+          This sentence is not L3.
+        evidence: >
+          carbon-frontend/src/pages/carbon/ChairmanDashboard.jsx and
+          CarbonConsolePage.jsx. CarbonConsolePage imports useTheme so
+          the loaded status cards render. EmissionsDashboard.jsx,
+          dashboards/AnalyticsDashboard.jsx, and EmissionsReport.jsx use
+          theme variants: no page-local fontSize, no FONT spread, no
+          print gradient, and no hex. A blank Scope 2 method is labelled
+          missing, not location-based. ChairmanDashboard.test.jsx and
+          CarbonSurfaceContract.test.jsx. docs/carbon/CARBON-UI-SHELL-SPEC.md
+          exists. Production image 696dae7b was not redeployed.
+        limit: >
+          Do not raise the cell above L2. Does not grade
+          carbon.journey.onboarding. MUI icon fontSize="small" is the
+          toolkit icon prop, not a page-local text size. L3 through L7
+          stay unclaimed. L6 and L7 are forbidden. Production image
+          696dae7b was not redeployed.
+      - level: L3
+        name: Proven
+        meaning: Page tests fail when Scope 2 kg is unlabelled or a record list uses raw DataGrid.
+        evidence: carbon-frontend/src/pages/carbon/__tests__
+        claim: partial
+      - level: L4
+        name: Proven live
+        meaning: Playwright on HEAD for the shell, not a single screenshot.
+        evidence: Not claimed.
+        claim: not_claimed
+      - level: L5
+        name: Operated
+        meaning: Nine dimensions at 5 written.
+        evidence: Do not --write the gauge.
+        claim: not_claimed
+        target: carbon.ui
+        product: Carbon on AASTMT
+        locked: 2026-10-01
+        limit: Not claimed. A fontSize cleanup does not operate this subject.
+      - level: L6
+        name: Excellent
+        claim: forbidden
+        target: carbon.ui
+        product: Carbon on AASTMT
+        locked: 2026-10-01
+        meaning: >
+          L6 Excellent is forbidden. No named shell gate has been bitten
+          across a dated window. Removing page-local fontSize does not
+          raise this cell.
+        evidence: none
+        limit: Do not claim L6. Do not --write the gauge. Do not raise this cell.
+      - level: L7
+        name: Gates held
+        claim: forbidden
+        target: carbon.ui
+        product: Carbon on AASTMT
+        locked: 2026-10-01
+        meaning: >
+          L7 Gates held is forbidden. There is no sustained window in
+          which every Carbon shell gate stayed closed.
+        evidence: none
+        limit: Do not claim L7. Production image 696dae7b is not this score.
+
+  - id: carbon.pack
+    kind: ai_pack
+    current_honest_level: L2
+    target: carbon.pack
+    product: Carbon on AASTMT
+    evidence: domain_packs/carbon/pack.yaml version 4; domain_packs/carbon/assurance/
+    locked: 2026-09-30
+    limit: Catalogue stays planned. blocks_release stays empty. No domain words in backend/ai/engine/**.
+    cells:
+      - level: L0
+        name: Unmanaged
+        meaning: Tools exist with no pack version.
+        evidence: Past.
+        claim: past
+      - level: L1
+        name: Declared
+        meaning: pack.yaml id carbon version 4. Owner set.
+        evidence: CARBON-PACK-SPC-01
+        claim: past
+      - level: L2
+        name: Specified / Built
+        claim: current
+        target: carbon.pack
+        product: Carbon on AASTMT
+        locked: 2026-10-01
+        meaning: >
+          Principles P-01–P-25 and the 19 CR rules each name target,
+          product, evidence, date, and limit. CARBON-PACK-SPEC.md has
+          the rank-2 headings. Catalogue stays planned.
+        evidence: >
+          domain_packs/carbon/assurance/principles.yaml.
+          domain_packs/carbon/assurance/rules/*.yaml.
+          assurance/carbon/ladder.yaml CARBON-PACK-*-02.
+        limit: >
+          Rank stays L2. blocks_release stays empty. No domain words in
+          backend/ai/engine/**. Do not claim L6 or L7. Do not --write
+          the gauge. Version stays 4 until a bump is its own change.
+      - level: L3
+        name: Proven
+        meaning: test_onboarding_contract.py loads every CR id. pack_contract --gate is a pack gate, not this cell's claim.
+        evidence: backend/emissions/tests/test_onboarding_contract.py
+        claim: partial
+      - level: L4
+        name: Proven live
+        meaning: Not claimed from a file_contains.
+        evidence: none
+        claim: not_claimed
+      - level: L5
+        name: Operated
+        meaning: Do not --write the gauge.
+        evidence: none
+        claim: not_claimed
+      - level: L6
+        name: Excellent
+        claim: forbidden
+        target: carbon.pack
+        product: Carbon on AASTMT
+        locked: 2026-10-01
+        meaning: >
+          L6 Excellent is forbidden. pack.yaml version 4 and an empty
+          blocks_release list are not a bitten gate.
+        evidence: none
+        limit: Do not claim L6. Do not put domain words in backend/ai/engine.
+      - level: L7
+        name: Gates held
+        claim: forbidden
+        target: carbon.pack
+        product: Carbon on AASTMT
+        locked: 2026-10-01
+        meaning: >
+          L7 Gates held is forbidden. Catalogue stays planned. No
+          sustained pack gate is recorded.
+        evidence: none
+        limit: Do not claim L7. Do not --write the gauge.
+
+  - id: carbon.journey.onboarding
+    kind: journey
+    current_honest_level: L5
+    scored_on: carbon_dev
+    production_scored: false
+    target: carbon.journey.onboarding
+    product: Carbon on AASTMT
+    evidence: >
+      docs/carbon/O1-ONBOARDING-SPEC.md Rank 5. evaluate_o1.
+      O1 quote scope 2 1239599.320800 kg (2,704,187 kWh location-based),
+      scope 1 8040.000000 kg (generators 3,000 L).
+    locked: 2026-09-30
+    limit: >
+      L5 on carbon_dev is not production scored. carbon.clearturn.tech is
+      deployed and not a scored footprint. Do not merge with this canvas
+      as the O1 board (aastmt-carbon-onboarding-excellence stays separate).
+      Do not claim L6/L7.
+    cells:
+      - level: L0
+        name: Unmanaged
+        meaning: No O1 contract.
+        claim: past
+      - level: L1
+        name: Declared
+        meaning: Subject id and owner.
+        claim: past
+      - level: L2
+        name: Specified / Built
+        meaning: O1-ONBOARDING-SPEC.md headings. P-01–P-12.
+        claim: past
+      - level: L3
+        name: Proven
+        meaning: test_onboarding_o1.py, test_onboarding_contract.py, test_onboarding_api.py on this SHA.
+        claim: past
+      - level: L4
+        name: Proven live
+        meaning: carbon-o1-nightly.yml on HEAD.
+        claim: past_on_named_sha
+      - level: L5
+        name: Operated
+        claim: current_on_carbon_dev_not_production
+        target: carbon.journey.onboarding
+        product: Carbon on AASTMT
+        locked: 2026-09-30
+        meaning: >
+          Nine dimensions at 5 on a carbon_dev collect. O1 passed.
+          evaluate_o1 code not_assured stays unmet. The quote is scope 2
+          1239599.320800 kg location-based (2,704,187 kWh) and scope 1
+          8040.000000 kg (generators 3,000 L).
+        evidence: >
+          docs/carbon/O1-ONBOARDING-SPEC.md Rank 5.
+          domain_packs/carbon/assurance/benchmarks/O1-smart-village.yaml
+          status passed. Not written as production. Today's gauge was
+          not collected and was not written.
+        limit: >
+          L5 on carbon_dev is not a production score.
+          carbon.clearturn.tech is not a scored footprint. Academy
+          complete is false. Do not claim L6 or L7. Do not merge the
+          O1 board into this cell.
+      - level: L6
+        name: Excellent
+        claim: forbidden
+        target: carbon.journey.onboarding
+        product: Carbon on AASTMT
+        locked: 2026-10-01
+        meaning: >
+          L6 Excellent is forbidden. L5 on carbon_dev is not a bitten
+          excellence gate. not_assured stays unmet.
+        evidence: none
+        limit: Do not claim L6. Do not score production from carbon.clearturn.tech.
+      - level: L7
+        name: Gates held
+        claim: forbidden
+        target: carbon.journey.onboarding
+        product: Carbon on AASTMT
+        locked: 2026-10-01
+        meaning: >
+          L7 Gates held is forbidden. Academy complete is not claimed.
+          One passed O1 leaf is not a sustained gate.
+        evidence: none
+        limit: Do not claim L7. Do not merge the O1 board into this cell.

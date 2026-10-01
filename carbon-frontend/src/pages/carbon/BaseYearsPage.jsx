@@ -16,7 +16,6 @@ import {
   FormControlLabel,
 } from '@mui/material';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
-import { FONT } from '../../theme/themeTokens';
 
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
@@ -53,7 +52,6 @@ function PolicyChip({ value }) {
       size="small"
       color={meta.color === 'default' ? undefined : meta.color}
       variant="outlined"
-      sx={{ height: 2.5, ...FONT.body, fontWeight: 600 }}
     />
   );
 }
@@ -65,7 +63,6 @@ function ActiveChip({ value }) {
       size="small"
       color={value ? 'success' : 'default'}
       variant="filled"
-      sx={{ height: 2.5, ...FONT.body, fontWeight: 600 }}
     />
   );
 }

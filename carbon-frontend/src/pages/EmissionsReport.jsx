@@ -9,7 +9,6 @@ import {
   Grid,
   Card,
   CardContent,
-  CircularProgress,
   Alert,
   Chip,
   Divider,
@@ -47,9 +46,13 @@ import {
   CheckCircle,
 } from "@mui/icons-material";
 import { Doughnut } from "react-chartjs-2";
-import { useTheme } from "@mui/material/styles";
+import { alpha, useTheme } from "@mui/material/styles";
 import { fetchEmissionsReport, fetchReportingPeriods } from "../api/emissions";
 import useDocumentTitle from "../hooks/useDocumentTitle";
+import PageContainer from "../components/layout/PageContainer";
+import EmptyState from "../components/Page/EmptyState";
+import LoadingSkeleton from "../components/Page/LoadingSkeleton";
+import { MarketBasedAbsentAlert, Scope2MethodChip } from "./carbon/Scope2Labels";
 
 // ============ Styled Components ============
 
@@ -75,7 +78,7 @@ const ReportSection = ({ title, icon, children, sx = {} }) => (
   </Paper>
 );
 
-const ScopeSummaryCard = ({ name, emissions, categories, color }) => {
+const ScopeSummaryCard = ({ name, emissions, categories, color, scope, method }) => {
   const { t } = useTranslation("emissions");
   return (
     <Card
@@ -89,9 +92,14 @@ const ScopeSummaryCard = ({ name, emissions, categories, color }) => {
       }}
     >
       <CardContent sx={{ p: 3 }}>
-        <Typography variant="overline" sx={{ color: "text.secondary", fontWeight: 600 }}>
-          {name}
-        </Typography>
+        <Stack direction="row" spacing={1} alignItems="center">
+          <Typography variant="overline" sx={{ color: "text.secondary", fontWeight: 600 }}>
+            {name}
+          </Typography>
+          {Number(scope) === 2 && (
+            <Scope2MethodChip method={method} scope={2} />
+          )}
+        </Stack>
         <Typography variant="h3" sx={{ fontWeight: 700, color: "text.primary", my: 1 }}>
           {emissions.toLocaleString()}
           <Typography component="span" variant="h6" sx={{ ml: 1, fontWeight: 400, color: "text.secondary" }}>
@@ -129,6 +137,7 @@ export default function EmissionsReport({ projectId }) {
   const [periods, setPeriods] = useState([]);
   const [selectedPeriod, setSelectedPeriod] = useState("");
   const [selectedYear, setSelectedYear] = useState(2025); // Demo data year
+  const [reloadKey, setReloadKey] = useState(0);
   const reportRef = useRef(null);
 
   const token = localStorage.getItem("access");
@@ -172,7 +181,7 @@ export default function EmissionsReport({ projectId }) {
     };
 
     loadReport();
-  }, [projectId, selectedPeriod, selectedYear, token, t]);
+  }, [projectId, selectedPeriod, selectedYear, token, t, reloadKey]);
 
   // Print report
   const handlePrint = () => {
@@ -193,9 +202,9 @@ export default function EmissionsReport({ projectId }) {
 
   // Scope colors — resolved from theme tokens (identical values)
   const scopeColors = {
-    1: theme.palette.success.main,   // #10b981
-    2: theme.palette.primary.light,  // #3b82f6
-    3: theme.palette.warning.main,   // #f59e0b
+    1: theme.palette.success.main,
+    2: theme.palette.primary.light,
+    3: theme.palette.warning.main,
   };
 
   const scopeIcons = {
@@ -212,7 +221,7 @@ export default function EmissionsReport({ projectId }) {
           {
             data: report.scope_details.map((s) => s.total_tonnes),
             backgroundColor: report.scope_details.map((s) => scopeColors[s.scope]),
-            borderColor: "#fff",
+            borderColor: theme.palette.background.paper,
             borderWidth: 3,
           },
         ],
@@ -222,31 +231,36 @@ export default function EmissionsReport({ projectId }) {
   // Loading state
   if (loading) {
     return (
-      <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: 400 }}>
-        <CircularProgress size={48} sx={{ color: "success.main" }} />
-      </Box>
+      <PageContainer>
+        <LoadingSkeleton variant="detail" />
+      </PageContainer>
     );
   }
 
-  // Error state
   if (error) {
     return (
-      <Alert severity="error" sx={{ m: 2 }}>
-        {error}
-      </Alert>
+      <PageContainer>
+        <Alert
+          severity="error"
+          action={<Button size="small" onClick={() => setReloadKey((n) => n + 1)}>{t("common:retry", { defaultValue: "Retry" })}</Button>}
+        >
+          {error}
+        </Alert>
+      </PageContainer>
     );
   }
 
   // No data state
   if (!report) {
     return (
-      <Alert severity="info" sx={{ m: 2 }}>
-        {t("noReportData")}
-      </Alert>
+      <PageContainer>
+        <EmptyState title={t("noReportData")} />
+      </PageContainer>
     );
   }
 
   return (
+    <PageContainer>
     <Box
       ref={reportRef}
       sx={{
@@ -267,11 +281,11 @@ export default function EmissionsReport({ projectId }) {
         sx={{
           p: 4,
           mb: 4,
-          background: `linear-gradient(135deg, ${theme.palette.success.main} 0%, ${theme.palette.success.dark} 100%)`,
+          bgcolor: "success.main",
           color: "common.white",
-          borderRadius: 3,
+          borderRadius: 1,
           "@media print": {
-            background: theme.palette.success.main,
+            bgcolor: "success.main",
             borderRadius: 0,
           },
         }}
@@ -279,7 +293,7 @@ export default function EmissionsReport({ projectId }) {
         <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <Box>
             <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 2 }}>
-              <Nature sx={{ fontSize: '2.5rem' }} />
+              <Nature fontSize="large" />
               <Typography variant="h4" sx={{ fontWeight: 800 }}>
                 {t("carbonEmissionsReport")}
               </Typography>
@@ -294,17 +308,17 @@ export default function EmissionsReport({ projectId }) {
                   report.reporting_period?.name ||
                   t("yearN", { year: report.reporting_period?.year || selectedYear })
                 }
-                sx={{ bgcolor: "rgba(255,255,255,0.2)", color: "white" }}
+                sx={{ bgcolor: alpha(theme.palette.common.white, 0.2), color: "common.white" }}
               />
               <Chip
                 icon={<CheckCircle />}
                 label={t("generatedOn", { date: new Date(report.generated_at).toLocaleDateString() })}
-                sx={{ bgcolor: "rgba(255,255,255,0.2)", color: "white" }}
+                sx={{ bgcolor: alpha(theme.palette.common.white, 0.2), color: "common.white" }}
               />
             </Stack>
           </Box>
           <Stack direction="row" spacing={1} sx={{ "@media print": { display: "none" } }}>
-            <FormControl size="small" sx={{ minWidth: 120, bgcolor: "white", borderRadius: 1 }}>
+            <FormControl size="small" sx={{ minWidth: 120, bgcolor: "background.paper", borderRadius: 1 }}>
               <Select
                 value={selectedPeriod || selectedYear}
                 onChange={(e) => {
@@ -316,7 +330,7 @@ export default function EmissionsReport({ projectId }) {
                     setSelectedPeriod(val);
                   }
                 }}
-                sx={{ bgcolor: "white" }}
+                sx={{ bgcolor: "background.paper" }}
               >
                 {periods.map((p) => (
                   <MenuItem key={p.id} value={p.id}>
@@ -332,12 +346,12 @@ export default function EmissionsReport({ projectId }) {
               </Select>
             </FormControl>
             <Tooltip title={t("printReport")}>
-              <IconButton onClick={handlePrint} sx={{ bgcolor: "rgba(255,255,255,0.2)", color: "white" }}>
+              <IconButton onClick={handlePrint} sx={{ bgcolor: alpha(theme.palette.common.white, 0.2), color: "common.white" }}>
                 <Print />
               </IconButton>
             </Tooltip>
             <Tooltip title={t("downloadJson")}>
-              <IconButton onClick={handleDownload} sx={{ bgcolor: "rgba(255,255,255,0.2)", color: "white" }}>
+              <IconButton onClick={handleDownload} sx={{ bgcolor: alpha(theme.palette.common.white, 0.2), color: "common.white" }}>
                 <Download />
               </IconButton>
             </Tooltip>
@@ -345,8 +359,10 @@ export default function EmissionsReport({ projectId }) {
         </Box>
       </Paper>
 
+      <MarketBasedAbsentAlert payload={report} />
+
       {/* Executive Summary */}
-      <ReportSection title={t("executiveSummary")} icon={<Description sx={{ color: "success.main", fontSize: '1.75rem' }} />}>
+      <ReportSection title={t("executiveSummary")} icon={<Description sx={{ color: "success.main" }} fontSize="large" />}>
         <Grid container spacing={4}>
           <Grid size={{ xs: 12, md: 6 }}>
             <Box sx={{ mb: 3 }}>
@@ -392,7 +408,7 @@ export default function EmissionsReport({ projectId }) {
       </ReportSection>
 
       {/* Scope Breakdown */}
-      <ReportSection title={t("emissionsByScope")} icon={<Factory sx={{ color: "primary.light", fontSize: '1.75rem' }} />}>
+      <ReportSection title={t("emissionsByScope")} icon={<Factory sx={{ color: "primary.light" }} fontSize="large" />}>
         <Grid container spacing={3}>
           {report.scope_details?.map((scope) => (
             <Grid size={{ xs: 12, md: 4 }} key={scope.scope}>
@@ -402,6 +418,7 @@ export default function EmissionsReport({ projectId }) {
                 emissions={scope.total_tonnes}
                 categories={scope.categories}
                 color={scopeColors[scope.scope]}
+                method={scope.scope2_method}
               />
             </Grid>
           ))}
@@ -518,7 +535,7 @@ export default function EmissionsReport({ projectId }) {
                         label={row.scope}
                         size="small"
                         sx={{
-                          bgcolor: `${scopeColors[row.scope]}20`,
+                          bgcolor: alpha(scopeColors[row.scope], 0.12),
                           color: scopeColors[row.scope],
                           fontWeight: 600,
                           minWidth: 32,
@@ -528,7 +545,7 @@ export default function EmissionsReport({ projectId }) {
                     <TableCell align="right">
                       {parseFloat(row.activity_value).toLocaleString()} {row.activity_unit}
                     </TableCell>
-                    <TableCell sx={{ fontSize: "0.75rem", color: "text.secondary" }}>{row.emission_factor}</TableCell>
+                    <TableCell><Typography variant="caption" color="text.secondary">{row.emission_factor}</Typography></TableCell>
                     <TableCell align="right" sx={{ fontWeight: 600 }}>
                       {row.co2e_tonnes.toLocaleString()}
                     </TableCell>
@@ -546,7 +563,7 @@ export default function EmissionsReport({ projectId }) {
       </Accordion>
 
       {/* Methodology Note */}
-      <ReportSection title={t("methodology")} icon={<Description sx={{ color: "secondary.main", fontSize: '1.75rem' }} />}>
+      <ReportSection title={t("methodology")} icon={<Description sx={{ color: "secondary.main" }} fontSize="large" />}>
         <Typography variant="body1" sx={{ color: "text.secondary", lineHeight: 1.8, mb: 2 }}>
           {t("methodologyText")}
         </Typography>
@@ -585,5 +602,6 @@ export default function EmissionsReport({ projectId }) {
         </Typography>
       </Box>
     </Box>
+    </PageContainer>
   );
 }

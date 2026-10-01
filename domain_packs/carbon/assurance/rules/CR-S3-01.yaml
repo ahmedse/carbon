@@ -1,0 +1,37 @@
+id: CR-S3-01
+journey: INV
+meaning: >
+  O5 is one named Scope 3 category: GHG Protocol Scope 3 Standard 2011
+  category 5, Waste generated in operations. The only legal source name
+  is "Smart Village waste disposal". Scope is 3. scope3_category is 5.
+  Activity unit is tonne. Paper, envelopes, commuting, meals, leased
+  diesel, water, and chilled water are not this category. Status stays
+  closed until that InventorySource and a matching EmissionFactor exist.
+  The 73 tonne activity line in the FY 2023-24 inventory file is not a
+  kilogram.
+source: domain_packs/carbon/assurance/benchmarks/O5-scope3-waste.yaml
+owner: carbon-inventory-lead
+failure: >
+  O5 is marked passed from a mixed Scope 3 soup, or 73 tonne is converted
+  to kg without an EmissionFactor, or another category is labelled O5.
+validation: >
+  Benchmark YAML names category 5, source name, unit tonne, status closed.
+  Tests forbid a Calculation.co2e_kg invented from that activity line.
+  evaluate_o1 does not emit an O5 kilogram.
+implementation: >
+  Host coverage may declare the source. Covered requires linked_tables
+  and a Calculation (CR-COV-01). No factor, no kilogram.
+confidence: high-spec
+catalogue: planned
+residual: >
+  smart_village_inventory_fy2324.csv lists Waste Disposal 73.0 ton as
+  activity. That quantity is not an O5 close and is not stored as kg.
+target: O5
+product: Carbon on AASTMT
+evidence: >
+  O5-scope3-waste.yaml. test_onboarding_contract.py test_o5_is_category_5_waste.
+  The activity CSV exists; no O5 Calculation exists.
+locked: 2026-09-30
+limit: >
+  Does not invent kg. Does not open categories 1–4 or 6–15. Does not
+  treat water 11490 m3 or chilled water TR as category 5.

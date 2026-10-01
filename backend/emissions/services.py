@@ -56,6 +56,45 @@ MONTH_NAMES = [
 ]
 
 
+def headline_calculations(qs):
+    """Headline totals exclude market-based Scope 2 so the two methods are not mixed."""
+    from emissions.inventory_math import MARKET_BASED
+    return qs.exclude(scope=2, scope2_method=MARKET_BASED)
+
+
+def scope2_method_split(qs):
+    """Location-based aggregate plus market-based present/absent. Never 0 kg as absent."""
+    from emissions.inventory_math import (
+        LOCATION_BASED,
+        MARKET_BASED,
+        display_scope2_method,
+        market_based_absent,
+        market_based_present,
+    )
+    location_agg = qs.filter(scope=2).filter(
+        Q(scope2_method=LOCATION_BASED) | Q(scope2_method__isnull=True) | Q(scope2_method=''),
+    ).aggregate(count=Count('id'), total_co2e_kg=Sum('co2e_kg'))
+    market_agg = qs.filter(scope=2, scope2_method=MARKET_BASED).aggregate(
+        count=Count('id'), total_co2e_kg=Sum('co2e_kg'),
+    )
+    by_method = {}
+    if int(location_agg['count'] or 0) > 0:
+        by_method[LOCATION_BASED] = {
+            'present': True,
+            'count': int(location_agg['count'] or 0),
+            'total_co2e_kg': location_agg['total_co2e_kg'],
+            'scope2_method': display_scope2_method(LOCATION_BASED),
+        }
+    market_count = int(market_agg['count'] or 0)
+    if market_count > 0:
+        by_method[MARKET_BASED] = market_based_present(
+            market_count, market_agg['total_co2e_kg'],
+        )
+    else:
+        by_method[MARKET_BASED] = market_based_absent()
+    return by_method
+
+
 # ── Calculation Summary Service ──────────────────────────────────────────
 
 class CalculationSummaryService:
@@ -90,11 +129,13 @@ class CalculationSummaryService:
         stale_count = qs.filter(is_stale=True).count()  # E3-3
 
         if total_calculations == 0:
+            from emissions.inventory_math import market_based_absent
             return {
                 'period_id': int(effective_period_id) if effective_period_id else None,
                 'total_calculations': 0,
                 'stale_count': 0,
                 'by_scope': {},
+                'by_scope2_method': {'market_based': market_based_absent()},
                 'by_status': {},
                 'by_module': [],
                 'latest_run_at': None,
@@ -106,6 +147,15 @@ class CalculationSummaryService:
         for item in by_scope_list:
             scope_val = item.pop('scope')
             by_scope_dict[scope_val] = item
+
+        from emissions.inventory_math import LOCATION_BASED, display_scope2_method
+
+        by_scope2_method = scope2_method_split(qs)
+        location_row = by_scope2_method.get(LOCATION_BASED)
+        if location_row and 2 in by_scope_dict:
+            by_scope_dict[2]['scope2_method'] = display_scope2_method(LOCATION_BASED)
+            by_scope_dict[2]['total_co2e_kg'] = location_row['total_co2e_kg']
+            by_scope_dict[2]['count'] = location_row['count']
 
         by_module_data = qs.values('module_id', 'module__name').annotate(
             count=Count('id'), total_co2e_kg=Sum('co2e_kg')
@@ -144,6 +194,7 @@ class CalculationSummaryService:
             'total_calculations': total_calculations,
             'stale_count': stale_count,
             'by_scope': by_scope_dict,
+            'by_scope2_method': by_scope2_method,
             'by_status': {},
             'by_module': by_module,
             'latest_run_at': latest_run_at,
@@ -160,7 +211,6 @@ class DashboardService:
     def get_dashboard_data(user, *, period_id=None, year=None, start_date=None, end_date=None):
         base_qs = scope_calculations(user, Calculation.objects.all())
         qs = base_qs
-
         reporting_period = None
         if period_id:
             reporting_period = ReportingPeriod.objects.filter(id=period_id).first()
@@ -171,10 +221,12 @@ class DashboardService:
         else:
             qs = qs.filter(reporting_year=year or timezone.now().year)
 
-        scope_breakdown = DashboardService._build_scope_breakdown(qs)
-        category_breakdown = DashboardService._build_category_breakdown(qs)
-        monthly_trend = DashboardService._build_monthly_trend(qs)
+        headline_qs = headline_calculations(qs)
+        scope_breakdown = DashboardService._build_scope_breakdown(headline_qs)
+        category_breakdown = DashboardService._build_category_breakdown(headline_qs)
+        monthly_trend = DashboardService._build_monthly_trend(headline_qs)
         grand_total_kg = sum(s['total_kg'] for s in scope_breakdown)
+        by_scope2_method = scope2_method_split(qs)
 
         months_with_data = len([m for m in monthly_trend if m['total'] > 0])
         data_quality = min(100, int((months_with_data / 36) * 100 * 3))
@@ -193,24 +245,30 @@ class DashboardService:
             ],
             'monthly_trend': monthly_trend,
             'data_quality_score': data_quality,
-            'calculation_count': qs.count(),
+            'calculation_count': headline_qs.count(),
             'last_updated': qs.order_by('-calculated_at').values_list('calculated_at', flat=True).first(),
+            'by_scope2_method': by_scope2_method,
         }
 
     @staticmethod
     def _build_scope_breakdown(qs):
+        from emissions.inventory_math import LOCATION_BASED, display_scope2_method
+
         scope_data = qs.values('scope').annotate(
             total_kg=Sum('co2e_kg'), count=Count('id')
         ).order_by('scope')
-        return [
-            {
+        rows = []
+        for s in scope_data:
+            item = {
                 'scope': s['scope'],
                 'scope_name': SCOPE_NAMES.get(s['scope'], f"Scope {s['scope']}"),
                 'total_kg': s['total_kg'] or Decimal('0'),
                 'count': s['count'],
             }
-            for s in scope_data
-        ]
+            if s['scope'] == 2:
+                item['scope2_method'] = display_scope2_method(LOCATION_BASED)
+            rows.append(item)
+        return rows
 
     @staticmethod
     def _build_category_breakdown(qs):
@@ -455,15 +513,15 @@ class ReportService:
         else:
             qs = qs.filter(reporting_year=year or timezone.now().year)
 
-        summary = ReportService._build_summary(qs)
-        scope_details = ReportService._build_scope_details(qs)
+        summary = ReportService._build_summary(headline_calculations(qs))
+        scope_details = ReportService._build_scope_details(headline_calculations(qs))
         rows = ReportService._build_detail_rows(qs)
 
         # By-gas totals (E3-1)
-        by_gas = ReportService._build_by_gas(qs)
+        by_gas = ReportService._build_by_gas(headline_calculations(qs))
 
         # Org-unit rollup (E3-1)
-        org_unit_rollup = ReportService._build_org_unit_rollup(qs)
+        org_unit_rollup = ReportService._build_org_unit_rollup(headline_calculations(qs))
 
         # Grouping (month|category) applied to detail rows
         if grouping == 'month':
@@ -482,6 +540,7 @@ class ReportService:
             'rows': rows,
             'format': report_format,
             'grouping': grouping,
+            'by_scope2_method': scope2_method_split(qs),
         }
 
     @staticmethod
@@ -703,6 +762,7 @@ class ReportService:
                 'name': SCOPE_NAMES.get(s['scope'], f"Scope {s['scope']}"),
                 'emissions_tonnes': round(tonnes, 2),
                 'calculation_count': s['count'],
+                **({'scope2_method': 'location-based'} if s['scope'] == 2 else {}),
             })
 
         return {
@@ -726,6 +786,7 @@ class ReportService:
                 'scope': scope,
                 'name': SCOPE_NAMES.get(scope, f"Scope {scope}"),
                 'total_tonnes': round(scope_total / 1000, 2),
+                **({'scope2_method': 'location-based'} if scope == 2 else {}),
                 'categories': [
                     {
                         'name': category_names.get(c['category'], c['category']),
@@ -757,8 +818,57 @@ class ReportService:
                 ) if calc.emission_factor else '',
                 'co2e_kg': calc.co2e_kg,
                 'co2e_tonnes': round(calc.co2e_kg / 1000, 4),
+                **({'scope2_method': calc.scope2_method} if calc.scope == 2 else {}),
             })
         return rows
+
+
+class DisclosureService:
+    """P2 labelled export of existing ledger fields. No new kilogram."""
+
+    @staticmethod
+    def export(user, *, framework, period_id):
+        from emissions.disclosure import FRAMEWORKS, build_disclosure
+        from emissions.inventory_math import LOCATION_BASED, MARKET_BASED
+
+        key = str(framework or "").strip().lower().replace("-", "_")
+        if key not in FRAMEWORKS:
+            raise ValueError("framework must be esrs_e1, ifrs_s2, or cdp")
+        period = ReportingPeriod.objects.filter(id=period_id).first()
+        if period is None:
+            return None
+        qs = scope_calculations(
+            user,
+            Calculation.objects.filter(reporting_period=period),
+        )
+        split = scope2_method_split(qs)
+        location = split.get(LOCATION_BASED) or {}
+        market = split.get(MARKET_BASED) or {}
+        scope1 = qs.filter(scope=1).aggregate(t=Sum('co2e_kg'))['t']
+        boundary = period.organizational_boundary
+        return build_disclosure(
+            framework=key,
+            period={
+                'id': period.id,
+                'name': period.name,
+                'start_date': str(period.start_date),
+                'end_date': str(period.end_date),
+                'status': period.status,
+            },
+            boundary=(
+                {
+                    'id': boundary.id,
+                    'name': boundary.name,
+                    'consolidation_approach': boundary.consolidation_approach,
+                }
+                if boundary else None
+            ),
+            scope1_kg=scope1,
+            scope2_location_kg=location.get('total_co2e_kg'),
+            scope2_market_kg=market.get('total_co2e_kg') if market.get('present') else None,
+            market_present=bool(market.get('present')),
+            market_count=int(market.get('count') or 0),
+        )
 
 
 # ── Calculation Engine Service ─────────────────────────────────────────────
@@ -938,6 +1048,16 @@ class CalculationEngineService:
                 f"cannot calculate for activity date {activity_date}"
             )
 
+        from emissions.inventory_math import LOCATION_BASED, inventory_kg, normalize_scope2_method
+
+        row_values = getattr(calculation.data_row, "values", None) if calculation.data_row_id else None
+        co2e = inventory_kg(activity, ef.factor_value, values=row_values)
+        scope2_method = calculation.scope2_method
+        if calculation.scope == 2:
+            scope2_method = normalize_scope2_method(scope2_method, default=LOCATION_BASED)
+        else:
+            scope2_method = None
+
         # Create successor
         successor = Calculation.objects.create(
             data_row=calculation.data_row,
@@ -945,7 +1065,7 @@ class CalculationEngineService:
             emission_factor=ef,
             activity_value=activity,
             activity_unit=calculation.activity_unit,
-            co2e_kg=activity * ef.factor_value,
+            co2e_kg=co2e,
             co2_kg=(activity * ef.co2_factor) if ef.co2_factor else None,
             ch4_kg=(activity * ef.ch4_factor) if ef.ch4_factor else None,
             n2o_kg=(activity * ef.n2o_factor) if ef.n2o_factor else None,
@@ -957,6 +1077,7 @@ class CalculationEngineService:
             activity_date=calculation.activity_date,
             calculation_method='recalculated',
             is_stale=False,
+            scope2_method=scope2_method,
         )
 
         # Mark old as superseded
@@ -1037,7 +1158,8 @@ class OwnerService:
         if reporting_period:
             calc_qs = calc_qs.filter(reporting_period=reporting_period)
 
-        scope_breakdown = DashboardService._build_scope_breakdown(calc_qs)
+        headline_qs = headline_calculations(calc_qs)
+        scope_breakdown = DashboardService._build_scope_breakdown(headline_qs)
         grand_total_kg = sum(s['total_kg'] for s in scope_breakdown)
 
         dq_summary = OwnerService._build_dq_summary(org_unit_ids)
@@ -1058,7 +1180,8 @@ class OwnerService:
             'category_breakdown': [],
             'monthly_trend': [],
             'data_quality_summary': dq_summary,
-            'calculation_count': calc_qs.count(),
+            'calculation_count': headline_qs.count(),
+            'by_scope2_method': scope2_method_split(calc_qs),
             'submission_status': (
                 'pending'
                 if reporting_period and reporting_period.status == 'open'
@@ -1263,6 +1386,17 @@ class MyDataService:
                 module_quality.setdefault(mid, []).append(asset.quality_status)
 
         modules_data = []
+        from emissions.models import InventorySource
+        from emissions.inventory_math import LOCATION_BASED, display_scope2_method
+
+        source_methods = {}
+        for src in InventorySource.objects.filter(
+            org_unit__in=org_units, is_active=True, scope=2,
+        ).only('org_unit_id', 'source_name', 'scope2_method'):
+            method = display_scope2_method(src.scope2_method, default=LOCATION_BASED)
+            source_methods[(src.org_unit_id, src.source_name)] = method
+            source_methods.setdefault(('scope', src.org_unit_id), method)
+
         for m in modules:
             mid = m.id
             statuses_m = module_quality.get(mid, [])
@@ -1277,10 +1411,17 @@ class MyDataService:
             pc = statuses_m.count('passing')
             qscore = round(pc / len(statuses_m) * 100, 1) if statuses_m else None
 
+            scope2_method = None
+            if m.scope == 2:
+                scope2_method = source_methods.get((m.org_unit_id, m.name)) or source_methods.get(
+                    ('scope', m.org_unit_id),
+                ) or display_scope2_method(LOCATION_BASED)
+
             modules_data.append({
                 'id': mid,
                 'name': m.name,
                 'scope': m.scope,
+                'scope2_method': scope2_method,
                 'table_count': table_counts.get(mid, 0),
                 'row_count': row_counts.get(mid, 0),
                 'quality_status': qs,
@@ -1330,6 +1471,22 @@ class MyDataService:
 
 # ── Console Service ────────────────────────────────────────────────────────
 
+def _activity_detail(calc):
+    """Label a stored kilogram. Scope 2 names its method. Does not invent one."""
+    from emissions.inventory_math import display_scope2_method
+
+    detail = (
+        f"{calc.activity_value} {calc.activity_unit} \u2192 "
+        f"{round(calc.co2e_kg, 1)} kg CO2e"
+    )
+    if getattr(calc, "scope", None) != 2:
+        return detail
+    label = display_scope2_method(getattr(calc, "scope2_method", None))
+    if not label:
+        return f"{detail} (scope 2 method unlabelled)"
+    return f"{detail} ({label})"
+
+
 class ConsoleService:
     """Aggregated console data for the Carbon landing page."""
 
@@ -1365,8 +1522,9 @@ class ConsoleService:
             user,
             Calculation.objects.select_related('module', 'reporting_period'),
         )
+        headline_qs = headline_calculations(calc_qs)
         recent_calcs = list(
-            calc_qs.annotate(
+            headline_qs.annotate(
                 total_count=Window(Count('id')),
                 total_kg_sum=Window(Sum('co2e_kg')),
             ).order_by('-calculated_at')[:10]
@@ -1378,6 +1536,7 @@ class ConsoleService:
         else:
             total_calculations = 0
             total_emissions_tonnes = 0.0
+        by_scope2_method = scope2_method_split(calc_qs)
 
         recent_activity = [
             {
@@ -1385,10 +1544,7 @@ class ConsoleService:
                 'action': 'calculation_completed',
                 'module_name': c.module.name if c.module else None,
                 'timestamp': c.calculated_at.isoformat() if c.calculated_at else None,
-                'detail': (
-                    f"{c.activity_value} {c.activity_unit} \u2192 "
-                    f"{round(c.co2e_kg, 1)} kg CO2e"
-                ),
+                'detail': _activity_detail(c),
             }
             for c in recent_calcs
         ]
@@ -1472,6 +1628,8 @@ class ConsoleService:
                 'total_calculations': total_calculations,
                 'avg_quality_score': avg_quality_score,
                 'total_emissions_tonnes': total_emissions_tonnes,
+                'scope2_method': 'location-based',
+                'by_scope2_method': by_scope2_method,
             },
             'alerts': dq_alerts + pending_alerts,
             'recent_activity': recent_activity,
@@ -1608,10 +1766,13 @@ class ReportConfigService:
         if config.categories:
             qs = qs.filter(category__in=config.categories)
 
-        scope_data = qs.values('scope').annotate(
+        from emissions.inventory_math import LOCATION_BASED, display_scope2_method
+
+        headline_qs = headline_calculations(qs)
+        scope_data = headline_qs.values('scope').annotate(
             total_kg=Sum('co2e_kg'), count=Count('id')
         ).order_by('scope')
-        category_data = qs.values('category').annotate(
+        category_data = headline_qs.values('category').annotate(
             total_kg=Sum('co2e_kg'), count=Count('id')
         ).order_by('category')
 
@@ -1620,14 +1781,17 @@ class ReportConfigService:
         scope_breakdown = []
         for s in scope_data:
             total_kg = s['total_kg'] or Decimal('0')
-            scope_breakdown.append({
+            row = {
                 'scope': s['scope'],
                 'scope_name': SCOPE_NAMES.get(s['scope'], f"Scope {s['scope']}"),
                 'co2e_tonnes': round(total_kg / 1000, 2),
                 'percentage': round(
                     (total_kg / grand_total_kg * 100) if grand_total_kg else 0, 2
                 ),
-            })
+            }
+            if s['scope'] == 2:
+                row['scope2_method'] = display_scope2_method(LOCATION_BASED)
+            scope_breakdown.append(row)
 
         category_breakdown = []
         for c in category_data:
@@ -1639,7 +1803,7 @@ class ReportConfigService:
 
         module_breakdown = []
         if config.grouping == 'module':
-            module_data = qs.values('module__name').annotate(
+            module_data = headline_qs.values('module__name').annotate(
                 total_kg=Sum('co2e_kg'), count=Count('id')
             ).order_by('module__name')
             for m in module_data:
@@ -1659,10 +1823,11 @@ class ReportConfigService:
             },
             'org_unit_id': config.org_unit_id,
             'total_co2e_tonnes': round(grand_total_kg / 1000, 2),
-            'calculation_count': qs.count(),
+            'calculation_count': headline_qs.count(),
             'scope_breakdown': scope_breakdown,
             'category_breakdown': category_breakdown,
             'module_breakdown': module_breakdown,
+            'by_scope2_method': scope2_method_split(qs),
             'generated_at': timezone.now().isoformat(),
         }
 
@@ -1924,8 +2089,10 @@ class ChairmanService:
             }
 
         # 1) Footprint — ALL calculations (org-scoped by module), not period-scoped.
+        # Headline excludes market-based Scope 2 so dual methods are not mixed.
         calc_qs = scope_calculations(user, Calculation.objects.all())
-        scope_rows = DashboardService._build_scope_breakdown(calc_qs)
+        headline_qs = headline_calculations(calc_qs)
+        scope_rows = DashboardService._build_scope_breakdown(headline_qs)
         grand_total_kg = sum((s['total_kg'] for s in scope_rows), Decimal('0'))
         total_tonnes = round(grand_total_kg / 1000, 2)
         scope_breakdown = [
@@ -1936,13 +2103,15 @@ class ChairmanService:
                 'count': s['count'],
                 'co2e_tonnes': round(s['total_kg'] / 1000, 2),
                 'percentage': round((s['total_kg'] / grand_total_kg * 100) if grand_total_kg else 0, 2),
+                **({'scope2_method': s['scope2_method']} if s.get('scope2_method') else {}),
             }
             for s in scope_rows
         ]
-        monthly_trend = DashboardService._build_monthly_trend(calc_qs)
+        monthly_trend = DashboardService._build_monthly_trend(headline_qs)
         months_with_data = len([m for m in monthly_trend if m['total'] > 0])
         data_quality = min(100, int((months_with_data / 36) * 100 * 3))
-        last_updated = calc_qs.order_by('-calculated_at').values_list('calculated_at', flat=True).first()
+        last_updated = headline_qs.order_by('-calculated_at').values_list('calculated_at', flat=True).first()
+        by_scope2_method = scope2_method_split(calc_qs)
 
         # 2) Coverage — full declared universe across ALL periods (org-scoped).
         visible_ous = org_units_for_capability(user, CARBON_READ)
@@ -2038,7 +2207,8 @@ class ChairmanService:
             'period': period_data,
             'headline': {
                 'footprint_tonnes': total_tonnes,
-                'calculation_count': calc_qs.count(),
+                'scope2_method': 'location-based',
+                'calculation_count': headline_qs.count(),
                 'coverage_total': total,
                 'coverage_covered': covered,
                 'coverage_pct': pct,
@@ -2051,6 +2221,7 @@ class ChairmanService:
                 'actions_in_progress': action_status_counts.get('in_progress', 0),
             },
             'scope_breakdown': scope_breakdown,
+            'by_scope2_method': by_scope2_method,
             'coverage': coverage,
             'coverage_by_campus': campus_breakdown,
             'coverage_by_scope': scope_coverage,

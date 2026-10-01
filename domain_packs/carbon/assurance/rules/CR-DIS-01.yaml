@@ -1,0 +1,39 @@
+id: CR-DIS-01
+journey: INV
+meaning: >
+  P2 is a labelled export of existing ledger fields into ESRS E1-6,
+  IFRS S2, and CDP C6 column names. GET /carbon-api/carbon/disclosure/
+  reads Calculation.co2e_kg, InventorySource.scope2_method,
+  ReportingPeriod, and OrganizationalBoundary for one period. It does
+  not compute a new total. Market-based is present only when CR-S2-02
+  is met; otherwise the column is null and status is absent. Scope 3
+  is omitted until O5. Benchmark P2 stays closed until a real filing
+  consumes the export.
+source: backend/emissions/disclosure.py; GET /carbon-api/carbon/disclosure/
+owner: carbon-inventory-lead
+failure: >
+  An export column contains a kilogram that is not on Calculation for
+  that period, or market-based is filled by copying the grid total, or
+  P2 is marked passed because the shape exists.
+validation: >
+  Each framework key maps to an existing field. Tests compare export
+  kg to Calculation aggregates for the same period. Forbidden kg
+  405271.000000, 5269592.116320, 1254223.105920, 19456.800000 are
+  not introduced. P2-disclosure.yaml status closed.
+implementation: >
+  Host Reports page can download the JSON. Chat may quote a kg from
+  this turn's payload only (CR-PULSE-01). No new factor. No new campus.
+confidence: high-code
+catalogue: planned
+residual: >
+  The shape is not an ESRS, IFRS, or CDP filing. Rankings (P-20) are a
+  different export. not_assured stays in the payload as unmet.
+target: P2
+product: Carbon on AASTMT
+evidence: >
+  GET /carbon-api/carbon/disclosure/. emissions/tests/test_domain_app_rules.py
+  CR-DIS-01. P2-disclosure.yaml status closed.
+locked: 2026-09-30
+limit: >
+  Not a filing. Does not mark P2 passed. Does not invent datapoints.
+  Does not add a second inventory total.

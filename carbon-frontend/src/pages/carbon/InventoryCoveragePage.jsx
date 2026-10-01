@@ -26,7 +26,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import PageContainer from '../../components/layout/PageContainer';
-import { FONT } from '../../theme/themeTokens';
+import { Scope2MethodChip } from './Scope2Labels';
 
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
@@ -82,7 +82,7 @@ function ScopeChip({ value }) {
 function TierChip({ value }) {
   if (value == null) {
     return (
-      <Typography component="span" sx={{ ...FONT.body, color: 'text.secondary' }}>—</Typography>
+      <Typography component="span" variant="body2" color="text.secondary">—</Typography>
     );
   }
   const cfg = {
@@ -124,7 +124,6 @@ function StatusChip({ value }) {
       size="small"
       color={meta.color === 'default' ? undefined : meta.color}
       variant="filled"
-      sx={{ height: 2.5, ...FONT.body, fontWeight: 600 }}
     />
   );
 }
@@ -134,7 +133,7 @@ function StatusChip({ value }) {
 function ExclusionChip({ value }) {
   if (!value) {
     return (
-      <Typography component="span" sx={{ ...FONT.body, color: 'text.secondary' }}>—</Typography>
+      <Typography component="span" variant="body2" color="text.secondary">—</Typography>
     );
   }
   const cfg = {
@@ -198,7 +197,6 @@ function ActiveChip({ value }) {
       size="small"
       color={value ? 'success' : 'default'}
       variant="filled"
-      sx={{ height: 2.5, ...FONT.body, fontWeight: 600 }}
     />
   );
 }
@@ -209,9 +207,9 @@ function StatCard({ label, value, sub }) {
   return (
     <Card sx={{ flex: 1, minWidth: 150 }}>
       <CardContent>
-        <Typography sx={{ ...FONT.statLabel, color: 'text.secondary' }}>{label}</Typography>
-        <Typography sx={{ ...FONT.statValue, color: 'text.primary' }}>{value}</Typography>
-        {sub && <Typography sx={{ ...FONT.caption, color: 'text.secondary' }}>{sub}</Typography>}
+        <Typography variant="overline" color="text.secondary">{label}</Typography>
+        <Typography variant="h3" color="text.primary">{value}</Typography>
+        {sub && <Typography variant="caption" color="text.secondary">{sub}</Typography>}
       </CardContent>
     </Card>
   );
@@ -234,7 +232,7 @@ function CoverageBar({ value }) {
         color={color}
         sx={{ flex: 1, height: 0.75, borderRadius: 1 }}
       />
-      <Typography variant="caption" sx={{ ...FONT.body, fontWeight: 600, minWidth: 40, textAlign: 'right' }}>
+      <Typography variant="caption" sx={{ minWidth: 40, textAlign: "right" }}>
         {pct.toFixed(1)}%
       </Typography>
     </Box>
@@ -767,6 +765,16 @@ export default function InventoryCoveragePage() {
     },
     { field: 'scope', headerName: 'Scope', width: 110, renderCell: (params) => <ScopeChip value={params.value} /> },
     {
+      field: 'scope2_method',
+      headerName: t('scope2MethodCol'),
+      width: 150,
+      renderCell: (params) => (
+        Number(params.row.scope) === 2
+          ? <Scope2MethodChip method={params.value} scope={2} />
+          : '—'
+      ),
+    },
+    {
       field: 'scope3_category',
       headerName: 'Scope 3 Cat',
       width: 110,
@@ -1000,7 +1008,7 @@ export default function InventoryCoveragePage() {
       <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }}>
         <Card sx={{ flex: 1, minWidth: 180 }}>
           <CardContent>
-            <Typography sx={{ ...FONT.statLabel, color: 'text.secondary' }}>Coverage</Typography>
+            <Typography variant="overline" color="text.secondary">Coverage</Typography>
             <CoverageBar value={coverage?.pct} />
           </CardContent>
         </Card>
@@ -1013,10 +1021,10 @@ export default function InventoryCoveragePage() {
 
       {/* Section tabs */}
       <Tabs value={tab} onChange={(e, v) => setTab(v)} sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}>
-        <Tab label="Sources" sx={{ ...FONT.tab }} />
-        <Tab label="Statuses" sx={{ ...FONT.tab }} />
-        <Tab label="Goals" sx={{ ...FONT.tab }} />
-        <Tab label="Actions" sx={{ ...FONT.tab }} />
+        <Tab label="Sources" />
+        <Tab label="Statuses" />
+        <Tab label="Goals" />
+        <Tab label="Actions" />
       </Tabs>
 
       {/* ── Sources ── */}

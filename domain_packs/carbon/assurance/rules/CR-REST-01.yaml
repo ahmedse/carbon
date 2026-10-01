@@ -1,0 +1,28 @@
+id: CR-REST-01
+journey: INV
+meaning: >
+  A correction archives the old DataRow (is_archived) and appends a new row.
+  values are immutable. PATCH of values is 409. QuerySet.update cannot write
+  values. Recalculation supersedes a Calculation; it does not edit the
+  predecessor's co2e_kg.
+source: backend/dataschema/models.py DataRow; dataschema/views.py DataRowViewSet.restate
+owner: carbon-inventory-lead
+failure: A live activity value is overwritten in place.
+validation: >
+  DataRow.save without update_fields raises IntegrityError. update_fields
+  including values raises. queryset.update(values=...) raises. POST
+  /rows/{id}/restate/ archives the old row and returns a new id. The old
+  values stay on the archived row.
+implementation: >
+  Host data entry calls restate for an existing row. Add-new remains POST
+  create. Soft-delete remains archive.
+confidence: high-code
+catalogue: planned
+residual: >
+  Catalogue stays planned until an assurance event records a restated campus
+  month. The static append-only check is not that event.
+target: O1
+product: Carbon on AASTMT
+evidence: test_datarow_append_only. DataRowViewSet.restate. CR-REST-01 tests in test_domain_app_rules.py.
+locked: 2026-09-30
+limit: Does not rewrite history. Does not reopen a locked period.

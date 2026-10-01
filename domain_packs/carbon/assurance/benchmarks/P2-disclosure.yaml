@@ -1,0 +1,62 @@
+# P2 leaf. Shape may ship. Status stays closed until a real filing consumes it.
+id: P2
+title: Disclosure export shape (ESRS E1 / IFRS S2 / CDP)
+status: closed
+owner: carbon-inventory-lead
+locked: 2026-09-30
+product: Carbon on AASTMT
+target: P2
+endpoint: GET /carbon-api/carbon/disclosure/
+export_status: shape_only
+filing: false
+blocker: >
+  shape_only is a labelled mapping of existing Calculation,
+  InventorySource, ReportingPeriod, and OrganizationalBoundary fields
+  into ESRS E1-6, IFRS S2, and CDP C6 names. It is not a filing. P2
+  stays closed until a real filing consumes the export.
+query:
+  framework:  # esrs_e1 | ifrs_s2 | cdp
+  reporting_period_id: required
+frameworks:
+  esrs_e1:
+    standard: ESRS E1 Climate change, datapoint E1-6
+    columns:
+      E1-6_scope_1_kg: Calculation.co2e_kg where scope = 1
+      E1-6_scope_2_location_based_kg: Calculation.co2e_kg where scope = 2 and scope2_method = location_based
+      E1-6_scope_2_market_based_kg: Calculation.co2e_kg where scope = 2 and scope2_method = market_based, else null
+      E1-6_scope_2_market_based_status: present | absent
+      E1-6_scope_3_kg: null until O5
+      E1-6_assurance: not_assured
+  ifrs_s2:
+    standard: IFRS S2 Climate-related Disclosures (ISSB), GHG via Corporate Standard 2004
+    columns:
+      S2_ghg_scope_1_kg: same as E1-6_scope_1_kg
+      S2_ghg_scope_2_location_based_kg: same as E1-6_scope_2_location_based_kg
+      S2_ghg_scope_2_market_based_kg: same as E1-6_scope_2_market_based_kg
+      S2_ghg_scope_3_kg: null until O5
+      S2_method: GHG Protocol Corporate Standard 2004; Scope 2 Guidance 2015
+  cdp:
+    standard: CDP climate change questionnaire (dual Scope 2)
+    columns:
+      C6.1_scope_1_kg: same as E1-6_scope_1_kg
+      C6.3_scope_2_location_based_kg: same as E1-6_scope_2_location_based_kg
+      C6.3_scope_2_market_based_kg: same as E1-6_scope_2_market_based_kg
+      C6.5_scope_3_kg: null until O5
+shared_payload:
+  period: ReportingPeriod id, name, start_date, end_date, status
+  boundary: OrganizationalBoundary name, consolidation_approach
+  scope2_method_label: location-based | market-based | absent
+  source: Calculation rows for reporting_period_id
+  new_kilogram: false
+forbidden_kg:
+  - "405271.000000"
+  - "5269592.116320"
+  - "1254223.105920"
+  - "19456.800000"
+close:
+  requires: a real ESRS, IFRS, or CDP filing that consumed this export
+  kilograms: none invented
+evidence: GET /carbon-api/carbon/disclosure/. P2-disclosure.yaml status closed. CR-DIS-01.
+limit: >
+  Not a filing. Does not mark P2 passed. Does not invent datapoints.
+  Market-based stays absent without CR-S2-02. Rankings are P-20, not this export.

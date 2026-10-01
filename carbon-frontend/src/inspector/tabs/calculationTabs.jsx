@@ -48,6 +48,14 @@ export function fmtNum(v) {
   return Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+export function Scope2MethodChip({ method, scope }) {
+  const { t } = useTranslation('emissions');
+  if (Number(scope) !== 2) return null;
+  const raw = String(method || 'location_based').toLowerCase().replace(/-/g, '_');
+  const label = raw === 'market_based' ? t('scope2MarketBased') : t('scope2LocationBased');
+  return <Chip label={label} size="small" variant="outlined" sx={{ ...FONT.chip }} />;
+}
+
 export function ScopeBadge({ value }) {
   const { t } = useTranslation('emissions');
   const n = Number(value);
@@ -87,6 +95,9 @@ function CalculationOverviewTab({ context }) {
   const details = [
     { label: 'Period',           value: calc.period_name || calc.period || '—' },
     { label: 'Scope',            value: <ScopeBadge value={calc.scope} /> },
+    ...(Number(calc.scope) === 2
+      ? [{ label: 'Scope 2 method', value: <Scope2MethodChip method={calc.scope2_method} scope={2} /> }]
+      : []),
     { label: 'Status',           value: <StatusChip status={calc.status} /> },
     { label: 'Total tCO₂e',      value: fmtNum(calc.total_emissions || calc.total_co2e) },
     { label: 'Rule Used',        value: calc.rule_name || calc.rule || '—' },

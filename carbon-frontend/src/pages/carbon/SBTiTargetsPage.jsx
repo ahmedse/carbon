@@ -16,7 +16,6 @@ import {
   LinearProgress,
 } from '@mui/material';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
-import { FONT } from '../../theme/themeTokens';
 
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
@@ -69,7 +68,6 @@ function StatusChip({ value }) {
       size="small"
       color={meta.color === 'default' ? undefined : meta.color}
       variant="filled"
-      sx={{ height: 2.5, ...FONT.body, fontWeight: 600 }}
     />
   );
 }
@@ -108,7 +106,7 @@ function ReductionBar({ value }) {
         color={color}
         sx={{ flex: 1, height: 0.75, borderRadius: 1 }}
       />
-      <Typography variant="caption" sx={{ ...FONT.body, fontWeight: 600, minWidth: 40, textAlign: 'right' }}>
+      <Typography variant="caption" sx={{ minWidth: 40, textAlign: "right" }}>
         {pct.toFixed(1)}%
       </Typography>
     </Box>

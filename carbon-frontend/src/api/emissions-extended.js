@@ -312,6 +312,13 @@ export async function generateReport(params, token) {
   return apiFetch(endpoint, { token });
 }
 
+export async function fetchDisclosureExport({ framework, reporting_period_id }, token) {
+  const query = new URLSearchParams();
+  query.append("framework", framework || "esrs_e1");
+  query.append("reporting_period_id", String(reporting_period_id));
+  return apiFetch(`${API_ROUTES.emissionsDisclosure}?${query.toString()}`, { token });
+}
+
 /**
  * Download report as CSV blob
  */

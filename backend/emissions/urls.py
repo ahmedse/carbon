@@ -37,6 +37,7 @@ from .views import (
     CoverageActionViewSet,
     InventoryCoverageAPIView,
     ChairmanAPIView,
+    DisclosureExportAPIView,
 )
 from .onboarding_o1 import OnboardingO1APIView
 
@@ -87,6 +88,7 @@ for _view in (
     InventoryCoverageAPIView,
     ChairmanAPIView,
     OnboardingO1APIView,
+    DisclosureExportAPIView,
 ):
     _brand_gate(_view)
 
@@ -167,6 +169,7 @@ urlpatterns = [
     path('', include(coverage_action_router.urls)),
     path('coverage/', InventoryCoverageAPIView.as_view(), name='inventory-coverage'),
     path('onboarding/o1/', OnboardingO1APIView.as_view(), name='onboarding-o1'),
+    path('disclosure/', DisclosureExportAPIView.as_view(), name='disclosure-export'),
 
     
     # Dashboard API

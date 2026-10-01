@@ -1,14 +1,11 @@
-// src/pages/carbon/ChairmanDashboard.jsx
-// Chairman Overview — strategic one-pager for board presentations.
-// Accordion sections let leadership expand only what they need.
+// Chairman Overview — strategic one-pager. Typography is theme variants (RULE 8).
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Box,
   Typography,
   Card,
   CardContent,
-  CircularProgress,
   Alert,
   Chip,
   LinearProgress,
@@ -49,28 +46,16 @@ import { useTranslation } from "react-i18next";
 import useDocumentTitle from "../../hooks/useDocumentTitle";
 import { fetchChairmanData } from "../../api/emissions-extended";
 import PageContainer from "../../components/layout/PageContainer";
-import { FONT, SPACING } from "../../theme/themeTokens";
+import PageHeader from "../../components/Page/PageHeader";
+import LoadingSkeleton from "../../components/Page/LoadingSkeleton";
+import { SPACING } from "../../theme/themeTokens";
+import { MarketBasedAbsentAlert } from "./Scope2Labels";
 
 ChartJS.register(
   CategoryScale, LinearScale, PointElement, LineElement,
   BarElement, ArcElement, ChartTooltip, Legend, Filler
 );
 
-const ACTION_TYPE_LABEL = {
-  collect_data: "Collect Data",
-  improve_quality: "Improve Quality",
-  obtain_verification: "Obtain Verification",
-  formalize_exclusion: "Formalize Exclusion",
-};
-
-const ACTION_STATUS_META = {
-  open:        { label: "Open",        color: "info" },
-  in_progress: { label: "In Progress", color: "primary" },
-  done:        { label: "Done",        color: "success" },
-  blocked:     { label: "Blocked",     color: "error" },
-};
-
-// ── Compact KPI card ─────────────────────────────────────────────────────────
 function KpiCard({ label, value, unit, sub, icon, color, tooltip }) {
   return (
     <Card variant="outlined" sx={{ borderRadius: 1.5, height: "100%" }}>
@@ -79,36 +64,36 @@ function KpiCard({ label, value, unit, sub, icon, color, tooltip }) {
           <Box sx={{
             width: 26, height: 26, borderRadius: 0.75,
             display: "flex", alignItems: "center", justifyContent: "center",
-            bgcolor: `${color}18`, color, flexShrink: 0,
-          }}>
-            {React.cloneElement(icon, { sx: { fontSize: 15 } })}
+            bgcolor: "action.hover", color, flexShrink: 0,
+          }}
+          >
+            {icon}
           </Box>
           {tooltip && (
             <Tooltip title={tooltip} arrow placement="top">
-              <InfoOutlined sx={{ fontSize: 13, color: "text.disabled", cursor: "help" }} />
+              <InfoOutlined fontSize="small" color="disabled" />
             </Tooltip>
           )}
         </Box>
-        <Typography sx={{ fontSize: "1.3rem", fontWeight: 700, color: "text.primary", lineHeight: 1.1 }}>
+        <Typography variant="h3" component="p" color="text.primary">
           {value}
           {unit && (
-            <Typography component="span" sx={{ ml: 0.5, fontSize: "0.7rem", fontWeight: 500, color: "text.secondary" }}>
+            <Typography component="span" variant="caption" sx={{ ml: 0.5 }} color="text.secondary">
               {unit}
             </Typography>
           )}
         </Typography>
-        <Typography sx={{ fontSize: "0.65rem", fontWeight: 600, color: "text.secondary", textTransform: "uppercase", letterSpacing: "0.04em", mt: 0.25 }}>
+        <Typography variant="overline" color="text.secondary" display="block">
           {label}
         </Typography>
         {sub && (
-          <Typography sx={{ fontSize: "0.6rem", color: "text.disabled", mt: 0.125 }}>{sub}</Typography>
+          <Typography variant="caption" color="text.secondary" display="block">{sub}</Typography>
         )}
       </CardContent>
     </Card>
   );
 }
 
-// ── Accordion section wrapper ─────────────────────────────────────────────────
 function Section({ title, badge, defaultExpanded = true, children }) {
   const theme = useTheme();
   return (
@@ -124,13 +109,13 @@ function Section({ title, badge, defaultExpanded = true, children }) {
       }}
     >
       <AccordionSummary
-        expandIcon={<ExpandMoreIcon sx={{ fontSize: 18, color: "text.secondary" }} />}
+        expandIcon={<ExpandMoreIcon fontSize="small" color="action" />}
         sx={{
           minHeight: 40, px: SPACING.lg,
           "& .MuiAccordionSummary-content": { my: 0.75, alignItems: "center", gap: 1 },
         }}
       >
-        <Typography sx={{ fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "text.secondary" }}>
+        <Typography variant="overline" color="text.secondary">
           {title}
         </Typography>
         {badge}
@@ -143,24 +128,27 @@ function Section({ title, badge, defaultExpanded = true, children }) {
 }
 
 export default function ChairmanDashboard() {
-  useDocumentTitle("Chairman Overview");
   const theme = useTheme();
   const navigate = useNavigate();
   const { t } = useTranslation("emissions");
+  useDocumentTitle(t("chairman.title"));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [data, setData] = useState(null);
   const token = localStorage.getItem("access");
 
-  useEffect(() => {
+  const load = useCallback(() => {
     let active = true;
-    setLoading(true); setError(null);
+    setLoading(true);
+    setError(null);
     fetchChairmanData({}, token)
       .then((r) => { if (active) setData(r); })
-      .catch((e) => { if (active) setError(e.message || "Failed to load"); })
+      .catch((e) => { if (active) setError(e.message || t("chairman.loadFailed")); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [token]);
+  }, [token, t]);
+
+  useEffect(() => load(), [load]);
 
   const scopeColors = useMemo(() => ({
     1: theme.palette.success.main,
@@ -187,57 +175,99 @@ export default function ChairmanDashboard() {
     if (!targets?.length) return null;
     const actualByYear = {};
     (data?.trajectory?.yearly_comparison || []).forEach((y) => { actualByYear[y.year] = y.total_co2e_tonnes; });
-    const labels = targets.map((t) => t.year);
+    const labels = targets.map((row) => row.year);
     return {
       labels,
       datasets: [
         {
-          label: "SBTi target", data: labels.map((y) => targets.find((t) => t.year === y)?.target_co2e_tonnes ?? null),
-          borderColor: theme.palette.text.secondary, backgroundColor: "transparent",
-          borderDash: [6, 4], borderWidth: 2, pointRadius: 0, tension: 0.15,
+          label: t("chairman.sbtiTargetSeries"),
+          data: labels.map((y) => targets.find((row) => row.year === y)?.target_co2e_tonnes ?? null),
+          borderColor: theme.palette.text.secondary,
+          backgroundColor: "transparent",
+          borderDash: [6, 4],
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.15,
         },
         {
-          label: "Actual", data: labels.map((y) => actualByYear[y] ?? null),
-          borderColor: scopeColors[1], backgroundColor: `${scopeColors[1]}20`,
-          fill: true, borderWidth: 2.5, pointRadius: 3, pointHoverRadius: 5, tension: 0.15,
+          label: t("chairman.actualSeries"),
+          data: labels.map((y) => actualByYear[y] ?? null),
+          borderColor: scopeColors[1],
+          backgroundColor: theme.palette.action.hover,
+          fill: true,
+          borderWidth: 2.5,
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          tension: 0.15,
         },
       ],
     };
-  }, [data, scopeColors, theme]);
+  }, [data, scopeColors, theme, t]);
 
   const donutOptions = {
-    responsive: true, maintainAspectRatio: false, cutout: "60%",
+    responsive: true,
+    maintainAspectRatio: false,
+    cutout: "60%",
     plugins: {
-      legend: { position: "bottom", labels: { usePointStyle: true, padding: 10, font: { size: 10, weight: 500 } } },
+      legend: { position: "bottom", labels: { usePointStyle: true, padding: 10 } },
       tooltip: {
-        backgroundColor: theme.palette.grey[900], bodyFont: { size: 11 }, padding: 8, cornerRadius: 6,
-        callbacks: { label: (c) => { const t = c.dataset.data.reduce((a, b) => a + b, 0); const pct = t ? ((c.parsed / t) * 100).toFixed(1) : 0; return `${c.label}: ${c.parsed.toLocaleString()} t (${pct}%)`; } },
+        callbacks: {
+          label: (c) => {
+            const total = c.dataset.data.reduce((a, b) => a + b, 0);
+            const pct = total ? ((c.parsed / total) * 100).toFixed(1) : 0;
+            return `${c.label}: ${c.parsed.toLocaleString()} t (${pct}%)`;
+          },
+        },
       },
     },
   };
 
   const lineOptions = {
-    responsive: true, maintainAspectRatio: false,
+    responsive: true,
+    maintainAspectRatio: false,
     interaction: { mode: "index", intersect: false },
     plugins: {
-      legend: { position: "top", labels: { usePointStyle: true, padding: 12, font: { size: 10, weight: 500 } } },
-      tooltip: { backgroundColor: theme.palette.grey[900], titleFont: { size: 11, weight: 600 }, bodyFont: { size: 10 }, padding: 8, cornerRadius: 6, callbacks: { label: (c) => `${c.dataset.label}: ${c.parsed.y != null ? c.parsed.y.toLocaleString() + " t CO₂e" : "—"}` } },
+      legend: { position: "top", labels: { usePointStyle: true, padding: 12 } },
+      tooltip: {
+        callbacks: {
+          label: (c) => `${c.dataset.label}: ${c.parsed.y != null ? `${c.parsed.y.toLocaleString()} t CO₂e` : "—"}`,
+        },
+      },
     },
     scales: {
-      y: { beginAtZero: true, grid: { color: theme.palette.divider }, ticks: { font: { size: 10 }, callback: (v) => `${v} t` } },
-      x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+      y: {
+        beginAtZero: true,
+        grid: { color: theme.palette.divider },
+        ticks: { callback: (v) => `${v} t` },
+      },
+      x: { grid: { display: false } },
     },
   };
 
-  if (loading) return (
-    <PageContainer sx={{ alignItems: "center", justifyContent: "center" }}>
-      <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: 300 }}>
-        <CircularProgress size={40} />
-      </Box>
-    </PageContainer>
-  );
+  if (loading) {
+    return (
+      <PageContainer>
+        <LoadingSkeleton variant="console" />
+      </PageContainer>
+    );
+  }
 
-  if (error) return <PageContainer><Alert severity="error" sx={{ m: 2 }}>{error}</Alert></PageContainer>;
+  if (error) {
+    return (
+      <PageContainer>
+        <Alert
+          severity="error"
+          action={(
+            <Button color="inherit" size="small" onClick={load}>
+              {t("common:retry")}
+            </Button>
+          )}
+        >
+          {error}
+        </Alert>
+      </PageContainer>
+    );
+  }
 
   const h = data?.headline || {};
   const period = data?.period;
@@ -247,30 +277,38 @@ export default function ChairmanDashboard() {
   const coverage = data?.coverage || {};
   const footprint = typeof h.footprint_tonnes === "number" ? h.footprint_tonnes.toLocaleString() : "—";
   const coverageLabel = `${h.coverage_covered ?? 0} / ${h.coverage_total ?? 0}`;
-  const periodLabel = period ? `${period.name} · ${period.status}` : "No active period";
+  const periodLabel = period ? `${period.name} · ${period.status}` : t("chairman.noPeriod");
+  const actionType = {
+    collect_data: t("chairman.collectData"),
+    improve_quality: t("chairman.improveQuality"),
+    obtain_verification: t("chairman.obtainVerification"),
+    formalize_exclusion: t("chairman.formalizeExclusion"),
+  };
+  const actionStatus = {
+    open: { label: t("chairman.statusOpen"), color: "info" },
+    in_progress: { label: t("chairman.statusInProgress"), color: "primary" },
+    done: { label: t("chairman.statusDone"), color: "success" },
+    blocked: { label: t("chairman.statusBlocked"), color: "error" },
+  };
+
+  const scope2Label = (method) => {
+    const raw = String(method || "").toLowerCase().replace(/-/g, "_");
+    if (raw === "market_based") return t("scope2MarketBased");
+    if (raw === "location_based") return t("scope2LocationBased");
+    return null;
+  };
 
   return (
     <PageContainer sx={{ p: 0, overflow: "auto" }}>
-
-      {/* ── Page header ─────────────────────────────────────────────────── */}
-      <Box sx={{ px: SPACING.lg, pt: 2, pb: 1.5, borderBottom: `1px solid ${theme.palette.divider}` }}>
-        <Stack direction="row" alignItems="flex-start" justifyContent="space-between" flexWrap="wrap" gap={1}>
-          <Box>
-            <Typography sx={{ fontSize: "1.15rem", fontWeight: 700, color: "text.primary" }}>
-              Chairman Dashboard
-            </Typography>
-            <Typography sx={{ fontSize: "0.78rem", color: "text.secondary", mt: 0.25, maxWidth: 620, lineHeight: 1.5 }}>
-              Platform-wide strategic overview — footprint, coverage, SBTi alignment, and open actions.
-              Audience: board &amp; leadership. For day-to-day tracking use <em>Emissions Breakdown</em>.
-            </Typography>
-          </Box>
-          <Stack direction="row" alignItems="center" gap={1} flexShrink={0}>
-            <Chip size="small" label={periodLabel} color="success" sx={{ fontSize: "0.65rem" }} />
-            <Typography sx={{ fontSize: "0.65rem", color: "text.disabled" }}>
-              {data?.as_of ? `Updated ${new Date(data.as_of).toLocaleDateString()}` : "—"}
-            </Typography>
-          </Stack>
-        </Stack>
+      <Box sx={{ px: SPACING.lg, pt: 2 }}>
+        <PageHeader
+          title={t("chairman.title")}
+          subtitle={t("chairman.description")}
+          badge={{ label: periodLabel, color: "success" }}
+        />
+        <Typography variant="caption" color="text.secondary">
+          {data?.as_of ? t("chairman.updated", { date: new Date(data.as_of).toLocaleDateString() }) : "—"}
+        </Typography>
       </Box>
 
       <Alert
@@ -284,29 +322,67 @@ export default function ChairmanDashboard() {
       >
         {t("chairman.notO1Footprint")}
       </Alert>
+      <Box sx={{ mx: SPACING.lg, mt: 1 }}>
+        <MarketBasedAbsentAlert payload={data} />
+      </Box>
 
-      {/* ── Section 1: Headline metrics (6 KPIs) ─────────────────────── */}
-      <Section title="Headline Metrics" defaultExpanded>
+      <Section title={t("chairman.headlineMetrics")} defaultExpanded>
         <Grid container spacing={1.25} sx={{ pt: 1 }}>
           {[
-            { label: "Total Footprint", value: footprint, unit: "t CO₂e", sub: "all periods, all campuses",
-              icon: <Factory />, color: theme.palette.primary.main,
-              tooltip: "Total CO₂e across ALL reporting periods and campuses (Scope 1+2+3). Platform-wide, not period-filtered." },
-            { label: "Inventory Coverage", value: coverageLabel, unit: `${h.coverage_pct ?? 0}%`, sub: "of declared universe",
-              icon: <TaskAlt />, color: theme.palette.success.main,
-              tooltip: "Sources with at least one calculation ÷ total declared sources." },
-            { label: "SBTi Targets", value: sbti.count ?? 0, unit: sbti.draft ? "draft" : "active", sub: `${sbti.committed ?? 0} committed`,
-              icon: <Flag />, color: theme.palette.warning.main,
-              tooltip: "Science-Based Targets. Draft = pending board ratification. SBTi 1.5°C pathway requires 42% reduction by 2030." },
-            { label: "Data Quality", value: h.avg_quality_tier != null ? `T${h.avg_quality_tier}` : "—", unit: "PCAF", sub: `DQ score ${h.data_quality_score ?? 0}/100`,
-              icon: <Bolt />, color: theme.palette.info.main,
-              tooltip: "PCAF tier (1=audited, 3=calculated, 5=proxy). DQ score = data completeness 0–100. T3 is the minimum credible standard." },
-            { label: "Open Actions", value: h.actions_open ?? 0, unit: "to do", sub: `${h.actions_in_progress ?? 0} in progress`,
-              icon: <LocalShipping />, color: theme.palette.error.main,
-              tooltip: "Work items for closing coverage gaps: collect missing data, improve quality, obtain verification, formalize exclusions." },
-            { label: "Calculations", value: h.calculation_count ?? 0, unit: "records", sub: "CO₂e rows",
-              icon: <Bolt />, color: theme.palette.secondary.main,
-              tooltip: "Total CO₂e calculation records (activity rows × emission factors). Each represents one measured emission event." },
+            {
+              label: t("chairman.totalFootprint"),
+              value: footprint,
+              unit: t("chairman.unitTco2e"),
+              sub: t("chairman.footprintSub"),
+              icon: <Factory fontSize="small" />,
+              color: theme.palette.primary.main,
+              tooltip: t("chairman.footprintTip"),
+            },
+            {
+              label: t("chairman.inventoryCoverage"),
+              value: coverageLabel,
+              unit: `${h.coverage_pct ?? 0}%`,
+              sub: t("chairman.coverageSub"),
+              icon: <TaskAlt fontSize="small" />,
+              color: theme.palette.success.main,
+              tooltip: t("chairman.coverageTip"),
+            },
+            {
+              label: t("chairman.sbtiTargets"),
+              value: sbti.count ?? 0,
+              unit: sbti.draft ? t("chairman.draft") : t("chairman.active"),
+              sub: t("chairman.committed", { count: sbti.committed ?? 0 }),
+              icon: <Flag fontSize="small" />,
+              color: theme.palette.warning.main,
+              tooltip: t("chairman.sbtiTip"),
+            },
+            {
+              label: t("chairman.dataQuality"),
+              value: h.avg_quality_tier != null ? `T${h.avg_quality_tier}` : "—",
+              unit: t("chairman.pcaf"),
+              sub: t("chairman.dqScore", { score: h.data_quality_score ?? 0 }),
+              icon: <Bolt fontSize="small" />,
+              color: theme.palette.info.main,
+              tooltip: t("chairman.dqTip"),
+            },
+            {
+              label: t("chairman.openActions"),
+              value: h.actions_open ?? 0,
+              unit: t("chairman.toDo"),
+              sub: t("chairman.inProgress", { count: h.actions_in_progress ?? 0 }),
+              icon: <LocalShipping fontSize="small" />,
+              color: theme.palette.error.main,
+              tooltip: t("chairman.actionsTip"),
+            },
+            {
+              label: t("chairman.calculations"),
+              value: h.calculation_count ?? 0,
+              unit: t("chairman.records"),
+              sub: t("chairman.co2eRows"),
+              icon: <Bolt fontSize="small" />,
+              color: theme.palette.secondary.main,
+              tooltip: t("chairman.calculationsTip"),
+            },
           ].map((kpi) => (
             <Grid key={kpi.label} size={{ xs: 6, sm: 4, md: 2 }}>
               <KpiCard {...kpi} />
@@ -315,49 +391,72 @@ export default function ChairmanDashboard() {
         </Grid>
       </Section>
 
-      {/* ── Section 2: Scope breakdown ────────────────────────────────── */}
       <Section
-        title="Scope Breakdown"
-        badge={<Typography sx={{ fontSize: "0.65rem", color: "text.disabled" }}>{footprint} t CO₂e total</Typography>}
+        title={t("chairman.scopeBreakdown")}
+        badge={<Typography variant="caption" color="text.secondary">{t("chairman.footprintTotal", { value: footprint })}</Typography>}
         defaultExpanded
       >
         <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ pt: 0.5 }}>
           <Box sx={{ flex: "0 0 220px", height: 200 }}>
             {scopeDonut
               ? <Doughnut data={scopeDonut} options={donutOptions} />
-              : <Typography sx={{ fontSize: "0.8rem", color: "text.disabled", mt: 2 }}>No measured emissions yet.</Typography>
-            }
+              : <Typography variant="body2" color="text.secondary">{t("chairman.noMeasured")}</Typography>}
           </Box>
           <Box sx={{ flex: 1 }}>
-            {(data?.scope_breakdown || []).map((s) => (
-              <Box key={s.scope} sx={{ mb: 1.5 }}>
-                <Stack direction="row" justifyContent="space-between" alignItems="baseline" mb={0.5}>
-                  <Typography sx={{ fontSize: "0.78rem", fontWeight: 600, color: "text.primary" }}>{s.scope_name}</Typography>
-                  <Stack direction="row" gap={1.5} alignItems="baseline">
-                    <Typography sx={{ fontSize: "0.95rem", fontWeight: 700, color: "text.primary" }}>
-                      {parseFloat(s.co2e_tonnes).toLocaleString()}
-                      <Typography component="span" sx={{ fontSize: "0.65rem", ml: 0.4, color: "text.secondary" }}>t</Typography>
-                    </Typography>
-                    <Typography sx={{ fontSize: "0.65rem", color: "text.disabled", width: 38, textAlign: "right" }}>{s.percentage}%</Typography>
+            {(data?.scope_breakdown || []).map((s) => {
+              const methodLabel = Number(s.scope) === 2 ? scope2Label(s.scope2_method) : null;
+              return (
+                <Box key={s.scope} sx={{ mb: 1.5 }}>
+                  <Stack direction="row" justifyContent="space-between" alignItems="center" mb={0.5}>
+                    <Stack direction="row" gap={1} alignItems="center">
+                      <Typography variant="subtitle2" color="text.primary">{s.scope_name}</Typography>
+                      {Number(s.scope) === 2 && methodLabel && (
+                        <Chip
+                          size="small"
+                          variant="outlined"
+                          label={t("chairman.scope2Method", { method: methodLabel })}
+                        />
+                      )}
+                      {Number(s.scope) === 2 && !methodLabel && (
+                        <Chip size="small" variant="outlined" label={t("chairman.scope2Unlabelled")} />
+                      )}
+                    </Stack>
+                    <Stack direction="row" gap={1.5} alignItems="baseline">
+                      <Typography variant="h6" component="span" color="text.primary">
+                        {parseFloat(s.co2e_tonnes).toLocaleString()}
+                        <Typography component="span" variant="caption" sx={{ ml: 0.4 }} color="text.secondary">
+                          {t("chairman.tonneUnit")}
+                        </Typography>
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">{s.percentage}%</Typography>
+                    </Stack>
                   </Stack>
-                </Stack>
-                <LinearProgress variant="determinate" value={Math.min(parseFloat(s.percentage), 100)}
-                  sx={{ height: 5, borderRadius: 1, bgcolor: theme.palette.divider,
-                    "& .MuiLinearProgress-bar": { bgcolor: scopeColors[s.scope], borderRadius: 1 } }} />
-              </Box>
-            ))}
+                  <LinearProgress
+                    variant="determinate"
+                    value={Math.min(parseFloat(s.percentage), 100)}
+                    sx={{
+                      height: 5,
+                      borderRadius: 1,
+                      bgcolor: theme.palette.divider,
+                      "& .MuiLinearProgress-bar": { bgcolor: scopeColors[s.scope], borderRadius: 1 },
+                    }}
+                  />
+                </Box>
+              );
+            })}
           </Box>
         </Stack>
       </Section>
 
-      {/* ── Section 3: Coverage by campus ─────────────────────────────── */}
       <Section
-        title="Coverage by Campus"
-        badge={
-          <Chip size="small" variant="outlined"
-            label={`${coverage.covered ?? 0} / ${coverage.total ?? 0} measured`}
-            sx={{ fontSize: "0.6rem", height: 18 }} />
-        }
+        title={t("chairman.coverageByCampus")}
+        badge={(
+          <Chip
+            size="small"
+            variant="outlined"
+            label={t("chairman.measured", { covered: coverage.covered ?? 0, total: coverage.total ?? 0 })}
+          />
+        )}
         defaultExpanded
       >
         <Stack spacing={1.5} sx={{ pt: 0.5 }}>
@@ -365,79 +464,89 @@ export default function ChairmanDashboard() {
             ? campus.map((c) => (
               <Box key={c.campus}>
                 <Stack direction="row" justifyContent="space-between" alignItems="baseline" mb={0.5}>
-                  <Typography sx={{ fontSize: "0.8rem", fontWeight: 600, color: "text.primary" }}>{c.campus}</Typography>
-                  <Typography sx={{ fontSize: "0.7rem", color: "text.secondary" }}>
-                    {c.covered} / {c.total} sources · {c.pct}%
+                  <Typography variant="subtitle2" color="text.primary">{c.campus}</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {t("chairman.sourcesLine", { covered: c.covered, total: c.total, pct: c.pct })}
                   </Typography>
                 </Stack>
-                <LinearProgress variant="determinate" value={Math.min(c.pct, 100)}
-                  sx={{ height: 7, borderRadius: 1.5, bgcolor: theme.palette.divider,
+                <LinearProgress
+                  variant="determinate"
+                  value={Math.min(c.pct, 100)}
+                  sx={{
+                    height: 7,
+                    borderRadius: 1.5,
+                    bgcolor: theme.palette.divider,
                     "& .MuiLinearProgress-bar": {
                       bgcolor: c.pct >= 60 ? theme.palette.success.main : c.pct >= 30 ? theme.palette.warning.main : theme.palette.error.main,
-                      borderRadius: 1.5 } }} />
+                      borderRadius: 1.5,
+                    },
+                  }}
+                />
               </Box>
             ))
-            : <Typography sx={{ fontSize: "0.8rem", color: "text.disabled" }}>No coverage data.</Typography>
-          }
+            : <Typography variant="body2" color="text.secondary">{t("chairman.noCoverage")}</Typography>}
           {campus.length > 0 && (
             <>
               <Divider sx={{ my: 0.25 }} />
-              <Typography sx={{ fontSize: "0.65rem", color: "text.disabled" }}>
-                Coverage is a plan, not a grade — {(coverage.total ?? 0) - (coverage.covered ?? 0)} sources remain declared (to be measured).
+              <Typography variant="caption" color="text.secondary">
+                {t("chairman.coverageNote", { remaining: (coverage.total ?? 0) - (coverage.covered ?? 0) })}
               </Typography>
             </>
           )}
         </Stack>
       </Section>
 
-      {/* ── Section 4: SBTi Trajectory (collapsed by default) ─────────── */}
       <Section
-        title="Emissions Trajectory"
-        badge={sbti.draft ? <Chip size="small" label="illustrative · draft targets" variant="outlined" sx={{ fontSize: "0.6rem", height: 18, color: "warning.main", borderColor: "warning.main" }} /> : null}
+        title={t("chairman.trajectory")}
+        badge={sbti.draft ? (
+          <Chip size="small" label={t("chairman.draftTargets")} variant="outlined" color="warning" />
+        ) : null}
         defaultExpanded={false}
       >
         {trajectoryChart
           ? <Box sx={{ height: 220, pt: 0.5 }}><Line data={trajectoryChart} options={lineOptions} /></Box>
-          : <Typography sx={{ fontSize: "0.8rem", color: "text.disabled", py: 1 }}>No trajectory data. SBTi targets are required.</Typography>
-        }
+          : <Typography variant="body2" color="text.secondary">{t("chairman.noTrajectory")}</Typography>}
       </Section>
 
-      {/* ── Section 5: Priority actions ───────────────────────────────── */}
       <Section
-        title="Priority Actions"
-        badge={h.actions_open > 0 ? <Chip size="small" label={`${h.actions_open} open`} color="error" sx={{ fontSize: "0.6rem", height: 18 }} /> : null}
+        title={t("chairman.priorityActions")}
+        badge={h.actions_open > 0 ? (
+          <Chip size="small" label={t("chairman.openCount", { count: h.actions_open })} color="error" />
+        ) : null}
         defaultExpanded={!!actions.length}
       >
         {actions.length
           ? (
             <Stack spacing={0.75} sx={{ pt: 0.5 }}>
               {actions.slice(0, 8).map((a) => {
-                const st = ACTION_STATUS_META[a.status] || { label: a.status, color: "default" };
+                const st = actionStatus[a.status] || { label: a.status, color: "default" };
                 return (
-                  <Stack key={a.id} direction="row" alignItems="center" gap={1}
-                    sx={{ py: 0.75, px: 1, borderRadius: 1, bgcolor: "action.hover" }}>
+                  <Stack
+                    key={a.id}
+                    direction="row"
+                    alignItems="center"
+                    gap={1}
+                    sx={{ py: 0.75, px: 1, borderRadius: 1, bgcolor: "action.hover" }}
+                  >
                     <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: `${st.color}.main`, flexShrink: 0 }} />
                     <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography sx={{ fontSize: "0.78rem", color: "text.primary", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        <strong>{ACTION_TYPE_LABEL[a.action_type] || a.action_type}</strong> — {a.source_name || "—"}
+                      <Typography variant="body2" color="text.primary" noWrap>
+                        {actionType[a.action_type] || a.action_type}
+                        {" — "}
+                        {a.source_name || "—"}
                       </Typography>
                       {a.notes && (
-                        <Typography sx={{ fontSize: "0.65rem", color: "text.disabled", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                          {a.notes}
-                        </Typography>
+                        <Typography variant="caption" color="text.secondary" noWrap>{a.notes}</Typography>
                       )}
                     </Box>
-                    <Chip size="small" label={st.label} color={st.color} variant="outlined" sx={{ fontSize: "0.6rem", height: 18, flexShrink: 0 }} />
+                    <Chip size="small" label={st.label} color={st.color} variant="outlined" />
                   </Stack>
                 );
               })}
             </Stack>
           )
-          : <Typography sx={{ fontSize: "0.8rem", color: "text.disabled", py: 1 }}>No open actions — all gaps addressed.</Typography>
-        }
+          : <Typography variant="body2" color="text.secondary">{t("chairman.noActions")}</Typography>}
       </Section>
-
     </PageContainer>
   );
 }
-

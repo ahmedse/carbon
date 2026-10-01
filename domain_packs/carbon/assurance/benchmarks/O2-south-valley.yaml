@@ -1,0 +1,59 @@
+# O2 leaf. Closed until the named source file exists. Do not invent kg.
+id: O2
+title: South Valley electricity and diesel
+status: closed
+owner: carbon-inventory-lead
+locked: 2026-09-30
+product: Carbon on AASTMT
+target: O2
+campus: South Valley
+campus_code: AASTMT-SVY
+org_unit_match: South Valley
+org_unit_host_name: Aswan South Valley
+data_owner: data.southvalley
+period:
+  count_open: 1
+  status: open
+  period_type: annual
+  start_before_end: true
+  boundary_required: true
+  same_open_period_as_academy: true
+  second_period_is_fail: true
+sources:
+  - name: South Valley electricity
+    scope: 2
+    scope3_category: null
+    approach: location-based
+    scope2_method: location_based
+    activity_unit: kWh
+    org_unit_name: South Valley
+  - name: South Valley diesel
+    scope: 1
+    scope3_category: null
+    activity_unit: litre
+    stream:
+      field: description
+      exactly_one_of: [generators, fleet]
+      both_is_fail: true
+      empty_is_fail: true
+    org_unit_name: South Valley
+coverage:
+  goal_scope: "1+2"
+  min_quality_tier: 4
+  covered_requires:
+    - named source file exists
+    - linked_tables non-empty on this period's InventorySourceStatus
+    - a Calculation row for the same reporting_period
+close:
+  evidence_file: raw/Carbon footprint app/csv/south_valley_inventory.csv
+  evidence_file_exists: false
+  kilograms: null
+  diesel_stream: null
+gate: >
+  Opens only after O1 remains passed and south_valley_inventory.csv exists
+  with named kWh months and one diesel stream. Until then the campus stays
+  declared or excluded insufficient_data (CR-EXC-01).
+evidence: domain_packs/carbon/assurance/benchmarks/O2-south-valley.yaml status closed. File south_valley_inventory.csv is absent.
+limit: >
+  Does not invent kg. Does not open a second ReportingPeriod.
+  evaluate_o1 is not this checklist. Does not pass O3 or O4.

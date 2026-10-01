@@ -588,10 +588,17 @@ class Calculation(models.Model):
             Calculation: The created calculation instance
         """
         from decimal import Decimal
+
+        from emissions.inventory_math import LOCATION_BASED, inventory_kg, normalize_scope2_method
         
         activity_decimal = Decimal(str(activity_value))
         ef_decimal = Decimal(str(emission_factor.factor_value))
-        co2e = activity_decimal * ef_decimal
+        row_values = getattr(data_row, "values", None) if data_row is not None else None
+        co2e = inventory_kg(activity_decimal, ef_decimal, values=row_values)
+        if int(getattr(emission_factor, "scope", 0) or 0) == 2:
+            scope2_method = normalize_scope2_method(scope2_method, default=LOCATION_BASED)
+        else:
+            scope2_method = None
         
         # Calculate individual gas components if available
         co2_kg = None
@@ -791,9 +798,12 @@ class CalculationRule(models.Model):
             Calculation instance or None if calculation failed
         """
         from decimal import Decimal, InvalidOperation
-        
-        # Get activity value from the row's JSON values
+
+        from emissions.inventory_math import is_offset_field
+
         activity_field_name = self.activity_field.name
+        if is_offset_field(activity_field_name):
+            return None
         raw_value = data_row.values.get(activity_field_name)
         
         if raw_value is None or raw_value == '':
@@ -914,11 +924,12 @@ class CalculationRule(models.Model):
             'snapshot_at': timezone.now().isoformat(),
         }
 
-        # GHG Protocol: Scope 2 dual calculation
+        # GHG Protocol: Scope 2 dual calculation. Never invent a market-based
+        # total from the location-based / grid factor (no residual mix).
         results = []
         scope2_mode = self.scope2_calculation_method if ef.scope == 2 else 'location_based'
-
-        if scope2_mode in ('location_based', 'dual'):
+        emit_location = ef.scope != 2 or scope2_mode in ('location_based', 'dual')
+        if emit_location:
             results.append(Calculation.create_from_data_row(
                 data_row=data_row,
                 emission_factor=ef,
@@ -929,30 +940,49 @@ class CalculationRule(models.Model):
                 reporting_period=reporting_period,
                 activity_date=activity_date,
                 calculated_by=user,
-                scope2_method='location_based',
+                scope2_method='location_based' if ef.scope == 2 else None,
                 emission_factor_snapshot=ef_snapshot,
             ))
 
-        if scope2_mode in ('market_based', 'dual'):
-            # Try to find a market-based counterpart factor
-            market_ef = ef
-            if self.factor_selector_mapping and '__market__' in self.factor_selector_mapping:
-                market_code = self.factor_selector_mapping['__market__']
-                market_ef = EmissionFactor.objects.filter(code=market_code, is_active=True).first() or ef
-
-            results.append(Calculation.create_from_data_row(
-                data_row=data_row,
-                emission_factor=market_ef,
-                activity_value=activity_value,
-                activity_unit=market_ef.activity_unit,
-                reporting_year=reporting_year,
-                reporting_month=reporting_month,
-                reporting_period=reporting_period,
-                activity_date=activity_date,
-                calculated_by=user,
-                scope2_method='market_based',
-                emission_factor_snapshot=ef_snapshot,
-            ))
+        if ef.scope == 2 and scope2_mode in ('market_based', 'dual'):
+            market_ef = None
+            mapping = self.factor_selector_mapping or {}
+            market_code = mapping.get('__market__')
+            if market_code:
+                market_ef = EmissionFactor.objects.filter(
+                    code=market_code, is_active=True, scope=2,
+                ).exclude(pk=ef.pk).first()
+            if market_ef is not None:
+                market_snapshot = {
+                    'factor_id': market_ef.id,
+                    'factor_code': market_ef.code,
+                    'factor_name': market_ef.name,
+                    'factor_value': str(market_ef.factor_value),
+                    'factor_unit': market_ef.factor_unit,
+                    'activity_unit': market_ef.activity_unit,
+                    'source': market_ef.source,
+                    'valid_from': str(market_ef.valid_from) if market_ef.valid_from else None,
+                    'valid_to': str(market_ef.valid_to) if market_ef.valid_to else None,
+                    'co2_factor': str(market_ef.co2_factor) if market_ef.co2_factor else None,
+                    'ch4_factor': str(market_ef.ch4_factor) if market_ef.ch4_factor else None,
+                    'n2o_factor': str(market_ef.n2o_factor) if market_ef.n2o_factor else None,
+                    'snapshot_at': timezone.now().isoformat(),
+                }
+                results.append(Calculation.create_from_data_row(
+                    data_row=data_row,
+                    emission_factor=market_ef,
+                    activity_value=activity_value,
+                    activity_unit=market_ef.activity_unit,
+                    reporting_year=reporting_year,
+                    reporting_month=reporting_month,
+                    reporting_period=reporting_period,
+                    activity_date=activity_date,
+                    calculated_by=user,
+                    scope2_method='market_based',
+                    emission_factor_snapshot=market_snapshot,
+                ))
+            elif scope2_mode == 'market_based':
+                return None
 
         # Return the first (primary) calculation for backward compatibility;
         # dual results are accessible via the Calculation model queryset.
@@ -1430,6 +1460,17 @@ class InventorySource(models.Model):
     )
     source_name = models.CharField(max_length=200)
     description = models.TextField(blank=True, default='')
+    SCOPE2_METHOD_CHOICES = [
+        ('location_based', 'Location-based'),
+        ('market_based', 'Market-based'),
+    ]
+    scope2_method = models.CharField(
+        max_length=20,
+        choices=SCOPE2_METHOD_CHOICES,
+        blank=True,
+        default='',
+        help_text="Required for Scope 2: location_based or market_based. Blank for Scope 1/3.",
+    )
     is_active = models.BooleanField(default=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -1451,10 +1492,19 @@ class InventorySource(models.Model):
         ]
         indexes = [models.Index(fields=['org_unit', 'scope', 'is_active'])]
 
+    def save(self, *args, **kwargs):
+        if self.scope == 2 and not self.scope2_method:
+            self.scope2_method = 'location_based'
+        if self.scope != 2:
+            self.scope2_method = ''
+        super().save(*args, **kwargs)
+
     def __str__(self):
         label = f"Scope {self.scope}"
         if self.scope == 3 and self.scope3_category:
             label += f" — Cat {self.scope3_category}"
+        if self.scope == 2 and self.scope2_method:
+            label += f" — {self.scope2_method.replace('_', '-')}"
         return f"{self.source_name} ({label})"
 
 

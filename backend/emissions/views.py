@@ -58,6 +58,7 @@ from .services import (
     InventoryCoverageService,
     ChairmanService,
     CalculationSummaryService,
+    DisclosureService,
 )
 from core.services import NotificationService
 
@@ -834,12 +835,14 @@ class ReportAPIView(APIView):
 
             output = io.StringIO()
             writer = csv.writer(output)
-            writer.writerow(['Scope', 'Category', 'CO2e (tonnes)', 'Count'])
+            writer.writerow(['Scope', 'Scope 2 method', 'Category', 'CO2e (tonnes)', 'Count'])
 
             for sd in data.get('scope_details', []):
                 for cat in sd.get('categories', []):
                     writer.writerow([
-                        sd['name'], cat['name'],
+                        sd['name'],
+                        sd.get('scope2_method') or ('location-based' if sd.get('scope') == 2 else ''),
+                        cat['name'],
                         cat['emissions_tonnes'], cat['count'],
                     ])
 
@@ -1235,6 +1238,32 @@ class ConsoleAPIView(APIView):
     def get(self, request):
         data = ConsoleService.get_console_data(request.user)
         return Response(data)
+
+
+class DisclosureExportAPIView(APIView):
+    """P2 labelled export of existing ledger fields. GET /carbon/disclosure/."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        period_id = request.query_params.get('reporting_period_id')
+        framework = request.query_params.get('framework', 'esrs_e1')
+        if not period_id:
+            return Response(
+                {'detail': 'reporting_period_id is required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            payload = DisclosureService.export(
+                request.user,
+                framework=framework,
+                period_id=int(period_id),
+            )
+        except ValueError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        if payload is None:
+            return Response({'detail': 'Period not found.'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(payload)
 
 
 class ChairmanAPIView(APIView):

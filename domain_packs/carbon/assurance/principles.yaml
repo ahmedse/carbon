@@ -7,9 +7,9 @@ target: O1
 product: Carbon on AASTMT
 locked: 2026-09-29
 limit: >
-  Governs the onboarding leaf only. Does not close South Valley, Abu Qir,
-  Alamein, Scope 3, or external assurance. GHG Protocol Corporate Standard
-  version 3 is a draft (CR-INV-01).
+  P-01–P-20 govern the O1 leaf. P-21–P-25 lock Dual Scope 2, O2–O4, O5,
+  P2, and P1 as closed contracts. They do not pass those leaves. GHG
+  Protocol Corporate Standard version 3 is a draft (CR-INV-01).
 
 principles:
   - id: P-01
@@ -189,3 +189,217 @@ principles:
     evidence: Each principle and each CR rule names target, product, evidence, locked, and limit.
     locked: 2026-09-30
     limit: A file-level lock date does not make a row ready when one of those five is missing.
+
+  - id: P-13
+    name: Label the Scope 2 method
+    statement: >
+      Location-based and market-based are two totals. A Scope 2 kilogram is
+      shown or spoken only with the method named. O1 electricity is
+      location-based. Do not mix an unlabelled Scope 2 figure into either total.
+      Do not invent a residual mix for Egypt. Do not publish a market-based
+      total that copies the grid factor.
+    binds: [CR-S2-01, CR-SRC-01]
+    violation: A Scope 2 total is shown without location-based or market-based, or both methods are added into one unlabelled mix.
+    target: O1
+    product: Carbon on AASTMT
+    evidence: InventorySource.scope2_method and Calculation.scope2_method. GET calculations/summary by_scope2_method. O1 electricity persists location_based.
+    locked: 2026-09-30
+    limit: Does not invent a residual mix. Does not add a fake market-based total. Does not open dual reporting as O2.
+
+  - id: P-14
+    name: Inventory is not an offset
+    statement: >
+      A credit, REC, or EAC does not reduce Calculation.co2e_kg. Inventory
+      math is activity × factor. Credits stay a separate statement. Egypt
+      FRA Decree 31/2024 is a market, not this footprint.
+    binds: [CR-OFF-01, CR-INV-01]
+    violation: A kilogram is net of an offset, credit, REC, or EAC field.
+    target: O1
+    product: Carbon on AASTMT
+    evidence: emissions/inventory_math.py. Calculation.create_from_data_row ignores offset keys. CR-OFF-01 tests.
+    locked: 2026-09-30
+    limit: Does not build an Egypt credit registry. Does not treat a listed credit as assurance.
+
+  - id: P-15
+    name: Activity before factor
+    statement: >
+      A kWh or litre DataRow exists before a kilogram is shown. The factor is
+      an EmissionFactor row. Chat does not invent either.
+    binds: [CR-DQ-01, CR-FAC-01]
+    violation: A kilogram appears with no activity row, or a factor is spoken with no EmissionFactor.
+    target: O1
+    product: Carbon on AASTMT
+    evidence: Host screen /carbon/my-data. CR-DQ-01. evaluate_o1 emits no CR-DQ-01 code.
+    locked: 2026-09-30
+    limit: Does not create a DataTable. Does not open O5.
+
+  - id: P-16
+    name: One dataset for act and report
+    statement: >
+      Targets, coverage, chairman, and Pulse read the same Calculation rows.
+      A ranking export or a chairman mix is not a second inventory.
+    binds: [CR-COV-01, CR-PULSE-01]
+    violation: A target, coverage percent, or Pulse quote uses a kilogram that is not on Calculation for that period.
+    target: O1
+    product: Carbon on AASTMT
+    evidence: ChairmanService and CalculationSummaryService read Calculation. get_chairman_overview is not the Smart Village footprint.
+    locked: 2026-09-30
+    limit: Chairman mix is not O1. Does not open P2 disclosure packs.
+
+  - id: P-17
+    name: Campus owner is a person
+    statement: >
+      Each campus has a dataowners_group writer scoped to that org unit.
+      Global enter_data is not granted to a campus user. The academy lead is
+      not a silent proxy for campus entry.
+    binds: [CR-OWN-01]
+    violation: A campus user has unrestricted carbon:enter_data, or writes another campus's rows.
+    target: O1
+    product: Carbon on AASTMT
+    evidence: ScopedRole dataowners_group with org_unit set. CR-OWN-01 tests. emp_1067 is not granted people:view.
+    locked: 2026-09-30
+    limit: Does not grant people:view to emp_1067. Does not make campus owners Django staff.
+
+  - id: P-18
+    name: Restate, do not overwrite
+    statement: >
+      A correction archives the old DataRow (is_archived) and appends a new
+      row. values are immutable. History stays.
+    binds: [CR-REST-01]
+    violation: A live DataRow.values field is mutated in place.
+    target: O1
+    product: Carbon on AASTMT
+    evidence: DataRow.save append-only. POST /rows/{id}/restate/. queryset.update cannot write values.
+    locked: 2026-09-30
+    limit: Does not rewrite Calculation.co2e_kg on the old run. Recalc supersedes; it does not edit the predecessor.
+
+  - id: P-19
+    name: Assurance is earned
+    statement: >
+      not_assured remains visible and unmet until a named verification
+      engagement exists. Credits are not assurance. A VVB pack is P1.
+    binds: [CR-PULSE-01]
+    violation: not_assured is hidden, marked met, or treated as closed because a credit exists.
+    target: O1
+    product: Carbon on AASTMT
+    evidence: evaluate_o1 code not_assured met false. P1 stays closed in O1-smart-village.yaml.
+    locked: 2026-09-30
+    limit: Does not open P1. Does not invent a VVB.
+
+  - id: P-20
+    name: Rankings are exports
+    statement: >
+      UI GreenMetric, QS, and STARS consume named sources. They do not
+      create an academy total. A ranking file is a report.
+    binds: [CR-PULSE-01]
+    violation: A ranking-driven kilogram is published that is not on a named InventorySource and Calculation.
+    target: O1
+    product: Carbon on AASTMT
+    evidence: Reports page is a shell. Ranking is not an O1 close. CR-PULSE-01.
+    locked: 2026-09-30
+    limit: Does not build a ranking as a goal. Does not invent campus tonnes for GreenMetric.
+
+  - id: P-21
+    name: Market-based is absent until a distinct factor
+    statement: >
+      Dual Scope 2 holds two labelled totals. Location-based is the Egypt
+      grid factor on InventorySource.scope2_method location_based. A
+      market-based row exists only when CalculationRule.factor_selector_mapping
+      __market__ names an active EmissionFactor whose primary key is not the
+      grid factor. Without that factor the market-based total is absent, not
+      zero, and not a copy of the grid. Egypt has no residual mix in this
+      product.
+    binds: [CR-S2-01, CR-S2-02]
+    violation: >
+      A market-based kilogram is shown that used the Egypt grid factor, or
+      a residual mix is invented, or market-based is shown as 0 kg because
+      no contractual factor exists.
+    target: O1
+    product: Carbon on AASTMT
+    evidence: >
+      CalculationRule.calculate_for_row. GET calculations/summary
+      by_scope2_method.market_based present false with reason
+      no_distinct_contractual_factor. CR-S2-02 tests.
+    locked: 2026-09-30
+    limit: >
+      Does not invent an Egypt residual mix. Does not treat unbundled RECs
+      as used electricity. Does not open O2.
+
+  - id: P-22
+    name: A campus leaf is a named file
+    statement: >
+      O2 South Valley, O3 Abu Qir, and O4 New Alamein each require two
+      InventorySource names, activity units, scopes, one diesel stream
+      word, one annual period, and an exclusion record for every other
+      unmeasured campus. Status stays closed until the named source file
+      exists. Absence is insufficient_data, not zero kilograms.
+    binds: [CR-CAM-01, CR-SRC-01, CR-EXC-01]
+    violation: A campus leaf is marked passed without the named file, or kilograms are invented for a campus.
+    target: O2
+    product: Carbon on AASTMT
+    evidence: >
+      domain_packs/carbon/assurance/benchmarks/O2-south-valley.yaml,
+      O3-abu-qir.yaml, O4-new-alamein.yaml. Each status closed.
+    locked: 2026-09-30
+    limit: >
+      Does not invent kg. Does not open a second ReportingPeriod.
+      evaluate_o1 stays the only O1 checklist.
+
+  - id: P-23
+    name: One named Scope 3 category
+    statement: >
+      O5 is GHG Protocol Scope 3 Standard 2011 category 5, Waste generated
+      in operations. The only named source is "Smart Village waste disposal",
+      activity unit tonne, scope 3, scope3_category 5. It is not a sector
+      soup of paper, commuting, meals, and leased assets. Status stays
+      closed until that InventorySource and a matching EmissionFactor exist.
+    binds: [CR-S3-01]
+    violation: >
+      O5 is marked passed from a mixed Scope 3 pile, or a kilogram is
+      invented from the 73 tonne activity line.
+    target: O5
+    product: Carbon on AASTMT
+    evidence: >
+      domain_packs/carbon/assurance/benchmarks/O5-scope3-waste.yaml.
+      Activity line exists in smart_village_inventory_fy2324.csv. No kg.
+    locked: 2026-09-30
+    limit: >
+      Does not convert 73 tonne to kg. Does not open categories 1–4 or 6–15.
+      Does not treat water or chilled-water files as this category.
+
+  - id: P-24
+    name: Disclosure is a projection
+    statement: >
+      P2 is a labelled export of existing Calculation, InventorySource,
+      ReportingPeriod, and OrganizationalBoundary fields into ESRS E1-6,
+      IFRS S2, and CDP C6 column names. It does not compute a new total.
+      Market-based is absent unless CR-S2-02 is met. Scope 3 is omitted
+      until O5. Status stays closed until a real filing consumes the export.
+    binds: [CR-DIS-01, CR-S2-01]
+    violation: An export column contains a kilogram that is not on Calculation for that period.
+    target: P2
+    product: Carbon on AASTMT
+    evidence: >
+      GET /carbon-api/carbon/disclosure/. emissions/disclosure.py.
+      CR-DIS-01 tests. P2-disclosure.yaml status closed.
+    locked: 2026-09-30
+    limit: >
+      Not an ESRS, IFRS, or CDP filing. Does not mark P2 passed. Does not
+      invent datapoints.
+
+  - id: P-25
+    name: A VVB pack is the only assurance close
+    statement: >
+      P1 stays closed while evaluate_o1 code not_assured is unmet. Closing
+      P1 requires a named verification pack: assurer_name, engagement_type
+      limited or reasonable, standard ISO 14064-3, opinion_date, statement_id.
+      Credits, RECs, and a UI badge are not that pack.
+    binds: [CR-ASR-01, CR-OFF-01]
+    violation: not_assured is hidden, marked met, or treated as closed because a credit exists.
+    target: P1
+    product: Carbon on AASTMT
+    evidence: >
+      evaluate_o1 code not_assured met false. P1-assurance.yaml status closed.
+      No VVB is named on carbon_dev.
+    locked: 2026-09-30
+    limit: Does not invent a VVB. Does not treat Egypt FRA credits as assurance.

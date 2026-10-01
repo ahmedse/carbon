@@ -5,6 +5,16 @@ status: passed
 owner: carbon-inventory-lead
 locked: 2026-09-29
 product: Carbon on AASTMT
+target: O1
+evidence: >
+  GET /carbon-api/carbon/onboarding/o1/. Scope 2 1239599.320800 kg
+  location-based (2,704,187 kWh). Scope 1 8040.000000 kg (generators
+  3,000 L). evaluate_o1 stays pure. Do not create
+  docs/carbon/evidence/O1-smart-village.json.
+limit: >
+  Passed is the Smart Village match. not_assured stays unmet. Fleet
+  5161 L is not this stream. Does not pass O2, O3, O4, O5, P1, P2, or
+  a market-based Scope 2 total.
 campus: Smart Village
 campus_code: AASTMT-SV
 period:
@@ -133,26 +143,82 @@ fail:
   - target_coverage_pct stored before any InventorySource exists for the period.
 closed:
   - id: O2
-    title: South Valley electricity and one fuel
+    title: South Valley electricity and diesel
     status: closed
-    reason: Opens only after O1 has a named open period and a calculation summary. Until then declare the campus or exclude it with insufficient_data.
+    spec: domain_packs/carbon/assurance/benchmarks/O2-south-valley.yaml
+    sources: ["South Valley electricity", "South Valley diesel"]
+    activity_units: [kWh, litre]
+    scopes: [2, 1]
+    target: O2
+    product: Carbon on AASTMT
+    evidence: O2-south-valley.yaml. File south_valley_inventory.csv is absent.
+    locked: 2026-09-30
+    limit: Does not invent kg. Does not open a second ReportingPeriod.
   - id: O3
-    title: Abu Qir electricity and one fuel
+    title: Abu Qir electricity and diesel
     status: closed
-    reason: Same gate as O2.
+    spec: domain_packs/carbon/assurance/benchmarks/O3-abu-qir.yaml
+    sources: ["Abu Qir electricity", "Abu Qir diesel"]
+    activity_units: [kWh, litre]
+    scopes: [2, 1]
+    target: O3
+    product: Carbon on AASTMT
+    evidence: O3-abu-qir.yaml. File abu_qir_inventory.csv is absent.
+    locked: 2026-09-30
+    limit: Does not invent kg. Does not open a second ReportingPeriod.
   - id: O4
-    title: Alamein electricity and one fuel
+    title: New Alamein electricity and diesel
     status: closed
-    reason: Same gate as O2.
+    spec: domain_packs/carbon/assurance/benchmarks/O4-new-alamein.yaml
+    sources: ["New Alamein electricity", "New Alamein diesel"]
+    activity_units: [kWh, litre]
+    scopes: [2, 1]
+    target: O4
+    product: Carbon on AASTMT
+    evidence: O4-new-alamein.yaml. File new_alamein_inventory.csv is absent.
+    locked: 2026-09-30
+    limit: Does not invent kg. CR-EXC-01 still matches Alamein as substring.
   - id: O5
-    title: Scope 3 categories declared
+    title: Smart Village waste disposal (Scope 3 category 5)
     status: closed
-    reason: Scope 3 is outside O1. Do not mark a category covered during onboarding.
+    spec: domain_packs/carbon/assurance/benchmarks/O5-scope3-waste.yaml
+    sources: ["Smart Village waste disposal"]
+    activity_units: [tonne]
+    scopes: [3]
+    scope3_category: 5
+    target: O5
+    product: Carbon on AASTMT
+    evidence: O5-scope3-waste.yaml. 73.0 ton activity is not kg.
+    locked: 2026-09-30
+    limit: Does not invent kg. Does not open a 15-category soup.
   - id: P1
-    title: A figure leaves the organisation
+    title: External assurance of the quoted inventory
     status: closed
-    reason: Requires data_quality_tier 3 or better on the quoted sources, and CR-INV-01 still catalogue planned until a method is frozen.
+    spec: domain_packs/carbon/assurance/benchmarks/P1-assurance.yaml
+    target: P1
+    product: Carbon on AASTMT
+    evidence: evaluate_o1 not_assured met false. No VVB named.
+    locked: 2026-09-30
+    limit: Does not invent a VVB. Credits are not assurance.
   - id: P2
-    title: External assurance
+    title: Disclosure export shape (ESRS E1 / IFRS S2 / CDP)
     status: closed
-    reason: No verifier is named. Corporate Standard version 3 is a draft.
+    spec: domain_packs/carbon/assurance/benchmarks/P2-disclosure.yaml
+    target: P2
+    product: Carbon on AASTMT
+    evidence: GET /carbon-api/carbon/disclosure/. Shape may ship. Filing has not consumed it.
+    locked: 2026-09-30
+    limit: Not a filing. Does not invent datapoints. Does not mark P2 passed.
+  - id: S2MB
+    title: Dual Scope 2 market-based total
+    status: closed
+    spec: domain_packs/carbon/assurance/benchmarks/S2-market-based.yaml
+    target: O1
+    product: Carbon on AASTMT
+    evidence: >
+      No distinct contractual EmissionFactor. CR-S2-02.
+      Market-based is absent. Not 0 kg. Not a copy of the Egypt grid.
+    locked: 2026-10-01
+    limit: >
+      Does not invent an Egypt residual mix. Does not store 0 kg as
+      market-based. Does not copy the location-based grid factor.

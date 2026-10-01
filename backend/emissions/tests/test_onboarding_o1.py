@@ -202,6 +202,7 @@ class EvaluateO1Tests(unittest.TestCase):
         kg = next(row for row in result["checks"] if row["code"] == "summary_kg")
         self.assertEqual(kg["kg"], "1500")
         self.assertEqual(kg["scope"], "2")
+        self.assertEqual(kg["method"], "location-based")
         self.assertTrue(any(row["code"] == "not_assured" and row["met"] is False for row in result["checks"]))
         self.assertTrue(any(row["code"] == "source_covered_invalid" for row in result["checks"]))
         self.assertTrue(any(row["code"] == "diesel_stream_met" and row["stream"] == "generators" for row in result["checks"]))

@@ -74,6 +74,18 @@ def _stream(description: str) -> str | None:
     return None
 
 
+def _scope2_method(source: dict | None) -> str | None:
+    if not source:
+        return None
+    raw = str(source.get("scope2_method") or source.get("approach") or "").strip().lower()
+    raw = raw.replace("-", "_").replace(" ", "_")
+    if raw in ("location_based", "market_based"):
+        return raw
+    if int(source.get("scope") or 0) == 2:
+        return "location_based"
+    return None
+
+
 def _kg(value: Any) -> str | None:
     if value is None or value == "":
         return None
@@ -107,6 +119,15 @@ def _source_checks(sources, statuses, period_id) -> list[dict]:
             ))
         else:
             rows.append(_check("CR-SRC-01", "source_declared", False, name=name))
+        if name == ELECTRICITY:
+            method = _scope2_method(source)
+            if method in ("location_based", "market_based"):
+                rows.append(_check(
+                    "CR-S2-01", "scope2_method", True,
+                    name=name, method=method.replace("_", "-"),
+                ))
+            else:
+                rows.append(_check("CR-S2-01", "scope2_method_unlabelled", False, name=name))
         if name == DIESEL:
             stream = _stream(str(source.get("description") or ""))
             if stream == "both":
@@ -283,13 +304,17 @@ def _coverage_goal_checks(sources: list[dict], goals: list[dict]) -> list[dict]:
 
 def o1_linked_summary(by_scope: dict, count: int) -> dict:
     """Copy linked-table kilogram sums. Does not read the period-wide summary."""
+    payload = {}
+    for scope, kg in (by_scope or {}).items():
+        if kg is None or kg == "":
+            continue
+        item = {"total_co2e_kg": kg}
+        if int(scope) == 2:
+            item["scope2_method"] = "location-based"
+        payload[str(scope)] = item
     return {
         "total_calculations": int(count or 0),
-        "by_scope": {
-            str(scope): {"total_co2e_kg": kg}
-            for scope, kg in (by_scope or {}).items()
-            if kg is not None and kg != ""
-        },
+        "by_scope": payload,
         "quote": "o1_linked_tables",
     }
 
@@ -305,7 +330,13 @@ def _quote_checks(summary: dict | None) -> list[dict]:
             kg = _kg((item or {}).get("total_co2e_kg") if isinstance(item, dict) else None)
             if kg is None:
                 continue
-            rows.append(_check("CR-PULSE-01", "summary_kg", True, scope=str(scope), kg=kg))
+            fields = {"scope": str(scope), "kg": kg}
+            if str(scope) == "2":
+                method = None
+                if isinstance(item, dict):
+                    method = item.get("scope2_method") or item.get("method")
+                fields["method"] = str(method or "location-based").replace("_", "-")
+            rows.append(_check("CR-PULSE-01", "summary_kg", True, **fields))
     rows.append(_check("CR-PULSE-01", "not_assured", False))
     return rows
 
@@ -469,7 +500,7 @@ def evaluate_o1(
 
 def _summary_for_linked_o1(period_id) -> dict:
     """Kilograms on the two O1 sources' linked tables for this period only."""
-    from django.db.models import Count, Sum
+    from django.db.models import Count, Q, Sum
 
     from emissions.models import Calculation, InventorySourceStatus
 
@@ -488,11 +519,16 @@ def _summary_for_linked_o1(period_id) -> dict:
         table_ids = list(status_row.linked_tables.values_list("id", flat=True))
         if not table_ids:
             continue
-        agg = Calculation.objects.filter(
+        agg_qs = Calculation.objects.filter(
             reporting_period_id=period_id,
             data_row__data_table_id__in=table_ids,
             scope=scope,
-        ).aggregate(kg=Sum("co2e_kg"), n=Count("id"))
+        )
+        if scope == 2:
+            agg_qs = agg_qs.filter(
+                Q(scope2_method="location_based") | Q(scope2_method__isnull=True) | Q(scope2_method=""),
+            )
+        agg = agg_qs.aggregate(kg=Sum("co2e_kg"), n=Count("id"))
         n = int(agg["n"] or 0)
         if agg["kg"] is None or n <= 0:
             continue
@@ -578,8 +614,11 @@ def load_o1_inputs(user) -> dict[str, Any]:
             "source_name": row.source_name,
             "scope": row.scope,
             "description": row.description or "",
+            "scope2_method": row.scope2_method or ("location_based" if row.scope == 2 else ""),
         }
-        for row in InventorySource.objects.all().only("id", "source_name", "scope", "description")
+        for row in InventorySource.objects.all().only(
+            "id", "source_name", "scope", "description", "scope2_method",
+        )
     ]
     statuses: list[dict] = []
     summary = None

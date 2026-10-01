@@ -53,6 +53,16 @@ function ScopeChip({ value }) {
   return <Chip label={t(labelKey)} size="small" color={cfg.color} />;
 }
 
+function Scope2MethodChip({ row }) {
+  const { t } = useTranslation('emissions');
+  if (Number(row?.scope) !== 2) {
+    return <Typography variant="body2" color="text.disabled">—</Typography>;
+  }
+  const raw = String(row?.scope2_method || 'location_based').toLowerCase().replace(/-/g, '_');
+  const label = raw === 'market_based' ? t('scope2MarketBased') : t('scope2LocationBased');
+  return <Chip label={label} size="small" variant="outlined" />;
+}
+
 function StatusChip({ row }) {
   const { t } = useTranslation('emissions');
   const cfg = STATUS_CFG[getStatus(row)];
@@ -123,6 +133,12 @@ export default function MyDataPage() {
       headerName: t('myData.scope'),
       width: 120,
       renderCell: ({ value }) => <ScopeChip value={value} />,
+    },
+    {
+      field: 'scope2_method',
+      headerName: t('myData.scope2Method'),
+      width: 160,
+      renderCell: ({ row }) => <Scope2MethodChip row={row} />,
     },
     {
       field: 'name',
