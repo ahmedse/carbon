@@ -85,6 +85,12 @@ describe('AIWorkspaceHeader mode toggle + safety contract (W5-A / ADR-0014)', ()
     expect(onHome).toHaveBeenCalledTimes(1);
   });
 
+  it('hides Tasks when Ask is locked for the Moodle embed', () => {
+    render(<AIWorkspaceHeader onClose={vi.fn()} lockAsk />);
+    expect(screen.getByRole('button', { name: 'Chat mode' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Tasks' })).not.toBeInTheDocument();
+  });
+
   it('does not report a change when re-selecting the active mode', () => {
     const onModeChange = vi.fn();
     render(<AIWorkspaceHeader onClose={vi.fn()} mode="agent" onModeChange={onModeChange} />);

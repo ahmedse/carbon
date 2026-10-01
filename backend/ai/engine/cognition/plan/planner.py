@@ -21,7 +21,7 @@ a Plan with tool-centric PlanSteps (tool_name + tool_args from TOOL_EXECUTORS).
 Falls back to LLM decomposition if no skill matches, and to single-step for
 simple queries. Distinct from the SQL-focused MultiStepPlanner.
 """
-from ai.engine.cognition.phrase_tables import T
+from ai.engine.cognition.phrase_tables import T, bound_to_pack
 from ai.engine.pack_vocab import LV, V, live_pattern
 import json
 import logging
@@ -962,6 +962,7 @@ class SkillAwarePlanner:
         self.llm_client = llm_client
         self.model = model
 
+    @bound_to_pack
     async def decompose(
         self,
         utterance: str,
@@ -1273,6 +1274,7 @@ class SkillAwarePlanner:
             logger.exception("Failed to parse skill body for '%s'", skill.name)
             return None
 
+    @bound_to_pack
     async def _llm_decompose(
         self, utterance: str, llm_client, model: str, instance_id: str = "",
         skills: list | None = None, user_id: str = "",

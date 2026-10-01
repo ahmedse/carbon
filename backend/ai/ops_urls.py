@@ -44,6 +44,7 @@ from ai.control_plane_api import (
     EvidenceExplorerView,
     LearningCandidatesView,
     PdpDryRunView,
+    PulseBindView,
 )
 from ai.prompt_governance_api import (
     PromptVersionActivateView,
@@ -76,6 +77,7 @@ urlpatterns = [
     path("control/candidates/", LearningCandidatesView.as_view(), name="ai-control-candidates"),
     path("control/pdp/dry-run/", PdpDryRunView.as_view(), name="ai-control-pdp-dry-run"),
     path("control/budget/", BudgetControlView.as_view(), name="ai-control-budget"),
+    path("control/bind/", PulseBindView.as_view(), name="ai-control-bind"),
     path(
         "control/prompts/versions/",
         PromptVersionListView.as_view(),

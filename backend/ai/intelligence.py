@@ -31,6 +31,51 @@ from rest_framework.exceptions import PermissionDenied
 CLEAR_BREAK_KEY = "_clear_break"
 
 
+def _conversation_app_identifier(user, conversation) -> str | None:
+    """Process Pulse never inherits a leftover Moodle app id."""
+    from ai.moodle_host import conversation_app_for_user
+
+    return conversation_app_for_user(user, getattr(conversation, "app_identifier", None))
+
+
+def _drop_leftover_moodle_app(user, conversation) -> None:
+    """A leftover Moodle thread on Carbon Pulse must not keep the Moodle app id."""
+    from ai.moodle_host import is_moodle_host_user
+
+    if getattr(conversation, "app_identifier", None) != "moodle":
+        return
+    if is_moodle_host_user(user):
+        return
+    conversation.app_identifier = None
+    payload = dict(getattr(conversation, "task_payload_json", None) or {})
+    payload.pop("page_context", None)
+    if hasattr(conversation, "task_payload_json"):
+        conversation.task_payload_json = payload
+    save = getattr(conversation, "save", None)
+    if not callable(save):
+        return
+    try:
+        save(update_fields=["app_identifier", "task_payload_json"])
+    except Exception:  # noqa: BLE001 — leftover cleanup must not fail the turn
+        pass
+
+
+def _apply_conversation_app(scope, user, conversation) -> None:
+    _drop_leftover_moodle_app(user, conversation)
+    app = _conversation_app_identifier(user, conversation)
+    if app:
+        scope.app_identifier = app
+
+
+def _moodle_page_context(user, conversation, incoming: str = "") -> str:
+    from ai.moodle_host import page_context_for_user
+
+    stored = ""
+    if getattr(conversation, "task_payload_json", None):
+        stored = str((conversation.task_payload_json or {}).get("page_context") or "")
+    return page_context_for_user(user, stored, incoming)
+
+
 def _snapshot_with_clear_break(conversation, snapshot: dict[str, Any]) -> dict[str, Any]:
     """Merge turn telemetry with any active clear-break marker."""
     prior = (getattr(conversation, "context_snapshot_json", None) or {}).get(
@@ -357,6 +402,7 @@ class CarbonIntelligence:
         Returns a serialized dict of the AIConversation.
         """
         from ai.models import AIConversation
+        from ai.moodle_host import conversation_app_for_user
 
         scope = build_scope(user)
         scope_json = scope.to_dict() if scope else {}
@@ -369,7 +415,7 @@ class CarbonIntelligence:
             user=user,
             conversation_type=conversation_type,
             title=title or _default_title(conversation_type),
-            app_identifier=app_identifier,
+            app_identifier=conversation_app_for_user(user, app_identifier),
             status="pending",
             scope_json=scope_json,
             task_payload_json=stored_payload,
@@ -461,8 +507,7 @@ class CarbonIntelligence:
 
         # Build fresh scope (NOT frozen — user's permissions may have changed)
         scope = build_scope(user)
-        if conversation.app_identifier:
-            scope.app_identifier = conversation.app_identifier
+        _apply_conversation_app(scope, user, conversation)
 
         # Assemble tiered, budgeted context from history (Sprint 15).
         history = list(
@@ -623,8 +668,7 @@ class CarbonIntelligence:
 
             # Build fresh scope (NOT frozen — user's permissions may have changed).
             scope = build_scope(user)
-            if conversation.app_identifier:
-                scope.app_identifier = conversation.app_identifier
+            _apply_conversation_app(scope, user, conversation)
 
             # Assemble tiered, budgeted context from history (Sprint 15).
             history = list(
@@ -662,17 +706,18 @@ class CarbonIntelligence:
                     "workspace_chat",
                     conversation.task_payload_json or {},
                 )
-                if (conversation.app_identifier or "") == "moodle":
+                if _conversation_app_identifier(user, conversation) == "moodle":
                     pulse_mode = "ask"
-                    if not page_context:
-                        page_context = str(
-                            (conversation.task_payload_json or {}).get("page_context") or ""
-                        )
+                    page_context = _moodle_page_context(user, conversation, page_context)
+                else:
+                    page_context = ""
                 if pulse_mode in PULSE_DIAL_MODES:
                     payload = dict(conversation.task_payload_json or {})
                     payload["pulse_mode"] = pulse_mode
                     if page_context:
                         payload["page_context"] = page_context
+                    elif "page_context" in payload and _conversation_app_identifier(user, conversation) != "moodle":
+                        payload.pop("page_context", None)
                     conversation.task_payload_json = payload
                     conversation.save(update_fields=["task_payload_json"])
                 # Ask/Plan is structured transport metadata on ChatRequest.
@@ -701,11 +746,40 @@ class CarbonIntelligence:
                     plan_cancel=bool(plan_cancel),
                     page_context=str(page_context or ""),
                 )
-                if (conversation.app_identifier or "") == "moodle":
+                if _conversation_app_identifier(user, conversation) == "moodle":
+                    from ai.moodle_ask_state import (
+                        ask_state_key,
+                        get_ask_state,
+                        put_ask_state,
+                    )
                     from ai.moodle_host import door_answer, snapshot_from_page_context
 
-                    cited = door_answer(content, snapshot_from_page_context(str(page_context or "")))
+                    page_text = str(page_context or "")
+                    snap = snapshot_from_page_context(page_text)
+                    payload = conversation.task_payload_json or {}
+                    courseid = int(
+                        payload.get("courseid")
+                        or (snap.get("course") or {}).get("id")
+                        or 0
+                    )
+                    host_uid = str(payload.get("moodle_user_id") or "").strip()
+                    if not host_uid:
+                        uname = str(
+                            getattr(getattr(conversation, "user", None), "username", "")
+                            or ""
+                        )
+                        if uname.startswith("moodle-"):
+                            host_uid = uname[len("moodle-") :]
+                        else:
+                            host_uid = str(getattr(conversation, "user_id", None) or "0")
+                    shortname = str(
+                        (snap.get("course") or {}).get("shortname") or ""
+                    ).strip()
+                    key = ask_state_key(host_uid, courseid, shortname=shortname)
+                    state = get_ask_state(key)
+                    cited = door_answer(content, snap, state=state)
                     if cited:
+                        put_ask_state(key, state)
                         self._build_ai_message(conversation, "completed", cited, [])
                         _finalize_generation("completed")
                         yield {"type": "chunk", "content": cited}
@@ -1004,8 +1078,7 @@ class CarbonIntelligence:
 
             # Fresh scope (not frozen — permissions may have changed).
             scope = build_scope(user)
-            if conversation.app_identifier:
-                scope.app_identifier = conversation.app_identifier
+            _apply_conversation_app(scope, user, conversation)
 
             conversation.status = "working"
             conversation.save(update_fields=["status"])
@@ -2085,8 +2158,7 @@ class CarbonIntelligence:
             )
         )
         scope = build_scope(user)
-        if conversation.app_identifier:
-            scope.app_identifier = conversation.app_identifier
+        _apply_conversation_app(scope, user, conversation)
         assembled = assemble_context(conversation, history, scope, adapter=self.adapter)
         last_msg = conversation.messages.order_by("-created_at").first()
         return {
@@ -2478,8 +2550,7 @@ class CarbonIntelligence:
             conversation._turn_replaced_message_id = None
 
         scope = build_scope(user)
-        if conversation.app_identifier:
-            scope.app_identifier = conversation.app_identifier
+        _apply_conversation_app(scope, user, conversation)
 
         # Phase 22-A — resolve durable preferences (profile → domain manifest)
         # for this regeneration; the per-message ``model`` param still wins.
@@ -2586,8 +2657,7 @@ class CarbonIntelligence:
         )
 
         scope = build_scope(user)
-        if conversation.app_identifier:
-            scope.app_identifier = conversation.app_identifier
+        _apply_conversation_app(scope, user, conversation)
 
         # Phase 22-A — resolve durable preferences (profile → domain manifest)
         # for this regeneration; the per-message ``model`` param still wins.
@@ -3912,9 +3982,10 @@ class CarbonIntelligence:
         stored = conversation.task_payload_json or {}
         process_mode = str(stored.get("pulse_mode") or stored.get("pulse_process") or "ask")
         page_context = ""
-        if (conversation.app_identifier or "") == "moodle":
+        owner = getattr(conversation, "user", None)
+        if _conversation_app_identifier(owner, conversation) == "moodle":
             process_mode = "ask"
-            page_context = str(stored.get("page_context") or "")
+            page_context = _moodle_page_context(owner, conversation)
         chat_request = ChatRequest(
             message=message,
             conversation=conv_ctx,

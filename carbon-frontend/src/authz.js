@@ -99,6 +99,7 @@ const ROUTE_ACTION_CAP = {
   '/catalog/products':     CATALOG_MANAGE_PRODUCTS,
   '/catalog/metadata':     CATALOG_MANAGE_METADATA,
   '/catalog/policies':     CATALOG_MANAGE_POLICIES,
+  '/catalog/policy-versions': CATALOG_MANAGE_POLICIES,
   '/catalog/governance':   CATALOG_VIEW_GOVERNANCE,
   // DQ
   '/dq':                   DQ_VIEW,

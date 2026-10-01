@@ -1,5 +1,11 @@
 # catalog/urls.py
 from django.urls import path
+from .policy_views import (
+    PolicyVersionDetailView,
+    PolicyVersionListView,
+    PolicyVersionPublishView,
+    PolicyVersionSubmitView,
+)
 from .views import (
     DataDomainViewSet, GlossaryTermViewSet, TagViewSet,
     AssetProfileViewSet, GovernanceEventViewSet, GovernanceComplianceView,
@@ -27,6 +33,10 @@ router.register(r'notes', NoteViewSet, basename='note')
 router.register(r'notes/(?P<note_id>[^/.]+)/comments', NoteCommentViewSet, basename='notecomment')
 
 urlpatterns = [
+    path('policy-versions/', PolicyVersionListView.as_view(), name='policy-versions'),
+    path('policy-versions/<int:pk>/', PolicyVersionDetailView.as_view(), name='policy-version-detail'),
+    path('policy-versions/<int:pk>/submit/', PolicyVersionSubmitView.as_view(), name='policy-version-submit'),
+    path('policy-versions/<int:pk>/publish/', PolicyVersionPublishView.as_view(), name='policy-version-publish'),
     path('search/', CatalogSearchView.as_view(), name='catalog-search'),
     path('governance/compliance/', GovernanceComplianceView.as_view(), name='governance-compliance'),
     # Table lineage and impact routes — declared before router.urls

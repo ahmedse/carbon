@@ -82,14 +82,20 @@ class PulseProvider(AIProvider):
     appropriate typed response with ``status="provider_unavailable"``.
     """
 
-    def __init__(self) -> None:
-        self._instance_id = resolve_instance_id()
-
     def _instance_for(self, payload: dict[str, Any]) -> str:
-        """Moodle hosts the same pane, but the turn runs on the medicine instance."""
-        if payload.get("app_identifier") == "moodle":
+        """Bind the turn's pack.
+
+        Moodle embed (signed ``moodle-*`` session or HMAC ``moodle:`` host)
+        on a brand that lists the extra pack is aast-med. Carbon Pulse at
+        :5179 is the process pack — leftover ``app_identifier=moodle`` must
+        not load the Moodle persona or page block.
+        """
+        from ai.moodle_host import is_moodle_embed_turn
+        from ai.platform_bind import extra_packs_for_brand
+
+        if is_moodle_embed_turn(payload) and "aast-med" in extra_packs_for_brand():
             return "aast-med"
-        return self._instance_id
+        return resolve_instance_id()
 
     # ── properties ────────────────────────────────────────────────────
 
@@ -105,7 +111,7 @@ class PulseProvider(AIProvider):
 
     def health_check(self) -> ProviderStatus:
         """Report the in-process engine's advertised modules."""
-        data = list_modules(instance_id=self._instance_id)
+        data = list_modules(instance_id=resolve_instance_id())
         error = data.get("error")
 
         if error:
@@ -503,9 +509,15 @@ class PulseProvider(AIProvider):
         page_context = str(getattr(request, "page_context", "") or "")
         if page_context:
             payload["page_context"] = page_context
-        if payload.get("app_identifier") == "moodle":
+        from ai.moodle_host import is_moodle_embed_turn
+        from ai.platform_bind import extra_packs_for_brand
+
+        if is_moodle_embed_turn(payload) and "aast-med" in extra_packs_for_brand():
             payload["process_mode"] = "ask"
             payload["app_identifier"] = "moodle"
+        elif payload.get("app_identifier") == "moodle":
+            payload.pop("app_identifier", None)
+            payload.pop("page_context", None)
         if request.conversation is not None:
             payload["conversation_history"] = {
                 "conversation_id": request.conversation.conversation_id,

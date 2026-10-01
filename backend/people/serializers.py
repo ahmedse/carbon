@@ -55,9 +55,9 @@ class ComplianceRuleSerializer(serializers.ModelSerializer):
             'id', 'rule_id', 'version', 'name', 'description',
             'jurisdiction', 'category', 'effective_date', 'formula_ref',
             'source_citation', 'inputs_schema', 'is_authoritative',
-            'provenance', 'test_cases', 'created_at', 'updated_at',
+            'lifecycle', 'provenance', 'test_cases', 'created_at', 'updated_at',
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'is_authoritative', 'lifecycle', 'created_at', 'updated_at']
 
 
 class EmployeeSerializer(serializers.ModelSerializer):
@@ -93,7 +93,8 @@ class EmployeeSerializer(serializers.ModelSerializer):
             'basic_salary', 'join_date', 'rotation', 'is_active', 'photo',
             'name_en_given', 'name_en_family', 'name_ar_given', 'name_ar_family',
             'civil_id', 'date_of_birth', 'gender',
-            'employment_type', 'contract_type', 'kuwaitization',
+            'employment_type', 'contract_type', 'kuwaitization', 'pifss_registered',
+            'separation_reason',
             'manager', 'manager_label', 'position', 'position_title',
             'user_id', 'username', 'opening_basic',
             'created_at', 'updated_at',
@@ -156,11 +157,13 @@ class PayrollRunSerializer(serializers.ModelSerializer):
         model = PayrollRun
         fields = [
             'id', 'org_unit', 'period_start', 'period_end', 'status',
+            'kind', 'source_run', 'covers_start', 'covers_end',
             'created_at', 'committed_at',
             'preparer_username', 'commit_requires_other_user',
         ]
         read_only_fields = [
-            'id', 'status', 'created_at', 'committed_at',
+            'id', 'status', 'kind', 'source_run', 'covers_start', 'covers_end',
+            'created_at', 'committed_at',
             'preparer_username', 'commit_requires_other_user',
         ]
 
@@ -554,7 +557,7 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'employee', 'employee_no', 'employee_name',
             'date', 'hours_worked', 'overtime_hours',
-            'status', 'source_row',
+            'status', 'absence_class', 'source_row',
         ]
         read_only_fields = ['id', 'employee_no', 'employee_name']
 

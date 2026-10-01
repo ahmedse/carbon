@@ -34,3 +34,35 @@ export function unmappedRequired(columns, fields = []) {
   const mapped = new Set(Object.values(columns || {}).filter(Boolean));
   return fields.filter((f) => f.required && !mapped.has(f.name)).map((f) => f.name);
 }
+
+/**
+ * True when every declared field name appears as a CSV header (identity layout).
+ * Extra headers are allowed; alias-only layouts return false.
+ */
+export function headersMatchIdentity(headers = [], fields = []) {
+  if (!fields.length) return false;
+  const headerSet = new Set(headers.map((h) => String(h)));
+  return fields.every((f) => headerSet.has(f.name));
+}
+
+/**
+ * True when mapping.columns is a full identity map for declared fields.
+ */
+export function isIdentityMapping(columns = {}, fields = []) {
+  if (!fields.length) return false;
+  return fields.every((f) => columns[f.name] === f.name);
+}
+
+/**
+ * Pick the official identity InboundTemplate for this target (People · *).
+ * Prefers an exact identity column map; falls back to the People · name for the key.
+ */
+export function pickOfficialIdentityTemplate(templates = [], fields = [], targetKey = '') {
+  const list = Array.isArray(templates) ? templates : [];
+  const forKey = targetKey
+    ? list.filter((t) => t && t.target_key === targetKey)
+    : list;
+  const identityHit = forKey.find((t) => isIdentityMapping(t?.mapping?.columns || {}, fields));
+  if (identityHit) return identityHit;
+  return forKey.find((t) => String(t?.name || '').startsWith('People · ')) || null;
+}

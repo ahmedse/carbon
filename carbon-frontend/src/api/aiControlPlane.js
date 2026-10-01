@@ -63,3 +63,15 @@ export function patchBudgetControl(token, dailyBudgetUsd) {
     body: { daily_budget_usd: dailyBudgetUsd },
   });
 }
+
+export function getPulseBind(token) {
+  return apiFetch(`${BASE}bind/`, { token });
+}
+
+export function patchPulseBind(token, body) {
+  return apiFetch(`${BASE}bind/`, {
+    token,
+    method: 'PATCH',
+    body,
+  });
+}

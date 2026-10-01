@@ -3,31 +3,37 @@ default_source_type: carbon_api
 
 tools:
   - name: get_calibration
+    app: gradevance
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   - name: list_review_queue
+    app: gradevance
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   - name: get_qa_summary
+    app: gradevance
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   - name: list_proposals
+    app: gradevance
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   - name: get_run
+    app: gradevance
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   - name: suggest_splits
+    app: gradevance
     kind: write
     requires_confirmation: false
     source_type: carbon_api

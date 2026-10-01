@@ -72,6 +72,7 @@ from .process_interview import ProcessInterview
 from .autonomy import AutonomyOverride
 from .heartbeat import PulseHeartbeat
 from .control_state import PulseControlState
+from .app_enablement import PulseAppEnablement
 from .knowledge_graph import (
     KgBootstrapRun,
     KgCacheEntry,
@@ -113,6 +114,7 @@ __all__ = [
     "ProcessInterview",
     "AutonomyOverride",
     "PulseHeartbeat",
+    "PulseAppEnablement",
     # core
     "AcceptanceReport",
     "Agent",

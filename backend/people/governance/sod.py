@@ -18,11 +18,13 @@ SUBJECT_PAYROLL_RUN = "payroll_run"
 SUBJECT_WPS_FILING = "wps_filing"
 SUBJECT_EMPLOYEE = "employee"
 SUBJECT_ATTENDANCE_PERMISSION = "attendance_permission"
+SUBJECT_POLICY_VERSION = "policy_version"
 
 ACTION_COMMIT = "commit"
 ACTION_SUBMIT = "submit"
 ACTION_ACTIVATE = "activate"
 ACTION_APPROVE = "approve"
+ACTION_PUBLISH = "publish"
 
 
 class SoDViolation(Exception):

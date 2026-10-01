@@ -1,6 +1,6 @@
 // The Moodle page iframes this route. It is the same AIWorkspace as Carbon,
 // with the dial locked to Ask and the open course attached.
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Box, Typography } from '@mui/material';
 import { API_BASE_URL } from '../../config';
 import { useAuth } from '../../auth/AuthContext';
@@ -64,6 +64,15 @@ export default function PulseEmbedPage() {
     };
   }, [ticket, acceptHostSession]);
 
+  const hostValue = useMemo(
+    () => ({
+      dialLock: 'ask',
+      appIdentifier: 'moodle',
+      pageContext,
+    }),
+    [pageContext],
+  );
+
   if (!user?.token || (ticket && exchanging && !pageContext)) {
     return (
       <Box sx={{ p: 2 }}>
@@ -75,13 +84,7 @@ export default function PulseEmbedPage() {
   }
 
   return (
-    <PulseHostContext.Provider
-      value={{
-        dialLock: 'ask',
-        appIdentifier: 'moodle',
-        pageContext,
-      }}
-    >
+    <PulseHostContext.Provider value={hostValue}>
       <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
         <AIWorkspace
           onClose={() => {

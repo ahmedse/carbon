@@ -478,6 +478,11 @@ const ROUTE_CONFIG = {
     icon: VerifiedUserIcon,
     parent: '/catalog',
   },
+  '/catalog/policy-versions': {
+    label: 'Policy versions',
+    icon: VerifiedUserIcon,
+    parent: '/catalog',
+  },
   '/dq': {
     label: 'Data Quality',
     icon: RuleIcon,

@@ -73,6 +73,13 @@ def _run_async(coro):
         return pool.submit(asyncio.run, coro).result()
 
 
+def _sanitize_host_page_context(instance_id: str, page_context: str) -> str:
+    """Moodle snapshot text is aast-med only. Process Pulse never sees it."""
+    from ai.moodle_host import sanitize_page_context
+
+    return sanitize_page_context(instance_id, page_context)
+
+
 @bound_to_pack
 async def _run_chat(
     instance_id: str, payload: dict[str, Any], task_id: str, *, stream_callback=None, progress_callback=None
@@ -125,9 +132,24 @@ async def _run_chat(
     )
     history_messages = conversation.get("messages") or []
 
-    instance_config = _instance_config(
+    from asgiref.sync import sync_to_async
+
+    instance_config = await sync_to_async(_instance_config, thread_sensitive=True)(
         instance_id, host_user_id, app_identifier=payload.get("app_identifier")
     )
+
+    from ai.platform_bind import turn_gate
+
+    gate = await sync_to_async(turn_gate, thread_sensitive=True)(instance_id)
+    instance_config["tool_freeze"] = gate.tool_freeze
+    instance_config["autonomy_clamp"] = gate.autonomy_clamp
+    if gate.refuse_before_model or instance_config.get("pulse_off"):
+        text = gate.message
+        if instance_config.get("pulse_off") and not instance_config.get("pack_present"):
+            from ai.platform_bind import PULSE_OFF_NO_PACK
+
+            text = PULSE_OFF_NO_PACK
+        return _completed_refuse(task_id, text)
 
     # Consent resume: if the previous turn PROPOSED an action in prose and the
     # user just said yes, re-issue the turn as the explicit action. Runs before
@@ -212,7 +234,9 @@ async def _run_chat(
             conversation_id=conversation_id,
             host_user_id=host_user_id,
             process_mode=str(payload.get("process_mode") or "ask"),
-            page_context=str(payload.get("page_context") or ""),
+            page_context=_sanitize_host_page_context(
+                instance_id, payload.get("page_context") or ""
+            ),
             dense_thinking=bool(payload.get("dense_thinking")),
             conversation_history=history_messages,
             instance_config=instance_config,
@@ -659,6 +683,36 @@ def _confidence_label(score: float | None) -> str:
 # ── Chat tool-action surfacing (Sprint "fly to rule detail") ──────────────
 
 
+def _completed_refuse(task_id: str, content: str) -> dict[str, Any]:
+    """Turn result with no model call (Pulse-off / full_stop)."""
+    return {
+        "status": "completed",
+        "task_id": task_id,
+        "result": {
+            "content": content,
+            "actions": [],
+            "pending_actions": [],
+            "tool_trace": [],
+            "intent_zone": "off_limits",
+            "turn_decision": "refuse",
+            "llm_calls": 0,
+            "llm_calls_background": 0,
+            "llm_calls_by_stage": {},
+            "state_saved": False,
+            "state_size": 0,
+            "active_plans": [],
+            "confidence_label": "confident",
+            "honest_uncertainty": False,
+            "truthfulness_flags": [],
+            "truthful": True,
+            "follow_up_questions": [],
+            "execution_ms": 0,
+            "external_sources": [],
+            "code_result": None,
+        },
+    }
+
+
 def _instance_config(
     instance_id: str,
     host_user_id: str | None = None,
@@ -675,20 +729,28 @@ def _instance_config(
     persona, domain topics, and host API catalog are strictly its own.
 
     ``app_identifier`` scopes the config to the active domain app within the
-    instance (falls back to the brand's default app). A missing instance.yaml
-    falls back to ``carbon`` so an unknown instance never crashes the turn —
-    host RBAC remains the backstop.
+    instance (falls back to the brand's default app). A missing pack yields
+    an empty catalog and Pulse-off — never another world's YAML (P2 / R5).
     """
     from ai.engine.core.archetypes import load_instance_config
     from ai.engine.cognition.turn.capability import inventory_provider
+    from ai.platform_bind import (
+        allowed_apps,
+        filter_catalog_by_app,
+        has_domain_pack,
+    )
 
     config: dict[str, Any] = load_instance_config(instance_id)
-    if not config and instance_id != "carbon":
-        # Unknown/new instance: fall back to the Carbon config rather than
-        # failing the turn (host RBAC still gates execution).
-        config = load_instance_config("carbon") or {}
+    if not config or not has_domain_pack(instance_id):
+        config = dict(config or {})
+        config["api_catalog"] = []
+        config["pulse_off"] = True
+        config["pack_present"] = False
+    else:
+        config["pulse_off"] = False
+        config["pack_present"] = True
 
-    # The requested pack decides. A fallen-back config must not inherit
+    # The requested pack decides. A missing pack must not inherit
     # another world's inventory. Absence means empty.
     provider = inventory_provider(instance_id)
     config["inventory"] = provider
@@ -723,9 +785,12 @@ def _instance_config(
     config["host_user_id"] = host_user_id
     config["user_access"] = user_access
     # Scope the config to the active domain app; default to the instance's app.
+    # Pack YAML ``default_app`` wins over the brand-map fallback so an extra
+    # pack (aast-med) is never stamped as carbon.
     config["app_identifier"] = (
         app_identifier
         or config.get("app_identifier")
+        or config.get("default_app")
         or default_app_for_instance(instance_id)
     )
 
@@ -736,6 +801,16 @@ def _instance_config(
     config["api_catalog"] = _cbac_filter_api_catalog(
         config.get("api_catalog") or [], host_user_id
     )
+    if not config.get("pulse_off"):
+        allowed = allowed_apps(instance_id, catalog=config.get("api_catalog") or [])
+        # Owned slugs come from the unfiltered pack so enablement can list them.
+        config["api_catalog"] = filter_catalog_by_app(
+            config.get("api_catalog") or [], allowed
+        )
+        nav = config.get("navigation_routes")
+        if isinstance(nav, list) and nav:
+            config["navigation_routes"] = filter_catalog_by_app(nav, allowed)
+        config["pulse_allowed_apps"] = sorted(allowed)
 
     # Enrich tenant_org aliases from the live deployment root (ADR-0028) so
     # Chat ORG-NAME grounding matches the seeded OrgUnit even when YAML
@@ -4977,6 +5052,12 @@ def dispatch_task(
          "result": {...} | "error": {"code": str, "message": str}}
     """
     instance_id = instance_id or resolve_instance_id()
+    if task_type == "chat":
+        from ai.platform_bind import turn_gate
+
+        gate = turn_gate(instance_id)
+        if gate.refuse_before_model:
+            return _completed_refuse(_new_task_id(), gate.message)
     if task_type not in MODULES:
         return {
             "status": "pulse_unavailable",
@@ -5193,7 +5274,27 @@ async def _run_action_stream(
         "verbosity": verbosity,
     }
 
-    instance_config = _instance_config(instance_id, host_user_id)
+    from asgiref.sync import sync_to_async
+    from ai.platform_bind import PULSE_OFF_STOPPED, TOOL_FREEZE_HOST, turn_gate
+
+    instance_config = await sync_to_async(_instance_config, thread_sensitive=True)(
+        instance_id, host_user_id
+    )
+    gate = await sync_to_async(turn_gate, thread_sensitive=True)(instance_id)
+    instance_config["tool_freeze"] = gate.tool_freeze
+    instance_config["autonomy_clamp"] = gate.autonomy_clamp
+    if gate.refuse_before_model or instance_config.get("pulse_off"):
+        yield {
+            "type": "error",
+            "message": gate.message or PULSE_OFF_STOPPED,
+        }
+        return
+    if gate.tool_freeze:
+        yield {
+            "type": "error",
+            "message": TOOL_FREEZE_HOST,
+        }
+        return
     factory = get_session_factory(instance_id)
     async with factory() as db:
         executor = CarbonHostExecutor(

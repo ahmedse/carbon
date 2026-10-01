@@ -852,7 +852,7 @@ export function AIWorkspace({ onClose, expanded = false, onToggleExpand }) {
     : null;
   const courseLine = courseMatch ? courseMatch[1].trim() : '';
   const hostIntro = embedded
-    ? `${courseLine ? `${courseLine}. ` : ''}Ask about this page. Cite only what is listed, and say when a fact is not on it. Nothing on Moodle is changed.`
+    ? `${courseLine ? `${courseLine}. ` : ''}Pulse answers from this course's lectures and files.`
     : undefined;
 
   return (

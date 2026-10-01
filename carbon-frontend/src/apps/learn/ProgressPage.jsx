@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Box, Button, Chip, Paper, Stack, Typography,
+  Alert, Box, Button, Chip, Paper, Stack, Typography,
 } from '@mui/material';
 import TimelineIcon from '@mui/icons-material/Timeline';
 import PageContainer from '../../components/layout/PageContainer';
@@ -17,15 +17,11 @@ import { fetchMyProgress } from '../../api/gradevance';
 import SkipToMain from '../../components/gradevance/SkipToMain';
 import WaveChart from '../../components/gradevance/WaveChart';
 import LearnReadingWidth, { useLearnPrimarySize } from '../../components/gradevance/LearnReadingWidth';
+import { criterionLabel, statusChipColor, statusLabel } from './learnCopy';
 
-function statusChipColor(status) {
-  switch ((status || '').toLowerCase()) {
-    case 'released': return 'success';
-    case 'submitted': return 'info';
-    case 'drafted':
-    case 'draft': return 'default';
-    default: return 'default';
-  }
+function displayableBandEntries(bands) {
+  if (!bands || typeof bands !== 'object' || bands.withheld === true) return [];
+  return Object.entries(bands).filter(([k, v]) => k !== 'withheld' && v != null && typeof v !== 'object');
 }
 
 function groupByAssignment(rows) {
@@ -74,6 +70,10 @@ export default function ProgressPage() {
   }, [load]);
 
   const groups = useMemo(() => groupByAssignment(rows), [rows]);
+  const showsLetterBands = useMemo(
+    () => rows.some((r) => displayableBandEntries(r.advisory_bands).length > 0),
+    [rows],
+  );
 
   if (loading) {
     return (
@@ -118,6 +118,13 @@ export default function ProgressPage() {
             )}
           />
 
+          {showsLetterBands && (
+            <Alert severity="warning" sx={{ mb: 2 }} role="status">
+              Advisory only — letter bands on this page are formative coaching signals, not final grades.
+              Summative marks stay withheld until a marker releases them.
+            </Alert>
+          )}
+
           {groups.length === 0 ? (
             <EmptyState
               icon={<TimelineIcon />}
@@ -161,7 +168,7 @@ export default function ProgressPage() {
                         {latest && (
                           <Chip
                             size="small"
-                            label={latest.status || (latest.released ? 'released' : 'draft')}
+                            label={statusLabel(latest.status || (latest.released ? 'released' : 'draft'))}
                             color={statusChipColor(latest.status || (latest.released ? 'released' : 'draft'))}
                           />
                         )}
@@ -169,7 +176,7 @@ export default function ProgressPage() {
 
                       <Stack spacing={1} aria-label="Submission trajectory">
                         {group.runs.map((row) => {
-                          const bands = row.advisory_bands || {};
+                          const bandEntries = displayableBandEntries(row.advisory_bands);
                           const when = row.created_at || row.updated_at;
                           return (
                             <Box
@@ -184,11 +191,11 @@ export default function ProgressPage() {
                                 )}
                                 <Chip
                                   size="small"
-                                  label={row.status || (row.released ? 'released' : 'draft')}
+                                  label={statusLabel(row.status || (row.released ? 'released' : 'draft'))}
                                   color={statusChipColor(row.status || (row.released ? 'released' : 'draft'))}
                                 />
                               </Stack>
-                              {Object.keys(bands).length > 0 && bands.withheld !== true && (
+                              {bandEntries.length > 0 && (
                                 <Stack
                                   direction="row"
                                   spacing={0.75}
@@ -197,11 +204,14 @@ export default function ProgressPage() {
                                   sx={{ mt: 0.5 }}
                                   aria-label="Advisory bands"
                                 >
-                                  {Object.entries(bands)
-                                    .filter(([k]) => k !== 'withheld')
-                                    .map(([k, v]) => (
-                                      <Chip key={k} size="small" label={`${k}: ${v}`} variant="outlined" />
-                                    ))}
+                                  {bandEntries.map(([k, v]) => (
+                                    <Chip
+                                      key={k}
+                                      size="small"
+                                      label={`${criterionLabel(k)}: ${v}`}
+                                      variant="outlined"
+                                    />
+                                  ))}
                                 </Stack>
                               )}
                             </Box>

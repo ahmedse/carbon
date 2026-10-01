@@ -17,7 +17,7 @@
 #             "params": {
 #                 "base_inputs": ["basic_salary"],
 #                 "years_input": "service_years",
-#                 "divisor": 26,
+#                 "divisor": "<rule data>",
 #                 "tiers": [
 #                     {"up_to": 5, "days_per_year": 15},
 #                     {"up_to": None, "days_per_year": 30},
@@ -58,6 +58,17 @@ class MissingNationalityError(Exception):
     Seed/import use nationality code ``KWT`` for Kuwaiti nationals. Do not
     invent a code when the FK is empty — refuse the figure instead.
     """
+
+
+class MissingPolicyFactError(Exception):
+    """Raised when a formula names a fact the caller did not supply.
+
+    The fact name comes from the rule. The engine does not invent a value.
+    """
+
+    def __init__(self, fact):
+        self.fact = fact
+        super().__init__(f"Missing required fact '{fact}'.")
 
 
 _QUANT = Decimal("0.001")
@@ -105,7 +116,194 @@ def _eval_multiply(params: dict, inputs: dict) -> Decimal:
     return (a * b).quantize(_QUANT, rounding=ROUND_HALF_UP)
 
 
-def _evaluate_formula(rule, inputs: dict) -> Decimal:
+def _require_facts(params: dict, inputs: dict) -> None:
+    for fact in params.get("requires_facts") or []:
+        if fact not in inputs or inputs.get(fact) in (None, ""):
+            raise MissingPolicyFactError(fact)
+
+
+def _base_amount(params: dict, inputs: dict) -> Decimal:
+    names = params.get("base_inputs") or []
+    return sum((_to_decimal(_require(inputs, name)) for name in names), Decimal("0"))
+
+
+def _apply_excess(base: Decimal, params: dict, inputs: dict) -> Decimal:
+    threshold = params.get("excess_over")
+    if threshold is None:
+        return base
+    gate = params.get("excess_when_fact")
+    if gate is not None:
+        if inputs.get(gate) in (None, ""):
+            raise MissingPolicyFactError(gate)
+        if inputs.get(gate) is not True:
+            return base
+    return max(Decimal("0"), base - _to_decimal(threshold))
+
+
+def _resolve_years(params: dict, inputs: dict) -> Decimal:
+    proration = params.get("proration") or {}
+    days_input = proration.get("days_input")
+    if days_input and inputs.get(days_input) not in (None, ""):
+        basis = _to_decimal(proration.get("basis", 1))
+        if basis == 0:
+            raise ValueError("proration basis must not be zero")
+        return _to_decimal(inputs[days_input]) / basis
+    return _to_decimal(_require(inputs, params["years_input"]))
+
+
+def _eval_scaled_rate(params: dict, inputs: dict) -> Decimal:
+    _require_facts(params, inputs)
+    if "divisor" not in params:
+        raise ValueError("scaled_rate requires a divisor")
+    divisor = _to_decimal(params["divisor"])
+    if divisor == 0:
+        raise ValueError("scaled_rate divisor must not be zero")
+    value = _base_amount(params, inputs) / divisor
+    hours = params.get("hours_per_day")
+    if hours not in (None, "", 0, "0"):
+        hours_dec = _to_decimal(hours)
+        if hours_dec == 0:
+            raise ValueError("hours_per_day must not be zero")
+        value = value / hours_dec
+    value = value * _to_decimal(params.get("multiplier", 1))
+    if params.get("quantity_input"):
+        quantity = _to_decimal(_require(inputs, params["quantity_input"]))
+    else:
+        quantity = _to_decimal(params.get("quantity", 1))
+    if params.get("max_quantity") is not None:
+        quantity = min(quantity, _to_decimal(params["max_quantity"]))
+    return (value * quantity).quantize(_QUANT, rounding=ROUND_HALF_UP)
+
+
+def _eval_cumulative_accrual(params: dict, inputs: dict) -> Decimal:
+    _require_facts(params, inputs)
+    if "divisor" not in params:
+        raise ValueError("cumulative_accrual requires a divisor")
+    divisor = _to_decimal(params["divisor"])
+    if divisor == 0:
+        raise ValueError("cumulative_accrual divisor must not be zero")
+    base = _apply_excess(_base_amount(params, inputs), params, inputs)
+    years = _resolve_years(params, inputs)
+    total = Decimal("0")
+    for tier in params.get("tiers") or []:
+        start = _to_decimal(tier.get("from_year", 0))
+        until = tier.get("until_year")
+        upper = years if until is None else min(years, _to_decimal(until))
+        span = upper - start
+        if span <= 0:
+            continue
+        if "days_per_year" in tier:
+            total += (base / divisor) * _to_decimal(tier["days_per_year"]) * span
+        elif "months_per_year" in tier:
+            total += base * _to_decimal(tier["months_per_year"]) * span
+        else:
+            raise ValueError("tier needs days_per_year or months_per_year")
+    return total.quantize(_QUANT, rounding=ROUND_HALF_UP)
+
+
+def _match_band(bands, reason: str, years: Decimal):
+    for band in bands or []:
+        if str(band.get("reason")) != reason:
+            continue
+        start = _to_decimal(band.get("from_years", 0))
+        until = band.get("until_years")
+        if years < start:
+            continue
+        if until is not None and years >= _to_decimal(until):
+            continue
+        return band
+    return None
+
+
+def _eval_banded_fraction(params: dict, inputs: dict) -> Decimal:
+    _require_facts(params, inputs)
+    reason_input = params.get("reason_input")
+    if reason_input and inputs.get(reason_input) in (None, ""):
+        raise MissingPolicyFactError(reason_input)
+    inner = _eval_cumulative_accrual(params, inputs)
+    amount = inner
+    if reason_input:
+        years = _resolve_years(params, inputs)
+        band = _match_band(params.get("bands") or [], str(inputs[reason_input]), years)
+        if band is None:
+            raise ValueError("No fraction band matched the supplied reason and years.")
+        denominator = _to_decimal(band.get("denominator", 1))
+        if denominator == 0:
+            raise ValueError("fraction denominator must not be zero")
+        amount = inner * _to_decimal(band.get("numerator", 1)) / denominator
+    if params.get("cap_months") is not None:
+        base = _apply_excess(_base_amount(params, inputs), params, inputs)
+        amount = min(amount, base * _to_decimal(params["cap_months"]))
+    return amount.quantize(_QUANT, rounding=ROUND_HALF_UP)
+
+
+def _fund_basis(salary: Decimal, fund: dict) -> Decimal:
+    mode = fund.get("slice") or "capped"
+    if mode == "capped":
+        ceiling = fund.get("ceiling")
+        if ceiling is None:
+            return salary
+        return min(salary, _to_decimal(ceiling))
+    if mode == "band":
+        floor = _to_decimal(fund.get("floor", 0))
+        width = _to_decimal(fund["width"])
+        return min(max(Decimal("0"), salary - floor), width)
+    raise ValueError(f"Unknown fund slice '{mode}'.")
+
+
+def _eval_fund_table(params: dict, inputs: dict) -> dict:
+    _require_facts(params, inputs)
+    salary = _to_decimal(_require(inputs, params.get("salary_input", "insured_salary")))
+    employee_total = Decimal("0")
+    employer_total = Decimal("0")
+    parts = []
+    for fund in params.get("funds") or []:
+        basis = _fund_basis(salary, fund)
+        employee_share = (basis * _to_decimal(fund.get("employee_rate", 0))).quantize(
+            _QUANT, rounding=ROUND_HALF_UP,
+        )
+        employer_share = (basis * _to_decimal(fund.get("employer_rate", 0))).quantize(
+            _QUANT, rounding=ROUND_HALF_UP,
+        )
+        employee_total += employee_share
+        employer_total += employer_share
+        parts.append({
+            "code": fund.get("code"),
+            "basis": str(basis.quantize(_QUANT, rounding=ROUND_HALF_UP)),
+            "employee_share": str(employee_share),
+            "employer_share": str(employer_share),
+        })
+    return {
+        "value": (employee_total + employer_total).quantize(_QUANT, rounding=ROUND_HALF_UP),
+        "employee_share": employee_total.quantize(_QUANT, rounding=ROUND_HALF_UP),
+        "employer_share": employer_total.quantize(_QUANT, rounding=ROUND_HALF_UP),
+        "funds": parts,
+    }
+
+
+def _eval_day_ladder(params: dict, inputs: dict) -> Decimal:
+    _require_facts(params, inputs)
+    if "divisor" not in params:
+        raise ValueError("day_ladder requires a divisor")
+    divisor = _to_decimal(params["divisor"])
+    if divisor == 0:
+        raise ValueError("day_ladder divisor must not be zero")
+    daily = _base_amount(params, inputs) / divisor
+    remaining = _to_decimal(_require(inputs, params.get("days_input", "days")))
+    total = Decimal("0")
+    for band in params.get("bands") or []:
+        if remaining <= 0:
+            break
+        take = min(remaining, _to_decimal(band["up_to_days"]))
+        denominator = _to_decimal(band.get("denominator", 1))
+        if denominator == 0:
+            raise ValueError("ladder denominator must not be zero")
+        total += daily * take * _to_decimal(band.get("numerator", 1)) / denominator
+        remaining -= take
+    return total.quantize(_QUANT, rounding=ROUND_HALF_UP)
+
+
+def _evaluate_formula(rule, inputs: dict):
     schema = rule.inputs_schema or {}
     formula = schema.get("formula")
     if not formula:
@@ -121,6 +319,17 @@ def _evaluate_formula(rule, inputs: dict) -> Decimal:
         return _eval_sum(params, inputs)
     if kind == "multiply":
         return _eval_multiply(params, inputs)
+    if kind == "scaled_rate":
+        return _eval_scaled_rate(params, inputs)
+    if kind == "cumulative_accrual":
+        return _eval_cumulative_accrual(params, inputs)
+    if kind == "banded_fraction":
+        return _eval_banded_fraction(params, inputs)
+    if kind == "day_ladder":
+        return _eval_day_ladder(params, inputs)
+    if kind == "fund_table":
+        detail = _eval_fund_table(params, inputs)
+        return detail
     raise ValueError(
         f"Rule '{rule.rule_id} v{rule.version}' declares unknown formula type '{kind}'."
     )
@@ -140,6 +349,19 @@ def _guard(rule, allow_non_authoritative: bool) -> None:
         )
 
 
+def _regulation_lineage(rule) -> dict:
+    """Copy a cited regulation identity onto lineage. Empty when the rule cites none."""
+    ref = (rule.inputs_schema or {}).get("regulation_ref") or {}
+    out = {}
+    if ref.get("pack") and ref.get("version"):
+        out["regulation_pack"] = ref["pack"]
+        out["regulation_version"] = str(ref["version"])
+    if ref.get("rule_id") and ref.get("version"):
+        out["regulation_rule_id"] = ref["rule_id"]
+        out["regulation_version"] = str(ref["version"])
+    return out
+
+
 def calculate(rule, inputs: dict, *, allow_non_authoritative: bool = False) -> dict:
     """Generic, deterministic executor.
 
@@ -149,24 +371,64 @@ def calculate(rule, inputs: dict, *, allow_non_authoritative: bool = False) -> d
     ``is_authoritative is False`` unless ``allow_non_authoritative=True``.
     """
     _guard(rule, allow_non_authoritative)
-    value = _evaluate_formula(rule, inputs)
+    evaluated = _evaluate_formula(rule, inputs)
+    if isinstance(evaluated, dict):
+        value = evaluated["value"]
+        extra = {
+            key: evaluated[key]
+            for key in ("employee_share", "employer_share", "funds")
+            if key in evaluated
+        }
+    else:
+        value = evaluated
+        extra = {}
+    params = ((rule.inputs_schema or {}).get("formula") or {}).get("params") or {}
+    if "compensatory_days" in params:
+        extra["compensatory_days"] = params["compensatory_days"]
     return {
         "value": value,
         "lineage": {
             "rule_id": rule.rule_id,
             "rule_version": rule.version,
             "inputs": inputs,
+            **extra,
+            **_regulation_lineage(rule),
         },
     }
 
 
-def _find_rule(rules, category: str):
-    """Return the active rule for a category from a manager/queryset/list.
+def _formula_type(rule) -> str:
+    return str(((getattr(rule, "inputs_schema", None) or {}).get("formula") or {}).get("type") or "")
 
-    "Active" = latest ``effective_date`` (ties broken by ``updated_at``).
+
+def _select_matching(rules, category: str, *, as_of=None, formula_type=None) -> list:
+    """Rules in ``category`` that are already effective on ``as_of``.
+
+    When ``formula_type`` is set and at least one row has that type, the
+    others stay out of the pick. An empty typed set falls back so a caller
+    that only has one formula still resolves.
     """
     matching = _rules_for_category(rules, category)
-    return _latest_rule(matching)
+    if as_of is not None:
+        matching = [
+            rule for rule in matching
+            if getattr(rule, "effective_date", None) is not None and rule.effective_date <= as_of
+        ]
+    if formula_type:
+        typed = [rule for rule in matching if _formula_type(rule) == formula_type]
+        if typed:
+            matching = typed
+    return matching
+
+
+def _find_rule(rules, category: str, *, as_of=None, formula_type=None):
+    """Return the active rule for a category from a manager/queryset/list.
+
+    "Active" = latest ``effective_date`` on or before ``as_of`` when a date
+    is supplied (ties broken by ``updated_at``). Omitting ``as_of`` keeps
+    the previous latest-row pick.
+    """
+    return _latest_rule(_select_matching(rules, category, as_of=as_of, formula_type=formula_type))
 
 
 def _rules_for_category(rules, category: str) -> list:
@@ -206,14 +468,15 @@ def _is_kuwaiti_scoped_rule(rule) -> bool:
     return "kuwaiti" in rid or "kuwaiti national" in name
 
 
-def _find_nationality_scoped_rule(rules, category: str, employee):
+def _find_nationality_scoped_rule(rules, category: str, employee, *, as_of=None, formula_type=None):
     """Pick a category rule, fail-closed when Kuwaiti-only rules exist.
 
     Observed seed rule ids use a ``-kuwaiti`` suffix (``KWT`` nationality).
     If any such rule is in the set and the employee has no nationality, refuse
     rather than defaulting to the latest row (which can be the Kuwaiti divisor).
+    ``as_of`` keeps a later effective date from applying to an earlier day.
     """
-    matching = _rules_for_category(rules, category)
+    matching = _select_matching(rules, category, as_of=as_of, formula_type=formula_type)
     if not matching:
         return None
     kuwaiti = [rule for rule in matching if _is_kuwaiti_scoped_rule(rule)]
@@ -259,25 +522,49 @@ def _require_verified_basic(employee, as_of: date):
 
 def calculate_eosi(employee, rules, *, allow_non_authoritative: bool = False, as_of: date = None) -> dict:
     """Compute the EOSI (end-of-service indemnity) accrual for an employee."""
-    rule = _find_nationality_scoped_rule(rules, "eosi", employee)
+    rule = _find_nationality_scoped_rule(
+        rules, "eosi", employee, formula_type="tiered_accrual",
+    )
     as_of = as_of or timezone.now().date()
     if rule is None:
         return calculate(None, {}, allow_non_authoritative=allow_non_authoritative)
-    basic = _require_verified_basic(employee, as_of)
-    inputs = {
-        "basic_salary": basic,
-        "service_years": _service_years(employee, as_of),
-    }
+    params = _formula_params(rule)
+    if params.get("base_kind") == "eosi_components":
+        from people.compensation_service import CompensationService
+        total = CompensationService.verified_eosi_base_amount(employee, as_of=as_of)
+        if total is None:
+            emp_no = getattr(employee, "employee_no", "?")
+            raise MissingVerifiedBasicError(
+                f"Employee {emp_no} has no verified earning lines flagged for "
+                "the indemnity base; refusing to compute from Employee.basic_salary."
+            )
+        base_name = (params.get("base_inputs") or ["total_salary"])[0]
+        inputs = {base_name: total, "service_years": _service_years(employee, as_of)}
+        basic_source = "verified_eosi_components"
+    else:
+        basic = _require_verified_basic(employee, as_of)
+        inputs = {
+            "basic_salary": basic,
+            "service_years": _service_years(employee, as_of),
+        }
+        basic_source = "verified_ledger"
+    for fact in params.get("requires_facts") or []:
+        inputs[fact] = getattr(employee, fact, None)
+    reason_input = params.get("reason_input")
+    if reason_input and reason_input not in inputs:
+        inputs[reason_input] = getattr(employee, reason_input, None)
     result = calculate(rule, inputs, allow_non_authoritative=allow_non_authoritative)
     lineage = dict(result.get("lineage") or {})
-    lineage["basic_source"] = "verified_ledger"
+    lineage["basic_source"] = basic_source
     result["lineage"] = lineage
     return result
 
 
 def calculate_leave_accrual(employee, rules, *, allow_non_authoritative: bool = False, as_of: date = None) -> dict:
     """Compute annual leave accrual for an employee."""
-    rule = _find_nationality_scoped_rule(rules, "leave", employee)
+    rule = _find_nationality_scoped_rule(
+        rules, "leave", employee, formula_type="tiered_accrual",
+    )
     as_of = as_of or timezone.now().date()
     if rule is None:
         return calculate(None, {}, allow_non_authoritative=allow_non_authoritative)
@@ -293,9 +580,35 @@ def calculate_leave_accrual(employee, rules, *, allow_non_authoritative: bool = 
     return result
 
 
+def calculate_classified(rule, inputs: dict, *, allow_non_authoritative: bool = False) -> dict:
+    """Price a formula only when the supplied class is one the rule bills.
+
+    A missing class refuses. A class the rule does not bill returns zero.
+    Class names and the billable list are rule data.
+    """
+    _guard(rule, allow_non_authoritative)
+    params = _formula_params(rule)
+    class_input = params.get("class_input")
+    if class_input:
+        if inputs.get(class_input) in (None, ""):
+            raise MissingPolicyFactError(class_input)
+        billable = [str(item) for item in (params.get("billable_classes") or [])]
+        if str(inputs[class_input]) not in billable:
+            return {
+                "value": Decimal("0.000"),
+                "lineage": {
+                    "rule_id": rule.rule_id,
+                    "rule_version": rule.version,
+                    "inputs": inputs,
+                    "billed": False,
+                },
+            }
+    return calculate(rule, inputs, allow_non_authoritative=allow_non_authoritative)
+
+
 def calculate_overtime(employee, inputs: dict, rules, *, allow_non_authoritative: bool = False) -> dict:
     """Compute overtime pay. ``inputs`` carries e.g. hours + overtime rate."""
-    rule = _find_rule(rules, "overtime")
+    rule = _find_rule(rules, "overtime", formula_type="multiply")
     return calculate(rule, inputs, allow_non_authoritative=allow_non_authoritative)
 
 
@@ -324,7 +637,7 @@ def _select_band_rate(bands, age: Decimal) -> Decimal:
     raise ValueError(f"No band matched for age={age}")
 
 
-def calculate_gross_pay(employee, inputs: dict, rules, *, allow_non_authoritative: bool = False) -> dict:
+def calculate_gross_pay(employee, inputs: dict, rules, *, allow_non_authoritative: bool = False, as_of: date = None) -> dict:
     """Compose gross pay (base + allowances + overtime) from a ``ComplianceRule``.
 
     The rule's ``sum`` formula names the components and ``inputs`` supplies their
@@ -332,7 +645,7 @@ def calculate_gross_pay(employee, inputs: dict, rules, *, allow_non_authoritativ
     it, the employee's ``basic_salary`` fills that component so base salary always
     enters gross.
     """
-    rule = _find_rule(rules, "payroll")
+    rule = _find_rule(rules, "payroll", as_of=as_of, formula_type="sum")
     if rule is not None and inputs is not None:
         base_input = _formula_params(rule).get("base_input")
         if base_input and base_input not in inputs:
@@ -351,6 +664,16 @@ def calculate_gosi(rule, gross_salary, employee_age=None, inputs=None, *, allow_
     hardcoded.
     """
     _guard(rule, allow_non_authoritative)
+    formula = (rule.inputs_schema or {}).get("formula") or {}
+    if formula.get("type") == "fund_table":
+        combined = dict(inputs) if inputs else {}
+        salary_input = (formula.get("params") or {}).get("salary_input", "gross_salary")
+        if gross_salary is not None:
+            combined.setdefault(salary_input, gross_salary)
+        if employee_age is not None:
+            age_input = (formula.get("params") or {}).get("age_input", "employee_age")
+            combined.setdefault(age_input, employee_age)
+        return calculate(rule, combined, allow_non_authoritative=allow_non_authoritative)
     params = _formula_params(rule)
     salary_input = params.get("salary_input", "gross_salary")
     age_input = params.get("age_input", "employee_age")
@@ -384,6 +707,7 @@ def calculate_gosi(rule, gross_salary, employee_age=None, inputs=None, *, allow_
             "employer_share": employer_share,
             "employee_rate": employee_rate,
             "employer_rate": employer_rate,
+            **_regulation_lineage(rule),
         },
     }
 
@@ -608,6 +932,7 @@ def calculate_net_pay(rule, gross, deductions, inputs=None, *, allow_non_authori
             "rule_id": rule.rule_id,
             "rule_version": rule.version,
             "inputs": lineage_inputs,
+            **_regulation_lineage(rule),
         },
         "negative_net_pay": net < 0,
     }

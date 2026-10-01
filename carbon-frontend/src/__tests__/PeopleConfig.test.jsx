@@ -122,7 +122,7 @@ describe('PeopleConfig (NSR-5B)', () => {
       expect(peopleApi.fetchComplianceRules).toHaveBeenCalledWith('test-token');
     });
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Add rule' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'New version' })).toBeInTheDocument();
     });
   });
 
@@ -130,9 +130,9 @@ describe('PeopleConfig (NSR-5B)', () => {
     const user = userEvent.setup();
     render(<PeopleConfigPage />);
     await user.click(screen.getByRole('tab', { name: 'Compliance Rules' }));
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Add rule' })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'New version' })).toBeInTheDocument());
 
-    await user.click(screen.getByRole('button', { name: 'Add rule' }));
+    await user.click(screen.getByRole('button', { name: 'New version' }));
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText('Add Compliance Rule')).toBeInTheDocument();
 

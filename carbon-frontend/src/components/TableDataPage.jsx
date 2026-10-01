@@ -12,7 +12,7 @@ import {
   fetchDataSchemaFields,
   fetchDataRows,
   createDataRow,
-  updateDataRow,
+  restateDataRow,
   deleteDataRow,
   bulkDeleteDataRows,
   exportRowsToCsv,
@@ -180,7 +180,7 @@ export default function TableDataPage({
       if (!idOrNull) {
         await createDataRow(token, rowValues, data_table, project_id, module_id);
       } else {
-        await updateDataRow(token, idOrNull, { values: rowValues }, project_id, module_id, true);
+        await restateDataRow(token, idOrNull, rowValues, project_id, module_id);
       }
       fetchRows();
     } catch (err) {

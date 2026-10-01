@@ -105,6 +105,42 @@ def _moodle_host_user(moodle_user_id: str):
 
 
 @method_decorator(csrf_exempt, name="dispatch")
+class MoodleRosterView(APIView):
+    """Staff HMAC read of pack material for one listed course. No passage text."""
+
+    authentication_classes: list = []
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        secret = configured_secret(getattr(settings, "MOODLE_PULSE_HMAC_SECRET", "") or "")
+        raw = request.body or b""
+        if not verify_signature(
+            secret,
+            request.headers.get("X-Pulse-Timestamp", ""),
+            raw,
+            request.headers.get("X-Pulse-Signature", ""),
+        ):
+            return Response({"ok": False, "error": "unauthorized"}, status=401)
+        try:
+            payload = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return Response({"ok": False, "error": "bad_json"}, status=400)
+        if not isinstance(payload, dict):
+            return Response({"ok": False, "error": "bad_json"}, status=400)
+        shortname = str(payload.get("shortname") or "").strip()
+        from ai.moodle_bank import course_roster
+
+        result = course_roster(shortname)
+        if not result.get("ok"):
+            status = 404 if result.get("error") == "off_list" else 400
+            return Response(result, status=status)
+        return Response(result)
+
+    def get(self, request):
+        return self.post(request)
+
+
+@method_decorator(csrf_exempt, name="dispatch")
 class MoodleEmbedView(APIView):
     """Moodle asks for a one-time ticket. The browser redeems it for the pane."""
 

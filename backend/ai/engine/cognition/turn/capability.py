@@ -354,11 +354,18 @@ def tool_capabilities(instance_config: dict | None) -> list[dict]:
     except Exception:  # noqa: BLE001 — the host catalog alone is still a surface
         return []
     plugins = {p.name: p for p in registered_plugins()}
+    blocked = {
+        str(name)
+        for name in ((instance_config or {}).get("excluded_tools") or [])
+        if str(name).strip()
+    }
     entries: list[dict] = []
     for tool in defs:
         fn = (tool or {}).get("function") or {}
         name = str(fn.get("name") or "")
         if not name or name not in allow or name == "call_host_api":
+            continue
+        if name in blocked:
             continue
         if name == ID_LIST_MY_CAPABILITIES and not wants_platform_inventory(instance_config):
             continue

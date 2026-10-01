@@ -22,6 +22,7 @@ import {
   CARBON_MANAGE_INVENTORY_COVERAGE,
   AI_VIEW_CONSOLE,
   DATASCHEMA_MANAGE,
+  CATALOG_MANAGE_POLICIES,
 } from "./capabilities";
 // ── Lazy-loaded page imports ──────────────────────────────────────────
 const OrgUnitsPage = React.lazy(() => import("./pages/admin/OrgUnitsPage"));
@@ -65,6 +66,7 @@ const DQWorkspacePage = React.lazy(() => import("./pages/dq/DQWorkspacePage"));
 const RuleDetailPage = React.lazy(() => import("./pages/dq/RuleDetailPage"));
 const ReferenceSetDetailPage = React.lazy(() => import("./pages/catalog/ReferenceSetDetailPage"));
 const GovernancePage = React.lazy(() => import("./pages/catalog/GovernancePage"));
+const PolicyDeskPage = React.lazy(() => import("./pages/catalog/PolicyDeskPage"));
 const DataSourcesDetailPage = React.lazy(() => import("./pages/catalog/DataSourcesDetailPage"));
 const ExportsDetailPage = React.lazy(() => import("./pages/catalog/ExportsDetailPage"));
 const ImportsDetailPage = React.lazy(() => import("./pages/catalog/ImportsDetailPage"));
@@ -577,6 +579,11 @@ export default function App() {
                   <Route path="/catalog/policies" element={
                     <AdminRoute>
                       <GovernancePolicyPage />
+                    </AdminRoute>
+                  } />
+                  <Route path="/catalog/policy-versions" element={
+                    <AdminRoute requiredCapability={CATALOG_MANAGE_POLICIES}>
+                      <PolicyDeskPage />
                     </AdminRoute>
                   } />
                   <Route path="/catalog/search" element={<SearchPage />} />

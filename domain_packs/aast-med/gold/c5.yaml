@@ -1,0 +1,20 @@
+# C5 YouTube captions. Empty caption is a miss. The video file is not stored.
+version: 1
+ask: "According to the handout"
+miss: "This is not in this lecture."
+world: aast-mbbs
+counted: 78
+empty_caption:
+  course: NMD1402
+  activity: 773
+  video_id: TJxF8UwiAXI
+  quote: "This caption text is not stored for Analytic Studies"
+whatsapp_mp4_stays_file:
+  course: NMD2303
+  filename: "WhatsApp Video 2023-10-21 at 10.56.25.mp4"
+  cmid: 793
+hit:
+  course: NMD1103
+  activity: 1211
+  passage: "NMD1103:youtube:1211:3PmVJQUCm4E"
+  quote: "wet hands with water and apply enough soap"

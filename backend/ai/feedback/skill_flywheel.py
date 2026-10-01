@@ -32,7 +32,10 @@ from ai.instance_registry import resolve_instance_id
 
 logger = logging.getLogger("carbon.ai.feedback.skill_flywheel")
 
-# Engine instance namespace — must match ``ai.plans_service.PLAN_INSTANCE_ID``.
+def plan_instance_id() -> str:
+    return resolve_instance_id()
+
+
 PLAN_INSTANCE_ID = resolve_instance_id()
 
 # Terminal run states — the flywheel only fires after the run is final, so
@@ -59,7 +62,7 @@ def _run_async(coro):
         return pool.submit(asyncio.run, coro).result()
 
 
-def feed_run_feedback(run_id: str, *, instance_id: str = PLAN_INSTANCE_ID) -> dict | None:
+def feed_run_feedback(run_id: str, *, instance_id: str | None = None) -> dict | None:
     """Feed one finalized plan run's outcome back into the SkillRegistry.
 
     No-ops (returns ``None``) unless the run is a skill-sourced plan in a
@@ -75,6 +78,7 @@ def feed_run_feedback(run_id: str, *, instance_id: str = PLAN_INSTANCE_ID) -> di
     """
     from ai.models.core import Run, RunStep
 
+    instance_id = instance_id or plan_instance_id()
     try:
         run = Run.objects.get(id=run_id)
     except Run.DoesNotExist:
@@ -175,7 +179,7 @@ def promote_on_success(
     threshold_successes: int = 3,
     min_success_rate: float = 0.75,
     *,
-    instance_id: str = PLAN_INSTANCE_ID,
+    instance_id: str | None = None,
 ) -> bool:
     """Report whether a skill has crossed the promote-ready bar.
 
@@ -185,6 +189,8 @@ def promote_on_success(
     """
     from ai.engine.core.database import get_session_factory
     from ai.engine.core.models import Skill
+
+    instance_id = instance_id or plan_instance_id()
 
     async def _check() -> bool:
         async with get_session_factory(instance_id)() as db:

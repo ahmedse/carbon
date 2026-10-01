@@ -185,6 +185,19 @@ export function updateDataRow(token, rowId, values, project_id, module_id, usePa
 }
 
 /**
+ * CR-REST-01: archive the live row and append a correction.
+ */
+export function restateDataRow(token, rowId, values, project_id, module_id) {
+  return apiFetch(`${API_ROUTES.rows}${rowId}/restate/`, {
+    method: "POST",
+    token,
+    project_id,
+    module_id,
+    body: { values }
+  });
+}
+
+/**
  * Delete a row.
  */
 export function deleteDataRow(token, rowId, project_id, module_id) {

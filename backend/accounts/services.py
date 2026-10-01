@@ -104,13 +104,38 @@ class AppManifestService:
         return manifests
 
 
+class _JwtPackId:
+    """Process pack id, read at access time.
+
+    Class-body ``os.getenv`` froze ``carbon`` when this module imported before
+    dotenv. Tokens must stamp ``resolve_instance_id()`` (aastmt → carbon).
+    """
+
+    def __get__(self, obj, owner=None):
+        try:
+            from ai.instance_registry import resolve_instance_id
+
+            return resolve_instance_id()
+        except Exception:  # noqa: BLE001 — JWT must still mint
+            return os.getenv("PULSE_INSTANCE_ID", "carbon")
+
+
+class _EnvStr:
+    def __init__(self, key, default):
+        self.key = key
+        self.default = default
+
+    def __get__(self, obj, owner=None):
+        return os.getenv(self.key, self.default)
+
+
 class PulseService:
     """Bridge to the external Pulse AI system (token generation + provisioning)."""
 
-    PULSE_HOST = os.getenv('PULSE_HOST', 'http://127.0.0.1:9100')
-    PULSE_INSTANCE_ID = os.getenv('PULSE_INSTANCE_ID', 'carbon')
-    PULSE_JWT_SECRET = os.getenv('PULSE_JWT_SECRET', 'changeme-in-production')
-    PULSE_JWT_ALGORITHM = os.getenv('PULSE_JWT_ALGORITHM', 'HS256')
+    PULSE_HOST = _EnvStr("PULSE_HOST", "http://127.0.0.1:9100")
+    PULSE_INSTANCE_ID = _JwtPackId()
+    PULSE_JWT_SECRET = _EnvStr("PULSE_JWT_SECRET", "changeme-in-production")
+    PULSE_JWT_ALGORITHM = _EnvStr("PULSE_JWT_ALGORITHM", "HS256")
 
     @staticmethod
     def generate_token(user):

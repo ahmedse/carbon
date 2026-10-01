@@ -1,0 +1,11 @@
+# A3 material roster. Ask-read of existing loaders. No passage text.
+# Off-list names are refused. These cmids are in-pack for MED520.
+course: MED520
+in_pack:
+  - {cmid: 1111, kind: file, name: alopecia, source: alopecia.pdf, status: ok}
+  - {cmid: 1112, kind: google-presentation, name: "PPT: alopecia", status: ok}
+  - {cmid: 1127, kind: file, name: "PPT: Herpes updated", source: herpes.pptx, status: ok}
+  - {cmid: 1128, kind: file, name: "herpes Updated", source: herpes.pdf, status: ok}
+off_list:
+  - NMD1601
+  - AHFAD-PED

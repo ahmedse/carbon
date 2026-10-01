@@ -14,27 +14,35 @@ def emit_governance_event(
     after: Optional[Dict[str, Any]],
     user,
     asset_profile=None,
+    *,
+    strict: bool = False,
 ):
     """Create a GovernanceEvent record with before/after state.
 
-    Best-effort and non-blocking: a governance-event failure MUST NEVER roll
-    back the caller's business write. The insert runs in its own
-    ``transaction.atomic()`` savepoint so that if it raises (e.g. a PostgreSQL
-    DataError from an over-long action/entity_type), ONLY this event insert is
-    rolled back — the caller's outer transaction stays intact.
+    Default is best-effort: a governance-event failure must not roll back the
+    caller's business write. The insert runs in its own savepoint so that if
+    it raises, only this event insert is rolled back.
+
+    ``strict=True`` writes in the caller's transaction and lets the exception
+    propagate. Policy publish uses this so a failed event insert undoes the
+    state change.
     """
     from catalog.models import GovernanceEvent
 
+    payload = dict(
+        entity_type=entity_type,
+        entity_id=entity_id,
+        action=action,
+        before=before or {},
+        after=after or {},
+        user=user,
+        asset=asset_profile,
+    )
+    if strict:
+        GovernanceEvent.objects.create(**payload)
+        return
     try:
         with transaction.atomic():
-            GovernanceEvent.objects.create(
-                entity_type=entity_type,
-                entity_id=entity_id,
-                action=action,
-                before=before or {},
-                after=after or {},
-                user=user,
-                asset=asset_profile,
-            )
+            GovernanceEvent.objects.create(**payload)
     except Exception as exc:  # pragma: no cover - defensive logging
         logger.warning("Failed to emit governance event for %s#%s: %s", entity_type, entity_id, exc)

@@ -2,7 +2,7 @@
 # EduOS profiles already carry their own `version` (gradevance.services.packs);
 # this pack version is the envelope those profile versions ship inside.
 id: eduos
-version: 3
+version: 4
 domain: education
 display_name: EduOS — GradeVance
 inventory: host_rbac

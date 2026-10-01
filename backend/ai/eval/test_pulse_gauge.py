@@ -71,13 +71,14 @@ def test_brand_count_includes_a_restored_instance_folder(tmp_path: Path):
 
 def test_pack_ids_come_from_domain_packs_dir():
     ids = pack_ids()
-    assert {"nibras", "eduos", "carbon"} <= ids
+    assert {"nibras", "eduos", "carbon", "aast-med"} <= ids
 
 
 def test_pack_contract_all_packs_green():
     rows, violations = check_all()
     assert violations == []
-    assert {r["id"] for r in rows} >= {"nibras", "eduos", "carbon"}
+    assert {r["id"] for r in rows} >= {"nibras", "eduos", "carbon", "aast-med"}
+    assert len({r["id"] for r in rows}) == len(rows)
     assert all(isinstance(r["version"], int) and r["version"] >= 1 for r in rows)
 
 
@@ -97,6 +98,38 @@ def test_pack_contract_flags_missing_manifest_and_bad_version(tmp_path: Path):
     assert "instance file missing" in joined
     assert "compat.engine required" in joined
     assert "points outside the pack" in joined
+
+
+def _minimal_pack(pack_dir: Path, pack_id: str, instance_text: str = "display_name: x\n") -> None:
+    pack_dir.mkdir(parents=True, exist_ok=True)
+    (pack_dir / "instance.yaml").write_text(instance_text, encoding="utf-8")
+    (pack_dir / "pack.yaml").write_text(
+        f"id: {pack_id}\nversion: 1\ndomain: x\ninstance: instance.yaml\ncompat:\n  engine: '>=2.1'\n",
+        encoding="utf-8",
+    )
+
+
+def test_pack_contract_rejects_shared_instance_yaml(tmp_path: Path):
+    alpha = tmp_path / "alpha"
+    beta = tmp_path / "beta"
+    _minimal_pack(alpha, "alpha")
+    beta.mkdir()
+    (beta / "pack.yaml").write_text(
+        "id: beta\nversion: 1\ndomain: x\ninstance: ../alpha/instance.yaml\n"
+        "compat:\n  engine: '>=2.1'\n",
+        encoding="utf-8",
+    )
+    _, violations = check_all(tmp_path)
+    joined = "\n".join(violations)
+    assert "points outside the pack" in joined
+
+
+def test_pack_contract_two_packs_keep_separate_instance_files(tmp_path: Path):
+    _minimal_pack(tmp_path / "alpha", "alpha")
+    _minimal_pack(tmp_path / "beta", "beta", "display_name: other\n")
+    rows, violations = check_all(tmp_path)
+    assert violations == []
+    assert {r["id"] for r in rows} == {"alpha", "beta"}
 
 
 def test_snapshot_and_series_row_shape():

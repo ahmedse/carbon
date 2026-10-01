@@ -8,7 +8,8 @@ relies on so a pack can be swapped, versioned or added without touching core:
   ``domain``, ``instance`` (a path that exists) and ``compat.engine``;
 * every path under ``owns:`` exists inside the pack (self-contained: a pack
   may not point outside itself, except ``banks`` which name eval evidence);
-* no two packs share an ``id``.
+* no two packs share an ``id``;
+* no two packs share an ``instance.yaml`` (resolved path).
 
 CLI::
 
@@ -206,9 +207,15 @@ def check_all(root: Path = DOMAIN_PACKS_ROOT) -> tuple[list[dict[str, Any]], lis
     rows: list[dict[str, Any]] = []
     violations: list[str] = []
     seen: dict[str, str] = {}
+    seen_instance: dict[str, str] = {}
     if not root.is_dir():
         return rows, [f"domain_packs root missing: {root}"]
-    for pack_dir in sorted(p for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")):
+    # ``_`` prefix is a platform guide (``_platform``), not a Pulse pack.
+    for pack_dir in sorted(
+        p
+        for p in root.iterdir()
+        if p.is_dir() and not p.name.startswith(".") and not p.name.startswith("_")
+    ):
         manifest, errs = check_pack(pack_dir)
         violations.extend(errs)
         pid = str(manifest.get("id") or pack_dir.name)
@@ -220,6 +227,17 @@ def check_all(root: Path = DOMAIN_PACKS_ROOT) -> tuple[list[dict[str, Any]], lis
         if isinstance(instance_rel, str) and instance_rel.strip():
             resolved = _resolve_pack_relative(pack_dir, instance_rel.strip())
             instance_ok = resolved is not None and resolved.is_file()
+            if instance_ok:
+                try:
+                    key = str(resolved.resolve())
+                except OSError:
+                    key = str(resolved)
+                if key in seen_instance:
+                    violations.append(
+                        f"{pack_dir.name}: instance.yaml is shared with {seen_instance[key]}"
+                    )
+                else:
+                    seen_instance[key] = pack_dir.name
         rows.append({
             "id": pid,
             "version": manifest.get("version"),

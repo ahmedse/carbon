@@ -1,0 +1,263 @@
+{
+  "tier": "production_readiness",
+  "run_at": "2026-09-30T16:43:56.361256+00:00",
+  "surface": "tasks",
+  "user": "emp_2378",
+  "verdict": "not_ready",
+  "reached": 8,
+  "failed": 2,
+  "partial": 1,
+  "missing": 1,
+  "n": 12,
+  "rule": "Production READY only when R1–R11 are reached. Lab T1–T10 and structural 417/417 never close R12. Night 2026-09-23 FAIL stays. L6/L7 not scored.",
+  "kpis": [
+    {
+      "id": "R1",
+      "name": "Host-grounded figures",
+      "honest": "reached",
+      "note": "Profile, payroll count, attendance empty-state, and GOSI totals all matched the host."
+    },
+    {
+      "id": "R2",
+      "name": "Latest-period bind",
+      "honest": "reached",
+      "note": "analyze_gosi_committed used the latest committed period_end from list_payroll_runs."
+    },
+    {
+      "id": "R3",
+      "name": "First-turn Create",
+      "honest": "reached",
+      "note": "Plan dial created 899f692e-df2f-404f-b99f-75efce0ecdd1."
+    },
+    {
+      "id": "R4",
+      "name": "Cockpit honesty",
+      "honest": "partial",
+      "note": "API final_response is read-shaped. This bench does not open Taskso. Browser check 2026-09-27: Result line was “Finished. Here’s what I found.” on the profile/leave read and the GOSI read."
+    },
+    {
+      "id": "R5",
+      "name": "Planner stability",
+      "honest": "reached",
+      "note": "3/3 human payroll briefs bound list_payroll_runs only."
+    },
+    {
+      "id": "R6",
+      "name": "Persona coverage",
+      "honest": "reached",
+      "note": "emp_1067 profile and leave matched the host and payroll runs stayed 403. emp_1712 direct reports matched the host row."
+    },
+    {
+      "id": "R7",
+      "name": "Write consent live",
+      "honest": "missing",
+      "note": "Leave/loan/attendance write needs STACK-HOLD + emp_1067. Not run."
+    },
+    {
+      "id": "R8",
+      "name": "Night cleanliness",
+      "honest": "fail",
+      "note": "Night 2026-09-23 FAIL stays. Dry-run / SKIP do not clear it."
+    },
+    {
+      "id": "R9",
+      "name": "Arabic Tasks",
+      "honest": "reached",
+      "note": "Arabic brief bound ['get_my_leave_balance'] status=completed."
+    },
+    {
+      "id": "R10",
+      "name": "Production latency",
+      "honest": "reached",
+      "note": "Observe+chat p50 2315 ms. Bar ≤ 8000 ms and no case > 30 s. over30=0."
+    },
+    {
+      "id": "R11",
+      "name": "Chat never writes",
+      "honest": "reached",
+      "note": "Ungated leave did not change host leave count."
+    },
+    {
+      "id": "R12",
+      "name": "Enterprise go-live",
+      "honest": "fail",
+      "note": "READY only when R1–R11 are reached. Lab T1–T10 never closes R12."
+    }
+  ],
+  "cases": {
+    "profile": {
+      "pass": true,
+      "plan_id": "c191ba3e-2226-4f5a-b361-993234bf90fa",
+      "status": "completed",
+      "tools": [
+        "get_my_profile",
+        "get_my_leave_balance"
+      ],
+      "host_misses": [],
+      "seconds": 2.63
+    },
+    "payroll": {
+      "pass": true,
+      "plan_id": "042f1aa5-65a5-4300-8139-242608d5a415",
+      "status": "completed",
+      "tools": [
+        "list_payroll_runs"
+      ],
+      "host_misses": [],
+      "seconds": 0.63
+    },
+    "attendance": {
+      "pass": true,
+      "plan_id": "c2cb82c4-0314-436e-a34a-9b237bc09535",
+      "status": "completed",
+      "tools": [
+        "list_my_attendance"
+      ],
+      "host_misses": [],
+      "seconds": 4.19
+    },
+    "gosi": {
+      "pass": true,
+      "plan_id": "62ca1a09-1f35-474a-ad1b-8fb0192560fa",
+      "status": "completed",
+      "tools": [
+        "list_payroll_runs",
+        "analyze_gosi_committed"
+      ],
+      "host_misses": [],
+      "used_args": [
+        {
+          "api_name": "list_payroll_runs",
+          "query_params": {
+            "status": "committed"
+          }
+        },
+        {
+          "bind": {
+            "period_end": {
+              "step": 0,
+              "field": "period_end",
+              "select": "latest"
+            }
+          },
+          "api_name": "analyze_gosi_committed",
+          "query_params": {
+            "dimension": "nationality",
+            "period_end": "2026-08-31"
+          }
+        }
+      ],
+      "seconds": 0.58
+    },
+    "arabic": {
+      "pass": true,
+      "plan_id": "e814a223-81eb-4c6b-b3b5-a53c64375c88",
+      "status": "completed",
+      "tools": [
+        "get_my_leave_balance"
+      ],
+      "misses": [],
+      "seconds": 4.55
+    },
+    "chat": {
+      "pass": true,
+      "conversation_id": "3d5b7c28-7296-405e-920f-de2fa8e6df9d",
+      "host_write": false,
+      "misses": [],
+      "seconds": 2.0
+    },
+    "first_turn": {
+      "pass": true,
+      "conversation_id": "0d036c66-72ea-4d37-bbc3-d8ec1b1745d5",
+      "plan_id": "899f692e-df2f-404f-b99f-75efce0ecdd1",
+      "plan_status": "pending_approval",
+      "reply": "Here is a draft for you to review. No task exists until you choose Create task — or tell me what to change.",
+      "misses": [],
+      "seconds": 3.53,
+      "http": 200,
+      "commit_http": 201
+    },
+    "stability": {
+      "pass": true,
+      "tries": [
+        {
+          "http": 201,
+          "tools": [
+            "list_payroll_runs"
+          ],
+          "ok": true
+        },
+        {
+          "http": 201,
+          "tools": [
+            "list_payroll_runs"
+          ],
+          "ok": true
+        },
+        {
+          "http": 201,
+          "tools": [
+            "list_payroll_runs"
+          ],
+          "ok": true
+        }
+      ],
+      "misses": []
+    },
+    "personas": {
+      "my": {
+        "user": "emp_1067",
+        "pass": true,
+        "plan_id": "a30d6a77-b61e-4555-b3e4-d8bd471529c4",
+        "status": "completed",
+        "tools": [
+          "get_my_profile",
+          "get_my_leave_balance"
+        ],
+        "host_misses": [],
+        "misses": [],
+        "seconds": 2.44
+      },
+      "team": {
+        "user": "emp_1712",
+        "pass": true,
+        "plan_id": "f8732b34-7d37-4ded-97d7-7916c07bc736",
+        "status": "completed",
+        "tools": [
+          "list_my_direct_reports"
+        ],
+        "host_misses": [],
+        "misses": [],
+        "seconds": 2.18
+      }
+    }
+  },
+  "oracles": {
+    "payroll": {
+      "ok": true,
+      "count": 13,
+      "latest_period": "2026-08-31",
+      "latest_id": 56
+    },
+    "attendance": {
+      "ok": true,
+      "count": 0
+    },
+    "gosi_latest": {
+      "ok": true,
+      "totals": [
+        "9863",
+        "1200"
+      ],
+      "period_end": "2026-08-31",
+      "run_ids": [
+        56,
+        68
+      ],
+      "empty": false
+    }
+  },
+  "l6_l7": "not scored",
+  "night_2026_09_23": "FAIL stays",
+  "lab_meter": "T1–T10 is a different score. Do not merge."
+}

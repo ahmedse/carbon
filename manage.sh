@@ -766,6 +766,17 @@ cmd_brand() {
         [eduos]=4
     )
 
+    # Pulse pack id (P1 / R6). Brand slug and pack may differ.
+    local -A PULSE_PACK_ID=(
+        [aastmt]=carbon
+        [nibras]=nibras
+        [medos]=medos
+        [tectona]=tectona
+        [eduos]=eduos
+    )
+    local pack="${PULSE_PACK_ID[$brand]}"
+    local redis_url="redis://localhost:6379/${BRAND_REDIS_DB[$brand]}"
+
     # Backend branding — mirrors carbon-frontend/src/brands/*.js (single source
     # of truth). Drives emails/PDFs/API docs + PLATFORM_TITLE on the backend.
     local -A BRAND_PLATFORM_NAME=(
@@ -830,8 +841,9 @@ cmd_brand() {
     # leak-free. (DB name is derived from DJANGO_BRAND in settings.py.)
     log_step "Updating backend/.env (brand, DB, Redis, media, Pulse, branding)"
     be_upsert "DJANGO_BRAND" "$brand"
-    be_upsert "PULSE_INSTANCE_ID" "$brand"
-    be_upsert "REDIS_URL" "redis://localhost:6379/${BRAND_REDIS_DB[$brand]}"
+    be_upsert "PULSE_INSTANCE_ID" "$pack"
+    be_upsert "REDIS_URL" "$redis_url"
+    be_upsert "PULSE_MEMORY_REDIS_URL" "$redis_url"
     be_upsert "DJANGO_MEDIA_ROOT" "./mediafiles/${brand}/"
     be_upsert "DATASCHEMA_UPLOAD_PATH" "dataschema_uploads/${brand}/"
     be_upsert "CHROMA_PERSIST_DIR" "./chroma_db/${brand}"
@@ -841,7 +853,7 @@ cmd_brand() {
     # Ensure the brand's media/upload/chroma dirs exist so Django never falls
     # back to a shared location.
     mkdir -p "$BACKEND_DIR/mediafiles/$brand" "$BACKEND_DIR/dataschema_uploads/$brand" "$BACKEND_DIR/chroma_db/$brand" 2>/dev/null || true
-    log_success "backend/.env → DJANGO_BRAND=${brand}, PULSE_INSTANCE_ID=${brand}, REDIS_URL=…/${BRAND_REDIS_DB[$brand]}"
+    log_success "backend/.env → DJANGO_BRAND=${brand}, PULSE_INSTANCE_ID=${pack}, PULSE_MEMORY_REDIS_URL=…/${BRAND_REDIS_DB[$brand]}"
 
     # 2) Frontend: copy ONLY branding keys from the preset, preserving the
     # local API URL. (The presets point at production; a raw `cp` would make
@@ -855,6 +867,8 @@ cmd_brand() {
             v=$(grep -E "^${k}=" "$fe" 2>/dev/null | head -1 | cut -d'=' -f2-)
             [[ -n "$v" ]] && fe_upsert "$k" "$v"
         done
+        # Widget identity is the pack id, not the brand slug (aastmt → carbon).
+        fe_upsert "VITE_PULSE_INSTANCE_ID" "$pack"
         # Local dev always talks to the local backend/frontend.
         fe_upsert "VITE_API_BASE_URL" "http://localhost:${BACKEND_PORT}/carbon-api/"
         fe_upsert "VITE_CANONICAL_URL" "http://localhost:${FRONTEND_PORT}"

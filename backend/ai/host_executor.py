@@ -1414,6 +1414,19 @@ class CarbonHostExecutor(HostAPIExecutor):
         super().__init__(db, instance_config=instance_config, user_token=user_token)
         self.host_user_id = host_user_id
 
+    async def call_api_direct(
+        self,
+        method: str,
+        endpoint: str,
+        params: dict | None = None,
+        body: dict | None = None,
+    ) -> dict:
+        if (self.instance_config or {}).get("tool_freeze"):
+            from ai.platform_bind import TOOL_FREEZE_HOST
+
+            return {"error": TOOL_FREEZE_HOST, "status": "refused"}
+        return await super().call_api_direct(method, endpoint, params, body)
+
     # ── Command boundary (P2-06b) ───────────────────────────────────────
 
     async def execute_host_api_via_boundary(
@@ -1446,6 +1459,27 @@ class CarbonHostExecutor(HostAPIExecutor):
         from ai.command_boundary import Command
         from ai.command_boundary_factory import get_command_boundary
         from ai.protocol import Scope
+
+        cfg = self.instance_config or {}
+        if cfg.get("tool_freeze"):
+            from ai.platform_bind import TOOL_FREEZE_HOST
+
+            return {"error": TOOL_FREEZE_HOST, "status": "refused"}
+        catalog = cfg.get("api_catalog")
+        if isinstance(catalog, list):
+            names = {
+                str(e.get("name"))
+                for e in catalog
+                if isinstance(e, dict) and e.get("name")
+            }
+            if api_name not in names:
+                return {
+                    "error": f"Unknown API endpoint: '{api_name}'. Check the api_catalog.",
+                    "status": "refused",
+                }
+        if cfg.get("autonomy_clamp") and not needs_confirmation:
+            if (method or "").upper() in ("POST", "PUT", "PATCH", "DELETE"):
+                needs_confirmation = True
 
         uid = str(host_user_id) if host_user_id else (instance_id or "")
         command = Command(

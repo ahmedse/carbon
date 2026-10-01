@@ -1,6 +1,17 @@
-# Questions about the activity the user has open.
+# Questions about the open activity, or a named lecture on this course.
 # A group matches only when every term is present.
+# number_markers find "lecture 10" / "L10" for bank-backed about answers.
 version: 1
 all_of_any:
   - ["this lecture"]
   - ["this activity"]
+about_of_any:
+  - ["tell me more about lecture"]
+  - ["about lecture"]
+  - ["more about lecture"]
+  - ["tell me more about l"]
+number_markers:
+  - "lecture "
+  - "lecture"
+  - "l"
+cite_span: 200

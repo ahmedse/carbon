@@ -1,6 +1,19 @@
 # Who the assistant is. Not a lecture fact, and not another host's handoff.
+# Expert-in-X is this course's bank or the course miss — never a page tour.
 all_of_any:
   - [who are you]
   - [what are you]
   - [your name]
-answer: I am Pulse on this course page. I answer from the lecture you have open. I do not change Moodle.
+phrases:
+  - who are you
+  - what are you
+  - your name
+  - are you
+  - are you pulse
+expert_prefixes:
+  - "are you expert in "
+  - "are you an expert in "
+  - "are you expert on "
+  - "are you an expert on "
+answer: I am Pulse for this course. I answer from this course's lectures and files.
+miss: This is not in this course.

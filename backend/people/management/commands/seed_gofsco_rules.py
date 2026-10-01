@@ -142,6 +142,9 @@ GOVERNED_REFERENCE_SETS = [
             ('basic', 'Basic', 'أساسي'),
             ('overtime', 'Overtime', 'عمل إضافي'),
             ('leave_pay', 'Leave Pay', 'بدل إجازة'),
+            ('leave_encashment', 'Leave Encashment', 'صرف رصيد الإجازة'),
+            ('absence_deduction', 'Absence Deduction', 'خصم غياب'),
+            ('compensatory_pay', 'Compensatory Pay', 'بدل يوم بديل'),
             ('eosi_accrual', 'EOSI Accrual', 'استحقاق مكافأة نهاية الخدمة'),
             ('gosi', 'GOSI / PIFSS', 'التأمينات الاجتماعية'),
             ('wps', 'WPS', 'نظام حماية الأجور'),
@@ -556,6 +559,34 @@ class Command(BaseCommand):
             f"✓ Leave policies: {lp_created} created, {lp_updated} up-to-date "
             f"({len(LEAVE_POLICIES)} total)"
         ))
+
+        from people.official_inbound_templates import ensure_official_inbound_templates
+
+        tpl = ensure_official_inbound_templates()
+        self.stdout.write(self.style.SUCCESS(
+            f"✓ Official inbound templates: created={tpl['created']} "
+            f"existing={tpl['existing']} (expected {tpl['expected']})"
+        ))
+
+        from django.contrib.auth import get_user_model
+
+        from people.sheet_provisions import ensure_sheet_drafts
+
+        User = get_user_model()
+        preparer = (
+            User.objects.filter(username="ahmed").first()
+            or User.objects.filter(is_superuser=True).first()
+        )
+        if preparer is None:
+            self.stdout.write(self.style.WARNING(
+                "Sheet 2026.2 drafts skipped: no preparer user to stamp."
+            ))
+        else:
+            created, skipped = ensure_sheet_drafts(preparer)
+            self.stdout.write(self.style.SUCCESS(
+                f"✓ Sheet 2026.2 drafts: {created} created, {skipped} already present "
+                "(lifecycle stays draft until a second person publishes)."
+            ))
 
         self.stdout.write(self.style.SUCCESS(
             "✓ GOFSCO authoritative configuration seeded."

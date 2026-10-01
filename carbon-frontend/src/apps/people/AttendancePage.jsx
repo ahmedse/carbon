@@ -50,6 +50,7 @@ const EMPTY_RECORD = {
   hours_worked: '',
   overtime_hours: '',
   status: 'present',
+  absence_class: '',
 };
 
 const EMPTY_PERMISSION = {
@@ -141,6 +142,7 @@ export default function AttendancePage() {
       hours_worked: record.hours_worked != null ? String(record.hours_worked) : '',
       overtime_hours: record.overtime_hours != null ? String(record.overtime_hours) : '',
       status: record.status ?? 'present',
+      absence_class: record.absence_class ?? '',
     });
     setRecordDialogOpen(true);
   };
@@ -167,6 +169,7 @@ export default function AttendancePage() {
       hours_worked: recordForm.hours_worked === '' ? 0 : Number(recordForm.hours_worked),
       overtime_hours: recordForm.overtime_hours === '' ? 0 : Number(recordForm.overtime_hours),
       status: recordForm.status,
+      absence_class: recordForm.absence_class || '',
     };
 
     setSaving(true);
@@ -315,6 +318,18 @@ export default function AttendancePage() {
               <MenuItem key={status} value={status}>{t(statusLabelKey(status))}</MenuItem>
             ))}
           </TextField>
+          <TextField
+            select
+            label={t('colAbsenceClass')}
+            name="absence_class"
+            value={recordForm.absence_class}
+            onChange={handleRecordChange}
+            fullWidth
+          >
+            <MenuItem value="">{t('absenceClassUnset')}</MenuItem>
+            <MenuItem value="justified">{t('absenceClassJustified')}</MenuItem>
+            <MenuItem value="unjustified">{t('absenceClassUnjustified')}</MenuItem>
+          </TextField>
         </Stack>
       </SystemDialog>
 
@@ -458,6 +473,16 @@ export default function AttendancePage() {
     { field: 'date', headerName: t('colDate'), width: 130, valueGetter: (value) => formatDate(value) },
     { field: 'hours_worked', headerName: t('colHoursWorked'), width: 130, valueGetter: (value) => value ?? '—' },
     { field: 'overtime_hours', headerName: t('colOvertimeHours'), width: 140, valueGetter: (value) => value ?? '—' },
+    {
+      field: 'absence_class',
+      headerName: t('colAbsenceClass'),
+      width: 140,
+      valueGetter: (value) => (
+        value === 'unjustified' ? t('absenceClassUnjustified')
+          : value === 'justified' ? t('absenceClassJustified')
+            : '—'
+      ),
+    },
     {
       field: 'status',
       headerName: t('colStatus'),

@@ -1,16 +1,18 @@
 // One Pulse status bar for Chat and Tasks. Font / Think / model live here
 // so the same controls apply on every Pulse surface.
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import PropTypes from 'prop-types';
 import { Box, IconButton, Stack, Tooltip, Typography } from '@mui/material';
 import TextDecreaseIcon from '@mui/icons-material/TextDecrease';
 import TextIncreaseIcon from '@mui/icons-material/TextIncrease';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../i18n/useLanguage';
+import { API_BASE_URL } from '../config';
 import AIStatusBar from './AIStatusBar';
 import AIModelSelect from './AIModelSelect';
 import PulsePresence from './PulsePresence';
 import { usePulsePrefs } from './pulsePrefs';
+import { pulseReleaseLabel, releaseTooltip } from './releaseTooltip';
 
 function PulseWorkspaceFooter({
   variant = 'ready',
@@ -32,6 +34,24 @@ function PulseWorkspaceFooter({
     setDenseThinking,
     setSelectedModel,
   } = prefsProp || hooked;
+  const [release, setRelease] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const url = `${String(API_BASE_URL || '').replace(/\/$/, '')}/health/`;
+    fetch(url)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.release) setRelease(data.release);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const releaseTip = releaseTooltip(release);
+  const releaseLabel = pulseReleaseLabel(release);
 
   return (
     <Box
@@ -55,6 +75,34 @@ function PulseWorkspaceFooter({
         denseThinking={denseThinking}
         onDenseThinkingChange={setDenseThinking}
       />
+      {releaseLabel ? (
+        <Tooltip
+          title={releaseTip}
+          placement="top"
+          slotProps={{
+            tooltip: { sx: { whiteSpace: 'pre-line', maxWidth: 360 } },
+          }}
+        >
+          <Typography
+            component="span"
+            data-testid="pulse-release"
+            aria-label={releaseTip}
+            sx={{
+              fontSize: '0.65rem',
+              color: 'text.secondary',
+              userSelect: 'none',
+              whiteSpace: 'nowrap',
+              px: 0.5,
+              borderLeft: 1,
+              borderColor: 'divider',
+              flexShrink: 0,
+              cursor: 'default',
+            }}
+          >
+            {releaseLabel}
+          </Typography>
+        </Tooltip>
+      ) : null}
       <PulsePresence />
       <Tooltip title={t('textSize')}>
         <Stack

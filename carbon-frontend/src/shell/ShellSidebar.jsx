@@ -247,6 +247,7 @@ function getSidebarItems(studioId, helpApps = []) {
         { label: 'Domains & Glossary', path: '/catalog/metadata', icon: EditIcon },
         { label: 'Data Quality', path: '/dq', icon: RuleIcon },
         { label: 'Access Policies', path: '/catalog/policies', icon: RuleIcon },
+        { label: 'Policy versions', path: '/catalog/policy-versions', icon: RuleIcon },
         { label: 'Audit Log', path: '/catalog/governance', icon: VerifiedUserIcon },
         { type: 'divider' },
         { type: 'group', label: 'Reference data' },

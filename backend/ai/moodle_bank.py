@@ -16,6 +16,7 @@ _C3_KINDS = ("page", "label", "book")
 _PACK = Path(__file__).resolve().parents[2] / "domain_packs" / "aast-med" / "bank"
 _ROOT = _PACK / "course-meat-13"
 _KEYS = _PACK / "course-keys-13"
+_EXT = _PACK / "course-ext-13"
 
 
 def passage_id(shortname: str, kind: str, activity_id: int) -> str:
@@ -102,6 +103,60 @@ def load_c4_files(shortname: str, meat_root: Path | None = None, keys_root: Path
     return out
 
 
+def load_c4_drive(shortname: str, ext_root: Path | None = None) -> dict[str, dict]:
+    """Drive bodies already stored for one course.
+
+    Empty and unavailable rows stay out. Moodle intro is never the body.
+    A Chat turn does not call Google.
+    """
+    return _load_ext(shortname, family="google", kind="google", ext_root=ext_root)
+
+
+def load_c5_youtube(shortname: str, ext_root: Path | None = None) -> dict[str, dict]:
+    """YouTube captions already stored for one course.
+
+    An explicit empty caption is not a passage. The video file is not stored.
+    A Chat turn does not call YouTube.
+    """
+    return _load_ext(shortname, family="youtube", kind="youtube", ext_root=ext_root)
+
+
+def load_external(shortname: str, ext_root: Path | None = None) -> dict[str, dict]:
+    """Drive bodies and captions for one course. Not file meat."""
+    return {**load_c4_drive(shortname, ext_root), **load_c5_youtube(shortname, ext_root)}
+
+
+def _load_ext(shortname: str, *, family: str, kind: str, ext_root: Path | None) -> dict[str, dict]:
+    path = (ext_root or _EXT) / f"{shortname}.jsonl"
+    out: dict[str, dict] = {}
+    if not path.is_file():
+        return out
+    for row in _rows(path):
+        if str(row.get("course") or "") != shortname:
+            continue
+        if row.get("family") != family or row.get("status") != "ok":
+            continue
+        if str(row.get("source_kind") or "").startswith("link:"):
+            continue
+        source_id = str(row.get("source_id") or "")
+        text = str(row.get("text") or "").strip()
+        if not source_id or not text or not row.get("cmid"):
+            continue
+        activity = int(row["cmid"])
+        pid = f"{shortname}:{kind}:{activity}:{source_id}"
+        out[pid] = {
+            "id": pid,
+            "course": shortname,
+            "kind": kind,
+            "activity_id": activity,
+            "source": f"{row.get('source_kind')}:{source_id}",
+            "name": str(row.get("name") or ""),
+            "text": text,
+            "world": listed_world(shortname),
+        }
+    return out
+
+
 def retrieve(shortname: str, activity_id: int, bank: dict[str, dict] | None = None) -> list[str]:
     """Passage ids for one activity, or an empty list."""
     return [row["id"] for row in passages_for(shortname, activity_id, bank)]
@@ -169,6 +224,151 @@ def listed_world(shortname: str) -> str:
 
 def listed_shortnames() -> set[str]:
     return set(_course_index())
+
+
+_ROSTER_URL_KINDS = {
+    "google-presentation": "google-presentation",
+    "google-file": "google-file",
+    "google-document": "google-document",
+    "youtube": "youtube",
+}
+
+
+def course_roster(shortname: str) -> dict:
+    """Ask-read of loaders for one listed course. No passage text.
+
+    Off-list names are refused. A row is in_pack when a keys/ext/meat
+    record exists; status is ok only when a loader already stored text.
+    """
+    name = str(shortname or "").strip()
+    if name not in listed_shortnames():
+        return {"ok": False, "error": "off_list", "shortname": name, "activities": []}
+
+    loaded = _roster_loaded(name)
+    ext = _roster_ext(name)
+    activities: list[dict] = []
+    seen: set[int] = set()
+    keys_path = _KEYS / f"{name}.jsonl"
+    if keys_path.is_file():
+        for row in _rows(keys_path):
+            item = _roster_from_key(name, row, loaded, ext)
+            if item is None:
+                continue
+            activities.append(item)
+            seen.add(int(item["cmid"]))
+    for cmid, rows in loaded.items():
+        if cmid in seen:
+            continue
+        for row in rows:
+            if row.get("kind") not in _C3_KINDS:
+                continue
+            activities.append(
+                {
+                    "cmid": cmid,
+                    "name": str(row.get("name") or ""),
+                    "kind": str(row.get("kind") or ""),
+                    "sectionnum": 0,
+                    "status": "ok",
+                    "source": "",
+                    "in_pack": True,
+                }
+            )
+            seen.add(cmid)
+            break
+    return {"ok": True, "shortname": name, "activities": activities}
+
+
+def _roster_loaded(shortname: str) -> dict[int, list[dict]]:
+    out: dict[int, list[dict]] = {}
+    for bank in (
+        load_c3(shortname),
+        load_c4_files(shortname),
+        load_c4_drive(shortname),
+        load_c5_youtube(shortname),
+    ):
+        for row in bank.values():
+            activity = int(row["activity_id"])
+            out.setdefault(activity, []).append(row)
+    return out
+
+
+def _roster_ext(shortname: str) -> dict[tuple[int, str], dict]:
+    path = _EXT / f"{shortname}.jsonl"
+    out: dict[tuple[int, str], dict] = {}
+    if not path.is_file():
+        return out
+    for row in _rows(path):
+        if str(row.get("course") or "") != shortname or not row.get("cmid"):
+            continue
+        source_id = str(row.get("source_id") or "")
+        if not source_id:
+            continue
+        out[(int(row["cmid"]), source_id)] = row
+    return out
+
+
+def _roster_from_key(
+    shortname: str,
+    row: dict,
+    loaded: dict[int, list[dict]],
+    ext: dict[tuple[int, str], dict],
+) -> dict | None:
+    if str(row.get("course") or "") != shortname or not row.get("cmid"):
+        return None
+    cmid = int(row["cmid"])
+    kind, source = _roster_kind_source(row)
+    item = {
+        "cmid": cmid,
+        "name": str(row.get("name") or ""),
+        "kind": kind or "link",
+        "sectionnum": int(row.get("sectionnum") or 0),
+        "status": "not_in_pack",
+        "source": source,
+        "in_pack": False,
+    }
+    if kind is None:
+        return item
+    passages = loaded.get(cmid) or []
+    if any(_roster_passage_matches(kind, source, passage) for passage in passages):
+        item["status"] = "ok"
+        item["in_pack"] = True
+        return item
+    recorded = ext.get((cmid, source))
+    if recorded is not None:
+        status = str(recorded.get("status") or "empty")
+        item["status"] = status if status in {"ok", "empty", "unavailable"} else "empty"
+        item["in_pack"] = True
+        if item["status"] == "ok" and not str(recorded.get("text") or "").strip():
+            item["status"] = "empty"
+        return item
+    item["status"] = "empty"
+    item["in_pack"] = True
+    return item
+
+
+def _roster_kind_source(row: dict) -> tuple[str | None, str]:
+    ref = str(row.get("ref") or "")
+    prefix, _, rest = ref.partition(":")
+    kind = str(row.get("kind") or "")
+    if kind == "file" and prefix == "file":
+        return "file", rest
+    mapped = _ROSTER_URL_KINDS.get(prefix)
+    if kind == "url" and mapped:
+        return mapped, rest
+    return None, rest
+
+
+def _roster_passage_matches(kind: str, source: str, passage: dict) -> bool:
+    row_kind = str(passage.get("kind") or "")
+    if kind == "file":
+        return row_kind == "file" and (
+            not source or str(passage.get("source") or "").endswith(source)
+        )
+    if kind == "youtube":
+        return row_kind == "youtube" and source in str(passage.get("source") or passage.get("id") or "")
+    if kind.startswith("google"):
+        return row_kind == "google" and source in str(passage.get("source") or passage.get("id") or "")
+    return row_kind == kind
 
 
 @lru_cache(maxsize=1)

@@ -53,6 +53,7 @@ export const LEGACY_REDIRECTS = Object.freeze({
 
   '/admin/ai/budget-usage': { path: '/admin/ai/platform', tab: 'spend' },
   '/admin/ai/engine-settings': { path: '/admin/ai/platform', tab: 'engine' },
+  '/admin/ai/platform?tab=pulse': { path: '/admin/ai/platform', tab: 'pulse' },
   // Roles matrix lives under Platform; Access Control remains /admin/access
 });
 

@@ -27,6 +27,7 @@ from django.db import transaction
 from dq.typed_gate import check_instances
 
 from .models import ComplianceRule, PayrollRunValidation
+from .regulation_pack import PackMissing, load_pack
 
 SEVERITY_ERROR = "error"
 SEVERITY_WARNING = "warning"
@@ -144,6 +145,10 @@ def validate_run(run):
     if gosi_finding is not None:
         findings.append(gosi_finding)
 
+    citation = _regulation_citation_finding(lines)
+    if citation is not None:
+        findings.append(citation)
+
     return findings
 
 
@@ -165,6 +170,14 @@ def _reconcile_findings(run, lines):
     gross_total = sum((ln.amount for ln in gross_lines), Decimal("0"))
     net_total = sum((ln.amount for ln in net_lines), Decimal("0"))
     loan_total = sum((ln.amount for ln in loan_lines), Decimal("0"))
+    extra_earnings = Decimal("0")
+    extra_deductions = Decimal("0")
+    for ln in lines:
+        effect = (ln.inputs or {}).get("effect")
+        if effect == "earning":
+            extra_earnings += ln.amount
+        elif effect == "deduction":
+            extra_deductions += ln.amount
 
     employee_share_total = Decimal("0")
     for ln in gosi_lines:
@@ -173,8 +186,8 @@ def _reconcile_findings(run, lines):
             return []
         employee_share_total += share
 
-    deductions = loan_total + employee_share_total
-    expected_net = gross_total - deductions
+    deductions = loan_total + employee_share_total + extra_deductions
+    expected_net = gross_total + extra_earnings - deductions
     diff = abs(net_total - expected_net)
     tolerance = _RECON_TOLERANCE * max(1, len(net_lines))
 
@@ -192,6 +205,75 @@ def _reconcile_findings(run, lines):
         "net_reconciliation", severity=SEVERITY_ERROR,
         passed=False, checked=len(net_lines), failed=1, sample_failures=failures,
     )]
+
+
+def _regulation_citation_finding(lines):
+    """Fail closed when a line's rule cites a regulation version that is missing.
+
+    Lines whose rule cites nothing are left alone, so a frozen version that
+    never declared a citation still validates.
+    """
+    failures = []
+    checked = 0
+    for ln in lines:
+        inputs = ln.inputs or {}
+        cited_id = inputs.get("regulation_rule_id")
+        cited_version = inputs.get("regulation_version")
+        rule = ComplianceRule.objects.filter(
+            rule_id=ln.rule_id, version=ln.rule_version,
+        ).first()
+        required = (rule.inputs_schema or {}).get("regulation_ref") if rule is not None else None
+        pack_id = inputs.get("regulation_pack") or (required or {}).get("pack")
+        if not required and not cited_id and not pack_id:
+            continue
+        checked += 1
+        if pack_id:
+            if not cited_version or (
+                required and required.get("pack") and (
+                    inputs.get("regulation_pack") != required.get("pack")
+                    or str(cited_version) != str(required.get("version"))
+                )
+            ):
+                failures.append(
+                    f"line #{ln.id} {_line_code(ln)} is missing its regulation citation"
+                )
+                continue
+            try:
+                load_pack(pack_id, cited_version)
+            except PackMissing:
+                failures.append(
+                    f"cited regulation pack {pack_id} version {cited_version} is missing"
+                )
+            if not (required or {}).get("rule_id"):
+                continue
+        if not cited_id or not cited_version:
+            failures.append(
+                f"line #{ln.id} {_line_code(ln)} is missing its regulation citation"
+            )
+            continue
+        if required and required.get("rule_id") and (
+            cited_id != required.get("rule_id")
+            or str(cited_version) != str(required.get("version"))
+        ):
+            failures.append(
+                f"line #{ln.id} citation {cited_id} {cited_version} "
+                f"does not match the policy"
+            )
+            continue
+        if not ComplianceRule.objects.filter(rule_id=cited_id, version=cited_version).exists():
+            failures.append(
+                f"cited regulation {cited_id} version {cited_version} is missing"
+            )
+    if checked == 0:
+        return None
+    return _finding(
+        "regulation_citation",
+        severity=SEVERITY_ERROR,
+        passed=not failures,
+        checked=checked,
+        failed=len(failures),
+        sample_failures=failures,
+    )
 
 
 def _gosi_employee_share(gosi_line):
@@ -236,15 +318,22 @@ def _gosi_bounds_finding(lines):
     if not gosi_lines:
         return None
 
+    cited_id = gosi_lines[0].rule_id
+    cited_version = gosi_lines[0].rule_version
     rule = ComplianceRule.objects.filter(
-        rule_id=gosi_lines[0].rule_id, version=gosi_lines[0].rule_version
+        rule_id=cited_id, version=cited_version
     ).first()
     if rule is None:
-        rule = ComplianceRule.objects.filter(category__code="gosi").order_by(
-            "-effective_date", "-updated_at"
-        ).first()
-    if rule is None:
-        return None
+        return _finding(
+            "gosi_bounds",
+            severity=SEVERITY_ERROR,
+            passed=False,
+            checked=len(gosi_lines),
+            failed=len(gosi_lines),
+            sample_failures=[
+                f"cited rule {cited_id} version {cited_version} is missing"
+            ],
+        )
 
     params = ((rule.inputs_schema or {}).get("formula") or {}).get("params") or {}
     lo = params.get("min_amount")

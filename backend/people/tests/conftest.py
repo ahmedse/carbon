@@ -24,5 +24,7 @@ def _seed_payslip_line_types(db):
     for code in (
         'gross', 'basic', 'overtime', 'leave_pay', 'eosi_accrual',
         'gosi', 'wps', 'deduction', 'net', 'loan_installment',
+        'leave_encashment', 'sick_pay', 'notice_pay', 'compensatory_pay',
+        'absence_deduction',
     ):
         ensure_ref('payslip_line_type', code)

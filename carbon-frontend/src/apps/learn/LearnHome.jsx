@@ -18,17 +18,12 @@ import {
 } from '../../api/gradevance';
 import SkipToMain from '../../components/gradevance/SkipToMain';
 import LearnReadingWidth, { useLearnPrimarySize } from '../../components/gradevance/LearnReadingWidth';
-
-function statusChipColor(status) {
-  switch ((status || '').toLowerCase()) {
-    case 'released': return 'success';
-    case 'submitted': return 'info';
-    case 'drafted':
-    case 'draft': return 'default';
-    case 'open': return 'primary';
-    default: return 'default';
-  }
-}
+import {
+  criterionLabel,
+  pickLatestCoaching,
+  statusChipColor,
+  statusLabel,
+} from './learnCopy';
 
 export default function LearnHome() {
   useDocumentTitle('Learn');
@@ -129,17 +124,7 @@ export default function LearnHome() {
     return rows.slice(0, 8);
   }, [assignments, progress]);
 
-  const latestCoaching = useMemo(() => {
-    const withCoach = submissions
-      .map((s) => ({
-        submission: s,
-        coaching: s.latest_run?.coaching || s.coaching || s.run?.coaching,
-        assignmentId: s.assignment || s.assignment_id,
-        title: s.assignment_title || s.title,
-      }))
-      .filter((x) => x.coaching && (x.coaching.strengths?.length || x.coaching.diagnosis_actions?.length));
-    return withCoach[0] || null;
-  }, [submissions]);
+  const latestCoaching = useMemo(() => pickLatestCoaching(submissions), [submissions]);
 
   if (loading) {
     return (
@@ -243,7 +228,7 @@ export default function LearnHome() {
                   </Typography>
                   <Chip
                     size="small"
-                    label={a.my_status || a.status || 'open'}
+                    label={statusLabel(a.my_status || a.status || 'open')}
                     color={statusChipColor(a.my_status || a.status)}
                   />
                   <Typography variant="caption" color="text.secondary">
@@ -281,10 +266,13 @@ export default function LearnHome() {
                       <Typography variant="caption" color="text.secondary">{r.course_title}</Typography>
                     )}
                   </Box>
-                  <Chip size="small" color="success" label={r.status || 'released'} />
-                  {r.bands && Object.entries(r.bands).slice(0, 3).map(([k, v]) => (
-                    <Chip key={k} size="small" variant="outlined" label={`${k}: ${v}`} />
-                  ))}
+                  <Chip size="small" color="success" label={statusLabel(r.status || 'released')} />
+                  {r.bands && Object.entries(r.bands)
+                    .filter(([k, v]) => k !== 'withheld' && v != null && typeof v !== 'object')
+                    .slice(0, 3)
+                    .map(([k, v]) => (
+                      <Chip key={k} size="small" variant="outlined" label={`${criterionLabel(k)}: ${v}`} />
+                    ))}
                 </Stack>
               </Paper>
             ))}

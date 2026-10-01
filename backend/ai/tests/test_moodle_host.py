@@ -76,6 +76,8 @@ def test_inventory_is_opt_in_per_pack():
     assert wants_platform_inventory({"inventory": "host_rbac"}) is True
 
     medicine = _instance_config("aast-med", "moodle-2")
+    assert medicine["instance_id"] == "aast-med"
+    assert medicine["app_identifier"] == "moodle"
     assert medicine["user_access"] == {}
     assert medicine["inventory"] == ""
     surfaced = {entry["name"] for entry in tool_capabilities(medicine)}

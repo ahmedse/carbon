@@ -16,18 +16,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { fetchMyAssignments, fetchMyCourses } from '../../api/gradevance';
 import SkipToMain from '../../components/gradevance/SkipToMain';
 import LearnReadingWidth from '../../components/gradevance/LearnReadingWidth';
-
-function statusChipColor(status) {
-  switch ((status || '').toLowerCase()) {
-    case 'released': return 'success';
-    case 'submitted': return 'info';
-    case 'drafted':
-    case 'draft': return 'default';
-    case 'open':
-    case 'published': return 'primary';
-    default: return 'default';
-  }
-}
+import { statusChipColor, statusLabel } from './learnCopy';
 
 function AssignmentRow({ a, onOpen }) {
   const myStatus = a.my_status || a.status || 'open';
@@ -48,7 +37,7 @@ function AssignmentRow({ a, onOpen }) {
           )}
         </Box>
         <Chip size="small" label={a.mode || 'formative'} variant="outlined" />
-        <Chip size="small" label={myStatus} color={statusChipColor(myStatus)} />
+        <Chip size="small" label={statusLabel(myStatus)} color={statusChipColor(myStatus)} />
       </Stack>
     </Paper>
   );

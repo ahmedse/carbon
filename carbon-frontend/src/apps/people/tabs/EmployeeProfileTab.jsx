@@ -336,6 +336,8 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
     d.date_of_birth = emp.date_of_birth ? String(emp.date_of_birth).slice(0, 10) : '';
     d.join_date = emp.join_date ? String(emp.join_date).slice(0, 10) : '';
     d.kuwaitization = Boolean(emp.kuwaitization);
+    d.pifss_registered = emp.pifss_registered === true ? 'true' : emp.pifss_registered === false ? 'false' : '';
+    d.separation_reason = emp.separation_reason ?? '';
     return d;
   };
 
@@ -396,7 +398,7 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
     if (key === 'employment') additionalProps?.loadPositions?.();
     const fieldsBySection = {
       identity: ['name_en_given', 'name_en_family', 'name_ar_given', 'name_ar_family', 'gender', 'civil_id', 'date_of_birth', 'nationality'],
-      employment: ['employment_type', 'contract_type', 'join_date', 'rotation', 'kuwaitization', 'position'],
+      employment: ['employment_type', 'contract_type', 'join_date', 'rotation', 'kuwaitization', 'pifss_registered', 'separation_reason', 'position'],
       organization: ['org_unit', 'manager'],
       // NSR-2B: compensation is ledger-driven — no inline edit of basic_salary.
     };
@@ -406,6 +408,7 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
       const v = emp[f];
       if ((f === 'date_of_birth' || f === 'join_date') && v) d[f] = String(v).slice(0, 10);
       else if (governed.has(f)) d[f] = refCode(v);
+      else if (f === 'pifss_registered') d[f] = v === true ? 'true' : v === false ? 'false' : '';
       else d[f] = v ?? '';
     }
     setDraft(d);
@@ -444,6 +447,10 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
       putCode('rotation');
       p.join_date = source.join_date || null;
       p.kuwaitization = Boolean(source.kuwaitization);
+      if (source.pifss_registered === true || source.pifss_registered === 'true') p.pifss_registered = true;
+      else if (source.pifss_registered === false || source.pifss_registered === 'false') p.pifss_registered = false;
+      else p.pifss_registered = null;
+      p.separation_reason = String(source.separation_reason ?? '').trim();
       p.position = source.position ? Number(source.position) : null;
     } else if (key === 'organization') {
       p.org_unit = source.org_unit ? Number(source.org_unit) : null;
@@ -601,7 +608,17 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
                 <MenuItem value="false">{t('no')}</MenuItem>
               </TextField>
             </Grid>
-          </Grid>
+            <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField fullWidth size="small" select label={t('formPifssRegistered')} name="pifss_registered" value={editAllDraft.pifss_registered ?? ''} onChange={handleEditAllChange}>
+                  <MenuItem value="">{t('pifssUnknown')}</MenuItem>
+                  <MenuItem value="true">{t('yes')}</MenuItem>
+                  <MenuItem value="false">{t('no')}</MenuItem>
+                </TextField>
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField fullWidth size="small" label={t('formSeparationReason')} name="separation_reason" value={editAllDraft.separation_reason ?? ''} onChange={handleEditAllChange} />
+              </Grid>
+            </Grid>
 
           <SectionHeading icon={BusinessIcon} title={t('sectionOrganization')} />
           <Grid container spacing={1.5}>
@@ -788,6 +805,16 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
                   <MenuItem value="false">{t('no')}</MenuItem>
                 </TextField>
               </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField fullWidth size="small" select label={t('formPifssRegistered')} name="pifss_registered" value={draft.pifss_registered ?? ''} onChange={handleChange}>
+                  <MenuItem value="">{t('pifssUnknown')}</MenuItem>
+                  <MenuItem value="true">{t('yes')}</MenuItem>
+                  <MenuItem value="false">{t('no')}</MenuItem>
+                </TextField>
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField fullWidth size="small" label={t('formSeparationReason')} name="separation_reason" value={draft.separation_reason ?? ''} onChange={handleChange} />
+              </Grid>
             </Grid>
             <SectionActions editing onSave={() => save('employment')} onCancel={cancelEdit} saving={saving} />
           </Stack>
@@ -801,6 +828,8 @@ export default function EmployeeProfileTab({ entityData, additionalProps }) {
               <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('formRotation')} value={refLabel(emp.rotation) || refCode(emp.rotation)} /></Grid>
               <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('colPosition')} value={positionTitle} /></Grid>
               <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('formKuwaitization')} value={emp.kuwaitization ? t('yes') : t('no')} /></Grid>
+              <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('formPifssRegistered')} value={emp.pifss_registered === true ? t('yes') : emp.pifss_registered === false ? t('no') : t('pifssUnknown')} /></Grid>
+              <Grid size={{ xs: 6, sm: 4 }}><ReadField label={t('formSeparationReason')} value={emp.separation_reason || '—'} /></Grid>
             </Grid>
             <SectionActions onEdit={() => startEdit('employment')} />
           </Box>

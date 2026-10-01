@@ -40,7 +40,13 @@ import {
 } from '../../api/inbound';
 import { INBOUND_STATUS_COLOR, inboundCaps, setInboundCrumb } from './inboundAccess';
 import InboundStatRow from './InboundStatRow';
-import { suggestColumnMap, unmappedRequired } from './suggestMap';
+import {
+  headersMatchIdentity,
+  isIdentityMapping,
+  pickOfficialIdentityTemplate,
+  suggestColumnMap,
+  unmappedRequired,
+} from './suggestMap';
 
 const ENCODINGS = [
   { value: 'utf-8', label: 'UTF-8' },
@@ -50,6 +56,52 @@ const ENCODINGS = [
 
 function toList(data) {
   return Array.isArray(data) ? data : data?.results || [];
+}
+
+/**
+ * Surface the official People · * template in Map when headers are identity.
+ * Uses the same mapping merge as a SearchSelect apply. Never commits.
+ */
+async function applyOfficialIdentityIfMatch({
+  token,
+  tplList,
+  hdrs,
+  fieldDefs,
+  existingCols,
+  baseColumns,
+  baseCrosswalks,
+  targetKey,
+  batchId,
+  canPrepare,
+  committed,
+  setColumns,
+  setCrosswalks,
+  setTemplateId,
+  setBatch,
+  notifyFromError,
+  mapFailedMsg,
+}) {
+  if (committed || !canPrepare || !batchId) return false;
+  if (!headersMatchIdentity(hdrs || [], fieldDefs || [])) return false;
+  const hasExisting = Object.values(existingCols || {}).some(Boolean);
+  if (hasExisting && !isIdentityMapping(existingCols || {}, fieldDefs || [])) return false;
+  const official = pickOfficialIdentityTemplate(tplList, fieldDefs, targetKey);
+  if (!official?.mapping?.columns) return false;
+  const next = { ...(baseColumns || {}), ...official.mapping.columns };
+  const walks = { ...(baseCrosswalks || {}), ...(official.mapping.crosswalks || {}) };
+  setColumns(next);
+  setCrosswalks(walks);
+  setTemplateId(String(official.id));
+  try {
+    const saved = await saveInboundMapping(token, batchId, {
+      columns: next,
+      crosswalks: walks,
+    });
+    setBatch(saved);
+  } catch (err) {
+    if (err?.status !== 400) notifyFromError(err, mapFailedMsg);
+  }
+  return true;
 }
 
 export default function InboundStudio({
@@ -102,15 +154,17 @@ export default function InboundStudio({
       setEncoding(row.encoding || 'utf-8');
       const targets = toList(targetRes);
       const hit = targets.find((item) => item.key === row.target_key);
-      setFields(hit?.fields || []);
+      const fieldDefs = hit?.fields || [];
+      setFields(fieldDefs);
       const existing = { ...(row.mapping?.columns || {}) };
-      const suggested = suggestColumnMap(row.headers || [], hit?.fields || [], aliases);
+      const suggested = suggestColumnMap(row.headers || [], fieldDefs, aliases);
       const cols = {};
       (row.headers || []).forEach((h) => {
         cols[h] = existing[h] || suggested[h] || '';
       });
       setColumns(cols);
-      setCrosswalks(row.mapping?.crosswalks || {});
+      const walks = row.mapping?.crosswalks || {};
+      setCrosswalks(walks);
       setInboundCrumb(row.id, row.original_filename);
       if (
         row.status !== 'committed'
@@ -120,7 +174,7 @@ export default function InboundStudio({
         try {
           const mapped = await saveInboundMapping(token, row.id, {
             columns: cols,
-            crosswalks: row.mapping?.crosswalks || {},
+            crosswalks: walks,
           });
           setBatch(mapped);
         } catch (mapErr) {
@@ -128,13 +182,34 @@ export default function InboundStudio({
         }
       }
       const tplRes = await fetchInboundTemplates(token, { kind, target_key: row.target_key });
-      setTemplates(toList(tplRes));
+      const tplList = toList(tplRes);
+      setTemplates(tplList);
+      setTemplateId('');
+      await applyOfficialIdentityIfMatch({
+        token,
+        tplList,
+        hdrs: row.headers || [],
+        fieldDefs,
+        existingCols: existing,
+        baseColumns: cols,
+        baseCrosswalks: walks,
+        targetKey: row.target_key,
+        batchId: row.id,
+        canPrepare,
+        committed: row.status === 'committed',
+        setColumns,
+        setCrosswalks,
+        setTemplateId,
+        setBatch,
+        notifyFromError,
+        mapFailedMsg: t('importMapFailed'),
+      });
     } catch (err) {
       setError(err?.status === 403 ? 'forbidden' : (err.message || t('importLoadFailed')));
     } finally {
       setLoading(false);
     }
-  }, [token, id, kind, aliases, t, notifyFromError]);
+  }, [token, id, kind, aliases, t, notifyFromError, canPrepare]);
 
   useEffect(() => {
     load();
@@ -190,15 +265,36 @@ export default function InboundStudio({
         if (!(h in merged)) merged[h] = suggested[h] || '';
       });
       setColumns(merged);
+      const walks = next.mapping?.crosswalks || {};
       try {
         const mapped = await saveInboundMapping(token, next.id, {
           columns: merged,
-          crosswalks: next.mapping?.crosswalks || {},
+          crosswalks: walks,
         });
         setBatch(mapped);
       } catch (mapErr) {
         if (mapErr?.status !== 400) notifyFromError(mapErr, t('importMapFailed'));
       }
+      setTemplateId('');
+      await applyOfficialIdentityIfMatch({
+        token,
+        tplList: templates,
+        hdrs: next.headers || [],
+        fieldDefs: fields,
+        existingCols: existing,
+        baseColumns: merged,
+        baseCrosswalks: walks,
+        targetKey: next.target_key,
+        batchId: next.id,
+        canPrepare,
+        committed: false,
+        setColumns,
+        setCrosswalks,
+        setTemplateId,
+        setBatch,
+        notifyFromError,
+        mapFailedMsg: t('importMapFailed'),
+      });
       notify({ message: t('importUploaded'), type: 'success' });
     } catch (err) {
       notifyFromError(err, t('importUploadFailed'));
@@ -219,8 +315,22 @@ export default function InboundStudio({
     const walks = { ...crosswalks, ...(tpl.mapping.crosswalks || {}) };
     setColumns(next);
     setCrosswalks(walks);
+    setTemplateId(String(tpl.id));
     persistMapping(next, walks);
     notify({ message: t('importTemplateApplied'), type: 'success' });
+  };
+
+  const downloadBlankHeader = () => {
+    if (!fields.length) return;
+    const header = fields.map((f) => f.name).join(',');
+    const blob = new Blob([`${header}\n`], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const key = (batch?.target_key || 'inbound').replace(/[^\w.-]+/g, '_');
+    a.download = `${key}.template.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const onSaveTemplate = async () => {
@@ -445,6 +555,11 @@ export default function InboundStudio({
                 />
               </FormField>
             </Box>
+            {fields.length > 0 && (
+              <Button size="small" variant="outlined" onClick={downloadBlankHeader}>
+                {t('importDownloadBlankHeader')}
+              </Button>
+            )}
             {canPrepare && batch.status !== 'committed' && (
               <Button size="small" variant="outlined" onClick={() => setSaveTplOpen(true)}>
                 {t('importSaveTemplate')}

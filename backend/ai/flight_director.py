@@ -39,9 +39,9 @@ from ai.instance_registry import resolve_instance_id
 
 logger = logging.getLogger("carbon.ai.flight_director")
 
-# Engine instance namespace for playbook rows — matches
-# ``ai.plans_service.PLAN_INSTANCE_ID`` (brand-resolved).
-_PLAYBOOK_INSTANCE_ID = resolve_instance_id()
+def _playbook_instance_id() -> str:
+    """Live pack id. Import-time snapshots are a defect (P7 / R6)."""
+    return resolve_instance_id()
 
 # Reference arg keys whose values are host entity ids the director validates.
 _REFERENCE_ARG_KEYS = (
@@ -1372,7 +1372,7 @@ def _apply_playbook_block(pattern: str, guidance: str, run_id: str):
 
     existing = (
         PlaybookBlock.objects.filter(
-            instance_id=_PLAYBOOK_INSTANCE_ID,
+            instance_id=_playbook_instance_id(),
             block_type="flight_director", title=pattern,
         )
         .order_by("-version")
@@ -1380,7 +1380,7 @@ def _apply_playbook_block(pattern: str, guidance: str, run_id: str):
     )
     if existing is None:
         return PlaybookBlock.objects.create(
-            instance_id=_PLAYBOOK_INSTANCE_ID,
+            instance_id=_playbook_instance_id(),
             block_type="flight_director",
             title=pattern,
             content=guidance,

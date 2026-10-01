@@ -40,8 +40,36 @@ const PLACEHOLDER_KEYS = {
 };
 
 const COMPOSER_HEIGHT_KEY = 'pulse.composerHeight';
-const COMPOSER_MIN_PX = 72;
+const COMPOSER_MIN_ROWS = 1;
+const COMPOSER_DEFAULT_ROWS = 2;
+// One text line (0.9375rem × 1.7) plus the input root's vertical padding (py: 0.5).
+// Saved pixel heights at or above this floor are kept; only a missing value uses the default.
+const COMPOSER_MIN_PX = 34;
 const COMPOSER_ROW_PX = 20;
+
+function readComposerHeight(raw) {
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= COMPOSER_MIN_PX ? n : null;
+}
+
+// Pixel height of the input root for a single text row. Falls back to
+// COMPOSER_MIN_PX when layout metrics are not available yet.
+function oneRowFloorPx(inputEl) {
+  if (!inputEl || typeof window === 'undefined') return COMPOSER_MIN_PX;
+  const cs = window.getComputedStyle(inputEl);
+  const font = parseFloat(cs.fontSize) || 15;
+  const parsedLine = parseFloat(cs.lineHeight);
+  const line = Number.isFinite(parsedLine) && parsedLine > 0 ? parsedLine : font * 1.7;
+  const extra = (style) => (
+    style
+      ? ['paddingTop', 'paddingBottom', 'borderTopWidth', 'borderBottomWidth']
+        .reduce((sum, key) => sum + (parseFloat(style[key]) || 0), 0)
+      : 0
+  );
+  const root = inputEl.closest('.MuiInputBase-root');
+  const measured = Math.ceil(line + extra(cs) + extra(root ? window.getComputedStyle(root) : null));
+  return Number.isFinite(measured) && measured >= COMPOSER_MIN_PX ? measured : COMPOSER_MIN_PX;
+}
 
 
 
@@ -175,8 +203,7 @@ function AIInputBar({
   const [composerHeight, setComposerHeight] = useState(() => {
     if (lockAsk) return null;
     try {
-      const n = Number(localStorage.getItem(COMPOSER_HEIGHT_KEY));
-      return Number.isFinite(n) && n >= COMPOSER_MIN_PX ? n : null;
+      return readComposerHeight(localStorage.getItem(COMPOSER_HEIGHT_KEY));
     } catch {
       return null;
     }
@@ -263,14 +290,15 @@ function AIInputBar({
     if (event.button !== 0) return;
     event.preventDefault();
     const startY = event.clientY;
+    const floor = oneRowFloorPx(inputRef.current);
     const startH = composerHeight
       || inputRef.current?.offsetHeight
-      || COMPOSER_MIN_PX;
-    dragRef.current = { startY, startH, last: startH };
+      || floor;
+    dragRef.current = { startY, startH, last: startH, floor };
     const onMove = (ev) => {
       if (!dragRef.current) return;
       const next = Math.max(
-        COMPOSER_MIN_PX,
+        dragRef.current.floor,
         Math.min(maxHeightPx, dragRef.current.startH + (dragRef.current.startY - ev.clientY)),
       );
       dragRef.current.last = next;
@@ -658,7 +686,7 @@ function AIInputBar({
           inputRef={inputRef}
           fullWidth
           multiline
-          minRows={composerHeight ? 1 : 3}
+          minRows={composerHeight ? COMPOSER_MIN_ROWS : COMPOSER_DEFAULT_ROWS}
           maxRows={composerHeight ? undefined : Math.min(8, maxRows)}
           size="small"
           value={value}
@@ -830,4 +858,11 @@ AIInputBar.propTypes = {
   onProcessChange: PropTypes.func,
 };
 
+export {
+  COMPOSER_HEIGHT_KEY,
+  COMPOSER_MIN_PX,
+  COMPOSER_MIN_ROWS,
+  COMPOSER_DEFAULT_ROWS,
+  readComposerHeight,
+};
 export default AIInputBar;

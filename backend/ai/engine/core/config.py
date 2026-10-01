@@ -520,8 +520,32 @@ class Settings(BaseSettings):
 
 
 @lru_cache()
-def get_settings() -> Settings:
+def _settings_cached() -> Settings:
     return Settings()
+
+
+def get_settings() -> Settings:
+    """Cached settings with a live pack id.
+
+    ``PULSE_INSTANCE_ID`` is the Redis/event partition. It is read from the
+    process env on every call so an import-time (or first-call) snapshot cannot
+    keep yesterday's pack after dotenv. Other fields stay on the cached object
+    so tests can still monkeypatch ``PULSE_MEMORY_REDIS_URL``.
+    """
+    settings = _settings_cached()
+    loaded = getattr(settings, "_pulse_id_loaded", None)
+    if loaded is None:
+        loaded = settings.PULSE_INSTANCE_ID
+        object.__setattr__(settings, "_pulse_id_loaded", loaded)
+    live = (os.environ.get("PULSE_INSTANCE_ID") or "").strip()
+    target = live or loaded
+    if settings.PULSE_INSTANCE_ID != target:
+        object.__setattr__(settings, "PULSE_INSTANCE_ID", target)
+    return settings
+
+
+get_settings.cache_clear = _settings_cached.cache_clear  # type: ignore[attr-defined]
+get_settings.cache_info = _settings_cached.cache_info  # type: ignore[attr-defined]
 
 
 def resolve_env_var(ref: str, default: str = "") -> str:

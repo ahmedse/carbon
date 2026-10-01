@@ -456,6 +456,43 @@ class DataRowViewSet(ScopedViewSet):
         )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+    @action(detail=True, methods=['post'], url_path='restate')
+    def restate(self, request, pk=None):
+        """CR-REST-01: archive the live row and append a correction. Never overwrite values."""
+        instance = self.get_object()
+        self._check_table_not_locked(instance.data_table, request)
+        if instance.is_archived:
+            raise AppFeedback(
+                code="row_archived",
+                title="Row is archived",
+                detail="An archived row is not restated. Correct the live successor.",
+                reasons=["This row is already archived."],
+                remediation=["Open the live row and restate that one."],
+                status_code=status.HTTP_409_CONFLICT,
+            )
+        values = request.data.get('values')
+        if not isinstance(values, dict) or not values:
+            return Response(
+                {'code': 'values_required', 'detail': 'Restate requires a values object.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        merged = dict(instance.values or {})
+        merged.update(values)
+        instance.is_archived = True
+        instance.save(update_fields=['is_archived', 'updated_at'])
+        new_row = DataRow.objects.create(
+            data_table=instance.data_table,
+            values=merged,
+            created_by=request.user,
+            version=int(instance.version or 1) + 1,
+        )
+        _log_schema_change(
+            request.user, "archive", data_table=instance.data_table,
+            notes=f"Restated row {instance.id} → {new_row.id}",
+        )
+        serializer = self.get_serializer(new_row)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
     def update(self, request, *args, **kwargs):
         """Override to add lock guard + comprehensive logging for PATCH/PUT operations"""
         instance = self.get_object()

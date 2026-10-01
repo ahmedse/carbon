@@ -1,0 +1,75 @@
+# Topic teaching on the signed course. Vocabulary for the Moodle Ask door.
+# A teaching ask names a topic. The topic is the remainder after a prefix,
+# or a short_query (bare topic token(s) with optional trailing ?/.).
+# Resolve against THIS course’s bank only. Title-matched activities win.
+# Miss is distinct from “not on this page” and “not in this lecture”.
+version: 1
+miss: This is not in this course.
+cite_span: 200
+# First matching prefix wins. Topic is stripped remainder (punctuation dropped).
+# "tell me more about lecture N" stays on lecture_asks (lecture door runs first
+# and is_lecture_ask excludes those from this door). A non-lecture complement
+# after "tell me more about" is a topic (e.g. alopecia).
+prefixes:
+  - "tell me more about "
+  - "educate me about "
+  - "teach me about "
+  - "teach me "
+  - "explain "
+  - "what is a "
+  - "what is an "
+  - "what is "
+  - "what's a "
+  - "what's an "
+  - "what's "
+  - "what are "
+# Bare topic query (e.g. "herpes?"). Not a disease list — vocabulary is the
+# course bank. Patterns stay in this pack; never engine/.
+# Boundary: greetings and multi-clause chat are not short topics. A message
+# whose first token is in greetings, or whose whole stripped text is only
+# stopwords, must not enter this door (so "hi" never becomes the miss
+# sentence). Internal . ! ? ; means the turn is not a short query.
+short_query:
+  max_tokens: 4
+  stopwords:
+    - this
+    - course
+    - page
+    - lecture
+    - what
+    - the
+    - a
+    - an
+    - is
+    - are
+    - of
+    - on
+    - in
+    - to
+    - for
+    - and
+    - or
+    - my
+    - me
+    - you
+    - it
+    - please
+    - thanks
+    - thank
+    - ok
+    - okay
+    - yes
+    - no
+    - maybe
+  greetings:
+    - hi
+    - hello
+    - hey
+    - bye
+    - goodbye
+    - good
+    - morning
+    - afternoon
+    - evening
+    - yo
+    - howdy

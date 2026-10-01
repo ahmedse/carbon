@@ -33,6 +33,7 @@ export default function PayslipPage() {
   const [linesError, setLinesError] = useState(null);
   const [searchValue, setSearchValue] = useState('');
   const [lineType, setLineType] = useState('');
+  const [highlightId, setHighlightId] = useState(null);
 
   useEffect(() => {
     setLoading(true);
@@ -114,10 +115,20 @@ export default function PayslipPage() {
       field: 'amount',
       headerName: t('colAmount'),
       width: 140,
-      valueGetter: (value) => formatAmount(value),
+      valueGetter: (value) => (
+        value == null || value === '' || Number.isNaN(Number(value))
+          ? '—'
+          : Number(value).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
+      ),
     },
     { field: 'rule_id', headerName: t('colRuleId'), width: 140, valueGetter: (value) => value ?? '—' },
     { field: 'rule_version', headerName: t('colRuleVersion'), width: 140, valueGetter: (value) => value ?? '—' },
+    {
+      field: 'regulation_version',
+      headerName: t('colRegulationVersion'),
+      width: 160,
+      valueGetter: (_value, row) => row.inputs?.regulation_version || '—',
+    },
   ], [t]);
 
   if (loading) {
@@ -206,6 +217,9 @@ export default function PayslipPage() {
             emptySubtext={t('payslipEmptyDesc')}
             pageSize={25}
             height={520}
+            onRowClick={(params) => setHighlightId(params.id)}
+            highlightRow={(row) => row.id === highlightId}
+            dataGridProps={{ density: 'compact', disableRowSelectionOnClick: true }}
           />
         )}
       </Stack>

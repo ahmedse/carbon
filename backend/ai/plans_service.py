@@ -71,7 +71,13 @@ from ai.step_journal import (
 
 logger = logging.getLogger("carbon.ai.plans_service")
 
-# Engine instance namespace (mirrors the chat/action paths).
+def plan_instance_id() -> str:
+    """Live pack id. Import-time snapshots are a defect (P7 / R6)."""
+    return resolve_instance_id()
+
+
+# Tests that import this name still get a string at import. Runtime paths
+# must call plan_instance_id() / resolve_instance_id().
 PLAN_INSTANCE_ID = resolve_instance_id()
 
 
@@ -126,7 +132,7 @@ def _plan_instance_config(host_user_id: str | None = None) -> dict:
     """
     from ai.engine_runtime import _instance_config
 
-    return _instance_config(PLAN_INSTANCE_ID, host_user_id)
+    return _instance_config(plan_instance_id(), host_user_id)
 
 
 # Run statuses this service owns (superset of the engine's status set).
@@ -2085,7 +2091,7 @@ class PlansService:
         async def _decompose():
             from ai.engine.llm.provider import get_llm_client
 
-            factory = get_session_factory(PLAN_INSTANCE_ID)
+            factory = get_session_factory(plan_instance_id())
             async with factory() as db:
                 registry = SkillRegistry(db)
                 planner = SkillAwarePlanner(
@@ -2094,7 +2100,7 @@ class PlansService:
                 return await planner.decompose(
                     utterance=brief,
                     skill_registry=registry,
-                    instance_id=PLAN_INSTANCE_ID,
+                    instance_id=plan_instance_id(),
                     user_id=user_pk,
                     force_decompose=True,
                     conversation_state=_svc._load_conversation_state(_cid),
@@ -2794,7 +2800,7 @@ class PlansService:
             plan_payload["inherited_context"] = inherited
         run = Run(
             id=run_id,
-            instance_id=PLAN_INSTANCE_ID,
+            instance_id=plan_instance_id(),
             conversation_id=conversation_id or "",
             host_user_id=user_pk,
             user_message=brief,
@@ -3144,7 +3150,7 @@ class PlansService:
         result = _run_async(
             route_chat(
                 task="deep",
-                instance_id=PLAN_INSTANCE_ID,
+                instance_id=plan_instance_id(),
                 conversation_id="discovery",
                 messages=self._discovery_prompt(
                     brief,
@@ -3299,7 +3305,7 @@ class PlansService:
             discovery_json["preferred_model"] = (model or "").strip()
         Run.objects.create(
             id=run_id,
-            instance_id=PLAN_INSTANCE_ID,
+            instance_id=plan_instance_id(),
             conversation_id=conversation_id or "",
             host_user_id=str(user.pk),
             user_message=brief,
@@ -3548,7 +3554,7 @@ class PlansService:
         limit = max(1, min(int(limit or 50), 500))
         runs = list(
             Run.objects.filter(
-                host_user_id=str(user.pk), instance_id=PLAN_INSTANCE_ID
+                host_user_id=str(user.pk), instance_id=plan_instance_id()
             ).order_by("-created_at")[:limit]
         )
         return {
@@ -3981,7 +3987,7 @@ class PlansService:
         fork_id = generate_uuid()
         fork = Run(
             id=fork_id,
-            instance_id=source.instance_id or PLAN_INSTANCE_ID,
+            instance_id=source.instance_id or plan_instance_id(),
             conversation_id=source.conversation_id or "",
             host_user_id=str(user.pk),
             user_message=source.user_message,
@@ -4095,7 +4101,7 @@ class PlansService:
         run_id = generate_uuid()
         run = Run(
             id=run_id,
-            instance_id=PLAN_INSTANCE_ID,
+            instance_id=plan_instance_id(),
             conversation_id="",
             host_user_id=str(user.pk),
             user_message=tpl.name,
@@ -4181,7 +4187,7 @@ class PlansService:
 
         schedule = RunSchedule(
             id=generate_uuid(),
-            instance_id=PLAN_INSTANCE_ID,
+            instance_id=plan_instance_id(),
             host_user_id=str(user.pk),
             name=name,
             description=(description or "").strip(),
@@ -4492,7 +4498,7 @@ class PlansService:
             run_id = generate_uuid()
             run = Run(
                 id=run_id,
-                instance_id=s.instance_id or PLAN_INSTANCE_ID,
+                instance_id=s.instance_id or plan_instance_id(),
                 conversation_id="",
                 host_user_id=s.host_user_id,
                 user_message=s.name,
@@ -4608,7 +4614,7 @@ class PlansService:
         from ai.host_executor import CarbonHostExecutor
         from ai.flight_director import FlightDirector
 
-        async with get_session_factory(PLAN_INSTANCE_ID)() as db:
+        async with get_session_factory(plan_instance_id())() as db:
             executor = CarbonHostExecutor(
                 db=db,
                 instance_config=instance_config,
@@ -4621,9 +4627,9 @@ class PlansService:
             execute_witness = ExecuteWitness(
                 executor=executor,
                 run_id=str(run.id),
-                instance_id=PLAN_INSTANCE_ID,
+                instance_id=plan_instance_id(),
                 hook_ctx_defaults={
-                    "instance_id": PLAN_INSTANCE_ID,
+                    "instance_id": plan_instance_id(),
                     "conversation_id": conversation_id,
                     "host_user_id": user_pk,
                     "run_id": str(run.id),
@@ -4718,7 +4724,7 @@ class PlansService:
                 )(conversation_id)
                 await loop.run(
                     plan=plan,
-                    instance_id=PLAN_INSTANCE_ID,
+                    instance_id=plan_instance_id(),
                     conversation_id=conversation_id,
                     user_message=inherited_brief,
                     system_prompt=system_prompt,
@@ -4848,7 +4854,7 @@ class PlansService:
                 for s in RunStep.objects.filter(run_id=run.id)
             }
         )()
-        async with get_session_factory(PLAN_INSTANCE_ID)() as db:
+        async with get_session_factory(plan_instance_id())() as db:
             executor = CarbonHostExecutor(
                 db=db,
                 instance_config=_plan_instance_config(user_pk),
@@ -5305,7 +5311,7 @@ class PlansService:
 
         user_pk = str(user.pk)
         instance_config = _plan_instance_config(user_pk)
-        factory = get_session_factory(PLAN_INSTANCE_ID)
+        factory = get_session_factory(plan_instance_id())
         conversation_id = run.conversation_id or f"plan-{run.id}"
 
         async def _stage_and_confirm():
@@ -5345,7 +5351,7 @@ class PlansService:
                     executor=executor,
                     conversation_id=conversation_id,
                     host_user_id=user_pk,
-                    instance_id=PLAN_INSTANCE_ID,
+                    instance_id=plan_instance_id(),
                 )
                 if not isinstance(staged, dict):
                     raise PlanStepError(
@@ -5632,7 +5638,7 @@ class PlansService:
         refused = self._contract_refusal(plan, instance_config, run.user_message or "")
         if refused:
             raise PlanStepError(refused)
-        factory = get_session_factory(PLAN_INSTANCE_ID)
+        factory = get_session_factory(plan_instance_id())
 
         async def _confirm():
             async with factory() as db:
@@ -5855,7 +5861,7 @@ class PlansService:
 
         user_pk = str(user.pk)
         instance_config = _plan_instance_config(user_pk)
-        factory = get_session_factory(PLAN_INSTANCE_ID)
+        factory = get_session_factory(plan_instance_id())
 
         async def _decline():
             async with factory() as db:

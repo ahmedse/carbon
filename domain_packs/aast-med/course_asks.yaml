@@ -1,5 +1,32 @@
-# Which course is open. The name comes from the signed snapshot.
+# Course identity vs course-about. Vocabulary for the Moodle Ask door.
+# Identity is the course name only. About is a capped outline from section
+# titles plus one short span from a course-overview bank row (study guide),
+# never a lecture PDF glued on as the course description.
 version: 1
 all_of_any:
   - [which course]
   - [what course]
+  - [what is this course]
+  - [what is the course]
+  - [what's this course]
+  - [what's the course]
+about_of_any:
+  - [course about]
+  - [about this course]
+  - [about the course]
+  - [what is this course about]
+  - [what's this course about]
+  - [what is the course about]
+# Name must contain every term in a group to count as a course overview.
+overview_name_of_any:
+  - [study guide]
+outline_cap: 12
+cite_span: 160
+body_miss: The file body for that section is not in the bank.
+description_miss: A Moodle description paragraph is not on this page.
+asks:
+  - which course
+  - what course
+  - what is this course
+  - what is the course
+  - What is this course about?

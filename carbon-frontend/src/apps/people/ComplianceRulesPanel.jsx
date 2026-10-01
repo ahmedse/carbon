@@ -1,33 +1,36 @@
-// src/apps/people/ComplianceRulesPanel.jsx
-// Compliance Rules CRUD for People Config (NSR-5B). SystemDialog + api helpers only.
+// Compliance rules on People Config. Drafts are editable. Published versions are not.
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Alert,
   Box,
   Button,
   Chip,
-  FormControlLabel,
   IconButton,
   Snackbar,
   Stack,
-  Switch,
   TextField,
   Tooltip,
   Typography,
 } from '@mui/material';
+import { Link as RouterLink } from 'react-router-dom';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import PublishIcon from '@mui/icons-material/Publish';
 import SettingsIcon from '@mui/icons-material/Settings';
 import { useTranslation } from 'react-i18next';
 import LoadingSkeleton from '../../components/Page/LoadingSkeleton';
 import ErrorAlert from '../../components/Page/ErrorAlert';
 import EmptyState from '../../components/Page/EmptyState';
 import SystemDialog from '../../components/SystemDialog';
-import ConfirmDialog from '../../components/ConfirmDialog';
-import StandardDataGrid from '../../components/StandardDataGrid';
-import { SearchSelect } from '../../components/Form';
+import FilteredDataGrid from '../../components/FilteredDataGrid';
+import { FormField, SearchSelect } from '../../components/Form';
 import { useAuth } from '../../auth/AuthContext';
 import { useReferenceOptions } from '../../hooks/useReferenceOptions';
 import {
@@ -35,6 +38,8 @@ import {
   createComplianceRule,
   updateComplianceRule,
   deleteComplianceRule,
+  copyForwardComplianceRule,
+  submitComplianceRule,
 } from '../../api/people';
 import { formatDate, refCode, refLabel } from './utils';
 
@@ -48,16 +53,43 @@ const EMPTY_FORM = {
   effective_date: '',
   formula_ref: '',
   source_citation: '',
-  inputs_schema: '{}',
-  is_authoritative: false,
+  inputs_schema: '{\n  "formula": { "type": "scaled_rate", "params": {} }\n}',
+  test_cases: '[]',
 };
 
-function tipHeader(tip) {
-  return (params) => (
-    <Tooltip title={tip} arrow enterDelay={400} placement="top">
-      <span>{params.colDef.headerName}</span>
-    </Tooltip>
-  );
+const LIFECYCLE_TONE = {
+  draft: 'info',
+  in_review: 'warning',
+  authoritative: 'success',
+  superseded: 'default',
+};
+
+function parseObject(text, fallback) {
+  const parsed = text.trim() ? JSON.parse(text) : fallback;
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new Error('not-object');
+  }
+  return parsed;
+}
+
+function readParams(text) {
+  try {
+    const parsed = JSON.parse(text || '{}');
+    return parsed?.formula?.params || {};
+  } catch {
+    return null;
+  }
+}
+
+function writeParam(text, key, value) {
+  const parsed = JSON.parse(text || '{}');
+  if (!parsed.formula || typeof parsed.formula !== 'object') {
+    parsed.formula = { type: 'scaled_rate', params: {} };
+  }
+  parsed.formula.params = parsed.formula.params || {};
+  if (value === '' || value == null) delete parsed.formula.params[key];
+  else parsed.formula.params[key] = value;
+  return JSON.stringify(parsed, null, 2);
 }
 
 export default function ComplianceRulesPanel() {
@@ -70,10 +102,14 @@ export default function ComplianceRulesPanel() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [highlightId, setHighlightId] = useState(null);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
+  const [fieldError, setFieldError] = useState('');
   const [saving, setSaving] = useState(false);
 
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -96,18 +132,33 @@ export default function ComplianceRulesPanel() {
 
   const showError = (err) => {
     const fb = err?.feedback;
-    const message = fb?.detail || fb?.title || err?.message || err?.detail || t('actionError');
+    const message = fb?.detail || err?.detail || err?.message || t('actionError');
     setSnackbar({ open: true, message, severity: 'error' });
+    return message;
   };
+
+  const visibleRows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return rows.filter((row) => {
+      if (statusFilter && row.lifecycle !== statusFilter) return false;
+      if (!q) return true;
+      return [row.rule_id, row.version, row.name].some((value) => String(value || '').toLowerCase().includes(q));
+    });
+  }, [rows, search, statusFilter]);
+
+  const params = readParams(form.inputs_schema);
+  const schemaInvalid = params === null;
 
   const openCreate = () => {
     setEditing(null);
     setForm({ ...EMPTY_FORM });
+    setFieldError('');
     setDialogOpen(true);
   };
 
   const openEdit = (row) => {
     setEditing(row);
+    setFieldError('');
     setForm({
       rule_id: row.rule_id ?? '',
       version: row.version ?? '',
@@ -119,45 +170,41 @@ export default function ComplianceRulesPanel() {
       formula_ref: row.formula_ref ?? '',
       source_citation: row.source_citation ?? '',
       inputs_schema: JSON.stringify(row.inputs_schema ?? {}, null, 2),
-      is_authoritative: Boolean(row.is_authoritative),
+      test_cases: JSON.stringify(row.test_cases ?? [], null, 2),
     });
     setDialogOpen(true);
   };
 
-  const closeDialog = () => {
-    setDialogOpen(false);
-    setEditing(null);
+  const setField = (name, value) => {
+    setForm((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleChange = (event) => {
-    const { name, value, checked, type } = event.target;
-    setForm((prev) => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
+  const setParam = (key, value) => {
+    setForm((prev) => {
+      try {
+        return { ...prev, inputs_schema: writeParam(prev.inputs_schema, key, value) };
+      } catch {
+        return prev;
+      }
+    });
   };
 
   const handleSave = async () => {
-    if (
-      !form.rule_id.trim()
-      || !form.version.trim()
-      || !form.name.trim()
-      || !form.effective_date
-      || !form.category
-      || !form.jurisdiction
-    ) {
-      setSnackbar({ open: true, message: tCommon('allFieldsRequired'), severity: 'error' });
+    if (!form.rule_id.trim() || !form.version.trim() || !form.name.trim() || !form.effective_date || !form.category || !form.jurisdiction) {
+      setFieldError(tCommon('allFieldsRequired'));
       return;
     }
-
-    let inputsSchema = {};
+    let inputsSchema;
+    let testCases;
     try {
-      inputsSchema = form.inputs_schema.trim() ? JSON.parse(form.inputs_schema) : {};
-      if (typeof inputsSchema !== 'object' || Array.isArray(inputsSchema)) {
-        throw new Error('not-object');
-      }
+      inputsSchema = parseObject(form.inputs_schema, {});
+      const parsedCases = form.test_cases.trim() ? JSON.parse(form.test_cases) : [];
+      if (!Array.isArray(parsedCases)) throw new Error('cases');
+      testCases = parsedCases;
     } catch {
-      setSnackbar({ open: true, message: t('complianceInputsSchemaInvalid'), severity: 'error' });
+      setFieldError(t('complianceInputsSchemaInvalid'));
       return;
     }
-
     const payload = {
       rule_id: form.rule_id.trim(),
       version: form.version.trim(),
@@ -169,23 +216,31 @@ export default function ComplianceRulesPanel() {
       formula_ref: form.formula_ref.trim(),
       source_citation: form.source_citation.trim(),
       inputs_schema: inputsSchema,
-      is_authoritative: Boolean(form.is_authoritative),
+      test_cases: testCases,
     };
-
     setSaving(true);
+    setFieldError('');
     try {
-      if (editing) {
-        await updateComplianceRule(editing.id, payload, token);
-      } else {
-        await createComplianceRule(payload, token);
-      }
-      closeDialog();
+      if (editing) await updateComplianceRule(editing.id, payload, token);
+      else await createComplianceRule(payload, token);
+      setDialogOpen(false);
+      setEditing(null);
       setSnackbar({ open: true, message: t('complianceRuleSaved'), severity: 'success' });
       await loadData();
     } catch (err) {
-      showError(err);
+      setFieldError(showError(err));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const runAction = async (fn, successKey) => {
+    try {
+      await fn();
+      setSnackbar({ open: true, message: t(successKey), severity: 'success' });
+      await loadData();
+    } catch (err) {
+      showError(err);
     }
   };
 
@@ -203,74 +258,104 @@ export default function ComplianceRulesPanel() {
   };
 
   const columns = useMemo(() => [
-    { field: 'rule_id', headerName: t('colRuleId'), flex: 1.1, minWidth: 140, renderHeader: tipHeader(t('colRuleIdTip')) },
+    { field: 'rule_id', headerName: t('colRuleId'), flex: 1.1, minWidth: 140 },
     { field: 'version', headerName: t('colVersion'), width: 90 },
-    { field: 'name', headerName: t('colName'), flex: 1.3, minWidth: 160 },
-    {
-      field: 'jurisdiction',
-      headerName: t('colJurisdiction'),
-      width: 110,
-      renderHeader: tipHeader(t('colJurisdictionTip')),
-      valueGetter: (_v, row) => refLabel(row.jurisdiction) || refCode(row.jurisdiction) || '—',
-    },
+    { field: 'name', headerName: t('colName'), flex: 1.2, minWidth: 160 },
     {
       field: 'category',
       headerName: t('colCategory'),
       width: 120,
-      renderCell: (p) => {
-        const code = refCode(p.row.category);
-        const label = refLabel(p.row.category) || t(`complianceCategory_${code}`, { defaultValue: code || '—' });
-        return <Chip size="small" variant="outlined" label={label} />;
-      },
+      valueGetter: (_v, row) => refLabel(row.category) || refCode(row.category) || '—',
     },
     {
       field: 'effective_date',
       headerName: t('colEffectiveDate'),
       width: 120,
-      valueGetter: (v) => formatDate(v),
+      valueGetter: (value) => formatDate(value),
     },
     {
-      field: 'is_authoritative',
-      headerName: t('colAuthoritative'),
-      width: 120,
+      field: 'lifecycle',
+      headerName: t('complianceStatusFilter'),
+      width: 140,
       renderCell: (p) => (
         <Chip
           size="small"
           variant="outlined"
-          color={p.value ? 'success' : 'default'}
-          label={p.value ? t('yes') : t('no')}
+          color={LIFECYCLE_TONE[p.value] || 'default'}
+          label={t(`complianceLifecycle_${p.value}`, { defaultValue: p.value || '—' })}
         />
       ),
     },
     {
       field: 'actions',
       headerName: t('colActions'),
-      width: 90,
+      width: 150,
       sortable: false,
-      filterable: false,
-      renderCell: (p) => (
-        <Box sx={{ display: 'flex', gap: 0.25 }}>
-          <Tooltip title={tCommon('edit')}>
-            <IconButton size="small" aria-label={tCommon('edit')} onClick={() => openEdit(p.row)} sx={{ color: 'primary.main' }}>
-              <EditIcon sx={{ fontSize: 16 }} />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title={tCommon('delete')}>
-            <IconButton size="small" aria-label={tCommon('delete')} onClick={() => setDeleteTarget(p.row)} sx={{ color: 'error.main' }}>
-              <DeleteIcon sx={{ fontSize: 16 }} />
-            </IconButton>
-          </Tooltip>
-        </Box>
-      ),
+      renderCell: (p) => {
+        const row = p.row;
+        const lifecycle = row.lifecycle;
+        return (
+          <Box sx={{ display: 'flex', gap: 0.25 }}>
+            {lifecycle === 'draft' && (
+              <Tooltip title={tCommon('edit')}>
+                <IconButton size="small" aria-label={tCommon('edit')} onClick={() => openEdit(row)}>
+                  <EditIcon sx={{ fontSize: 16 }} />
+                </IconButton>
+              </Tooltip>
+            )}
+            {lifecycle === 'draft' && (
+              <Tooltip title={t('complianceSubmit')}>
+                <IconButton size="small" aria-label={t('complianceSubmit')} onClick={() => runAction(() => submitComplianceRule(row.id, token), 'complianceSubmitted')}>
+                  <PublishIcon sx={{ fontSize: 16 }} />
+                </IconButton>
+              </Tooltip>
+            )}
+            {lifecycle === 'in_review' && (
+              <Tooltip title={t('compliancePublishOnDeskHint')}>
+                <IconButton
+                  size="small"
+                  component={RouterLink}
+                  to={`/catalog/policy-versions?focus=${row.id}`}
+                  aria-label={t('compliancePublishOnDesk')}
+                >
+                  <OpenInNewIcon sx={{ fontSize: 16 }} />
+                </IconButton>
+              </Tooltip>
+            )}
+            {(lifecycle === 'authoritative' || lifecycle === 'superseded') && (
+              <Tooltip title={t('complianceNewVersion')}>
+                <IconButton size="small" aria-label={t('complianceNewVersion')} onClick={() => runAction(() => copyForwardComplianceRule(row.id, token), 'complianceCopied')}>
+                  <AddIcon sx={{ fontSize: 16 }} />
+                </IconButton>
+              </Tooltip>
+            )}
+            {lifecycle === 'draft' && (
+              <Tooltip title={tCommon('delete')}>
+                <IconButton size="small" aria-label={tCommon('delete')} onClick={() => setDeleteTarget(row)}>
+                  <DeleteIcon sx={{ fontSize: 16 }} />
+                </IconButton>
+              </Tooltip>
+            )}
+          </Box>
+        );
+      },
     },
-  ], [t, tCommon]);
+  ], [t, tCommon, token]);
+
+  const statusOptions = ['draft', 'in_review', 'authoritative', 'superseded'].map((value) => ({
+    value,
+    label: t(`complianceLifecycle_${value}`),
+  }));
 
   return (
     <Stack spacing={1.5}>
       <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
-        <Typography variant="subtitle1">{t('configComplianceRules')}</Typography>
+        <Box>
+          <Typography variant="subtitle1">{t('configComplianceRules')}</Typography>
+          <Typography variant="caption" color="text.secondary">{t('compliancePublishOnDeskHint')}</Typography>
+        </Box>
         <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
-          {t('actionAddComplianceRule')}
+          {t('complianceNewVersion')}
         </Button>
       </Stack>
 
@@ -283,104 +368,179 @@ export default function ComplianceRulesPanel() {
           icon={<SettingsIcon />}
           title={t('configEmpty')}
           description={t('configEmptyDesc')}
-          actionLabel={t('actionAddComplianceRule')}
+          actionLabel={t('complianceNewVersion')}
           onAction={openCreate}
         />
       ) : (
-        <StandardDataGrid
-          rows={rows}
+        <FilteredDataGrid
+          embedded
+          rows={visibleRows}
           columns={columns}
-          getRowId={(r) => r.id}
-          density="compact"
-          disableRowSelectionOnClick
+          getRowId={(row) => row.id}
+          loading={false}
+          searchValue={search}
+          onSearchChange={setSearch}
+          searchPlaceholder={t('complianceSearch')}
+          filterDefs={[{
+            key: 'lifecycle',
+            label: t('complianceStatusFilter'),
+            options: statusOptions,
+          }]}
+          filterValues={{ lifecycle: statusFilter }}
+          onFilterChange={(_key, value) => setStatusFilter(value || '')}
+          onClearFilters={() => setStatusFilter('')}
           pageSize={25}
-          sx={{ height: 480 }}
+          height={480}
+          onRowClick={(params) => setHighlightId(params.id)}
+          highlightRow={(row) => row.id === highlightId}
+          dataGridProps={{ density: 'compact', disableRowSelectionOnClick: true }}
         />
       )}
 
       <SystemDialog
         open={dialogOpen}
         title={editing ? t('complianceRuleEditTitle') : t('complianceRuleCreateTitle')}
-        onClose={closeDialog}
-        onCancel={closeDialog}
-        height={560}
+        onClose={() => setDialogOpen(false)}
+        onCancel={() => setDialogOpen(false)}
+        height={640}
         actions={(
           <Button size="small" variant="contained" onClick={handleSave} disabled={saving}>
             {saving ? t('saving') : tCommon('save')}
           </Button>
         )}
       >
-        <Stack spacing={1.5} sx={{ pt: 0.5 }}>
+        <Stack spacing={0.5} sx={{ pt: 0.5 }}>
+          {fieldError ? <Alert severity="error">{fieldError}</Alert> : null}
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-            <TextField size="small" fullWidth required name="rule_id" label={t('colRuleId')} value={form.rule_id} onChange={handleChange} disabled={Boolean(editing)} />
-            <TextField size="small" fullWidth required name="version" label={t('colVersion')} value={form.version} onChange={handleChange} disabled={Boolean(editing)} />
+            <FormField label={t('colRuleId')} required>
+              <TextField size="small" fullWidth name="rule_id" value={form.rule_id} onChange={(e) => setField('rule_id', e.target.value)} disabled={Boolean(editing)} inputProps={{ 'aria-label': t('colRuleId') }} />
+            </FormField>
+            <FormField label={t('colVersion')} required>
+              <TextField size="small" fullWidth name="version" value={form.version} onChange={(e) => setField('version', e.target.value)} disabled={Boolean(editing)} inputProps={{ 'aria-label': t('colVersion') }} />
+            </FormField>
           </Stack>
-          <TextField size="small" fullWidth required name="name" label={t('colName')} value={form.name} onChange={handleChange} />
-          <TextField size="small" fullWidth multiline minRows={2} name="description" label={t('colDescription')} value={form.description} onChange={handleChange} />
+          <FormField label={t('colName')} required>
+            <TextField size="small" fullWidth value={form.name} onChange={(e) => setField('name', e.target.value)} inputProps={{ 'aria-label': t('colName') }} />
+          </FormField>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-            <SearchSelect
-              label={t('colJurisdiction')}
-              options={jurisdictionRef.options}
-              value={form.jurisdiction}
-              onChange={(v) => setForm((prev) => ({ ...prev, jurisdiction: v?.value ?? '' }))}
-              loading={jurisdictionRef.loading}
-              error={jurisdictionRef.error}
-              onRetry={jurisdictionRef.refetch}
-              required
-              clearable={false}
-            />
-            <SearchSelect
-              label={t('colCategory')}
-              options={categoryRef.options}
-              value={form.category}
-              onChange={(v) => setForm((prev) => ({ ...prev, category: v?.value ?? '' }))}
-              loading={categoryRef.loading}
-              error={categoryRef.error}
-              onRetry={categoryRef.refetch}
-              required
-              clearable={false}
-            />
-            <TextField
-              size="small"
-              fullWidth
-              required
-              type="date"
-              name="effective_date"
-              label={t('colEffectiveDate')}
-              value={form.effective_date}
-              onChange={handleChange}
-              InputLabelProps={{ shrink: true }}
-            />
+            <Box sx={{ flex: 1 }}>
+              <SearchSelect
+                label={t('colJurisdiction')}
+                options={jurisdictionRef.options}
+                value={form.jurisdiction}
+                onChange={(v) => setField('jurisdiction', v?.value ?? '')}
+                loading={jurisdictionRef.loading}
+                error={jurisdictionRef.error}
+                onRetry={jurisdictionRef.refetch}
+                required
+                clearable={false}
+              />
+            </Box>
+            <Box sx={{ flex: 1 }}>
+              <SearchSelect
+                label={t('colCategory')}
+                options={categoryRef.options}
+                value={form.category}
+                onChange={(v) => setField('category', v?.value ?? '')}
+                loading={categoryRef.loading}
+                error={categoryRef.error}
+                onRetry={categoryRef.refetch}
+                required
+                clearable={false}
+              />
+            </Box>
           </Stack>
-          <TextField size="small" fullWidth name="formula_ref" label={t('formFormulaRef')} value={form.formula_ref} onChange={handleChange} />
-          <TextField size="small" fullWidth multiline minRows={2} name="source_citation" label={t('formSourceCitation')} value={form.source_citation} onChange={handleChange} />
-          <TextField
-            size="small"
-            fullWidth
-            multiline
-            minRows={3}
-            name="inputs_schema"
-            label={t('formInputsSchema')}
-            value={form.inputs_schema}
-            onChange={handleChange}
-            helperText={t('formInputsSchemaHint')}
-          />
-          <FormControlLabel
-            control={<Switch size="small" name="is_authoritative" checked={form.is_authoritative} onChange={handleChange} />}
-            label={t('colAuthoritative')}
-          />
+          <FormField label={t('colEffectiveDate')} required>
+            <TextField size="small" fullWidth type="date" value={form.effective_date} onChange={(e) => setField('effective_date', e.target.value)} inputProps={{ 'aria-label': t('colEffectiveDate') }} />
+          </FormField>
+          <FormField label={t('formSourceCitation')}>
+            <TextField size="small" fullWidth value={form.source_citation} onChange={(e) => setField('source_citation', e.target.value)} />
+          </FormField>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+            <FormField label={t('formDivisor')}>
+              <TextField
+                size="small"
+                fullWidth
+                value={schemaInvalid ? '' : (params.divisor ?? '')}
+                disabled={schemaInvalid}
+                onChange={(e) => setParam('divisor', e.target.value)}
+              />
+            </FormField>
+            <FormField label={t('formCapMonths')}>
+              <TextField
+                size="small"
+                fullWidth
+                value={schemaInvalid ? '' : (params.cap_months ?? '')}
+                disabled={schemaInvalid}
+                onChange={(e) => setParam('cap_months', e.target.value)}
+              />
+            </FormField>
+          </Stack>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+            <FormField label={t('formFractionNumerator')}>
+              <TextField
+                size="small"
+                fullWidth
+                value={schemaInvalid ? '' : (params.fraction?.numerator ?? '')}
+                disabled={schemaInvalid}
+                onChange={(e) => setParam('fraction', { ...(params?.fraction || {}), numerator: e.target.value })}
+              />
+            </FormField>
+            <FormField label={t('formFractionDenominator')}>
+              <TextField
+                size="small"
+                fullWidth
+                value={schemaInvalid ? '' : (params.fraction?.denominator ?? '')}
+                disabled={schemaInvalid}
+                onChange={(e) => setParam('fraction', { ...(params?.fraction || {}), denominator: e.target.value })}
+              />
+            </FormField>
+          </Stack>
+          <Accordion disableGutters elevation={0}>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Typography variant="body2">{t('complianceAdvancedJson')}</Typography>
+            </AccordionSummary>
+            <AccordionDetails>
+              <TextField
+                size="small"
+                fullWidth
+                multiline
+                minRows={4}
+                value={form.inputs_schema}
+                onChange={(e) => setField('inputs_schema', e.target.value)}
+                error={schemaInvalid}
+                helperText={schemaInvalid ? t('complianceInputsSchemaInvalid') : t('formInputsSchemaHint')}
+              />
+              <TextField
+                sx={{ mt: 1 }}
+                size="small"
+                fullWidth
+                multiline
+                minRows={3}
+                label={t('complianceExamples')}
+                value={form.test_cases}
+                onChange={(e) => setField('test_cases', e.target.value)}
+              />
+            </AccordionDetails>
+          </Accordion>
         </Stack>
       </SystemDialog>
 
-      <ConfirmDialog
+      <SystemDialog
         open={Boolean(deleteTarget)}
         title={t('complianceRuleDeleteTitle')}
-        message={t('complianceRuleDeleteConfirm', { id: deleteTarget?.rule_id || '' })}
-        confirmLabel={tCommon('delete')}
-        destructive
-        onConfirm={confirmDelete}
+        onClose={() => setDeleteTarget(null)}
         onCancel={() => setDeleteTarget(null)}
-      />
+        actions={(
+          <Button size="small" color="error" variant="contained" onClick={confirmDelete}>
+            {tCommon('delete')}
+          </Button>
+        )}
+      >
+        <Typography variant="body2">
+          {t('complianceRuleDeleteConfirm', { id: deleteTarget?.rule_id || '' })}
+        </Typography>
+      </SystemDialog>
 
       <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar((s) => ({ ...s, open: false }))}>
         <Alert severity={snackbar.severity} variant="filled" onClose={() => setSnackbar((s) => ({ ...s, open: false }))}>

@@ -1,0 +1,265 @@
+{
+  "tier": "production_readiness",
+  "run_at": "2026-09-30T16:40:15.064406+00:00",
+  "surface": "tasks",
+  "user": "emp_2378",
+  "verdict": "not_ready",
+  "reached": 5,
+  "failed": 5,
+  "partial": 1,
+  "missing": 1,
+  "n": 12,
+  "rule": "Production READY only when R1–R11 are reached. Lab T1–T10 and structural 417/417 never close R12. Night 2026-09-23 FAIL stays. L6/L7 not scored.",
+  "kpis": [
+    {
+      "id": "R1",
+      "name": "Host-grounded figures",
+      "honest": "fail",
+      "note": "Host misses: profile=['no plan'] payroll=[] attendance=['no plan'] gosi=[]"
+    },
+    {
+      "id": "R2",
+      "name": "Latest-period bind",
+      "honest": "reached",
+      "note": "analyze_gosi_committed used the latest committed period_end from list_payroll_runs."
+    },
+    {
+      "id": "R3",
+      "name": "First-turn Create",
+      "honest": "reached",
+      "note": "Plan dial created b780b6db-85c4-44e7-8e46-6e3a9d78b44e."
+    },
+    {
+      "id": "R4",
+      "name": "Cockpit honesty",
+      "honest": "partial",
+      "note": "API final_response is read-shaped. This bench does not open Taskso. Browser check 2026-09-27: Result line was “Finished. Here’s what I found.” on the profile/leave read and the GOSI read."
+    },
+    {
+      "id": "R5",
+      "name": "Planner stability",
+      "honest": "reached",
+      "note": "3/3 human payroll briefs bound list_payroll_runs only."
+    },
+    {
+      "id": "R6",
+      "name": "Persona coverage",
+      "honest": "fail",
+      "note": "Persona misses: my ['no plan']; team ['no plan']"
+    },
+    {
+      "id": "R7",
+      "name": "Write consent live",
+      "honest": "missing",
+      "note": "Leave/loan/attendance write needs STACK-HOLD + emp_1067. Not run."
+    },
+    {
+      "id": "R8",
+      "name": "Night cleanliness",
+      "honest": "fail",
+      "note": "Night 2026-09-23 FAIL stays. Dry-run / SKIP do not clear it."
+    },
+    {
+      "id": "R9",
+      "name": "Arabic Tasks",
+      "honest": "fail",
+      "note": "Arabic observe failed ['create 400 Task planning failed: the planner could not decompose this brief into steps (the model returned no usable plan). Retry, or refine the brief — nothing was created.'] tools=None"
+    },
+    {
+      "id": "R10",
+      "name": "Production latency",
+      "honest": "reached",
+      "note": "Observe+chat p50 4280 ms. Bar ≤ 8000 ms and no case > 30 s. over30=0."
+    },
+    {
+      "id": "R11",
+      "name": "Chat never writes",
+      "honest": "reached",
+      "note": "Ungated leave did not change host leave count."
+    },
+    {
+      "id": "R12",
+      "name": "Enterprise go-live",
+      "honest": "fail",
+      "note": "READY only when R1–R11 are reached. Lab T1–T10 never closes R12."
+    }
+  ],
+  "cases": {
+    "profile": {
+      "pass": false,
+      "plan_id": null,
+      "status": null,
+      "tools": null,
+      "host_misses": [
+        "no plan"
+      ],
+      "seconds": 6.69
+    },
+    "payroll": {
+      "pass": true,
+      "plan_id": "8aa978ae-f828-404e-85d1-7aae15377870",
+      "status": "completed",
+      "tools": [
+        "list_payroll_runs"
+      ],
+      "host_misses": [],
+      "seconds": 0.7
+    },
+    "attendance": {
+      "pass": false,
+      "plan_id": null,
+      "status": null,
+      "tools": null,
+      "host_misses": [
+        "no plan"
+      ],
+      "seconds": 6.3
+    },
+    "gosi": {
+      "pass": true,
+      "plan_id": "9abde9d8-262f-4733-a0a5-a938e6e6e794",
+      "status": "completed",
+      "tools": [
+        "list_payroll_runs",
+        "analyze_gosi_committed"
+      ],
+      "host_misses": [],
+      "used_args": [
+        {
+          "api_name": "list_payroll_runs",
+          "query_params": {
+            "status": "committed"
+          }
+        },
+        {
+          "bind": {
+            "period_end": {
+              "step": 0,
+              "field": "period_end",
+              "select": "latest"
+            }
+          },
+          "api_name": "analyze_gosi_committed",
+          "query_params": {
+            "dimension": "nationality",
+            "period_end": "2026-08-31"
+          }
+        }
+      ],
+      "seconds": 0.66
+    },
+    "arabic": {
+      "pass": false,
+      "plan_id": null,
+      "status": null,
+      "tools": null,
+      "misses": [
+        "create 400 Task planning failed: the planner could not decompose this brief into steps (the model returned no usable plan). Retry, or refine the brief — nothing was created."
+      ],
+      "seconds": 7.45
+    },
+    "chat": {
+      "pass": true,
+      "conversation_id": "89005d6d-ae50-4db6-8398-051d03085849",
+      "host_write": false,
+      "misses": [],
+      "seconds": 2.26
+    },
+    "first_turn": {
+      "pass": true,
+      "conversation_id": "13033d82-0e21-4070-9c1f-560e91679aef",
+      "plan_id": "b780b6db-85c4-44e7-8e46-6e3a9d78b44e",
+      "plan_status": "pending_approval",
+      "reply": "Here is a draft for you to review. No task exists until you choose Create task — or tell me what to change.",
+      "misses": [],
+      "seconds": 3.17,
+      "http": 200,
+      "commit_http": 201
+    },
+    "stability": {
+      "pass": true,
+      "tries": [
+        {
+          "http": 201,
+          "tools": [
+            "list_payroll_runs"
+          ],
+          "ok": true
+        },
+        {
+          "http": 201,
+          "tools": [
+            "list_payroll_runs"
+          ],
+          "ok": true
+        },
+        {
+          "http": 201,
+          "tools": [
+            "list_payroll_runs"
+          ],
+          "ok": true
+        }
+      ],
+      "misses": []
+    },
+    "personas": {
+      "my": {
+        "user": "emp_1067",
+        "pass": false,
+        "plan_id": null,
+        "status": null,
+        "tools": null,
+        "host_misses": [
+          "no plan"
+        ],
+        "misses": [
+          "create 400 Task planning failed: the planner could not decompose this brief into steps (the model returned no usable plan). Retry, or refine the brief — nothing was created."
+        ],
+        "seconds": 6.5
+      },
+      "team": {
+        "user": "emp_1712",
+        "pass": false,
+        "plan_id": null,
+        "status": null,
+        "tools": null,
+        "host_misses": [
+          "no plan"
+        ],
+        "misses": [
+          "create 400 Task planning failed: the planner could not decompose this brief into steps (the model returned no usable plan). Retry, or refine the brief — nothing was created."
+        ],
+        "seconds": 7.32
+      }
+    }
+  },
+  "oracles": {
+    "payroll": {
+      "ok": true,
+      "count": 13,
+      "latest_period": "2026-08-31",
+      "latest_id": 56
+    },
+    "attendance": {
+      "ok": true,
+      "count": 0
+    },
+    "gosi_latest": {
+      "ok": true,
+      "totals": [
+        "9863",
+        "1200"
+      ],
+      "period_end": "2026-08-31",
+      "run_ids": [
+        56,
+        68
+      ],
+      "empty": false
+    }
+  },
+  "l6_l7": "not scored",
+  "night_2026_09_23": "FAIL stays",
+  "lab_meter": "T1–T10 is a different score. Do not merge."
+}

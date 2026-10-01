@@ -92,6 +92,11 @@ export function exportWpsPayrollRun(id, token) {
 }
 
 /** Advance a draft run to computed (people:manage). */
+/** Open an off-cycle retro tied to a committed run. Period dates must not match the source. */
+export function openRetroPayrollRun(id, data, token) {
+  return apiFetch(`${ROOT}payroll-runs/${encodeURIComponent(id)}/retro/`, { method: 'POST', body: data, token });
+}
+
 export function computePayrollRun(id, token) {
   return apiFetch(`${ROOT}payroll-runs/${encodeURIComponent(id)}/compute/`, { method: 'POST', token });
 }
@@ -363,6 +368,22 @@ export function deleteComplianceRule(id, token) {
   return apiFetch(`${ROOT}compliance-rules/${encodeURIComponent(id)}/`, {
     method: 'DELETE', token,
   });
+}
+
+export function copyForwardComplianceRule(id, token) {
+  return apiFetch(`${ROOT}compliance-rules/${encodeURIComponent(id)}/copy-forward/`, {
+    method: 'POST', body: {}, token,
+  });
+}
+
+export function submitComplianceRule(id, token) {
+  return apiFetch(`${ROOT}compliance-rules/${encodeURIComponent(id)}/submit/`, {
+    method: 'POST', body: {}, token,
+  });
+}
+
+export function previewComplianceRule(id, token) {
+  return apiFetch(`${ROOT}compliance-rules/${encodeURIComponent(id)}/preview/`, { token });
 }
 
 /** List positions. */

@@ -335,7 +335,7 @@ export default function DataTableGrid({
       await onEditRow(rowId, values);
       setDrawerOpen(false);
       setEditingRow(null);
-      notify({ message: rowId ? t('dgRowUpdated') : t('dgRowAdded'), type: "success" });
+      notify({ message: rowId ? t('dgRowRestated') : t('dgRowAdded'), type: "success" });
       fetchRows?.();
     } catch (err) {
       const message = err?.data?.code === "append_only"

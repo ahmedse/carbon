@@ -196,10 +196,10 @@ def publish_op_progress_sync(
 
 
 def _instance_id() -> str:
-    """Return this instance's id for the frame envelope (lazy, no engine import)."""
-    from ai.engine.core.config import get_settings
+    """Return this instance's pack id for the frame envelope (lazy)."""
+    from ai.instance_registry import resolve_instance_id
 
-    return get_settings().PULSE_INSTANCE_ID
+    return resolve_instance_id()
 
 
 def _op_frame_visible(user, frame: dict) -> bool:

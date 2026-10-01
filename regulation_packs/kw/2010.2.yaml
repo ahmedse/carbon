@@ -1,0 +1,40 @@
+id: kw
+version: "2010.2"
+supersedes: "2010.1"
+floors:
+  - field: working_day_multiplier
+    op: gte
+    value: "1.25"
+  - field: friday_multiplier
+    op: gte
+    value: "2.0"
+  - field: holiday_multiplier
+    op: gte
+    value: "2.0"
+funds:
+  - code: basic
+    slice: capped
+    ceiling: "1500"
+    employee_rate: "0.05"
+    employer_rate: "0.10"
+  - code: supplementary
+    slice: band
+    floor: "1500"
+    width: "1250"
+    employee_rate: "0.05"
+    employer_rate: "0.10"
+  - code: pension_increase
+    slice: capped
+    ceiling: "2750"
+    employee_rate: "0.025"
+    employer_rate: "0.01"
+  - code: financial_remuneration
+    slice: capped
+    ceiling: "1500"
+    employee_rate: "0.025"
+    employer_rate: "0"
+  - code: unemployment
+    slice: capped
+    ceiling: "2750"
+    employee_rate: "0.005"
+    employer_rate: "0.005"

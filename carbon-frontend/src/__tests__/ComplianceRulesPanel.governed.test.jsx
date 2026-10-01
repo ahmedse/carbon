@@ -53,7 +53,7 @@ describe('ComplianceRulesPanel governed pickers', () => {
     const user = userEvent.setup();
     render(<ComplianceRulesPanel />);
 
-    const addButtons = await screen.findAllByRole('button', { name: /add rule/i });
+    const addButtons = await screen.findAllByRole('button', { name: /new version/i });
     await user.click(addButtons[0]);
 
     const category = await screen.findByLabelText(/^category|الفئة/i);

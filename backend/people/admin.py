@@ -30,9 +30,9 @@ from .models import (
 class ComplianceRuleAdmin(admin.ModelAdmin):
     list_display = [
         'rule_id', 'version', 'name', 'category', 'jurisdiction',
-        'effective_date', 'is_authoritative',
+        'effective_date', 'lifecycle', 'is_authoritative',
     ]
-    list_filter = ['category', 'jurisdiction', 'is_authoritative']
+    list_filter = ['category', 'jurisdiction', 'lifecycle', 'is_authoritative']
     search_fields = ['rule_id', 'name', 'formula_ref']
     ordering = ['category', 'rule_id', '-effective_date']
     readonly_fields = ['created_at', 'updated_at']
@@ -51,7 +51,7 @@ class EmployeeAdmin(admin.ModelAdmin):
 
 @admin.register(PayrollRun)
 class PayrollRunAdmin(admin.ModelAdmin):
-    list_display = ['id', 'org_unit', 'period_start', 'period_end', 'status', 'created_at']
+    list_display = ['id', 'org_unit', 'period_start', 'period_end', 'kind', 'status', 'created_at']
     list_filter = ['status', 'org_unit']
     ordering = ['-period_start']
     readonly_fields = ['created_at', 'committed_at']

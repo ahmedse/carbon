@@ -70,6 +70,36 @@ class CompensationService:
         return line.amount if line is not None else None
 
     @staticmethod
+    def verified_eosi_base_amount(employee, as_of=None) -> Decimal | None:
+        """Sum verified open monthly earnings flagged ``is_eosi_base``.
+
+        Returns None when no such line exists. Does not read
+        ``Employee.basic_salary``.
+        """
+        lines = (
+            CompensationService.current_lines(employee, as_of=as_of)
+            .filter(
+                component__is_eosi_base=True,
+                component__direction="earning",
+                frequency="monthly",
+                is_verified=True,
+            )
+            .select_related("component")
+            .order_by("-effective_start", "-pk")
+        )
+        seen: set[str] = set()
+        total = Decimal("0")
+        found = False
+        for line in lines:
+            code = line.component.code
+            if code in seen:
+                continue
+            seen.add(code)
+            total += Decimal(line.amount)
+            found = True
+        return total if found else None
+
+    @staticmethod
     def ledger_totals(employee, as_of=None):
         """DB-computed monthly earnings/deductions for ``employee`` (Decimal-exact).
 

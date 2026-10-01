@@ -1,0 +1,23 @@
+# Greeting door. Phrases live here, never in engine/.
+# A listed-course greeting is answered before the model: hello + course
+# headline from the snapshot (shortname once, fullname as Moodle sent it),
+# optional staff/student view when the snapshot already has the audience,
+# then one line that Pulse answers from this course's lectures and files.
+# Do not say page, weeks, or exams. Pulse-off / not-on-list is L0 in the
+# host seam, not this reply. Topic miss stays “This is not in this course.”
+# and must not fire on these.
+version: 1
+phrases:
+  - hi
+  - hello
+  - hey
+  - hi there
+  - hello there
+  - hey there
+  - good morning
+  - good afternoon
+  - good evening
+  - yo
+  - howdy
+hello: Hi.
+grounding: Pulse can answer from this course's lectures and files.

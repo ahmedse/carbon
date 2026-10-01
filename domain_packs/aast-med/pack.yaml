@@ -1,7 +1,7 @@
 # Domain pack manifest (ADR-0050 / med ADR-0004).
 # Engine addresses packs by id. Moodle and medicine words stay in this pack.
 id: aast-med
-version: 1
+version: 2
 domain: moodle-education
 display_name: AAST College of Medicine — Moodle
 instance: instance.yaml
@@ -16,8 +16,11 @@ owns:
   onboarding_asks: onboarding_asks.yaml
   section_asks: section_asks.yaml
   lecture_asks: lecture_asks.yaml
+  topic_asks: topic_asks.yaml
+  reference_asks: reference_asks.yaml
   fact_asks: fact_asks.yaml
   identity_asks: identity_asks.yaml
+  greet_asks: greet_asks.yaml
   course_asks: course_asks.yaml
   access_reasons: access_reasons.yaml
   courses: courses.yaml
@@ -29,9 +32,13 @@ owns:
   gold_l3: gold/l3.yaml
   gold_c3: gold/c3.yaml
   gold_c4: gold/c4.yaml
+  gold_c4_drive: gold/c4-drive.yaml
+  gold_c5: gold/c5.yaml
   gold_l4: gold/l4.yaml
   gold_c6: gold/c6.yaml
+  bank_ext: bank/course-ext-13
   gold_l5: gold/l5.yaml
+  gold_a3_roster: gold/a3-roster.yaml
   gold_nmd2101_restore: gold/nmd2101_restore.yaml
   keys_nmd1103: bank/course-keys-13/NMD1103.jsonl
   keys_nmd1000: bank/course-keys-13/NMD1000.jsonl

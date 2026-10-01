@@ -1,0 +1,13 @@
+# Follow-up reference asks for a topic already resolved on this conversation.
+# Vocabulary for the Moodle Ask door. State carries resolved_topic (set by the
+# topic door). Do not scan chat history. Cite this course’s passages only.
+version: 1
+all_of_any:
+  - ["give me references"]
+  - ["references from the course"]
+  - ["here from the course"]
+  - ["course references"]
+  - ["references please"]
+cite_span: 160
+no_topic: No course topic is in focus.
+course_label: "Course materials for {topic}:"

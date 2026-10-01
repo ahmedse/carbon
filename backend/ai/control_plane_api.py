@@ -38,6 +38,7 @@ from ai.models.control_state import (
     PulseControlState,
     get_or_create_control_state,
 )
+from ai.platform_bind import has_domain_pack
 logger = logging.getLogger("carbon.ai.control_plane")
 
 
@@ -686,3 +687,146 @@ class BudgetControlView(APIView):
                 "spend": cmd._spend(request, state),
             }
         )
+
+
+# ── Platform bind / Pulse jail (ADR-0036 tab, not a seventh sidebar) ─────
+
+
+class PulseBindView(APIView):
+    """GET|PATCH control/bind/ — pack health, Pulse on/off, per-app enablement.
+
+    Reads: ``ai:view_console``. Writes: ``ai:manage_console``.
+    Never writes ``DJANGO_BRAND``. Does not claim a switch when files ≠ process.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        if self.request.method == "GET":
+            return [IsAuthenticated(), ControlReadPermission()]
+        return [IsAuthenticated(), ManageConsolePermission()]
+
+    def get(self, request):
+        return Response(self._payload())
+
+    def patch(self, request):
+        from ai.platform_bind import bind_health
+
+        instance_id = resolve_instance_id()
+        state = get_or_create_control_state(instance_id)
+        prev = state.as_dict()
+
+        if "pulse_enabled" in request.data:
+            enabled = bool(request.data.get("pulse_enabled"))
+            if enabled:
+                if state.containment_level == "full_stop":
+                    state.containment_level = "normal"
+                    state.learning_admissions_frozen = False
+            else:
+                state.containment_level = "full_stop"
+                state.learning_admissions_frozen = True
+                self._kill_active_like_full_stop(request.user)
+
+        apps = request.data.get("apps")
+        extra_apps = request.data.get("extra_apps")
+        writing_apps = isinstance(apps, dict) or isinstance(extra_apps, dict)
+        if writing_apps:
+            health = bind_health(instance_id=instance_id)
+            if not health["files_match_process"]:
+                return Response(
+                    {
+                        "error": "files_mismatch",
+                        "detail": "Process brand does not match file brand. Pulse has not switched.",
+                        "health": health,
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+        if isinstance(apps, dict):
+            self._write_enablement(instance_id, apps, request.user.username)
+        if isinstance(extra_apps, dict):
+            from ai.platform_bind import extra_packs_for_brand, has_domain_pack
+
+            for pack, slugs in extra_apps.items():
+                pack_id = str(pack or "").strip()
+                if pack_id not in extra_packs_for_brand():
+                    continue
+                if not has_domain_pack(pack_id) or not isinstance(slugs, dict):
+                    continue
+                self._write_enablement(pack_id, slugs, request.user.username)
+
+        state.updated_by = request.user.username
+        state.save()
+        AuditService.log(
+            action="ai.pulse.bind.set",
+            actor=request.user.username,
+            target=instance_id,
+            detail={
+                "from": prev,
+                "to": state.as_dict(),
+                "apps": apps,
+                "extra_apps": extra_apps,
+            },
+            host_user_id=str(request.user.pk),
+            visibility="shared",
+        )
+        return Response(self._payload())
+
+    @staticmethod
+    def _raw_catalog(instance_id: str) -> list:
+        from ai.engine.core.archetypes import load_instance_config
+
+        if not has_domain_pack(instance_id):
+            return []
+        cfg = load_instance_config(instance_id) or {}
+        return list(cfg.get("api_catalog") or [])
+
+    def _write_enablement(self, instance_id: str, apps: dict, username: str) -> None:
+        from ai.models.app_enablement import PulseAppEnablement
+        from ai.platform_bind import bind_apps_payload
+
+        allowed_slugs = {
+            row["slug"] for row in bind_apps_payload(instance_id, self._raw_catalog(instance_id))
+        }
+        for slug, raw in apps.items():
+            slug = str(slug).strip()
+            if slug not in allowed_slugs:
+                continue
+            row, _ = PulseAppEnablement.objects.get_or_create(
+                instance_id=instance_id,
+                app_slug=slug,
+                defaults={"enabled": True},
+            )
+            row.enabled = bool(raw)
+            row.updated_by = username
+            row.save()
+
+    def _payload(self) -> dict:
+        from ai.platform_bind import (
+            bind_apps_payload,
+            bind_health,
+            extra_packs_for_brand,
+            has_domain_pack,
+        )
+
+        instance_id = resolve_instance_id()
+        health = bind_health(instance_id=instance_id)
+        catalog = self._raw_catalog(instance_id) if health["pack_present"] else []
+        extra_pack_apps = []
+        for pack in extra_packs_for_brand():
+            extra_pack_apps.append(
+                {
+                    "pack": pack,
+                    "apps": bind_apps_payload(pack, self._raw_catalog(pack)),
+                }
+            )
+        return {
+            "health": health,
+            "pulse_enabled": health["pulse_enabled"],
+            "apps": bind_apps_payload(instance_id, catalog),
+            "extra_pack_apps": extra_pack_apps,
+            "pack_present": has_domain_pack(instance_id),
+        }
+
+    @staticmethod
+    def _kill_active_like_full_stop(user) -> None:
+        ContainmentView._kill_all_active(user)

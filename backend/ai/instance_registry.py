@@ -22,6 +22,12 @@ _BRAND_INSTANCE_MAP = {
 
 _FALLBACK_BRAND = "aastmt"
 
+# Extra packs sit on a brand cell. They are not manage.sh brands.
+# aast-med is the Moodle pack on aastmt; its default app is never carbon.
+_EXTRA_PACK_DEFAULT_APP = {
+    "aast-med": "moodle",
+}
+
 
 def active_brand() -> str:
     """Return the active Django brand, normalized to a known value."""
@@ -43,14 +49,30 @@ def resolve_default_app_identifier() -> str:
     return _BRAND_INSTANCE_MAP[active_brand()][1]
 
 
+def pack_id_for_brand(brand: str) -> str:
+    """Pack id for a brand slug. Brand and pack may differ (aastmt → carbon)."""
+    key = (brand or "").strip().lower()
+    if key in _BRAND_INSTANCE_MAP:
+        return _BRAND_INSTANCE_MAP[key][0]
+    return _BRAND_INSTANCE_MAP[_FALLBACK_BRAND][0]
+
+
+def known_brand(brand: str) -> bool:
+    return (brand or "").strip().lower() in _BRAND_INSTANCE_MAP
+
+
 def default_app_for_instance(instance_id: str | None) -> str:
     """Default app identifier for a *specific* engine instance.
 
     Unlike :func:`resolve_default_app_identifier` (which is brand-global), this
     is instance-scoped so a Carbon-instance turn defaults to the ``carbon`` app
-    even when the deployment brand is Nibras (and vice-versa).
+    even when the deployment brand is Nibras (and vice-versa). An extra pack
+    (aast-med) is not a brand; it still has its own default app.
     """
     for app in _BRAND_INSTANCE_MAP.values():
         if app[0] == instance_id:
             return app[1]
+    extra = _EXTRA_PACK_DEFAULT_APP.get(instance_id or "")
+    if extra:
+        return extra
     return "carbon"

@@ -55,6 +55,55 @@ def verify_signature(secret: str, timestamp: str, body: bytes, signature: str, *
 INSTANCE_ID = "aast-med"
 
 
+def is_moodle_host_user(user: Any) -> bool:
+    """True only for the Moodle embed shadow account, never Carbon Pulse."""
+    return str(getattr(user, "username", "") or "").startswith("moodle-")
+
+
+def is_moodle_embed_turn(payload: dict[str, Any] | None) -> bool:
+    """True for the signed Moodle pane or HMAC ask, not a leftover Carbon thread.
+
+    ``app_identifier=moodle`` alone is not enough. Carbon Pulse at :5179 can
+    still carry that leftover id; only the embed shadow user or ``moodle:`` /
+    ``moodle-`` host id binds the medicine pack.
+    """
+    data = payload if isinstance(payload, dict) else {}
+    host = str(data.get("host_user_id") or "").strip()
+    if host.startswith("moodle:") or host.startswith("moodle-"):
+        return True
+    if not host.isdigit():
+        return False
+    try:
+        from django.contrib.auth import get_user_model
+
+        user = get_user_model().objects.filter(pk=int(host)).only("username").first()
+    except Exception:  # noqa: BLE001 — bind must not crash a Carbon turn
+        return False
+    return is_moodle_host_user(user)
+
+
+def conversation_app_for_user(user: Any, app_identifier: str | None) -> str | None:
+    """Moodle app id is embed-only. Carbon/Nibras/EduOS Pulse keep their pack."""
+    app = str(app_identifier or "").strip() or None
+    if app == "moodle" and not is_moodle_host_user(user):
+        return None
+    return app
+
+
+def page_context_for_user(user: Any, stored: str = "", incoming: str = "") -> str:
+    """Signed Moodle page facts stay on the embed user. Process Pulse gets none."""
+    if not is_moodle_host_user(user):
+        return ""
+    return str(incoming or stored or "")
+
+
+def sanitize_page_context(instance_id: str, page_context: str) -> str:
+    """Drop Moodle snapshot text on every pack that is not aast-med."""
+    if str(instance_id or "") != INSTANCE_ID:
+        return ""
+    return str(page_context or "")
+
+
 def course_block(snapshot: dict[str, Any] | None) -> str:
     block = str((snapshot or {}).get("block") or "")
     if block in COURSE_LIST_BLOCKS:
@@ -123,8 +172,20 @@ def prepare_ask(payload: dict[str, Any] | None) -> AskDecision:
     reason = access_answer(message, snapshot)
     if reason:
         return AskDecision(answer=reason, refusal=str(snapshot.get("access") or ""))
-    cited = door_answer(message, snapshot)
+    from ai.moodle_ask_state import ask_state_key, get_ask_state, put_ask_state
+
+    courseid = int(
+        (host_context or {}).get("courseid")
+        or snapshot.get("courseid")
+        or (snapshot.get("course") or {}).get("id")
+        or 0
+    )
+    shortname = str((snapshot.get("course") or {}).get("shortname") or "").strip()
+    key = ask_state_key(payload.get("moodle_user_id"), courseid, shortname=shortname)
+    state = get_ask_state(key)
+    cited = door_answer(message, snapshot, state=state)
     if cited:
+        put_ask_state(key, state)
         return AskDecision(answer=cited)
     chat = chat_payload(
         message,
@@ -168,7 +229,7 @@ def page_context_from_snapshot(host_context: dict[str, Any], snapshot: dict[str,
         lines.append("No course is open. Do not invent a course page.")
     if snapshot.get("audience") == "student" and course.get("visible_to_user") and not snapshot.get("enrolled"):
         lines.append("This student is not enrolled in the open course.")
-    lines.append("Cite only these sections. If a fact is not listed, say it is not on this page.")
+    lines.append("Cite only these sections. If a fact is not listed, say it is not in this course.")
     if not sections:
         lines.append("Sections: (none).")
     else:
@@ -186,6 +247,22 @@ def page_context_from_snapshot(host_context: dict[str, Any], snapshot: dict[str,
         )
     if snapshot.get("sections_truncated"):
         lines.append("Further sections exist and were not included.")
+    off_sec = []
+    for item in snapshot.get("pulse_off_sections") or []:
+        try:
+            off_sec.append(str(int(item)))
+        except (TypeError, ValueError):
+            continue
+    if off_sec:
+        lines.append("Pulse-off sections: " + ",".join(off_sec))
+    off_cm = []
+    for item in snapshot.get("pulse_off_cmids") or []:
+        try:
+            off_cm.append(str(int(item)))
+        except (TypeError, ValueError):
+            continue
+    if off_cm:
+        lines.append("Pulse-off activities: " + ",".join(off_cm))
     lines.append(
         "No clinical advice. No claim that Moodle was changed. "
         "Teaching outlines are drafts. Not a mentorship caseload."
@@ -193,15 +270,55 @@ def page_context_from_snapshot(host_context: dict[str, Any], snapshot: dict[str,
     return "\n".join(lines)
 
 
-def door_answer(message: str, snapshot: dict[str, Any] | None) -> str | None:
-    """Section, lecture, fact, and identity replies. None means this message is not one of those."""
-    from ai.moodle_page import course_answer, fact_answer, identity_answer, lecture_answer, section_answer
+def door_answer(
+    message: str,
+    snapshot: dict[str, Any] | None,
+    state: dict[str, Any] | None = None,
+) -> str | None:
+    """Section, lecture, fact, topic, reference, greeting, and identity replies."""
+    from ai.moodle_page import (
+        course_answer,
+        fact_answer,
+        greet_answer,
+        identity_answer,
+        lecture_answer,
+        reference_answer,
+        section_answer,
+        topic_answer,
+    )
 
-    for answer_for in (identity_answer, course_answer, fact_answer, lecture_answer, section_answer):
-        answer = answer_for(message, snapshot)
+    bag = state if isinstance(state, dict) else None
+    for answer_for in (
+        greet_answer,
+        identity_answer,
+        course_answer,
+        fact_answer,
+        lecture_answer,
+        section_answer,
+        topic_answer,
+        reference_answer,
+    ):
+        if answer_for in (topic_answer, reference_answer, identity_answer):
+            answer = answer_for(message, snapshot, state=bag)
+        else:
+            answer = answer_for(message, snapshot)
         if answer:
             return answer
+    if str(message or "").strip():
+        from ai.moodle_page import closed_answer
+
+        return closed_answer(snapshot)
     return None
+
+
+def _csv_ints(blob: str) -> list[int]:
+    out: list[int] = []
+    for part in (blob or "").replace(" ", "").split(","):
+        if part.lstrip("-").isdigit():
+            value = int(part)
+            if value not in out:
+                out.append(value)
+    return out
 
 
 def snapshot_from_page_context(text: str) -> dict[str, Any]:
@@ -211,17 +328,31 @@ def snapshot_from_page_context(text: str) -> dict[str, Any]:
     sections: list[dict[str, Any]] = []
     truncated = False
     in_sections = False
+    audience = ""
+    pulse_off_sections: list[int] = []
+    pulse_off_cmids: list[int] = []
     for line in (text or "").splitlines():
+        if line.startswith("Moodle audience:"):
+            audience = line.split(":", 1)[1].strip().rstrip(".")
+            in_sections = False
+            continue
         if line.startswith("Open course ") and "(" in line and ")" in line:
             head = line[len("Open course ") :]
             fullname, _, rest = head.partition(" (")
-            shortname = rest.split(")", 1)[0].strip()
+            shortname, _, tail = rest.partition(")")
+            shortname = shortname.strip()
             if shortname:
                 course = {
                     "shortname": shortname,
                     "fullname": fullname.strip(),
                     "visible_to_user": True,
                 }
+                # page_context_from_snapshot writes id=N; restore it so
+                # ask_state_key matches prepare_ask / the embed course thread.
+                for token in tail.split():
+                    if token.startswith("id=") and token[3:].isdigit():
+                        course["id"] = int(token[3:])
+                        break
             in_sections = False
             continue
         if line == "Sections:":
@@ -247,11 +378,23 @@ def snapshot_from_page_context(text: str) -> dict[str, Any]:
             if raw.isdigit():
                 activity = {"name": name.strip(), "cmid": int(raw)}
             continue
+        if line.startswith("Pulse-off sections:"):
+            pulse_off_sections = _csv_ints(line.split(":", 1)[1])
+            continue
+        if line.startswith("Pulse-off activities:"):
+            pulse_off_cmids = _csv_ints(line.split(":", 1)[1])
+            continue
         if line == "Further sections exist and were not included.":
             truncated = True
     snapshot: dict[str, Any] = {"course": course, "activity": activity, "sections": sections}
     if truncated:
         snapshot["sections_truncated"] = True
+    if audience:
+        snapshot["audience"] = audience
+    if pulse_off_sections:
+        snapshot["pulse_off_sections"] = pulse_off_sections
+    if pulse_off_cmids:
+        snapshot["pulse_off_cmids"] = pulse_off_cmids
     return snapshot
 
 

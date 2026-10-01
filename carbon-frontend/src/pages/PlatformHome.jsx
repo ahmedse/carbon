@@ -3,7 +3,7 @@
 // Dual-workspace model: domains here; Pulse beside/expanded for AI.
 // RULE: Never add emissions-specific dashboards here; they live inside domain apps.
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -29,6 +29,7 @@ import useDocumentTitle from '../hooks/useDocumentTitle';
 import PageContainer from '../components/layout/PageContainer';
 import { FONT } from '../theme/themeTokens';
 import { BRAND_ID, PLATFORM_TITLE, PLATFORM_TAGLINE } from '../config/branding';
+import { resolveRoleAwareHome } from '../apps/learn/learnCopy';
 
 const APP_ICONS = {
   Co2: Co2Icon,
@@ -172,6 +173,7 @@ function NoAppsPlaceholder() {
 export default function PlatformHome() {
   const { t } = useTranslation('shell');
   useDocumentTitle(t('ui.platformTitle'));
+  const navigate = useNavigate();
   const { availablePerspectives, user, context, loading, userCapabilities, isGlobalAdminFlag } = useAuth();
   const { isAppEnabled } = useEnabledApps();
 
@@ -185,6 +187,20 @@ export default function PlatformHome() {
       isGlobalAdminFlag,
     });
   });
+
+  // Role-aware home: learn-only students never sit on empty Platform Home.
+  useEffect(() => {
+    if (loading || !user) return;
+    const isAdmin = (user.roles || []).some((r) => r.active !== false && r.role === 'admins_group');
+    const target = resolveRoleAwareHome('/', {
+      capabilities: userCapabilities,
+      isAdmin,
+      isGlobalAdmin: isGlobalAdminFlag === true,
+    });
+    if (target !== '/') {
+      navigate(target, { replace: true });
+    }
+  }, [loading, user, userCapabilities, isGlobalAdminFlag, navigate]);
 
   return (
     <PageContainer

@@ -34,7 +34,8 @@ from ai.engine.core.models import (
     SkillAdmissionLog,
 )
 from ai.engine.core.query import first
-from ai.plans_service import PLAN_INSTANCE_ID, _run_async
+from ai.instance_registry import resolve_instance_id
+from ai.plans_service import _run_async
 
 logger = logging.getLogger("carbon.ai.catalog_service")
 
@@ -64,8 +65,8 @@ class CatalogService:
     ``_run_async`` (module-level helper imported from ``ai.plans_service``).
     """
 
-    def __init__(self, instance_id: str = PLAN_INSTANCE_ID):
-        self.instance_id = instance_id
+    def __init__(self, instance_id: str | None = None):
+        self.instance_id = instance_id or resolve_instance_id()
 
     # ── Public (sync) API ────────────────────────────────────────────────
 

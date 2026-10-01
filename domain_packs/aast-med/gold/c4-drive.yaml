@@ -1,0 +1,32 @@
+# C4-drive. Bodies come from course-ext-13. Moodle intro is not a passage.
+version: 1
+ask: "According to the handout"
+miss: "This is not in this lecture."
+world: aast-mbbs
+counted: 134
+absent:
+  - google-file:not-on-any-activity
+  - google-presentation:not-on-any-activity
+c4_file_drive_refs:
+  - google-presentation:1_4k2LQC4bfZblcbBRG-NSkepSl5defs8
+  - google-presentation:1FgcDehEV07I_kF-216xAKORX7I4rTXK9
+intro_not_passage:
+  course: NMD1103
+  source_id: 1_4k2LQC4bfZblcbBRG-NSkepSl5defs8
+  intro: "Review the outline of the lecture before attending the practical session In the clinical skills Lab."
+duplicate_source:
+  - course: NMD1000
+    source_id: 1CjirLoUbyO3OcNTnj00p30sJqBCqCevQ
+    activities: [1349, 1350]
+  - course: MED213
+    source_id: 1WtXYwyoVNn6KOkDGuu5tl-McIdf9xyGD
+    activities: [891, 892]
+  - course: NMD3304
+    source_id: 1HCshifv0IQyqrUgD6gt-WpqMvJsR7fcF
+    activities: [722, 725]
+hit:
+  course: NMD1402
+  activity: 776
+  passage: "NMD1402:google:776:1zTjF9c9-EGPV4_LNwDq4Cn-HcC6KXvFo"
+  quote: "Differentiate between observational and intervention studies"
+docs_links_unresolved: 35

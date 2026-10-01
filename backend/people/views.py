@@ -153,21 +153,44 @@ def _blocked_write_response(instance):
     return None
 
 
+def _policy_error_response(exc):
+    from people.governance.sod import SoDViolation
+    from people.policy_service import PolicyTransitionError
+
+    if isinstance(exc, SoDViolation):
+        return Response(
+            {"detail": str(exc), "code": exc.code},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    if isinstance(exc, PolicyTransitionError):
+        body = {"detail": str(exc), "code": exc.code}
+        if exc.errors:
+            body["errors"] = exc.errors
+        return Response(body, status=exc.status_code)
+    raise exc
+
+
 class ComplianceRuleListCreateView(APIView):
     permission_classes = [IsAuthenticated, PeopleAccess]
 
     def get(self, request):
         qs = ComplianceRule.objects.all()
+        lifecycle = (request.query_params.get("lifecycle") or "").strip()
+        if lifecycle:
+            qs = qs.filter(lifecycle=lifecycle)
         return Response({
             'count': qs.count(),
             'results': ComplianceRuleSerializer(qs, many=True).data,
         })
 
     def post(self, request):
-        serializer = ComplianceRuleSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        from people.policy_service import create_draft
+
+        try:
+            rule = create_draft(request.data, request.user)
+        except Exception as exc:  # noqa: BLE001 — mapped below
+            return _policy_error_response(exc)
+        return Response(ComplianceRuleSerializer(rule).data, status=status.HTTP_201_CREATED)
 
 
 class ComplianceRuleDetailView(APIView):
@@ -178,24 +201,67 @@ class ComplianceRuleDetailView(APIView):
         return Response(ComplianceRuleSerializer(rule).data)
 
     def patch(self, request, pk):
+        from people.policy_service import update_draft
+
         rule = get_object_or_404(ComplianceRule, pk=pk)
-        serializer = ComplianceRuleSerializer(rule, data=request.data, partial=True)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data)
+        try:
+            rule = update_draft(rule, request.data, request.user)
+        except Exception as exc:  # noqa: BLE001 — mapped below
+            return _policy_error_response(exc)
+        return Response(ComplianceRuleSerializer(rule).data)
 
     def delete(self, request, pk):
+        from people.policy_service import delete_draft
+
         rule = get_object_or_404(ComplianceRule, pk=pk)
-        emit_governance_event(
-            entity_type='ComplianceRule',
-            entity_id=rule.pk,
-            action='delete',
-            before={'pk': rule.pk},
-            after=None,
-            user=request.user,
-        )
-        rule.delete()
+        try:
+            delete_draft(rule, request.user)
+        except Exception as exc:  # noqa: BLE001 — mapped below
+            return _policy_error_response(exc)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ComplianceRuleCopyForwardView(APIView):
+    permission_classes = [IsAuthenticated, PeopleAccess]
+
+    def post(self, request, pk):
+        from people.policy_service import copy_forward
+
+        rule = get_object_or_404(ComplianceRule, pk=pk)
+        try:
+            draft = copy_forward(
+                rule,
+                request.user,
+                version=(request.data or {}).get("version"),
+                effective_date=(request.data or {}).get("effective_date"),
+            )
+        except Exception as exc:  # noqa: BLE001 — mapped below
+            return _policy_error_response(exc)
+        return Response(ComplianceRuleSerializer(draft).data, status=status.HTTP_201_CREATED)
+
+
+class ComplianceRuleSubmitView(APIView):
+    permission_classes = [IsAuthenticated, PeopleAccess]
+
+    def post(self, request, pk):
+        from people.policy_service import submit
+
+        rule = get_object_or_404(ComplianceRule, pk=pk)
+        try:
+            rule = submit(rule, request.user)
+        except Exception as exc:  # noqa: BLE001 — mapped below
+            return _policy_error_response(exc)
+        return Response(ComplianceRuleSerializer(rule).data)
+
+
+class ComplianceRulePreviewView(APIView):
+    permission_classes = [IsAuthenticated, PeopleAccess]
+
+    def get(self, request, pk):
+        from people.policy_service import preview
+
+        rule = get_object_or_404(ComplianceRule, pk=pk)
+        return Response(preview(rule))
 
 
 class EmployeeListCreateView(APIView):
@@ -2000,10 +2066,42 @@ class PayrollRunComputeView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
         except PayrollServiceError as exc:
-            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+            return Response(
+                {"detail": str(exc), "code": getattr(exc, "code", "payroll_refused")},
+                status=status.HTTP_409_CONFLICT,
+            )
         except NonAuthoritativeRuleError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
         return Response(result)
+
+
+class PayrollRunRetroView(APIView):
+    """Open an off-cycle retro tied to a committed run. Thin: the service owns the rule."""
+
+    permission_classes = [IsAuthenticated, PeopleAccess]
+
+    def post(self, request, pk):
+        run = get_object_or_404(
+            _scoped(request.user, PayrollRun.objects.all(), 'org_unit_id__in'), pk=pk,
+        )
+        start = parse_date(str(request.data.get("period_start") or ""))
+        end = parse_date(str(request.data.get("period_end") or ""))
+        if start is None or end is None:
+            return Response(
+                {"detail": "period_start and period_end are required.", "code": "retro_period_required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        service = PayrollRunService()
+        try:
+            retro = service.open_retro(
+                run, period_start=start, period_end=end, user=request.user,
+            )
+        except PayrollServiceError as exc:
+            return Response(
+                {"detail": str(exc), "code": getattr(exc, "code", "payroll_refused")},
+                status=status.HTTP_409_CONFLICT,
+            )
+        return Response(PayrollRunSerializer(retro).data, status=status.HTTP_201_CREATED)
 
 
 class PayrollRunValidateView(APIView):

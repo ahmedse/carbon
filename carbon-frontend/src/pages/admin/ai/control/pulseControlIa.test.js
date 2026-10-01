@@ -33,4 +33,12 @@ describe('pulseControlIa', () => {
     expect(LEGACY_REDIRECTS['/admin/ai/workspace']).toBeUndefined();
     expect(LEGACY_REDIRECTS['/admin/ai/conversations']).toBeUndefined();
   });
+
+  it('puts Pulse under Platform, not a seventh sidebar', () => {
+    expect(CONTROL_DESTINATIONS.find((d) => d.id === 'pulse')).toBeUndefined();
+    expect(LEGACY_REDIRECTS['/admin/ai/platform?tab=pulse']).toEqual({
+      path: '/admin/ai/platform',
+      tab: 'pulse',
+    });
+  });
 });

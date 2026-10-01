@@ -20,6 +20,7 @@ import BudgetUsagePanel from '../BudgetUsagePanel';
 import EngineSettingsPanel from '../EngineSettingsPanel';
 import ControlHub from './ControlHub';
 import RolesMatrixPanel from './RolesMatrixPanel';
+import PulseBindPanel from './PulseBindPanel';
 
 function BudgetEditor() {
   const { t } = useTranslation('ai');
@@ -124,6 +125,7 @@ export default function PlatformHubPage() {
       { id: 'spend', label: label('Spend'), element: <BudgetEditor /> },
       { id: 'engine', label: label('Engine'), element: <EngineSettingsPanel /> },
       { id: 'roles', label: label('Roles'), element: <RolesMatrixPanel /> },
+      { id: 'pulse', label: label('Pulse'), element: <PulseBindPanel /> },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [t],

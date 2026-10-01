@@ -41,6 +41,7 @@ import {
   validatePayrollRun,
   commitPayrollRun,
   exportWpsPayrollRun,
+  openRetroPayrollRun,
 } from '../../api/people';
 import {
   fetchOrgUnits,
@@ -107,6 +108,10 @@ export default function PayrollRunsPage() {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [actionError, setActionError] = useState(null);
+  const [retroSource, setRetroSource] = useState(null);
+  const [retroForm, setRetroForm] = useState({ period_start: '', period_end: '' });
+  const [retroError, setRetroError] = useState('');
+  const [retroSaving, setRetroSaving] = useState(false);
   const [searchValue, setSearchValue] = useState('');
   const [gridFilters, setGridFilters] = useState({ status: '', org_unit: '' });
 
@@ -213,6 +218,26 @@ export default function PayrollRunsPage() {
       });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleRetro = async () => {
+    if (!retroSource) return;
+    if (!retroForm.period_start || !retroForm.period_end) {
+      setRetroError(tCommon('allFieldsRequired'));
+      return;
+    }
+    setRetroSaving(true);
+    setRetroError('');
+    try {
+      await openRetroPayrollRun(retroSource.id, retroForm, token);
+      setRetroSource(null);
+      setSnackbar({ open: true, message: t('retroRunTitle'), severity: 'success' });
+      await loadData();
+    } catch (err) {
+      setRetroError(err?.message || err?.detail || t('actionError'));
+    } finally {
+      setRetroSaving(false);
     }
   };
 
@@ -409,6 +434,21 @@ export default function PayrollRunsPage() {
               <Button
                 size="small"
                 variant="outlined"
+                disabled={busyId === run.id}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setRetroError('');
+                  setRetroForm({ period_start: '', period_end: '' });
+                  setRetroSource(run);
+                }}
+              >
+                {t('actionOpenRetro')}
+              </Button>
+            )}
+            {run.status === 'committed' && (
+              <Button
+                size="small"
+                variant="outlined"
                 color="info"
                 startIcon={<DownloadIcon />}
                 disabled={busyId === run.id}
@@ -582,6 +622,44 @@ export default function PayrollRunsPage() {
             name="period_end"
             value={form.period_end}
             onChange={handleChange}
+            InputLabelProps={{ shrink: true }}
+            fullWidth
+            required
+          />
+        </Stack>
+      </SystemDialog>
+
+      <SystemDialog
+        open={Boolean(retroSource)}
+        title={t('retroRunTitle')}
+        onClose={() => { if (!retroSaving) setRetroSource(null); }}
+        onCancel={() => { if (!retroSaving) setRetroSource(null); }}
+        cancelLabel={tCommon('cancel')}
+        actions={
+          <Button variant="contained" onClick={handleRetro} disabled={retroSaving}>
+            {t('actionOpenRetro')}
+          </Button>
+        }
+      >
+        <Stack spacing={2}>
+          <Alert severity="info">{t('retroRunHint')}</Alert>
+          {retroError ? <Alert severity="error" role="alert">{retroError}</Alert> : null}
+          <TextField
+            type="date"
+            label={t('colPeriodStart')}
+            name="period_start"
+            value={retroForm.period_start}
+            onChange={(event) => setRetroForm((prev) => ({ ...prev, period_start: event.target.value }))}
+            InputLabelProps={{ shrink: true }}
+            fullWidth
+            required
+          />
+          <TextField
+            type="date"
+            label={t('colPeriodEnd')}
+            name="period_end"
+            value={retroForm.period_end}
+            onChange={(event) => setRetroForm((prev) => ({ ...prev, period_end: event.target.value }))}
             InputLabelProps={{ shrink: true }}
             fullWidth
             required

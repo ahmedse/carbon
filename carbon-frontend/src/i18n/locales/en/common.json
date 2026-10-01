@@ -189,6 +189,7 @@
   "failedFetchRows": "Failed to fetch rows",
   "rowsTruncated": "This table has more rows than this screen can load. Narrow the search.",
   "rowAppendOnly": "A saved row is not edited. Add a new row for the correction.",
+  "dgRowRestated": "Correction archived the old row and appended a new one.",
   "failedFetchSchema": "Failed to fetch schema",
   "rowsDeleted": "Rows deleted.",
   "bulkDeleteFailed": "Bulk delete failed",

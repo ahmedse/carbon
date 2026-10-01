@@ -146,6 +146,19 @@ class FieldAccessPolicy(models.Model):
     class Meta:
         unique_together = [('field', 'required_capability')]
 
+
+class DataRowQuerySet(models.QuerySet):
+    """Block QuerySet.update of immutable activity values (CR-REST-01)."""
+
+    def update(self, **kwargs):
+        if "values" in kwargs:
+            from django.db import IntegrityError
+            raise IntegrityError(
+                "DataRow is append-only — do not update; insert a new row."
+            )
+        return super().update(**kwargs)
+
+
 class DataRow(models.Model):
     data_table = models.ForeignKey(DataTable, on_delete=models.CASCADE, related_name='rows')
     values = models.JSONField()
@@ -166,6 +179,8 @@ class DataRow(models.Model):
             models.Index(fields=['data_table', 'created_at'], name='datarow_table_time_idx'),
         ]
         # fillfactor=100 is applied via migration 0007 ALTER TABLE — no dead-tuple headroom needed
+
+    objects = DataRowQuerySet.as_manager()
 
     _MUTABLE_FIELDS = frozenset({'is_archived', 'dq_flags', 'version', 'updated_at', 'updated_by_id'})
 

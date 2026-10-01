@@ -53,7 +53,26 @@ class ComplianceRule(models.Model):
     # carries a generic, rule-agnostic formula expression (see calculation_engine).
     inputs_schema = models.JSONField(default=dict, blank=True)
     is_authoritative = models.BooleanField(
-        default=False, help_text="False until sourced from KLL / PIFSS / WPS",
+        default=False, help_text="True only while lifecycle is authoritative",
+    )
+    # Governed lifecycle. ``is_authoritative`` stays the bit payroll already
+    # selects on. Authoritative and superseded rows are immutable through the
+    # API; a later version is a new row.
+    LIFECYCLE_DRAFT = "draft"
+    LIFECYCLE_IN_REVIEW = "in_review"
+    LIFECYCLE_AUTHORITATIVE = "authoritative"
+    LIFECYCLE_SUPERSEDED = "superseded"
+    LIFECYCLE_CHOICES = [
+        (LIFECYCLE_DRAFT, "Draft"),
+        (LIFECYCLE_IN_REVIEW, "In review"),
+        (LIFECYCLE_AUTHORITATIVE, "Authoritative"),
+        (LIFECYCLE_SUPERSEDED, "Superseded"),
+    ]
+    lifecycle = models.CharField(
+        max_length=20,
+        choices=LIFECYCLE_CHOICES,
+        default=LIFECYCLE_DRAFT,
+        db_index=True,
     )
     provenance = models.JSONField(
         null=True, blank=True,
@@ -69,6 +88,18 @@ class ComplianceRule(models.Model):
         ordering = ['category__sort_order', 'category__code', 'rule_id', '-effective_date']
         verbose_name = "Compliance Rule"
         verbose_name_plural = "Compliance Rules"
+
+    def save(self, *args, **kwargs):
+        # Keep the payroll bit aligned with the lifecycle. ORM and seed writers
+        # that set only ``is_authoritative=True`` land in Authoritative so the
+        # two cannot diverge. In review, draft, and superseded are not selectable.
+        if self.lifecycle == self.LIFECYCLE_AUTHORITATIVE:
+            self.is_authoritative = True
+        elif self.is_authoritative and self.lifecycle == self.LIFECYCLE_DRAFT:
+            self.lifecycle = self.LIFECYCLE_AUTHORITATIVE
+        else:
+            self.is_authoritative = False
+        super().save(*args, **kwargs)
 
     def __str__(self):
         cat = self.category.code if self.category_id else '?'
@@ -138,6 +169,18 @@ class Employee(models.Model):
     kuwaitization = models.BooleanField(
         default=False,
         help_text="Kuwaiti national (nationalization target flag)",
+    )
+    pifss_registered = models.BooleanField(
+        null=True,
+        blank=True,
+        default=None,
+        help_text="Social-insurance registration. Null means unknown and indemnity that requires it refuses.",
+    )
+    separation_reason = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        help_text="Governed separation reason. Blank means the employee has not separated.",
     )
     manager = models.ForeignKey(
         'self', null=True, blank=True, on_delete=models.SET_NULL,
@@ -211,6 +254,29 @@ class PayrollRun(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
     created_at = models.DateTimeField(auto_now_add=True)
     committed_at = models.DateTimeField(null=True, blank=True)
+    kind = models.CharField(
+        max_length=16,
+        default="regular",
+        help_text="regular or retro. A retro run has its own period identity.",
+    )
+    source_run = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="retro_runs",
+        help_text="Committed run this retro reprices. Null on a regular run.",
+    )
+    covers_start = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Original period start a retro reprices. Null on a regular run.",
+    )
+    covers_end = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Original period end a retro reprices. Null on a regular run.",
+    )
 
     class Meta:
         ordering = ['-period_start']
@@ -259,6 +325,33 @@ class PayslipLine(models.Model):
     def __str__(self):
         code = self.line_type.code if self.line_type_id else self.line_type
         return f"{self.employee} {code} = {self.amount}"
+
+
+class LieuDay(models.Model):
+    """Day-in-lieu balance earned by a posted payslip line.
+
+    The money line and this balance are written in the same compute. Recompute
+    deletes both. A committed run is not recomputed, so the balance stays.
+    """
+
+    employee = models.ForeignKey(Employee, on_delete=models.PROTECT, related_name="lieu_days")
+    payroll_run = models.ForeignKey(PayrollRun, on_delete=models.CASCADE, related_name="lieu_days")
+    payslip_line = models.ForeignKey(
+        PayslipLine, null=True, blank=True, on_delete=models.SET_NULL, related_name="lieu_days",
+    )
+    days = models.DecimalField(max_digits=8, decimal_places=3)
+    rule_id = models.CharField(max_length=120)
+    rule_version = models.CharField(max_length=40)
+    earned_on = models.DateField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["id"]
+        verbose_name = "Lieu day"
+        verbose_name_plural = "Lieu days"
+
+    def __str__(self):
+        return f"{self.employee} +{self.days} days"
 
 
 class PayrollRunValidation(models.Model):
@@ -926,6 +1019,12 @@ class AttendanceRecord(models.Model):
     hours_worked = models.DecimalField(max_digits=6, decimal_places=2, default=0)
     overtime_hours = models.DecimalField(max_digits=6, decimal_places=2, default=0)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES)
+    absence_class = models.CharField(
+        max_length=32,
+        blank=True,
+        default="",
+        help_text="Attendance classification supplied by the People plane. Blank means unclassified.",
+    )
     # ADR 0025 lineage seam: inbound attendance is a governed measurement stored
     # in dataschema.DataRow; this FK points back to the source row so any
     # payslip figure derived from it can carry the source id / row_hash.

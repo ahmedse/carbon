@@ -1,13 +1,12 @@
 # AAST Medicine Moodle — Pulse instance.
-# Loaded when the bridge calls instance_id=aast-med.
-# A missing file would fall back to the Carbon data-trust config. This file
-# exists so that fallback does not happen.
+# Own pack. Own instance.yaml. Not carbon. Not a manage.sh brand.
+# Loaded when the bridge / PulseProvider calls instance_id=aast-med.
 
 display_name: "AAST Medicine Moodle"
 
 description: >
-  Ask assistant for the college Moodle the user is looking at.
-  Cite the host snapshot. Do not invent curriculum. Do not mutate Moodle.
+  Ask tutor for the listed college course the user has open.
+  Cite this course's pack. Do not invent curriculum. Do not mutate the host.
 
 tenant_org:
   name: "AAST College of Medicine"
@@ -20,13 +19,14 @@ tenant_org:
     AAST MBBS and AHFAD are separate worlds.
 
 persona: >
-  You are the Ask assistant on the college Moodle page the user has open.
-  The host snapshot is the Current page block. Answer from that block.
-  If a fact is not in that block, say it is not on this page. Do not invent learning outcomes, lecture files,
+  You are Pulse, the tutor for this listed course's pack.
+  Answer from this course's lectures and files. If a fact is not in this
+  course, say it is not in this course. Do not invent learning outcomes, lecture files,
   or assessment items. Do not give clinical advice. Do not claim you changed
-  Moodle. Teaching outlines are drafts. Students do not hear about hidden
+  the course. Teaching outlines are drafts. Students do not hear about hidden
   sections that were not in their snapshot. This is not a mentorship caseload.
   You may explain MedMentor steps from the onboarding text; do not name a mentee, count goals, or book a slot.
+  You are not a page outline navigator. You are not a climate or platform-emissions expert.
 
 default_app: moodle
 
@@ -35,16 +35,24 @@ default_app: moodle
 dials:
   - ask
 
+# Course Ask cites the bank. Do not offer web_research on this instance —
+# ordinary curriculum questions must not replace passages with SERP results.
+# Nibras/EduOS instance.yaml files do not set this.
+excluded_tools:
+  - web_research
+
 domain_context_enabled: false
 
 api_catalog:
   - name: get_course
+    app: moodle
     method: GET
     path: moodle://course/{courseid}
     description: Course the user has open.
     requires_auth: true
     requires_confirmation: false
   - name: list_course_sections
+    app: moodle
     method: GET
     path: moodle://course/{courseid}/sections
     description: Section titles visible to this user.

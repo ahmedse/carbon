@@ -40,6 +40,12 @@ class PulseHealthView(APIView):
             status = CarbonIntelligence().health_check()
             payload = asdict(status)
             payload["capabilities"] = capabilities
+            try:
+                from ai.platform_bind import bind_health
+
+                payload["bind"] = bind_health()
+            except Exception:  # noqa: BLE001 — health stays up if bind probe fails
+                payload["bind"] = {"healthy": False}
             return Response(payload)
         except Exception as exc:  # noqa: BLE001 — never 500 the console
             logger.exception("pulse health check failed")

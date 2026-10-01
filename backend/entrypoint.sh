@@ -13,6 +13,11 @@ python manage.py bootstrap_platform || echo "⚠ Bootstrap had issues — contin
 echo "==> Ensuring Nibras admin accounts (no-op unless DJANGO_BRAND=nibras)..."
 python manage.py ensure_nibras_admins || echo "⚠ Admin provisioning had issues — continuing anyway"
 
+# Create-only People official InboundTemplate rows (ADR-0060 · R8). Soft-fail so
+# a brand without inbound tables yet still boots. Never AppConfig.ready().
+echo "==> Ensuring People official inbound templates (create-only)..."
+python manage.py ensure_people_inbound_templates || echo "⚠ People inbound templates ensure had issues — continuing anyway"
+
 echo "==> Collecting static files..."
 python manage.py collectstatic --noinput
 

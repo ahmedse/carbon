@@ -1,9 +1,10 @@
-import React, { createContext, useState, useContext, useEffect, useMemo, useRef } from "react";
+import React, { createContext, useState, useContext, useEffect, useMemo, useRef, useCallback } from "react";
 import { API_BASE_URL, API_ROUTES } from "../config";
 import { fetchModules } from "../api/modules";
 import { apiFetch, refreshAccessToken, EMBED_USER_KEY, embedPulseHost } from "../api/api";
 import { DATASCHEMA_VIEW } from "../capabilities";
 import { applyWorkspaceForUser, clearAuthStorage, resolveLandingPath } from "../shell/sessionRestore";
+import { resolveRoleAwareHome } from "../apps/learn/learnCopy";
 
 // --- Helpers for token management ---
 // refreshAccessToken is imported from api.js (single source of truth)
@@ -259,27 +260,47 @@ export const AuthProvider = ({ children }) => {
 
   // --- Ensure a working context exists whenever the user is present ---
   useEffect(() => {
+    // The Moodle pane is Ask-only. Do not load Carbon modules/tables on every
+    // host session; that work plus a new `user` object retriggered this effect.
+    if (embedHost) return;
     if (user && !context && !user.must_change_password) {
       buildContext(user);
     }
     // eslint-disable-next-line
-  }, [user, context]);
+  }, [user, context, embedHost]);
 
   // --- Refetch tables when context changes (or when the table-view gate flips) ---
   useEffect(() => {
+    if (embedHost) return;
     if (user && context?.modules && !user.must_change_password) {
       refetchTables();
     }
     // eslint-disable-next-line
-  }, [user, context?.modules, canViewTables]);
+  }, [user, context?.modules, canViewTables, embedHost]);
 
   // Moodle iframe session. Kept in sessionStorage so it does not replace a Carbon login.
-  const acceptHostSession = async ({ access, refresh, username }) => {
+  // Stable identity: PulseEmbedPage's ticket effect depends on this function.
+  // An inline function + setUser(new object) re-ran that effect forever;
+  // empty Ask stayed cheap, Start a conversation mounted the thread view
+  // into the loop and froze the Moodle tab.
+  const acceptHostSession = useCallback(async ({ access, refresh, username }) => {
     const userObj = { username, token: access, refresh, roles: [] };
-    setUser(userObj);
-    sessionStorage.setItem('pulse_embed_user', JSON.stringify(userObj));
+    setUser((prev) => {
+      if (
+        prev
+        && prev.token === access
+        && prev.refresh === refresh
+        && prev.username === username
+      ) {
+        return prev;
+      }
+      return userObj;
+    });
+    try {
+      sessionStorage.setItem('pulse_embed_user', JSON.stringify(userObj));
+    } catch { /* ignore quota */ }
     setLoading(false);
-  };
+  }, []);
 
   // --- Login: fetch tokens, user roles, and build project list ---
   const login = async ({ username, password }) => {
@@ -382,6 +403,7 @@ export const AuthProvider = ({ children }) => {
       // Prefer last in-app route (Nibras / Carbon / any brand) over Home.
       // Data-owners with no admin role still land on their first module when
       // there is no remembered path beyond the default dashboard.
+      // EduOS students with learn:access land on /learn — never empty Platform Home.
       const isAdmin = (u.roles || []).some(r => r.active !== false && r.role === 'admins_group');
       const isDataOwner = (u.roles || []).some(r => r.active !== false && r.role === 'dataowners_group');
       let landingPath = resolveLandingPath('/');
@@ -393,6 +415,18 @@ export const AuthProvider = ({ children }) => {
       ) {
         landingPath = `/modules/${modules[0].id}`;
       }
+      let capsForLanding = [];
+      try {
+        capsForLanding = JSON.parse(localStorage.getItem("user_capabilities") || "[]");
+      } catch {
+        capsForLanding = [];
+      }
+      const isGlobalAdmin = localStorage.getItem("is_global_admin") === "1";
+      landingPath = resolveRoleAwareHome(landingPath, {
+        capabilities: capsForLanding,
+        isAdmin,
+        isGlobalAdmin,
+      });
 
       const ctx = {
         projectId: "carbon",

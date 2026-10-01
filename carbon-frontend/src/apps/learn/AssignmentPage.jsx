@@ -21,8 +21,21 @@ import SkipToMain from '../../components/gradevance/SkipToMain';
 import WaveChart from '../../components/gradevance/WaveChart';
 import LctCodesTable from '../../components/gradevance/LctCodesTable';
 import LearnReadingWidth, { useLearnPrimarySize } from '../../components/gradevance/LearnReadingWidth';
+import {
+  criterionLabel,
+  resolveSubmissionRunId,
+  statusChipColor,
+  statusLabel,
+} from './learnCopy';
 
 const AUTOSAVE_MS = 800;
+
+function focusCoachingResults() {
+  const el = document.getElementById('coaching-heading');
+  if (!el) return;
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (typeof el.focus === 'function') el.focus({ preventScroll: true });
+}
 
 function bandsWithheld(assignment, run) {
   if (!run) return false;
@@ -83,7 +96,7 @@ function BandExpectationsBlock({ expectations }) {
         } else body = String(val ?? '');
         return (
           <Box key={key}>
-            <Typography variant="body2" sx={{ fontWeight: 600 }}>{key}</Typography>
+            <Typography variant="body2" sx={{ fontWeight: 600 }}>{criterionLabel(key)}</Typography>
             {body ? (
               <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-wrap' }}>
                 {body}
@@ -102,18 +115,6 @@ function displayableBands(bands) {
   return Object.fromEntries(
     Object.entries(bands).filter(([k, v]) => k !== 'withheld' && v != null && typeof v !== 'object'),
   );
-}
-
-function statusChipColor(status) {
-  switch ((status || '').toLowerCase()) {
-    case 'released': return 'success';
-    case 'submitted': return 'info';
-    case 'drafted':
-    case 'draft': return 'default';
-    case 'open':
-    case 'published': return 'primary';
-    default: return 'default';
-  }
 }
 
 function canRequestReview(assignment, run) {
@@ -161,6 +162,7 @@ export function AssignmentDesk({
   const [appealBusy, setAppealBusy] = useState(false);
   const [withdrawBusy, setWithdrawBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [showAnalysisDetail, setShowAnalysisDetail] = useState(false);
   const primarySize = useLearnPrimarySize();
 
   const textRef = useRef(text);
@@ -220,14 +222,19 @@ export function AssignmentDesk({
         const appeals = appealData.results || appealData || [];
         setAppeal(appeals[0] || null);
 
-        const runId = latest?.latest_run_id || latest?.run?.id || latest?.run;
+        const runId = resolveSubmissionRunId(latest);
         if (runId) {
           try {
             const r = await fetchMyRun(token, runId);
             setRun(r);
           } catch {
-            if (latest?.run && typeof latest.run === 'object') setRun(latest.run);
-            else setRun(null);
+            if (latest?.latest_run && typeof latest.latest_run === 'object') {
+              setRun(latest.latest_run);
+            } else if (latest?.run && typeof latest.run === 'object') {
+              setRun(latest.run);
+            } else {
+              setRun(null);
+            }
           }
         } else {
           setRun(null);
@@ -322,14 +329,23 @@ export function AssignmentDesk({
     setMsg(null);
     try {
       const result = await persistDraft(textRef.current, { analyze: true, status: 'draft' });
+      let nextRun = null;
       if (result.run) {
-        setRun(result.run);
-      } else if (result.run_id || result.latest_run_id) {
-        const runId = result.run_id || result.latest_run_id;
-        setRun(await fetchMyRun(token, runId));
+        nextRun = result.run;
+      } else {
+        const runId = result.run_id
+          || result.latest_run_id
+          || resolveSubmissionRunId(result.submission)
+          || resolveSubmissionRunId(submissionRef.current);
+        if (runId) {
+          nextRun = await fetchMyRun(token, runId);
+        }
       }
+      if (nextRun) setRun(nextRun);
       setDirty(false);
       setMsg('Formative coaching ready');
+      // Results must be reachable — toast alone is insufficient (UX audit P0).
+      window.setTimeout(focusCoachingResults, 50);
     } catch (err) {
       setActionError(err?.message || 'Coaching request failed');
     } finally {
@@ -509,13 +525,13 @@ export function AssignmentDesk({
       )}
 
       <Stack direction="row" spacing={1} sx={{ mb: 1.5, flexWrap: 'wrap' }} useFlexGap aria-label="Assignment status">
-        <Chip size="small" label={myStatus} color={statusChipColor(myStatus)} />
+        <Chip size="small" label={statusLabel(myStatus)} color={statusChipColor(myStatus)} />
         <Chip size="small" label={assignment.mode || 'formative'} variant="outlined" />
-        {run?.released === true && <Chip size="small" color="success" label="released" />}
+        {run?.released === true && <Chip size="small" color="success" label={statusLabel('released')} />}
         {run?.released === false && assignment.mode === 'summative' && (
-          <Chip size="small" label="unreleased" />
+          <Chip size="small" label={statusLabel('unreleased')} />
         )}
-        {dirty && !readOnly && <Chip size="small" label="unsaved" color="warning" />}
+        {dirty && !readOnly && <Chip size="small" label={statusLabel('unsaved')} color="warning" />}
       </Stack>
 
       {(briefText || expectations) && (
@@ -570,8 +586,15 @@ export function AssignmentDesk({
       {run && (
         <Paper sx={{ p: 1.5, mb: 1.5 }} component="section" aria-labelledby="coaching-heading">
           <Stack direction="row" spacing={1} sx={{ mb: 1 }} alignItems="center" flexWrap="wrap" useFlexGap>
-            <Typography id="coaching-heading" variant="subtitle1">Results</Typography>
-            <Chip size="small" label={run.status || 'done'} />
+            <Typography
+              id="coaching-heading"
+              variant="subtitle1"
+              tabIndex={-1}
+              sx={{ outline: 'none' }}
+            >
+              Results
+            </Typography>
+            <Chip size="small" label={statusLabel(run.status || 'done')} />
             {run.gate_decision && <Chip size="small" label={`gate: ${run.gate_decision}`} />}
             {coachingPayload.watermark && (
               <Chip size="small" color="warning" label={coachingPayload.watermark} />
@@ -584,13 +607,18 @@ export function AssignmentDesk({
             </Alert>
           ) : (
             <>
+              {Object.keys(bands).length > 0 && (
+                <Alert severity="warning" sx={{ mb: 1.5 }} role="status">
+                  Advisory only — these letter bands are formative coaching, not your final grade.
+                </Alert>
+              )}
               <Typography variant="subtitle2">Advisory bands</Typography>
               <Stack direction="row" spacing={1} sx={{ mb: 1.5, flexWrap: 'wrap' }} useFlexGap>
                 {Object.keys(bands).length === 0 ? (
                   <Typography variant="body2" color="text.secondary">No bands yet.</Typography>
                 ) : (
                   Object.entries(bands).map(([k, v]) => (
-                    <Chip key={k} size="small" label={`${k}: ${v}`} />
+                    <Chip key={k} size="small" label={`${criterionLabel(k)}: ${v}`} />
                   ))
                 )}
               </Stack>
@@ -611,10 +639,28 @@ export function AssignmentDesk({
               </li>
             ))}
           </ul>
-          <LctCodesTable segments={run.segments || []} wave={run.wave} />
+
+          {(run.segments?.length > 0 || run.wave) && (
+            <Box sx={{ mt: 1 }}>
+              <Button
+                size="small"
+                variant="text"
+                onClick={() => setShowAnalysisDetail((v) => !v)}
+                aria-expanded={showAnalysisDetail}
+                aria-controls="learn-analysis-detail"
+              >
+                {showAnalysisDetail ? 'Hide analysis detail' : 'Show analysis detail'}
+              </Button>
+              {showAnalysisDetail && (
+                <Box id="learn-analysis-detail" sx={{ mt: 1 }}>
+                  <LctCodesTable segments={run.segments || []} wave={run.wave} />
+                </Box>
+              )}
+            </Box>
+          )}
           {(run.wave?.points?.length > 0) && (
             <Box sx={{ mt: 1.5 }}>
-              <Typography variant="subtitle2">Semantic wave (SG)</Typography>
+              <Typography variant="subtitle2">Semantic wave</Typography>
               <WaveChart points={run.wave.points} />
             </Box>
           )}

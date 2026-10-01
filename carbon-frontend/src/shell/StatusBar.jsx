@@ -11,23 +11,7 @@ import { useAuth } from '../auth/AuthContext';
 import { listWorkspaceSuggestions } from '../api/aiWorkspace';
 import { PLATFORM_TITLE } from '../config/branding';
 import { API_BASE_URL } from '../config';
-
-function shortRelease(tag) {
-  const match = String(tag || '').match(/v(\d+\.\d+\.\d+)$/);
-  return match ? `v${match[1]}` : 'v1.0';
-}
-
-function releaseTooltip(release) {
-  if (!release) return '';
-  const lines = [];
-  if (release.tag) lines.push(release.tag);
-  const pack = [release.pack, release.pack_version].filter(Boolean).join(' ');
-  if (pack) lines.push(pack);
-  if (release.image_built_at) lines.push(`built ${release.image_built_at}`);
-  if (release.process_started_at) lines.push(`started ${release.process_started_at}`);
-  else if (release.deployed_at) lines.push(`deployed ${release.deployed_at}`);
-  return lines.join('\n');
-}
+import { releaseTooltip, shortRelease } from './releaseTooltip';
 
 export function StatusBar({
   sidebarMode,

@@ -25,7 +25,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from django.db import transaction
 from django.db.models import Q
@@ -33,7 +33,9 @@ from django.utils import timezone
 
 from . import calculation_engine
 from .compensation_service import CompensationService
-from .models import AttendanceRecord, ComplianceRule, Employee, PayrollRun, PayslipLine
+from .associated_pay import ServiceGateError, priced_lines
+from .calculation_engine import MissingPolicyFactError
+from .models import AttendanceRecord, ComplianceRule, Employee, LieuDay, PayrollRun, PayslipLine
 
 SEVERITY_ERROR = "error"
 SEVERITY_WARNING = "warning"
@@ -43,8 +45,43 @@ SEVERITY_INFO = "info"
 class PayrollServiceError(Exception):
     """Raised when a payroll run is asked to perform an illegal transition."""
 
+    def __init__(self, message, *, code="payroll_refused"):
+        super().__init__(message)
+        self.code = code
+
 
 ACTIVE_PERIOD_STATUSES = ("draft", "computed", "validated", "committed")
+
+
+def loan_within_policy(rule, wage, amount) -> bool:
+    """True when no cap is declared, or the installment is within it.
+
+    The fraction is rule data. This does not recompute the installment.
+    """
+    if rule is None:
+        return True
+    params = ((rule.inputs_schema or {}).get("formula") or {}).get("params") or {}
+    raw = params.get("max_wage_fraction")
+    if raw is None:
+        return True
+    cap = (Decimal(str(wage)) * Decimal(str(raw))).quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
+    return Decimal(str(amount)) <= cap
+
+
+def _refuse_loan_above_policy(rule, wage, amount):
+    if loan_within_policy(rule, wage, amount):
+        return
+    raise PayrollServiceError(
+        "Loan deduction exceeds the published wage fraction. "
+        "The installment schedule was not rewritten."
+    )
+
+
+def _fact_window(run):
+    """Period whose facts a run prices. A retro keeps its own identity and reads the source period."""
+    if getattr(run, "kind", "regular") == "retro" and run.covers_start and run.covers_end:
+        return run.covers_start, run.covers_end
+    return run.period_start, run.period_end
 
 
 def assert_unique_active_period(org_unit, period_start, period_end, *, exclude_pk=None):
@@ -209,8 +246,9 @@ class PayrollRunService:
         Null ``join_date`` (bulk ERP) stays included.
         """
         ids = run.org_unit.get_descendant_ids(include_self=True)
+        cutoff = run.covers_end or run.period_end
         return Employee.objects.filter(org_unit_id__in=ids).filter(
-            Q(join_date__isnull=True) | Q(join_date__lte=run.period_end),
+            Q(join_date__isnull=True) | Q(join_date__lte=cutoff),
         )
 
     # --- compute -----------------------------------------------------------
@@ -222,17 +260,19 @@ class PayrollRunService:
         )
 
         rules = ComplianceRule.objects
-        gosi_rule = self._resolve_rule(rules, "gosi")
-        loan_rule = self._resolve_rule(rules, "other", formula_type="loan_schedule")
-        net_rule = self._resolve_rule(rules, "other", formula_type="net_pay")
+        as_of = run.period_end
+        gosi_rule = self._resolve_rule(rules, "gosi", as_of=as_of)
+        loan_rule = self._resolve_rule(rules, "other", formula_type="loan_schedule", as_of=as_of)
+        net_rule = self._resolve_rule(rules, "other", formula_type="net_pay", as_of=as_of)
 
         employees = list(self._scoped_employees(run))
         with transaction.atomic():
+            LieuDay.objects.filter(payroll_run=run).delete()
             run.lines.all().delete()
             lines_created = 0
             for employee in employees:
                 lines_created += self._compute_employee(
-                    run, employee, gosi_rule, loan_rule, net_rule
+                    run, employee, gosi_rule, loan_rule, net_rule, as_of=as_of,
                 )
             run.status = "computed"
             run.save(update_fields=["status"])
@@ -255,14 +295,15 @@ class PayrollRunService:
             "lines_created": lines_created,
         }
 
-    def _compute_employee(self, run, employee, gosi_rule, loan_rule, net_rule):
+    def _compute_employee(self, run, employee, gosi_rule, loan_rule, net_rule, *, as_of=None):
         rules = ComplianceRule.objects
         created = 0
 
         # 1. gross — verified monthly earnings from the ledger (ADR-0029).
         # ``basic`` is required; housing/transport/etc. fold into the package
         # passed to the gross sum rule (which names the ``basic`` input).
-        package = self._verified_earnings_package(employee, as_of=run.period_end)
+        window_start, window_end = _fact_window(run)
+        package = self._verified_earnings_package(employee, as_of=window_end)
         if package is None:
             raise PayrollServiceError(
                 f"Employee {employee.employee_no} has no verified monthly "
@@ -280,7 +321,9 @@ class PayrollRunService:
             if len(measurements) == 1:
                 gross_inputs["data_row_id"] = measurements[0]["data_row_id"]
                 gross_inputs["row_hash"] = measurements[0]["row_hash"]
-        gross = calculation_engine.calculate_gross_pay(employee, gross_inputs, rules)
+        gross = calculation_engine.calculate_gross_pay(
+            employee, gross_inputs, rules, as_of=as_of or run.period_end,
+        )
         self._line_from_result(run, employee, "gross", gross)
         created += 1
 
@@ -293,7 +336,46 @@ class PayrollRunService:
             created += 1
             employee_share = gosi["lineage"].get("employee_share", Decimal("0"))
 
-        # 3. loan installments due this period.
+        # 3. Associated pay (leave, absence, overtime, sick, notice, encashment).
+        #    Posted only when an authoritative rule names a payslip line and the
+        #    employee has the fact. Earnings increase net; deductions reduce it.
+        basic_amount = CompensationService.verified_basic_amount(employee, as_of=window_end)
+        try:
+            associated = priced_lines(
+                employee, window_start, window_end, package, basic_amount,
+                rule_as_of=as_of or run.period_end,
+            )
+        except MissingPolicyFactError as exc:
+            raise PayrollServiceError(
+                f"Employee {employee.employee_no} is missing fact '{exc.fact}'.",
+                code="missing_fact",
+            ) from exc
+        except ServiceGateError as exc:
+            raise PayrollServiceError(str(exc), code="service_gate") from exc
+        associated_earnings = Decimal("0")
+        associated_deductions = []
+        for item in associated:
+            line = self._line_from_result(
+                run, employee, item["line_code"], item, effect=item.get("effect"),
+            )
+            created += 1
+            days = item["lineage"].get("compensatory_days")
+            if days not in (None, "", 0, "0"):
+                LieuDay.objects.create(
+                    employee=employee,
+                    payroll_run=run,
+                    payslip_line=line,
+                    days=Decimal(str(days)),
+                    rule_id=item["lineage"]["rule_id"],
+                    rule_version=item["lineage"]["rule_version"],
+                    earned_on=window_end,
+                )
+            if item.get("effect") == "deduction":
+                associated_deductions.append(item["value"])
+            else:
+                associated_earnings += Decimal(str(item["value"]))
+
+        # 4. loan installments due this period.
         # Hybrid (NSR-3A): prefer persisted LoanInstallment rows due in the
         # period when any exist for the loan; fall back to in-memory engine
         # schedule when the loan has no materialized rows yet.
@@ -304,12 +386,18 @@ class PayrollRunService:
             )
             if installment is None:
                 continue
-            self._loan_line(run, employee, schedule, installment)
+            _refuse_loan_above_policy(loan_rule, gross["value"], installment["amount"])
+            self._loan_line(run, employee, schedule, installment, loan_rule)
             created += 1
             deductions.append(installment["amount"])
 
-        # 4. net pay = gross − (GOSI employee share + loan installments).
-        net = calculation_engine.calculate_net_pay(net_rule, gross["value"], deductions)
+        # 5. net = package + associated earnings − (GOSI share + loans + associated deductions).
+        deductions.extend(associated_deductions)
+        net = calculation_engine.calculate_net_pay(
+            net_rule, Decimal(str(gross["value"])) + associated_earnings, deductions,
+        )
+        net["lineage"]["inputs"]["package_gross"] = gross["value"]
+        net["lineage"]["inputs"]["associated_earnings"] = associated_earnings
         self._line_from_result(run, employee, "net", net)
         created += 1
 
@@ -350,19 +438,37 @@ class PayrollRunService:
 
     # --- line writers ------------------------------------------------------
 
-    def _line_from_result(self, run, employee, line_type, result):
+    def _line_from_result(self, run, employee, line_type, result, *, effect=None):
         lineage = result["lineage"]
-        self._create_line(
+        inputs = dict(lineage.get("inputs") or {})
+        for key in (
+            "regulation_rule_id",
+            "regulation_pack",
+            "regulation_version",
+            "employee_share",
+            "employer_share",
+            "compensatory_days",
+        ):
+            if key in lineage and key not in inputs:
+                inputs[key] = lineage[key]
+        if effect:
+            inputs["effect"] = effect
+        return self._create_line(
             run, employee, line_type, result["value"],
-            lineage["rule_id"], lineage["rule_version"], lineage["inputs"],
+            lineage["rule_id"], lineage["rule_version"], inputs,
         )
 
-    def _loan_line(self, run, employee, schedule, installment):
+    def _loan_line(self, run, employee, schedule, installment, loan_rule=None):
         lineage = schedule["lineage"]
         inputs = dict(lineage["inputs"])
         inputs["installment_no"] = installment["installment_no"]
         inputs["principal_portion"] = str(installment["principal_portion"])
         inputs["interest_portion"] = str(installment["interest_portion"])
+        if loan_rule is not None:
+            ref = (loan_rule.inputs_schema or {}).get("regulation_ref") or {}
+            if ref.get("rule_id") and ref.get("version"):
+                inputs["regulation_rule_id"] = ref["rule_id"]
+                inputs["regulation_version"] = str(ref["version"])
         self._create_line(
             run, employee, "loan_installment", installment["amount"],
             lineage["rule_id"], lineage["rule_version"], inputs,
@@ -371,7 +477,7 @@ class PayrollRunService:
     def _create_line(self, run, employee, line_type, amount, rule_id, rule_version, inputs):
         if isinstance(line_type, str):
             line_type = _payslip_line_type(line_type)
-        PayslipLine.objects.create(
+        return PayslipLine.objects.create(
             payroll_run=run,
             employee=employee,
             line_type=line_type,
@@ -384,15 +490,22 @@ class PayrollRunService:
     # --- helpers -----------------------------------------------------------
 
     @staticmethod
-    def _resolve_rule(rules, category, formula_type=None):
-        """Return the active AUTHORITATIVE rule for a category (optionally a formula type).
+    def _resolve_rule(rules, category, formula_type=None, *, as_of=None):
+        """Return the authoritative rule in effect on ``as_of``.
 
         Regulated payroll figures (GOSI, loan schedule, net pay) may only be
         computed from authoritative rules — the same contract the calculation
         engine's ``_guard`` enforces. Non-authoritative demo/test rows are
         skipped so they can never be selected for a live payroll run.
+
+        When ``as_of`` is set, a version whose effective date is after the
+        period end is not eligible. The latest remaining effective date wins.
+        Omitting ``as_of`` keeps the previous latest-authoritative pick.
         """
-        qs = rules.filter(category__code=category, is_authoritative=True).order_by("-effective_date", "-updated_at")
+        qs = rules.filter(category__code=category, is_authoritative=True)
+        if as_of is not None:
+            qs = qs.filter(effective_date__lte=as_of)
+        qs = qs.order_by("-effective_date", "-updated_at")
         if formula_type is None:
             return qs.first()
         for rule in qs:
@@ -535,6 +648,32 @@ class PayrollRunService:
             result["status"] = locked.status
             result["idempotent"] = False
             return result
+
+    def open_retro(self, source, *, period_start, period_end, user=None):
+        """Open an off-cycle run tied to a committed period.
+
+        The retro has its own period dates, so ``people_payrollrun_one_active_period``
+        still refuses a second run on the source period. The caller does not
+        pick a rule version; compute resolves the authoritative rules then.
+        ``user`` is unused until compute stamps the preparer on this new run.
+        """
+        del user
+        if source.status != "committed":
+            raise PayrollServiceError(
+                "A retro run can only be opened from a committed payroll run.",
+                code="retro_source_not_committed",
+            )
+        assert_unique_active_period(source.org_unit, period_start, period_end)
+        return PayrollRun.objects.create(
+            org_unit=source.org_unit,
+            period_start=period_start,
+            period_end=period_end,
+            kind="retro",
+            source_run=source,
+            covers_start=source.period_start,
+            covers_end=source.period_end,
+            status="draft",
+        )
 
     def _run_validation(self, run):
         findings = self.validation_seam.validate_run(run)

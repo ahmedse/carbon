@@ -604,3 +604,32 @@ export function updateTableRelation(token, id, data) {
 export function deleteTableRelation(token, id) {
   return apiFetch(`${API_ROUTES.tableRelations}${id}/`, { method: "DELETE", token });
 }
+
+const POLICY_DESK = "catalog/policy-versions/";
+
+/** List policy versions on the Data Trust desk. */
+export function fetchPolicyVersions(token, params = {}) {
+  const qs = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value != null && value !== "") qs.set(key, String(value));
+  });
+  const suffix = qs.toString() ? `?${qs}` : "";
+  return apiFetch(`${POLICY_DESK}${suffix}`, { token });
+}
+
+/** Detail for one version: diff, examples, floor, governance event. */
+export function fetchPolicyVersion(id, token) {
+  return apiFetch(`${POLICY_DESK}${encodeURIComponent(id)}/`, { token });
+}
+
+export function submitPolicyVersion(id, token) {
+  return apiFetch(`${POLICY_DESK}${encodeURIComponent(id)}/submit/`, {
+    method: "POST", body: {}, token,
+  });
+}
+
+export function publishPolicyVersion(id, token) {
+  return apiFetch(`${POLICY_DESK}${encodeURIComponent(id)}/publish/`, {
+    method: "POST", body: {}, token,
+  });
+}

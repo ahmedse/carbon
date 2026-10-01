@@ -12,6 +12,7 @@ from django.test import override_settings
 from ai.instance_registry import (
     active_brand,
     default_app_for_instance,
+    pack_id_for_brand,
     resolve_default_app_identifier,
     resolve_instance_id,
 )
@@ -36,6 +37,25 @@ def test_brand_maps_to_instance_and_default_app(brand, instance_id, app_identifi
         assert resolve_default_app_identifier() == app_identifier
 
 
+def test_pack_id_for_brand_uses_pack_not_slug():
+    assert pack_id_for_brand("aastmt") == "carbon"
+    assert pack_id_for_brand("nibras") == "nibras"
+    assert pack_id_for_brand("eduos") == "eduos"
+
+
+def test_aastmt_default_pack_is_carbon_not_aast_med():
+    with override_settings(DJANGO_BRAND="aastmt"):
+        assert resolve_instance_id() == "carbon"
+        assert resolve_default_app_identifier() == "carbon"
+        assert pack_id_for_brand("aastmt") == "carbon"
+
+
+def test_aast_med_is_not_a_brand():
+    with override_settings(DJANGO_BRAND="aast-med"):
+        assert active_brand() == "aastmt"
+        assert resolve_instance_id() == "carbon"
+
+
 def test_unknown_brand_falls_back_to_carbon():
     with override_settings(DJANGO_BRAND="some-unknown-brand"):
         assert active_brand() == "aastmt"
@@ -54,6 +74,7 @@ def test_default_app_for_instance_is_instance_scoped():
     assert default_app_for_instance("nibras") == "people"
     assert default_app_for_instance("medos") == "medos"
     assert default_app_for_instance("tectona") == "healthy"
+    assert default_app_for_instance("aast-med") == "moodle"
     assert default_app_for_instance("unknown") == "carbon"
 
 
@@ -99,10 +120,13 @@ def test_carbon_instance_config_defaults_to_carbon_app_even_on_nibras_brand():
     assert config["app_identifier"] == "carbon"
 
 
-def test_unknown_instance_falls_back_to_carbon_config():
+def test_unknown_instance_does_not_load_carbon_config():
     from ai.engine_runtime import _instance_config
 
     config = _instance_config("no-such-instance", None)
-    # Falls back to the carbon config file, but keeps the requested id.
     assert config["instance_id"] == "no-such-instance"
-    assert config["display_name"]
+    assert config.get("pulse_off") is True
+    assert config.get("api_catalog") == []
+    names = {e.get("name") for e in (config.get("api_catalog") or [])}
+    assert "list_emission_factors" not in names
+    assert "get_chairman_overview" not in names

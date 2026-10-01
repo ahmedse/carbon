@@ -77,27 +77,33 @@ capabilities:
 # Read-only host APIs Pulse may call (CBAC still applies). Mutations stay in Teach UI.
 api_catalog:
   - name: get_calibration
+    app: gradevance
     method: GET
     path: /carbon-api/gradevance/calibration/
     description: Held-out coding κ + segmentation fidelity for a profile pack.
     confirmation_message: null
   - name: list_review_queue
+    app: gradevance
     method: GET
     path: /carbon-api/gradevance/review-queue/
     description: Open HITL review items for triage.
   - name: get_qa_summary
+    app: gradevance
     method: GET
     path: /carbon-api/gradevance/qa/summary/
     description: QA console summary (gates, gold status).
   - name: list_proposals
+    app: gradevance
     method: GET
     path: /carbon-api/gradevance/proposals/
     description: Draft/open learning-loop proposals (anchors, segmentation policy).
   - name: get_run
+    app: gradevance
     method: GET
     path: /carbon-api/gradevance/runs/{run_id}/
     description: Analysis run detail including LCT segments and ExpertEdits.
   - name: suggest_splits
+    app: gradevance
     method: POST
     path: /carbon-api/gradevance/calibration/suggest-splits/
     description: >

@@ -11,6 +11,7 @@ default_source_type: carbon_api
 tools:
   # ── Read ──────────────────────────────────────────────────────────────
   - name: list_payroll_runs
+    app: people
     kind: read
     requires_confirmation: false
     source_type: carbon_api
@@ -18,222 +19,265 @@ tools:
       - {ar: "اعرض تشغيلات الرواتب", en: "list October payroll runs"}
 
   - name: get_payroll_run
+    app: people
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   - name: list_payslip_lines
+    app: people
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   - name: analyze_committed_pay
+    app: people
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   - name: analyze_employees
+    app: people
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   - name: analyze_kuwaitization
+    app: people
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   - name: analyze_leave_utilization
+    app: people
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   - name: analyze_leave_presence
+    app: people
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   - name: analyze_loan_book
+    app: people
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   - name: analyze_gosi_committed
+    app: people
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   - name: analyze_cert_expiry
+    app: people
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   - name: list_my_direct_reports
+    app: team
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   - name: list_leave_policies
+    app: people
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   - name: list_my_attendance
+    app: my
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   - name: list_team_leave
+    app: team
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   - name: list_correspondence_inbox
+    app: people
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   - name: list_correspondence_history
+    app: people
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   # ── Run lifecycle mutations (staged + confirmed; RULE_21) ─────────────
   - name: compute_payroll_run
+    app: people
     kind: confirm
     requires_confirmation: true
     source_type: carbon_api
 
   - name: validate_payroll_run
+    app: people
     kind: confirm
     requires_confirmation: true
     source_type: carbon_api
 
   - name: commit_payroll_run
+    app: people
     kind: confirm
     requires_confirmation: true
     source_type: carbon_api
 
   # ── Leave lifecycle reads/mutations (staged + confirmed; RULE_21) ──────
   - name: list_leave_records
+    app: people
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   - name: list_leave_entitlements
+    app: people
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   - name: create_leave_record
+    app: people
     kind: confirm
     requires_confirmation: true
     source_type: carbon_api
 
   - name: submit_my_leave
+    app: my
     kind: confirm
     requires_confirmation: true
     source_type: carbon_api
 
   - name: list_my_leave
+    app: my
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   - name: get_my_leave_balance
+    app: my
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   # ── Loan lifecycle (self-service + admin reads) ───────────────────────
   - name: submit_my_loan
+    app: my
     kind: confirm
     requires_confirmation: true
     source_type: carbon_api
 
   - name: list_my_loans
+    app: my
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   - name: list_loans
+    app: people
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   - name: list_loan_installments
+    app: people
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   # ── Onboarding / employees ────────────────────────────────────────────
   - name: list_employees
+    app: people
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   - name: get_employee
+    app: people
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   - name: create_employee
+    app: people
     kind: confirm
     requires_confirmation: true
     source_type: carbon_api
 
   - name: update_employee
+    app: people
     kind: confirm
     requires_confirmation: true
     source_type: carbon_api
 
   # ── GOSI/WPS SIF filing (staged + confirmed; RULE_21) ─────────────────
   - name: generate_gosi_wps_sif
+    app: people
     kind: confirm
     requires_confirmation: true
     source_type: carbon_api
 
   - name: validate_gosi_wps_sif
+    app: people
     kind: confirm
     requires_confirmation: true
     source_type: carbon_api
 
   - name: submit_gosi_wps_sif
+    app: people
     kind: confirm
     requires_confirmation: true
     source_type: carbon_api
 
   - name: get_gosi_wps_sif
+    app: people
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   # ── Attendance permission lifecycle (ESS + admin ops; RULE_21) ────────
   - name: list_my_attendance_permissions
+    app: my
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   - name: submit_my_attendance_permission
+    app: my
     kind: confirm
     requires_confirmation: true
     source_type: carbon_api
 
   - name: list_attendance_permissions
+    app: people
     kind: read
     requires_confirmation: false
     source_type: carbon_api
 
   - name: create_attendance_permission
+    app: people
     kind: confirm
     requires_confirmation: true
     source_type: carbon_api
 
   - name: approve_attendance_permission
+    app: people
     kind: confirm
     requires_confirmation: true
     source_type: carbon_api
 
   - name: submit_correspondence
+    app: people
     kind: confirm
     requires_confirmation: true
     source_type: carbon_api

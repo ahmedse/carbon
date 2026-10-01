@@ -2,14 +2,18 @@
 # snapshot; these names are the contract for a later tool loop. No writes.
 tools:
   - name: get_course
+    app: moodle
     method: HOST
     description: Course the user has open, or one they can already see.
   - name: list_my_courses
+    app: moodle
     method: HOST
     description: Courses in the audience scope.
   - name: list_course_sections
+    app: moodle
     method: HOST
     description: Section titles. Students receive visible sections only.
   - name: explain_access
+    app: moodle
     method: HOST
     description: Enrol, group, or hidden — for this user on this course.

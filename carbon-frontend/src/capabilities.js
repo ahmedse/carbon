@@ -158,6 +158,7 @@ export const ROUTE_CAPABILITIES = {
   '/catalog/products':    CATALOG_MANAGE_PRODUCTS,
   '/catalog/metadata':    CATALOG_MANAGE_METADATA,
   '/catalog/policies':    CATALOG_MANAGE_POLICIES,
+  '/catalog/policy-versions': CATALOG_MANAGE_POLICIES,
   '/catalog/governance':  CATALOG_VIEW_GOVERNANCE,
 
   // AI (Pulse) admin console — prefix-matched for every /admin/ai/* route
@@ -231,6 +232,7 @@ export const MENU_ITEM_CAPABILITIES = {
   'Organizational Boundaries': CARBON_MANAGE_REPORTING_PERIODS,
   'Base Years':               CARBON_MANAGE_REPORTING_PERIODS,
   'Inventory Coverage':       CARBON_MANAGE_INVENTORY_COVERAGE,
+  'Policy versions':          CATALOG_MANAGE_POLICIES,
 
   // GradeVance / Teach (unique labels — do not reuse Carbon "Overview")
   'Stems':                GRADEVANCE_MANAGE,

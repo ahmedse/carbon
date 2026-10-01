@@ -2,7 +2,7 @@
 # the registry — never by name in core code. Bump `version` when catalog,
 # processes, vocabulary or banks change in a way a running instance must notice.
 id: nibras
-version: 16
+version: 17
 domain: hrms
 display_name: Nibras — GOFSCO People & Payroll
 inventory: host_rbac
