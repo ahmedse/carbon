@@ -1487,6 +1487,18 @@ def _activity_detail(calc):
     return f"{detail} ({label})"
 
 
+def single_open_period():
+    """The one ReportingPeriod with status open.
+
+    Closed and locked years are not the data-entry period. Two open
+    periods is not a choice. Product Carbon on AASTMT. Date 1 Oct 2026.
+    """
+    periods = list(ReportingPeriod.objects.filter(status='open').order_by('id')[:2])
+    if len(periods) != 1:
+        return None
+    return periods[0]
+
+
 class ConsoleService:
     """Aggregated console data for the Carbon landing page."""
 
@@ -1494,10 +1506,8 @@ class ConsoleService:
     def get_console_data(user):
         today = timezone.now().date()
 
-        # Active reporting period
-        active_period = ReportingPeriod.objects.filter(
-            status__in=['open', 'locked', 'submitted']
-        ).order_by('-start_date').first()
+        # Data entry accepts the single open period only.
+        active_period = single_open_period()
 
         active_period_data = None
         if active_period:
@@ -1537,6 +1547,15 @@ class ConsoleService:
             total_calculations = 0
             total_emissions_tonnes = 0.0
         by_scope2_method = scope2_method_split(calc_qs)
+
+        open_period_tonnes = None
+        open_period_calculation_count = None
+        if active_period is not None:
+            open_qs = headline_calculations(calc_qs.filter(reporting_period=active_period))
+            open_period_calculation_count = open_qs.count()
+            if open_period_calculation_count:
+                open_kg = open_qs.aggregate(total=Sum('co2e_kg'))['total'] or 0
+                open_period_tonnes = round(float(open_kg) / 1000, 2)
 
         recent_activity = [
             {
@@ -1602,9 +1621,14 @@ class ConsoleService:
             has_calc = Calculation.objects.filter(
                 data_row=OuterRef('pk'), reporting_period=active_period,
             )
+            open_start = active_period.start_date.isoformat()
+            open_end = active_period.end_date.isoformat()
+            on_open_period = Q(values__period_start=open_start, values__period_end=open_end)
+            unstamped = ~Q(values__has_key='period_start')
             pending_rows = (
                 DataRow.objects
                 .filter(data_table__in=data_table_qs, is_archived=False)
+                .filter(on_open_period | unstamped)
                 .annotate(has_calc=Exists(has_calc))
                 .filter(has_calc=False)
                 .values('data_table__module_id', 'data_table__module__name')
@@ -1628,6 +1652,8 @@ class ConsoleService:
                 'total_calculations': total_calculations,
                 'avg_quality_score': avg_quality_score,
                 'total_emissions_tonnes': total_emissions_tonnes,
+                'open_period_tonnes': open_period_tonnes,
+                'open_period_calculation_count': open_period_calculation_count,
                 'scope2_method': 'location-based',
                 'by_scope2_method': by_scope2_method,
             },
@@ -2070,11 +2096,7 @@ class ChairmanService:
         if period_id:
             period = ReportingPeriod.objects.filter(id=period_id).first()
         if period is None:
-            period = ReportingPeriod.objects.filter(
-                status__in=['open', 'locked', 'submitted']
-            ).order_by('-start_date').first()
-        if period is None:
-            period = ReportingPeriod.objects.order_by('-start_date').first()
+            period = single_open_period()
 
         period_data = None
         if period:

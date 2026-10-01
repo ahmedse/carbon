@@ -14,6 +14,11 @@ blocks_release: []
 # 2026-09-30 lock: CR-S2-02, CR-CAM-01, CR-S3-01, CR-ASR-01, CR-DIS-01 are
 # catalogue planned. Dual Scope 2, O2–O4, O5, P1, P2 stay closed until evidence.
 # 2026-10-01 lock: CR-INT-01 is catalogue planned. Target O2. Product Carbon
-# on AASTMT. Evidence is the named CSV paths in that rule. Limit: no invented
-# kilogram, one open period, benchmarks stay closed, market-based stays
-# absent, not_assured stays unmet, P2 stays shape_only. Not a deploy.
+# on AASTMT. Evidence is the named CSV paths in that rule. The open
+# data-entry period is Calendar year 2026. Required streams for that year
+# start missing. A missing stream is not 0 kg. Closed FY 2023-24 holds the
+# Smart Village electricity and generator-diesel history. Closed FY 2025-26
+# holds only the rows already stored on it. Limit: no invented kilogram,
+# one open period, benchmarks stay closed, market-based stays absent,
+# not_assured stays unmet, P2 stays shape_only. Ranks stay L2, L2, L2, and
+# journey L5 on carbon_dev only. Not a deploy.

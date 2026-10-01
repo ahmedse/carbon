@@ -149,7 +149,9 @@ export default function EmissionsReport({ projectId }) {
         const result = await fetchReportingPeriods(token);
         setPeriods(result || []);
         if (result?.length > 0) {
-          setSelectedPeriod(result[0].id);
+          const open = result.filter((row) => row.status === 'open');
+          const pick = open.length === 1 ? open[0] : result[0];
+          setSelectedPeriod(pick.id);
         }
       } catch (err) {
         console.warn("Failed to load reporting periods:", err);

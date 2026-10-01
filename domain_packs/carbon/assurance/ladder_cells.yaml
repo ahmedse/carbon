@@ -218,9 +218,13 @@ subjects:
           product, evidence, date, and limit. P-26: activity for a locked
           later year may be stored and shown on that year; it never adds
           kilograms to the open period; a missing factor stores activity
-          with inventory kg absent, not zero. CARBON-PACK-SPEC.md has
-          the rank-2 headings. Catalogue stays planned. This sentence
-          is rank 2.
+          with inventory kg absent, not zero. The open data-entry period
+          is Calendar year 2026. Required streams for that year start
+          missing. A missing stream is not 0 kg. Closed FY 2023-24 holds
+          the Smart Village electricity and generator-diesel history.
+          Closed FY 2025-26 holds only the rows already stored on it.
+          CARBON-PACK-SPEC.md has the rank-2 headings. Catalogue stays
+          planned. This sentence is rank 2. The rank stays L2.
         evidence: >
           domain_packs/carbon/assurance/principles.yaml.
           domain_packs/carbon/assurance/rules/*.yaml.

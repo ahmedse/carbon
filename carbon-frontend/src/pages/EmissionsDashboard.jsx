@@ -58,7 +58,7 @@ import {
   CloudQueue,
   Speed,
 } from "@mui/icons-material";
-import { fetchEmissionsDashboard, triggerCalculations } from "../api/emissions";
+import { fetchEmissionsDashboard, fetchReportingPeriods, triggerCalculations } from "../api/emissions";
 import useDocumentTitle from "../hooks/useDocumentTitle";
 import { useEnabledApps } from "../hooks/useEnabledApps";
 import { useNotes } from "../notes/NotesContext";
@@ -186,7 +186,10 @@ export default function EmissionsDashboard({ projectId }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [data, setData] = useState(null);
-  const [selectedYear, setSelectedYear] = useState(2026); // Demo data year
+  const [selectedYear, setSelectedYear] = useState(2026);
+  const [openPeriodId, setOpenPeriodId] = useState(null);
+  const [openPeriodName, setOpenPeriodName] = useState("");
+  const [yearFilter, setYearFilter] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
   
   const token = localStorage.getItem("access");
@@ -240,10 +243,21 @@ export default function EmissionsDashboard({ projectId }) {
       setLoading(true);
       setError(null);
       try {
-        const result = await fetchEmissionsDashboard(
-          { project_id: projectId, year: selectedYear },
-          token
-        );
+        let periodId = openPeriodId;
+        if (!yearFilter && periodId == null) {
+          const periods = await fetchReportingPeriods(token);
+          const list = Array.isArray(periods) ? periods : periods?.results || [];
+          const open = list.filter((row) => row.status === "open");
+          if (open.length === 1) {
+            periodId = open[0].id;
+            setOpenPeriodId(open[0].id);
+            setOpenPeriodName(open[0].name || "");
+          }
+        }
+        const query = !yearFilter && periodId != null
+          ? { project_id: projectId, reporting_period_id: periodId }
+          : { project_id: projectId, year: selectedYear };
+        const result = await fetchEmissionsDashboard(query, token);
         setData(result);
       } catch (err) {
         console.error("Failed to load emissions dashboard:", err);
@@ -254,18 +268,17 @@ export default function EmissionsDashboard({ projectId }) {
     };
 
     loadData();
-  }, [projectId, selectedYear, token, t]);
+  }, [projectId, selectedYear, token, t, openPeriodId, yearFilter]);
 
   // Handle recalculation — triggers all active calculation rules
   const handleRecalculate = async () => {
     setRecalculating(true);
     try {
       await triggerCalculations({ recalculate: true }, token);
-      // Refresh data
-      const result = await fetchEmissionsDashboard(
-        { project_id: projectId, year: selectedYear },
-        token
-      );
+      const query = !yearFilter && openPeriodId != null
+        ? { project_id: projectId, reporting_period_id: openPeriodId }
+        : { project_id: projectId, year: selectedYear };
+      const result = await fetchEmissionsDashboard(query, token);
       setData(result);
     } catch (err) {
       console.error("Recalculation failed:", err);
@@ -520,7 +533,9 @@ export default function EmissionsDashboard({ projectId }) {
         <EmptyState
           icon={<CloudQueue />}
           title={t("noEmissionsData")}
-          description={t("noEmissionsSubtext")}
+          description={openPeriodName && !yearFilter
+            ? t("noEmissionsForPeriod", { name: openPeriodName })
+            : t("noEmissionsSubtext")}
           actionLabel={t("calculateEmissions")}
           onAction={handleRecalculate}
         />
@@ -543,7 +558,10 @@ export default function EmissionsDashboard({ projectId }) {
             <Select
               value={selectedYear}
               label={t("yearLabel")}
-              onChange={(e) => setSelectedYear(e.target.value)}
+              onChange={(e) => {
+                setYearFilter(true);
+                setSelectedYear(e.target.value);
+              }}
             >
               {[2023, 2024, 2025, 2026].map((y) => (
                 <MenuItem key={y} value={y}>

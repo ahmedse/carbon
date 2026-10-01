@@ -29,9 +29,17 @@ confidence: high-code
 catalogue: planned
 residual: >
   The period's display name is chosen by the inventory lead. The rule does not
-  prescribe a calendar year. It does not treat draft as open.
+  insert a period. On 1 Oct 2026 the open data-entry period is Calendar year
+  2026. Required streams for that year start missing. A missing stream is not
+  0 kg. Closed FY 2023-24 holds the Smart Village electricity and
+  generator-diesel history. Closed FY 2025-26 holds only the rows already
+  stored on it. Draft is not open. Ranks stay where the ladder files put them.
 target: O1
 product: Carbon on AASTMT
-evidence: GET /carbon-api/carbon/onboarding/o1/ codes open_period_count, open_period_dates, open_period_type
+evidence: >
+  GET /carbon-api/carbon/onboarding/o1/ codes open_period_count,
+  open_period_dates, open_period_type. Date 1 Oct 2026. Product Carbon
+  on AASTMT. The open data-entry period is Calendar year 2026. Required
+  streams for that year start missing. A missing stream is not 0 kg.
 locked: 2026-09-29
 limit: Does not choose which period to close. Does not treat draft as open. Does not close O2–P2.

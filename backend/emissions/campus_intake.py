@@ -937,9 +937,10 @@ def open_period_inventory_kg() -> dict[str, str] | None:
 def store_discovered_activity(*, user) -> dict[str, Any]:
     """Store file quantities on the period they belong to. Never calculates them.
 
-    FY 2025-26 rows land on the locked period. Waste 73.0 ton lands on the
-    open period with inventory kg absent. This does not open a period, does
-    not archive an existing row, and does not create a Calculation.
+    FY 2025-26 rows land on the locked period when that period is locked.
+    Waste 73.0 ton is FY 2023-24 history. It is not written onto Calendar
+    year 2026, and a closed period rejects the write. This does not open a
+    period, does not archive an existing row, and does not create a Calculation.
     """
     from django.conf import settings
 

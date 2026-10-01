@@ -316,6 +316,78 @@ class IntakeWriteTests(TestCase):
         self.assertEqual(roles[later.id], "closed")
         self.assertEqual(ReportingPeriod.objects.filter(status="open").count(), 1)
 
+    def test_discovered_history_is_not_written_onto_calendar_year_2026(self):
+        from core.models import Module
+        from dataschema.models import DataRow, DataTable
+        from emissions.services import ConsoleService
+
+        self.period.status = "closed"
+        self.period.save(update_fields=["status"])
+        calendar = ReportingPeriod.objects.create(
+            name="Calendar year 2026",
+            start_date=date(2026, 1, 1),
+            end_date=date(2026, 12, 31),
+            status="open",
+            period_type="annual",
+        )
+        later = ReportingPeriod.objects.create(
+            name="FY 2025-26",
+            start_date=date(2025, 7, 1),
+            end_date=date(2026, 6, 30),
+            status="closed",
+            period_type="annual",
+        )
+        stored = store_discovered_activity(user=self.user)
+        self.assertIsNone(stored["kilograms"])
+        self.assertFalse(DataRow.objects.filter(values__period_start="2026-01-01").exists())
+        self.assertFalse(DataRow.objects.filter(values__period_start="2023-07-01").exists())
+        self.period.refresh_from_db()
+        later.refresh_from_db()
+        calendar.refresh_from_db()
+        self.assertEqual(self.period.status, "closed")
+        self.assertEqual(later.status, "closed")
+        self.assertEqual(calendar.status, "open")
+        board = coverage_board(self.user)
+        by_name = {row["source_name"]: row for row in board["streams"]}
+        for name in (
+            "Smart Village electricity",
+            "Smart Village diesel",
+            "Smart Village waste disposal",
+            "South Valley electricity",
+            "South Valley diesel",
+            "Abu Qir electricity",
+            "Abu Qir diesel",
+            "New Alamein electricity",
+            "New Alamein diesel",
+        ):
+            self.assertEqual(by_name[name]["status"], "missing", name)
+            self.assertIsNone(by_name[name]["inventory_kg"], name)
+        module = Module.objects.create(name="Closed history", scope=2, org_unit=self.org)
+        table = DataTable.objects.create(module=module, name="closed_kwh", title="Closed")
+        row = DataRow.objects.create(
+            data_table=table,
+            values={
+                "source_name": "Smart Village electricity",
+                "period_start": "2023-07-01",
+                "period_end": "2024-06-30",
+                "quantity": "2704187",
+            },
+        )
+        Calculation.create_from_data_row(
+            data_row=row,
+            emission_factor=self.factor,
+            activity_value=10,
+            activity_unit="litre",
+            reporting_year=2023,
+            reporting_period=self.period,
+        )
+        console = ConsoleService.get_console_data(self.user)
+        self.assertEqual(console["active_period"]["id"], calendar.id)
+        self.assertEqual(console["active_period"]["name"], "Calendar year 2026")
+        self.assertIsNone(console["stats"]["open_period_tonnes"])
+        self.assertEqual(console["stats"]["open_period_calculation_count"], 0)
+        self.assertFalse(any(alert.get("type") == "pending_submission" for alert in console["alerts"]))
+
     def test_fy2526_upload_is_not_posted_onto_the_open_period(self):
         result = apply_template(
             leaf_id="O2",

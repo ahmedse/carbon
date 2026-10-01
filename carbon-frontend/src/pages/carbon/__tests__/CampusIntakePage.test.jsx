@@ -98,7 +98,7 @@ describe('Campus intake', () => {
     renderPage();
     expect(await screen.findByText(/700000/)).toBeInTheDocument();
     expect(screen.getByText(/south_valley_inventory.csv/)).toBeInTheDocument();
-    expect(screen.getByText(/0 tCO2e/)).toBeInTheDocument();
+    expect(screen.getByText(/Inventory kilograms are absent/)).toBeInTheDocument();
     expect(screen.getByText(/25000/)).toBeInTheDocument();
     expect(screen.queryByText(/kg CO2e/)).not.toBeInTheDocument();
     expect(screen.queryByText(/^0 kg$/)).not.toBeInTheDocument();

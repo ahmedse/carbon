@@ -131,6 +131,14 @@ export default function CarbonConsolePage() {
   const daysLeft = period?.days_remaining;
   const daysLeftColor = daysLeft == null ? 'text.secondary' : daysLeft <= 14 ? 'error.main' : daysLeft <= 30 ? 'warning.main' : 'success.main';
 
+  const hasOpenTonnes = Object.prototype.hasOwnProperty.call(stats, 'open_period_tonnes');
+  const tonnesAbsent = hasOpenTonnes && (stats.open_period_tonnes == null);
+  const tonnesValue = tonnesAbsent
+    ? t('intake.kgAbsent')
+    : Number(hasOpenTonnes ? stats.open_period_tonnes : (stats.total_emissions_tonnes ?? 0)).toLocaleString();
+  const calcCount = stats.open_period_calculation_count != null
+    ? stats.open_period_calculation_count
+    : (stats.total_calculations ?? 0);
   const qScore = Math.round(stats.avg_quality_score ?? 0);
   const qColor = qScore >= 80 ? 'success' : qScore >= 60 ? 'warning' : 'error';
   const marketPresent = Boolean(stats?.by_scope2_method?.market_based?.present);
@@ -222,9 +230,11 @@ export default function CarbonConsolePage() {
           <Grid size={{ xs: 6, sm: 3 }}>
             <StatusCard
               label={t('console.totalEmissions')}
-              value={(stats.total_emissions_tonnes ?? 0).toLocaleString()}
-              unit={t('chairman.unitTco2e')}
-              sub={marketPresent ? t('console.headlineExcludesMarket') : t('scope2HeadlineLocation')}
+              value={tonnesValue}
+              unit={tonnesAbsent ? '' : t('chairman.unitTco2e')}
+              sub={tonnesAbsent
+                ? t('console.openPeriodAbsent')
+                : (marketPresent ? t('console.headlineExcludesMarket') : t('scope2HeadlineLocation'))}
               color="primary"
               icon={<BarChart fontSize="small" />}
               onClick={() => navigate('/carbon/dashboard')}
@@ -235,7 +245,7 @@ export default function CarbonConsolePage() {
           <Grid size={{ xs: 6, sm: 3 }}>
             <StatusCard
               label={t('console.calculations')}
-              value={stats.total_calculations ?? 0}
+              value={calcCount}
               unit={t('chairman.records')}
               sub={t('console.acrossTables', { count: stats.total_tables ?? 0 })}
               color="info"

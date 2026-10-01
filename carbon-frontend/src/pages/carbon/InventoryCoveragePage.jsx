@@ -634,7 +634,8 @@ export default function InventoryCoveragePage() {
         const boards = Array.isArray(intake?.periods) ? intake.periods : [];
         setStreamPeriods(boards);
         setStreams(Array.isArray(intake?.streams) ? intake.streams : []);
-        setStreamPeriodId((current) => current || (boards[0] ? String(boards[0].id) : ''));
+        const openBoard = boards.find((row) => row.role === 'open') || boards[0];
+        setStreamPeriodId((current) => current || (openBoard ? String(openBoard.id) : ''));
         setStreamError('');
       } catch (err) {
         setStreams([]);
@@ -659,7 +660,8 @@ export default function InventoryCoveragePage() {
   // Auto-select the first period once periods are available.
   useEffect(() => {
     if (periods.length > 0 && !selectedPeriod) {
-      setSelectedPeriod(periods[0].id);
+      const open = periods.find((row) => row.status === 'open');
+      setSelectedPeriod((open || periods[0]).id);
     }
   }, [periods, selectedPeriod]);
 
@@ -1036,7 +1038,7 @@ export default function InventoryCoveragePage() {
       {streamPeriods.length > 0 && (
         <Box sx={{ maxWidth: 420, my: 2 }}>
           <SearchSelect
-            label={t('intake.period')}
+            label={t('intake.periodList')}
             options={streamPeriods.map((board) => ({
               value: String(board.id),
               label: t('intake.streamsFor', {

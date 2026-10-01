@@ -171,7 +171,7 @@ describe('Inventory onboarding', () => {
     expect(screen.getByText(/abu_qir_inventory.csv is absent/)).toBeInTheDocument();
     expect(screen.getByText(/new_alamein_inventory.csv is absent/)).toBeInTheDocument();
     expect(screen.getByText(/shape_only/)).toBeInTheDocument();
-    expect(screen.getAllByText(/0 tCO2e/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Inventory kilograms are absent/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/kg CO2e/)).not.toBeInTheDocument();
   });
 });

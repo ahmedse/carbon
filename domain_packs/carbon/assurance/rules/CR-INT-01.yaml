@@ -6,8 +6,11 @@ meaning: >
   activity with inventory kg absent, not zero. O2, O3, O4, O5,
   market-based Scope 2, and P1 are operable without inventing a kilogram.
   A discovered file is quoted cell by cell. An open-period file that is
-  absent stays a named wait, with the columns required, and the coverage
-  panel shows 0 tCO2e because no Calculation was stored. Market-based
+  absent stays a named wait, with the columns required. The open
+  data-entry period is Calendar year 2026. Required streams for that
+  year start missing. The coverage panel lists a missing stream as
+  missing. Inventory kg stays absent. A missing stream is not 0 kg.
+  Market-based
   stays absent until a ContractualScope2Factor row differs from the grid
   factor. P1 records five VVB fields and not_assured stays unmet until
   all five are present. P2 stays shape_only.
@@ -19,8 +22,9 @@ source: >
 owner: carbon-inventory-lead
 failure: >
   A leaf is marked passed without its open-period file, a discovered
-  FY file is posted onto the FY 2023-24 period, a later-year quantity
-  adds kilograms to the open period, a missing factor is stored as 0 kg,
+  FY file is posted onto Calendar year 2026 or onto closed FY 2023-24,
+  a later-year quantity adds kilograms to the open period, a missing
+  stream is stored as 0 kg, a missing factor is stored as 0 kg,
   a kilogram is stored from a blank month or from both diesel streams,
   market-based copies 0.4584 or an Egypt residual mix, or not_assured
   is marked met with fewer than five VVB fields.
@@ -39,13 +43,22 @@ implementation: >
 confidence: high-code
 catalogue: planned
 residual: >
-  South Valley and Abu Qir FY 2025-26 files are not the open period.
-  New Alamein has no inventory file. Waste has 73.0 ton and no tonne
-  factor file. No contractual factor is committed. No VVB is committed.
+  The open data-entry period is Calendar year 2026. Its required streams
+  start missing. A missing stream is not 0 kg. Closed FY 2023-24 holds
+  the Smart Village electricity and generator-diesel history. Closed
+  FY 2025-26 holds only the rows already stored on it. South Valley and
+  Abu Qir files are not Calendar year 2026. New Alamein has no inventory
+  file. Waste 73.0 ton stays on the closed FY 2023-24 history and has no
+  tonne factor file. No contractual factor is committed. No VVB is committed.
 target: O2
 product: Carbon on AASTMT
 evidence: >
-  CR-INT-01. Date 1 Oct 2026. emissions/tests/test_campus_intake.py.
+  CR-INT-01. Date 1 Oct 2026. Product Carbon on AASTMT. Target O2.
+  emissions/tests/test_campus_intake.py. The open data-entry period is
+  Calendar year 2026. Required streams for that year start missing. A
+  missing stream is not 0 kg. Closed FY 2023-24 holds the Smart Village
+  electricity and generator-diesel history. Closed FY 2025-26 holds only
+  the rows already stored on it.
   raw/Carbon footprint app/csv/south_valley_scope12_fy2526.csv,
   abu_qir_monthly_electricity_fy2526.csv, abu_qir_fuel_fy2526.csv,
   smart_village_inventory_fy2324.csv. Open-period files
