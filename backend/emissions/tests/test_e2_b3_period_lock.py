@@ -209,12 +209,28 @@ class PeriodTransitionActionsTests(TestCase):
         self.assertEqual(period.status, 'closed')
 
     def test_close_invalid_transition_409(self):
-        """close action from 'open' → 409."""
+        """close action from 'open' → 409. Open cannot skip straight to closed."""
         period = ReportingPeriod.objects.create(
             name='BadClose', start_date='2026-01-01', end_date='2026-12-31', status='open',
         )
         resp = self.client.post(reverse('emissions:reporting-period-close', args=[period.id]))
         self.assertEqual(resp.status_code, 409)
+        period.refresh_from_db()
+        self.assertEqual(period.status, 'open')
+
+    def test_close_from_locked_keeps_row_values(self):
+        """close action: locked → closed. Data row values are not rewritten."""
+        row = DataRow.objects.get(data_table=self.table)
+        before = dict(row.values)
+        period = ReportingPeriod.objects.create(
+            name='LockClose', start_date='2023-07-01', end_date='2024-06-30', status='locked',
+        )
+        resp = self.client.post(reverse('emissions:reporting-period-close', args=[period.id]))
+        self.assertEqual(resp.status_code, 200)
+        period.refresh_from_db()
+        self.assertEqual(period.status, 'closed')
+        row.refresh_from_db()
+        self.assertEqual(row.values, before)
 
 
 class DataRowLockedTableWriteGuardTests(TestCase):

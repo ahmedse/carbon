@@ -161,7 +161,7 @@ class ReportingPeriodViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def close(self, request, pk=None):
-        """Close a verified period. Delegates to PeriodLockService."""
+        """Close a locked or verified period. Delegates to PeriodLockService."""
         period = self.get_object()
         try:
             PeriodLockService.close_period(period, request.user)

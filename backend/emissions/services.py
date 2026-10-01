@@ -1949,7 +1949,7 @@ class PeriodLockService:
 
     @staticmethod
     def close_period(period, user):
-        """Transition a period to 'closed'."""
+        """Transition a locked or verified period to 'closed'. Rows are not rewritten."""
         period.transition_to('closed', user)
         return period
 
