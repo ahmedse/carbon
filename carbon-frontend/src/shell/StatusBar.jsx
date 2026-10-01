@@ -10,6 +10,24 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../auth/AuthContext';
 import { listWorkspaceSuggestions } from '../api/aiWorkspace';
 import { PLATFORM_TITLE } from '../config/branding';
+import { API_BASE_URL } from '../config';
+
+function shortRelease(tag) {
+  const match = String(tag || '').match(/v(\d+\.\d+\.\d+)$/);
+  return match ? `v${match[1]}` : 'v1.0';
+}
+
+function releaseTooltip(release) {
+  if (!release) return '';
+  const lines = [];
+  if (release.tag) lines.push(release.tag);
+  const pack = [release.pack, release.pack_version].filter(Boolean).join(' ');
+  if (pack) lines.push(pack);
+  if (release.image_built_at) lines.push(`built ${release.image_built_at}`);
+  if (release.process_started_at) lines.push(`started ${release.process_started_at}`);
+  else if (release.deployed_at) lines.push(`deployed ${release.deployed_at}`);
+  return lines.join('\n');
+}
 
 export function StatusBar({
   sidebarMode,
@@ -23,11 +41,26 @@ export function StatusBar({
   const { t } = useTranslation('shell');
   const [systemStatus, setSystemStatus] = useState('ready');
   const [suggestionCount, setSuggestionCount] = useState(0);
+  const [release, setRelease] = useState(null);
 
   useEffect(() => {
     // TODO: Poll backend for system status
     // For now, just show ready state
     setSystemStatus('ready');
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const url = `${String(API_BASE_URL || '').replace(/\/$/, '')}/health/`;
+    fetch(url)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.release) setRelease(data.release);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Pending proactive suggestions — drives the AI Workspace badge.
@@ -275,16 +308,27 @@ export function StatusBar({
         </Tooltip>
       </Box>
 
-      {/* Version */}
+      {/* Version — detail comes from /health/ release, not a hardcoded sentence */}
       {!compact && (
-        <Typography sx={{
-          fontSize: '0.6875rem',
-          opacity: 0.6,
-          userSelect: 'none',
-          ml: 0.5
-        }}>
-          v1.0
-        </Typography>
+        <Tooltip
+          title={releaseTooltip(release) || shortRelease(release?.tag)}
+          placement="top"
+          slotProps={{
+            tooltip: { sx: { whiteSpace: 'pre-line', maxWidth: 360 } },
+          }}
+        >
+          <Typography
+            component="span"
+            sx={{
+              fontSize: '0.6875rem',
+              opacity: 0.6,
+              userSelect: 'none',
+              ml: 0.5,
+            }}
+          >
+            {shortRelease(release?.tag)}
+          </Typography>
+        </Tooltip>
       )}
     </Box>
   );

@@ -32,6 +32,16 @@ class TestHealthEndpoint:
         resp = client.get('/carbon-api/health/')
         assert 'timestamp' in resp.json()
 
+    def test_health_release_is_read_only_identity(self, client):
+        resp = client.get('/carbon-api/health/')
+        release = resp.json()["release"]
+        assert isinstance(release["pack"], str) and release["pack"]
+        assert isinstance(release["loaded_packs"], list)
+        assert isinstance(release["catalogs"], list)
+        assert isinstance(release["extra_packs"], list)
+        assert "process_started_at" in release
+        assert "pulse_enabled" in release
+
 
 class TestMetricsEndpoint:
     """1.9c: Prometheus metrics endpoint."""

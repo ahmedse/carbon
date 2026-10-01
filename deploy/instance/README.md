@@ -126,11 +126,12 @@ systemctl start nibras-deploy.service   # trigger now
 1. Locks `/tmp/<instance>-deploy.lock` (no concurrent deploys).
 2. `git fetch --tags`, finds newest `${INSTANCE}-v*` tag, skips if already `.deployed-tag`.
 3. Checks out the tag (preserving `staticfiles`/`mediafiles`/`dataschema_uploads`).
-4. Builds frontend with `VITE_BRAND=<DJANGO_BRAND>` + `VITE_API_BASE_URL=/carbon-api/`.
-5. `docker compose build --no-cache` + `up -d --force-recreate` (container `${INSTANCE}-backend`).
-6. Health-checks `http://127.0.0.1:<port>/carbon-api/health/`.
-7. `activate_apps --active "$APP_ACTIVE_SLUGS"` (per-instance subset).
-8. `nginx -t` + reload, stamps `.deployed-tag`.
+4. Builds frontend with `VITE_BRAND=<DJANGO_BRAND>`, `VITE_API_BASE_URL=/carbon-api/`, and the `VITE_PLATFORM_*` / `VITE_CANONICAL_URL` lines from `carbon-frontend/.env.instance.<brand>` (so `index.html` `%VITE_*%` is substituted).
+5. For `nibras` only: refuse to start unless `DJANGO_BRAND=nibras` and `domain_packs/nibras/pack.yaml` says `id: nibras`. The runtime mount is a directory that contains `nibras` (plus the shared `_platform` guide). `carbon`, `aast-med`, `eduos`, `medos`, and `tectona` are not copied. After the container is healthy, `/carbon-api/health/` `release` must report `pack=nibras`, `loaded_packs=["nibras"]`, empty `extra_packs`, and `pulse_enabled=true`, or the tag is not recorded.
+6. `docker compose build --no-cache` + `up -d --force-recreate` (container `${INSTANCE}-backend`).
+7. Health-checks `http://127.0.0.1:<port>/carbon-api/health/`.
+8. `activate_apps --active "$APP_ACTIVE_SLUGS"` (per-instance subset).
+9. `nginx -t` + reload, stamps `.deployed-tag`.
 
 ### Secrets never leave the VPS
 

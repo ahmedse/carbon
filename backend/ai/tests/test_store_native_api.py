@@ -159,3 +159,27 @@ def test_no_sqlalchemy_in_store_module():
     text = store_path.read_text(encoding="utf-8")
     assert "import sqlalchemy" not in text
     assert "from sqlalchemy" not in text
+
+
+def test_prepare_db_thread_drops_closed_connection(monkeypatch):
+    """A psycopg connection Postgres already closed must be discarded."""
+    from ai.store import _prepare_db_thread
+
+    class Raw:
+        closed = 1
+
+    class Wrapper:
+        def __init__(self):
+            self.connection = Raw()
+            self.closed_calls = 0
+
+        def close(self):
+            self.closed_calls += 1
+            self.connection = None
+
+    wrapper = Wrapper()
+    monkeypatch.setattr("django.db.close_old_connections", lambda: None)
+    monkeypatch.setattr("django.db.connection", wrapper)
+    _prepare_db_thread()
+    assert wrapper.closed_calls == 1
+    assert wrapper.connection is None

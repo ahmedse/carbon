@@ -443,6 +443,40 @@ class InMemoryStore(Store):
 # ── DjangoStore ──────────────────────────────────────────────────────────
 
 
+def _prepare_db_thread() -> None:
+    """Drop a dead thread-local connection before ORM work.
+
+    Chat streaming runs on a daemon thread, then ``sync_to_async(...,
+    thread_sensitive=True)`` hops to asgiref's shared worker. That worker is
+    not a request thread, so Django never recycles its connection. After
+    Postgres closes the idle socket, psycopg2 leaves ``closed != 0`` and the
+    next cursor raises ``InterfaceError: connection already closed``. The
+    workspace replaces that with the generic unreachable sentence.
+    """
+    from django.db import close_old_connections, connection
+
+    close_old_connections()
+    raw = connection.connection
+    if raw is not None and getattr(raw, "closed", 0):
+        connection.close()
+
+
+def _sync_read(fn):
+    """Run a read on the DB thread, reconnecting once if the socket is dead."""
+    from django.db import connection
+    from django.db.utils import InterfaceError
+
+    def _inner(*args, **kwargs):
+        _prepare_db_thread()
+        try:
+            return fn(*args, **kwargs)
+        except InterfaceError:
+            connection.close()
+            return fn(*args, **kwargs)
+
+    return _inner
+
+
 class _DjangoSession(Session):
     """Thin async wrapper over Django ORM via ``sync_to_async``."""
 
@@ -477,6 +511,7 @@ class _DjangoSession(Session):
         tracked = list(self._tracked.values())
 
         def _commit() -> None:
+            _prepare_db_thread()
             for engine_obj, dj_obj in pending:
                 dj_obj.save()
                 _backfill_engine_attrs(engine_obj, dj_obj)
@@ -511,7 +546,7 @@ class _DjangoSession(Session):
                 qs = qs[:limit]
             return list(qs)
 
-        rows = await sync_to_async(_select, thread_sensitive=True)()
+        rows = await sync_to_async(_sync_read(_select), thread_sensitive=True)()
         for row in rows:
             self._tracked[id(row)] = row
         return rows
@@ -524,7 +559,7 @@ class _DjangoSession(Session):
         def _get() -> Any:
             return resolved.objects.get(pk=pk)
 
-        row = await sync_to_async(_get, thread_sensitive=True)()
+        row = await sync_to_async(_sync_read(_get), thread_sensitive=True)()
         if row is not None:
             self._tracked[id(row)] = row
         return row
@@ -553,7 +588,11 @@ class _DjangoSession(Session):
                 if getattr(dj_obj, "pk", None) != pk
             ]
 
-        await sync_to_async(obj.delete, thread_sensitive=True)()
+        def _delete() -> None:
+            _prepare_db_thread()
+            obj.delete()
+
+        await sync_to_async(_delete, thread_sensitive=True)()
 
     async def refresh(self, obj: Any) -> None:
         from asgiref.sync import sync_to_async
@@ -567,7 +606,11 @@ class _DjangoSession(Session):
             # Unsaved engine object — nothing to refresh from the DB.  The
             # generated PK/defaults were already back-filled by ``commit``.
             return
-        await sync_to_async(dj_obj.refresh_from_db, thread_sensitive=True)()
+        def _refresh() -> None:
+            _prepare_db_thread()
+            dj_obj.refresh_from_db()
+
+        await sync_to_async(_refresh, thread_sensitive=True)()
 
     async def flush(self) -> None:
         await self.commit()
@@ -593,13 +636,14 @@ class _DjangoSession(Session):
         _FUNCS = {"Sum": Sum, "Count": Count, "Avg": Avg, "Min": Min, "Max": Max}
 
         def _aggregate() -> dict[str, Any]:
+            _prepare_db_thread()
             qs = resolved.objects.all()
             if coerced:
                 qs = qs.filter(*coerced)
             agg = {alias: _FUNCS[func_name](field) for alias, (func_name, field) in spec.items()}
             return qs.aggregate(**agg)
 
-        return await sync_to_async(_aggregate, thread_sensitive=True)()
+        return await sync_to_async(_sync_read(_aggregate), thread_sensitive=True)()
 
     async def close(self) -> None:
         self._closed = True

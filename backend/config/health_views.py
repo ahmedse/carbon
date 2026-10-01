@@ -2,15 +2,97 @@
 import os
 import shutil
 import time
+from pathlib import Path
+
 from django.http import JsonResponse, HttpResponse
 from django.db import connections
 from django.db.utils import OperationalError
 from django.utils import timezone
 
+# Set when this worker loads. The status bar shows it as process start.
+_PROCESS_STARTED_AT = timezone.now().isoformat()
+
+
+def _packs_root() -> Path:
+    """Dev repo layout and the production ``/domain_packs`` mount."""
+    from django.conf import settings
+
+    sibling = Path(settings.BASE_DIR).resolve().parent / "domain_packs"
+    if sibling.is_dir():
+        return sibling
+    mounted = Path("/domain_packs")
+    if mounted.is_dir():
+        return mounted
+    return sibling
+
+
+def _pack_version(root: Path, pack_id: str) -> str | None:
+    path = root / pack_id / "pack.yaml"
+    if not path.is_file():
+        return None
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if line.startswith("version:"):
+                return line.split(":", 1)[1].strip().strip("'\"") or None
+    except OSError:
+        return None
+    return None
+
+
+def release_payload() -> dict:
+    """Read-only release identity for the shell tooltip and the deploy gate.
+
+    Pack ids come from directories that actually contain ``pack.yaml``.
+    A brand that falls back to another pack shows that pack id here.
+    """
+    from ai.instance_registry import active_brand, resolve_instance_id
+    from ai.models.control_state import CONTAINMENT_FULL_STOP, PulseControlState
+
+    brand = active_brand()
+    pack = resolve_instance_id()
+    root = _packs_root()
+    loaded: list[str] = []
+    catalogs: list[str] = []
+    if root.is_dir():
+        for child in sorted(root.iterdir()):
+            if not child.is_dir() or child.name.startswith("."):
+                continue
+            if (child / "pack.yaml").is_file():
+                loaded.append(child.name)
+            if (child / "api_catalog.yaml").is_file():
+                catalogs.append(child.name)
+    present = (root / pack / "pack.yaml").is_file()
+    pulse_enabled = present
+    try:
+        row = PulseControlState.objects.filter(instance_id=pack).only(
+            "containment_level"
+        ).first()
+        if row is not None and row.containment_level == CONTAINMENT_FULL_STOP:
+            pulse_enabled = False
+    except Exception:
+        pass
+    return {
+        "tag": os.environ.get("CARBON_RELEASE_TAG") or "",
+        "process_brand": brand,
+        "pack": pack,
+        "pack_version": _pack_version(root, pack),
+        "extra_packs": [name for name in loaded if name != pack],
+        "loaded_packs": loaded,
+        "catalogs": catalogs,
+        "pulse_enabled": pulse_enabled,
+        "image_built_at": os.environ.get("CARBON_IMAGE_BUILT_AT") or None,
+        "process_started_at": _PROCESS_STARTED_AT,
+        "deployed_at": os.environ.get("CARBON_DEPLOYED_AT") or None,
+    }
+
 
 def health_check(request):
     """Enhanced health endpoint — DB, Redis, disk, last backup, error count."""
     result = {'status': 'ok', 'timestamp': timezone.now().isoformat(), 'checks': {}}
+    try:
+        result["release"] = release_payload()
+    except Exception:
+        result["release"] = {"pulse_enabled": False}
 
     # 1. Database check
     try:
