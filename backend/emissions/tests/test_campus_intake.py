@@ -239,6 +239,83 @@ class IntakeWriteTests(TestCase):
         self.assertEqual(calc.emission_factor_id, self.factor.id)
         self.assertIn("test double", self.factor.source)
 
+    def test_new_intake_binds_to_the_open_period_and_a_closed_period_rejects_writes(self):
+        self.period.status = "closed"
+        self.period.save(update_fields=["status"])
+        calendar = ReportingPeriod.objects.create(
+            name="Calendar year 2026",
+            start_date=date(2026, 1, 1),
+            end_date=date(2026, 12, 31),
+            status="open",
+            period_type="annual",
+        )
+        later = ReportingPeriod.objects.create(
+            name="FY 2025-26",
+            start_date=date(2025, 7, 1),
+            end_date=date(2026, 6, 30),
+            status="closed",
+            period_type="annual",
+        )
+        result = enter_activity(
+            user=self.user,
+            fields={"source_name": "South Valley diesel", "quantity": "10", "stream": "generators"},
+            factor=self.factor,
+        )
+        self.assertTrue(result["written"], result)
+        self.assertEqual(result["current"][0]["values"]["period_start"], "2026-01-01")
+        self.assertEqual(result["current"][0]["values"]["period_end"], "2026-12-31")
+        calc = Calculation.objects.get()
+        self.assertEqual(calc.reporting_period_id, calendar.id)
+        self.assertEqual(ReportingPeriod.objects.filter(status="open").count(), 1)
+        closed = apply_template(
+            leaf_id="O2",
+            rows=[self._row()],
+            user=self.user,
+            factor=self.factor,
+        )
+        self.assertFalse(closed["written"])
+        self.assertIsNone(closed["kilograms"])
+        self.assertEqual(closed["exclusions"][0]["code"], "period_mismatch")
+        later_write = apply_template(
+            leaf_id="O2",
+            rows=[self._row(period_start="2025-07-01", period_end="2026-06-30")],
+            user=self.user,
+            factor=self.factor,
+        )
+        self.assertFalse(later_write["written"])
+        self.assertIsNone(later_write["kilograms"])
+        self.assertFalse(Calculation.objects.filter(reporting_period=self.period).exists())
+        self.assertFalse(Calculation.objects.filter(reporting_period=later).exists())
+        self.period.refresh_from_db()
+        later.refresh_from_db()
+        calendar.refresh_from_db()
+        self.assertEqual(self.period.status, "closed")
+        self.assertEqual(later.status, "closed")
+        self.assertEqual(calendar.status, "open")
+        board = coverage_board(self.user)
+        self.assertEqual(board["open_period"]["id"], calendar.id)
+        self.assertEqual(board["open_period"]["name"], "Calendar year 2026")
+        by_name = {row["source_name"]: row for row in board["streams"]}
+        self.assertEqual(by_name["South Valley diesel"]["status"], "entered")
+        self.assertEqual(by_name["South Valley diesel"]["period_id"], calendar.id)
+        for name in (
+            "Smart Village electricity",
+            "Smart Village diesel",
+            "Smart Village waste disposal",
+            "South Valley electricity",
+            "Abu Qir electricity",
+            "Abu Qir diesel",
+            "New Alamein electricity",
+            "New Alamein diesel",
+        ):
+            self.assertEqual(by_name[name]["status"], "missing", name)
+            self.assertIsNone(by_name[name]["inventory_kg"], name)
+        roles = {row["id"]: row["role"] for row in board["periods"]}
+        self.assertEqual(roles[calendar.id], "open")
+        self.assertEqual(roles[self.period.id], "closed")
+        self.assertEqual(roles[later.id], "closed")
+        self.assertEqual(ReportingPeriod.objects.filter(status="open").count(), 1)
+
     def test_fy2526_upload_is_not_posted_onto_the_open_period(self):
         result = apply_template(
             leaf_id="O2",

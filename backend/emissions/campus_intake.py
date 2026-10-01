@@ -122,8 +122,16 @@ def _leaf_shell(leaf_id: str, title: str, org_unit_name: str) -> dict[str, Any]:
     }
 
 
+def _quoted_entry_window() -> dict[str, str]:
+    """Dates staff may write. Empty when there is not exactly one open period."""
+    window = _entry_window()
+    if window is None:
+        return {"start_date": "", "end_date": ""}
+    return window
+
+
 def _o2() -> dict[str, Any]:
-    period = academy_period()
+    period = _quoted_entry_window()
     leaf = _leaf_shell("O2", "South Valley electricity and diesel", "South Valley")
     leaf["tonnes_co2e"] = "0"
     leaf["waiting"] = _waiting(OPEN_PERIOD_FILES["O2"], CAMPUS_COLUMNS)
@@ -174,7 +182,7 @@ def _o2() -> dict[str, Any]:
 
 
 def _o3() -> dict[str, Any]:
-    period = academy_period()
+    period = _quoted_entry_window()
     leaf = _leaf_shell("O3", "Abu Qir electricity and diesel", "Abu Qir")
     leaf["tonnes_co2e"] = "0"
     leaf["waiting"] = _waiting(OPEN_PERIOD_FILES["O3"], CAMPUS_COLUMNS)
@@ -300,7 +308,7 @@ def intake_catalogue() -> dict[str, Any]:
     return {
         "product": "Carbon on AASTMT",
         "locked": "2026-10-01",
-        "open_period": academy_period(),
+        "open_period": _quoted_entry_window(),
         "leaves": [_o2(), _o3(), _o4(), _o5(), _s2(), _p1()],
     }
 
@@ -330,10 +338,17 @@ def _decimal(value: Any) -> Decimal | None:
 
 
 def validate_template(leaf_id: str, rows: list[dict]) -> dict[str, Any]:
-    """Accept a template upload. A period mismatch is an exclusion, not a kilogram."""
-    period = academy_period()
+    """Accept a template upload onto the single open period. A closed period is not a write target."""
+    period = _entry_window()
     errors: list[str] = []
     exclusions: list[dict[str, str]] = []
+    if period is None:
+        return {
+            "ok": False,
+            "errors": ["open period count"],
+            "exclusions": [_exclusion("open_period_count")],
+            "rows": [],
+        }
     if leaf_id not in {"O1", "O2", "O3", "O4", "O5"}:
         return {"ok": False, "errors": ["leaf has no activity template"], "exclusions": [], "rows": []}
     columns = WASTE_COLUMNS if leaf_id == "O5" else CAMPUS_COLUMNS
@@ -446,6 +461,17 @@ def _open_period_or_none():
     if len(periods) != 1:
         return None
     return periods[0]
+
+
+def _entry_window() -> dict[str, str] | None:
+    """Start and end of the only open period. Closed periods are not included."""
+    period = _open_period_or_none()
+    if period is None:
+        return None
+    return {
+        "start_date": period.start_date.isoformat(),
+        "end_date": period.end_date.isoformat(),
+    }
 
 
 _BENCHMARK_FILES = (
@@ -839,19 +865,31 @@ def _period_board(period, user, role: str) -> dict[str, Any]:
     }
 
 
+def _history_periods():
+    """Closed and locked periods, readable. This does not open or rewrite them."""
+    from emissions.models import ReportingPeriod
+
+    return list(
+        ReportingPeriod.objects.filter(status__in=("locked", "closed")).order_by("start_date", "id")
+    )
+
+
 def coverage_board(user=None) -> dict[str, Any]:
-    """Required streams for the open period and, when it exists, locked FY 2025-26.
+    """Required streams for the single open period. Closed and locked years stay readable.
 
     A percent is not returned. Inventory kilograms come only from calculations
-    on that same period. Later-year activity does not mark the open period entered.
+    on that same period. A missing stream stays missing until a row exists on
+    that period. History rows do not mark the open period entered.
     """
     period = _open_period_or_none()
-    locked = _locked_later_period()
     periods = []
     if period is not None:
         periods.append(_period_board(period, user, "open"))
-    if locked is not None and (period is None or locked.id != period.id):
-        periods.append(_period_board(locked, user, "locked"))
+    for old in _history_periods():
+        if period is not None and old.id == period.id:
+            continue
+        role = "locked" if old.status == "locked" else "closed"
+        periods.append(_period_board(old, user, role))
     if period is None:
         streams = []
         for spec in required_stream_specs():
@@ -1275,14 +1313,16 @@ def apply_template(*, leaf_id: str, rows: list[dict], user, factor=None) -> dict
 
 
 def enter_activity(*, user, fields: dict, factor=None) -> dict[str, Any]:
-    """One missing stream, same DataRow path as a template upload."""
+    """One missing stream on the single open period. A closed period is not a write target."""
     source_name = str((fields or {}).get("source_name") or "").strip()
     spec = next((item for item in required_stream_specs() if item["source_name"] == source_name), None)
     if spec is None:
         return _blank_result(errors=["source"])
     if not user_may_write(user, spec["org_unit_name"]):
         return _blank_result(errors=["org scope"])
-    period = academy_period()
+    period = _entry_window()
+    if period is None:
+        return _blank_result(errors=["open period count"], exclusions=[_exclusion("open_period_count")])
     method = str((fields or {}).get("method") or "location_based").strip().lower().replace("-", "_")
     if spec["scope"] == 2 and method == "market_based" and not _distinct_contractual(factor):
         return _blank_result(exclusions=[_exclusion("market_absent")])

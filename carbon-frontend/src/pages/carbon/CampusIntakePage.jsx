@@ -33,6 +33,12 @@ function statusLabel(t, status) {
   return t(STATUS_KEY[status] || 'intake.statusMissing');
 }
 
+function periodRoleLabel(t, role) {
+  if (role === 'locked') return t('intake.periodLocked');
+  if (role === 'closed') return t('intake.periodClosed');
+  return t('intake.periodOpen');
+}
+
 function downloadTemplate(leaf) {
   const columns = leaf.template_columns || [];
   if (!columns.length) return;
@@ -88,7 +94,8 @@ export default function CampusIntakePage() {
   );
   const rows = (leaf?.activity_rows || []).map((row, index) => ({ id: index, ...row }));
   const streams = Array.isArray(payload?.streams) ? payload.streams : [];
-  const lockedBoard = (Array.isArray(payload?.periods) ? payload.periods : []).find((row) => row.role === 'locked') || null;
+  const historyBoards = (Array.isArray(payload?.periods) ? payload.periods : [])
+    .filter((row) => row.role === 'locked' || row.role === 'closed');
   const stream = streams.find((row) => row.id === streamId) || null;
   const campuses = useMemo(() => {
     const names = [...new Set(streams.map((row) => row.campus).filter(Boolean))];
@@ -259,15 +266,15 @@ export default function CampusIntakePage() {
           />
           {recordNote && <Alert severity="info">{recordNote}</Alert>}
 
-          {lockedBoard && (
-            <Box>
+          {historyBoards.map((board) => (
+            <Box key={board.id}>
               <Typography variant="h6">
-                {t('intake.streamsFor', { name: lockedBoard.name, status: t('intake.periodLocked') })}
+                {t('intake.streamsFor', { name: board.name, status: periodRoleLabel(t, board.role) })}
               </Typography>
               <FilteredDataGrid
                 embedded
-                title={lockedBoard.name}
-                rows={lockedBoard.streams || []}
+                title={board.name}
+                rows={board.streams || []}
                 columns={[
                   { field: 'campus', headerName: t('intake.campus'), flex: 1 },
                   { field: 'source_name', headerName: t('intake.source'), flex: 1.4 },
@@ -288,7 +295,7 @@ export default function CampusIntakePage() {
                 hideSearch
               />
             </Box>
-          )}
+          ))}
 
           <WorkflowCard
             icon={<FactCheckIcon />}

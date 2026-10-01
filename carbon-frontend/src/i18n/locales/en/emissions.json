@@ -498,6 +498,7 @@
     "selectStream": "Choose a missing stream from the list, then enter its quantity.",
     "periodOpen": "Open period",
     "periodLocked": "Locked period",
+    "periodClosed": "Closed period",
     "recordDiscovered": "Record discovered files on their year",
     "recordDiscoveredHint": "Quantities are copied from the file. A locked year stays locked. This does not add kilograms to the open period.",
     "recorded": "Activity stored on its own year. No inventory kilogram was added.",

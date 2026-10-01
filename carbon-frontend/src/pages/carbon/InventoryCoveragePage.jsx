@@ -1041,7 +1041,11 @@ export default function InventoryCoveragePage() {
               value: String(board.id),
               label: t('intake.streamsFor', {
                 name: board.name,
-                status: board.role === 'locked' ? t('intake.periodLocked') : t('intake.periodOpen'),
+                status: board.role === 'locked'
+                  ? t('intake.periodLocked')
+                  : board.role === 'closed'
+                    ? t('intake.periodClosed')
+                    : t('intake.periodOpen'),
               }),
             }))}
             value={streamPeriodId}
@@ -1054,7 +1058,11 @@ export default function InventoryCoveragePage() {
           <Typography variant="subtitle1">
             {t('intake.streamsFor', {
               name: board.name,
-              status: board.role === 'locked' ? t('intake.periodLocked') : t('intake.periodOpen'),
+              status: board.role === 'locked'
+                ? t('intake.periodLocked')
+                : board.role === 'closed'
+                  ? t('intake.periodClosed')
+                  : t('intake.periodOpen'),
             })}
           </Typography>
           {(board.streams || []).length === 0 && (
