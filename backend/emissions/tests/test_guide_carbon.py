@@ -82,6 +82,13 @@ class CarbonGuideAPITests(APITestCase):
         self.assertNotIn("L2", ids)
         self.assertEqual(data["recommended_track"], "D")
         self.assertEqual(data["next_id"], "D1")
+        stages = {r["id"]: r["stage"] for r in data["lessons"]}
+        self.assertEqual(stages["D1"], "entry")
+        self.assertEqual(stages["D2"], "entry")
+        self.assertEqual(stages["D7"], "entry")
+        self.assertEqual(stages["D3"], "")
+        self.assertEqual(stages["D4"], "")
+        self.assertNotIn("L2", stages)
         d = next(t for t in data["tracks"] if t["id"] == "D")
         self.assertTrue(d["title"])
 
@@ -113,12 +120,13 @@ class CarbonGuideAPITests(APITestCase):
             for key in _keys(payload):
                 self.assertFalse(any(w in key.lower() for w in FORBIDDEN_KEYS), key)
 
-    def test_detail_hides_the_answer_and_fills_the_source_name(self):
+    def test_detail_hides_the_answer_and_checks_the_row(self):
         self.client.force_authenticate(self.owner)
         body = self.detail("D2").json()
-        self.assertEqual(body["question"], {"options": 3, "params": {"source": "Guide Diesel"}})
-        self.assertIn("Guide Diesel", body["copy"]["question"])
-        self.assertEqual(len(body["copy"]["options"]), 3)
+        self.assertEqual(body["question"], {"kind": "host", "options": 0, "params": {}})
+        self.assertIn("row you saved", body["copy"]["question"])
+        self.assertNotIn("scope", body["copy"]["question"].lower())
+        self.assertEqual(body["copy"].get("options") or [], [])
         self.assertNotIn("correct", body)
 
     def test_arabic_copy_and_english_fallback(self):
@@ -150,15 +158,16 @@ class CarbonGuideAPITests(APITestCase):
         self.client.force_authenticate(self.owner)
         before = (DataRow.objects.count(), Calculation.objects.count(), InventorySourceStatus.objects.count())
         self.assertEqual(self.progress("D2", event="started").status_code, 200)
-        self.assertEqual(self.progress("D2", event="answered", choice=0).status_code, 200)
+        self.assertEqual(self.progress("D2", event="check").status_code, 200)
         after = (DataRow.objects.count(), Calculation.objects.count(), InventorySourceStatus.objects.count())
         self.assertEqual(before, after)
 
     def test_bad_events_are_rejected(self):
         self.client.force_authenticate(self.owner)
         self.assertEqual(self.progress("D2", event="finish").status_code, 400)
+        self.assertEqual(self.progress("D2", event="answered", choice=0).status_code, 400)
         for bad in (9, -1, "a", True):
-            self.assertEqual(self.progress("D2", event="answered", choice=bad).status_code, 400)
+            self.assertEqual(self.progress("D1", event="answered", choice=bad).status_code, 400)
         self.assertEqual(GuideProgress.objects.count(), 0)
 
     # ── completion ──────────────────────────────────────────────────────
@@ -166,6 +175,19 @@ class CarbonGuideAPITests(APITestCase):
         self.client.force_authenticate(self.owner)
         out = self.progress("D1", event="answered", choice=2).json()
         self.assertEqual((out["correct"], out["state"]), (False, "started"))
+        again = self.progress("D1", event="answered", choice=2)
+        self.assertEqual(again.status_code, 200)
+        self.assertEqual((again.json()["correct"], again.json()["state"]), (False, "started"))
+
+    def test_a_second_host_check_is_allowed_until_the_row_exists(self):
+        self.client.force_authenticate(self.owner)
+        self.progress("D2", event="started")
+        first = self.progress("D2", event="check")
+        second = self.progress("D2", event="check")
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual((second.json()["correct"], second.json()["state"], second.json()["waiting"]), (None, "started", "host"))
+        self.assertEqual(GuideProgress.objects.get(lesson_id="D2").state, "started")
 
     def test_answer_only_lesson_completes(self):
         # GUIDE-COR-DONE (answer)
@@ -176,23 +198,41 @@ class CarbonGuideAPITests(APITestCase):
         self.assertEqual(self.progress("D1", event="answered", choice=2).json()["state"], "done")
 
     def test_d2_needs_a_real_row_after_start(self):
-        # GUIDE-COR-DONE (host row): the answer waits, a row made after starting completes it
+        # GUIDE-COR-DONE (host row): the check is the saved row, not a quiz
         self.client.force_authenticate(self.owner)
         DataRow.objects.create(data_table=self.table, values={"litres": 1}, created_by=self.owner)
         self.progress("D2", event="started")
-        waiting = self.progress("D2", event="answered", choice=0).json()
-        self.assertEqual((waiting["correct"], waiting["state"], waiting["waiting"]), (True, "started", "host"))
-        self.assertEqual(self.progress("D2", event="check").json()["state"], "started")
+        waiting = self.progress("D2", event="check").json()
+        self.assertEqual((waiting["correct"], waiting["state"], waiting["waiting"]), (None, "started", "host"))
         DataRow.objects.create(data_table=self.table, values={"litres": 2}, created_by=self.owner)
-        self.assertEqual(self.progress("D2", event="check").json()["state"], "done")
+        done = self.progress("D2", event="check").json()
+        self.assertEqual((done["correct"], done["state"], done["waiting"]), (None, "done", None))
         self.assertEqual(GuideProgress.objects.get(lesson_id="D2").signal, "host_row")
 
     def test_someone_elses_row_does_not_count(self):
         self.client.force_authenticate(self.owner)
         self.progress("D2", event="started")
-        self.progress("D2", event="answered", choice=0)
         DataRow.objects.create(data_table=self.table, values={"litres": 2}, created_by=self.plain)
         self.assertEqual(self.progress("D2", event="check").json()["state"], "started")
+
+    def test_wrong_answer_does_not_also_wait(self):
+        from django.utils import timezone
+
+        from guide import engine
+
+        self.client.force_authenticate(self.owner)
+        lesson = {
+            "id": "ZX", "pack": "carbon", "version": 1,
+            "question": {"kind": "static", "options": 3, "correct": 0},
+            "host": "row_created",
+        }
+        ctx = engine.Ctx(self.owner, "carbon", frozenset(["carbon:enter_data"]))
+        now = timezone.now()
+        first = engine.apply_event(ctx, lesson, "answered", 0, now)
+        self.assertEqual((first["correct"], first["waiting"], first["state"]), (True, "host", "started"))
+        second = engine.apply_event(ctx, lesson, "answered", 1, now)
+        self.assertEqual(second["correct"], False)
+        self.assertIsNone(second["waiting"])
 
     def test_progress_is_per_user(self):
         self.client.force_authenticate(self.owner)

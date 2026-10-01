@@ -18,6 +18,13 @@
     "phase": {
       "gather": "Gathering data",
       "close": "Analysis and close"
+    },
+    "entry": {
+      "subtitle": "Start with your activity data",
+      "description": "The count is the data-entry lessons only. Calculation, inventory, reporting, and the rest of the guide stay under Later.",
+      "title": "Add data",
+      "later": "Later",
+      "laterHint": "Calculation, quality, locks, hand-off, inventory, and reporting."
     }
   },
   "state": {
@@ -36,10 +43,13 @@
     },
     "dont": "Do not:",
     "openScreen": "Open the screen",
+    "openDataEntry": "Open Data Entry",
     "fix": "Fix it",
     "submit": "Check my answer",
     "wrong": "Not quite. Read the Know card and try again.",
     "waitingHost": "Your answer is right. The lesson finishes when the app shows you did it.",
+    "waitingRow": "No saved row yet.",
+    "checkRow": "Check for a saved row",
     "checkAgain": "Check again",
     "done": "Lesson complete.",
     "notDone": "Finish the Check card to complete this lesson.",

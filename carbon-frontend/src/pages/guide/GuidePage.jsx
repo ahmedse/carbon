@@ -27,8 +27,8 @@ export default function GuidePage() {
           icon={SchoolIcon}
           title={t('hub.title')}
           titleComponent="h1"
-          subtitle={t('hub.subtitle')}
-          description={t('hub.description')}
+          subtitle={appId === 'carbon' ? t('hub.entry.subtitle') : t('hub.subtitle')}
+          description={appId === 'carbon' ? t('hub.entry.description') : t('hub.description')}
         />
         <GuideHub
           appId={appId}

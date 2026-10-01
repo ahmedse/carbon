@@ -5,7 +5,7 @@ Checks, per pack that has ``guide/guide.yaml``:
   - track, phase, version are well formed; gathering lessons sort before closing lessons
   - every probe a lesson names is registered
   - every capability key exists in the host's capability table
-  - English and Arabic copy exist for each lesson, with the option count the question needs
+  - English and Arabic copy exist for each lesson, with the option count a quiz needs
   - no kilogram-like key in a live payload is checked in tests, where probes run on data
 """
 from __future__ import annotations
@@ -64,25 +64,30 @@ def check_pack(pack_id: str, known_caps: set[str]) -> list[str]:
         if row.get("live"):
             wanted.append(("live", row["live"]))
         spec = row.get("question") or {}
-        if spec.get("kind") == "probe":
+        qkind = spec.get("kind")
+        if qkind == "probe":
             wanted.append(("question", spec.get("name")))
-        elif spec.get("kind") != "static":
-            problems.append(f"{where}: question kind must be static or probe")
+        elif qkind == "host":
+            if not row.get("host"):
+                problems.append(f"{where}: a host check needs a host probe")
+        elif qkind != "static":
+            problems.append(f"{where}: question kind must be static, probe, or host")
         for kind, name in wanted:
             if registry.find(pack_id, kind, name) is None:
                 problems.append(f"{where}: probe {kind}.{name} is not registered")
-        options = int(spec.get("options") or 3)
+        options = int(spec.get("options") or (0 if qkind == "host" else 3))
+        copy_keys = ("title", "know", "do", "dont", "question") if qkind == "host" else COPY_KEYS
         for lang, copy in copies.items():
             text = (copy.get("lessons") or {}).get(lid)
             if not text:
                 problems.append(f"{where}: no {lang} copy")
                 continue
-            for key in COPY_KEYS:
+            for key in copy_keys:
                 if not str(text.get(key) or "").strip():
                     problems.append(f"{where}: {lang} copy is missing {key}")
-            if len(text.get("options") or []) != options:
+            if qkind != "host" and len(text.get("options") or []) != options:
                 problems.append(f"{where}: {lang} copy needs {options} options")
-        if spec.get("kind") == "static" and not 0 <= int(spec.get("correct", -1)) < options:
+        if qkind == "static" and not 0 <= int(spec.get("correct", -1)) < options:
             problems.append(f"{where}: correct index out of range")
     return problems
 

@@ -102,6 +102,10 @@ class EngineTests(SimpleTestCase):
         self.assertTrue(engine.check_choice(CATALOG[0], _ctx(), 1))
         self.assertFalse(engine.check_choice(CATALOG[0], _ctx(), 0))
 
+    def test_host_check_carries_no_options(self):
+        lesson = _lesson("H1", 1, question={"kind": "host"}, host="row_created")
+        self.assertEqual(engine.question_for(lesson, _ctx()), {"kind": "host", "options": 0, "params": {}})
+
     def test_resume_is_the_last_touched_lesson_and_step(self):
         earlier = NOW - timedelta(hours=2)
         later = NOW - timedelta(minutes=5)
@@ -116,3 +120,33 @@ class EngineTests(SimpleTestCase):
     def test_resume_is_empty_when_nothing_has_been_opened(self):
         out = engine.evaluate_lessons(_ctx("t:write"), CATALOG, {}, NOW)
         self.assertIsNone(out["resume"])
+
+    def test_stage_owns_next_until_its_lessons_are_done(self):
+        catalog = [
+            _lesson("D1", 20),
+            _lesson("D2", 30, stage="entry"),
+            _lesson("D3", 40),
+            _lesson("D7", 80, stage="entry"),
+        ]
+        out = engine.evaluate_lessons(_ctx("t:write"), catalog, {}, NOW)
+        self.assertEqual(out["next_id"], "D2")
+        self.assertEqual(out["recommended_track"], "D")
+        self.assertFalse(next(r for r in out["lessons"] if r["id"] == "D3")["is_next"])
+
+        done_row = engine.evaluate_lessons(_ctx("t:write"), catalog, _done("D2"), NOW)
+        self.assertEqual(done_row["next_id"], "D7")
+
+        both = engine.evaluate_lessons(_ctx("t:write"), catalog, _done("D2", "D7"), NOW)
+        self.assertIsNone(both["next_id"])
+        self.assertIsNone(both["recommended_track"])
+        self.assertEqual(len(both["lessons"]), 4)
+
+    def test_blocked_stage_lesson_does_not_hand_next_to_a_later_one(self):
+        catalog = [
+            _lesson("D2", 30, stage="entry", needs=["gate"]),
+            _lesson("D7", 80, stage="entry"),
+        ]
+        STATE["gate_open"] = False
+        out = engine.evaluate_lessons(_ctx("t:write"), catalog, {}, NOW)
+        self.assertIsNone(out["next_id"])
+        self.assertEqual(next(r for r in out["lessons"] if r["id"] == "D2")["blocker"]["code"], "gate_closed")

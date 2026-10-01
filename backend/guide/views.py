@@ -123,6 +123,8 @@ class GuideProgressAPIView(APIView):
         if event not in self.EVENTS:
             return Response({"detail": "event must be one of " + ", ".join(self.EVENTS)}, status=400)
         choice = request.data.get("choice")
+        if event == "answered" and (lesson.get("question") or {}).get("kind") == "host":
+            return Response({"detail": "This lesson is checked in the app, not by a choice."}, status=400)
         if event == "answered":
             limit = engine.question_for(lesson, ctx)["options"]
             if isinstance(choice, bool) or not isinstance(choice, int) or not 0 <= choice < limit:

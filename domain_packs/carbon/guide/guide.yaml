@@ -3,6 +3,11 @@
 # Structure only. Text lives in copy.en.yaml / copy.ar.yaml next to this file.
 # Nothing here or in any payload carries a kilogram, a tonne or a factor value.
 # First lesson is D1 (data owed this period). No shell/menu lesson.
+# stage: entry  — the live data-entry path, in order:
+#   D1 which source, D2 one saved row, D7 a file.
+# D2 finishes when the host probe sees a saved row. It is not a scope quiz.
+# Do not bump a lesson version for a copy change: a bump re-offers finished lessons.
+# Other lessons stay in the catalog. The hub keeps them quiet.
 #
 # priority   global order of "next up". Data gathering comes first.
 # phase      gather | close. The hub groups by phase inside a track.
@@ -28,6 +33,7 @@ lessons:
     scope_cap: carbon:enter_data
     route: /carbon/my-data
     target: my-data.list
+    stage: entry
     question: {kind: static, options: 3, correct: 0}
 
   - id: D2
@@ -43,7 +49,8 @@ lessons:
     host: row_created
     route: /carbon/my-data
     target: my-data.add-row
-    question: {kind: probe, name: scope_of_source, options: 3}
+    stage: entry
+    question: {kind: host}
 
   - id: D3
     track: D
@@ -106,6 +113,7 @@ lessons:
     scope_cap: carbon:enter_data
     route: /carbon/my-data
     target: my-data.bulk-import
+    stage: entry
     question: {kind: static, options: 3, correct: 0}
 
   - id: C2

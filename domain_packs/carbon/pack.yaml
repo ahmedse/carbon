@@ -1,6 +1,6 @@
 # Domain pack manifest (ADR-0050). Addressed by `id` via the registry only.
 id: carbon
-version: 4
+version: 5
 domain: data_trust
 display_name: Carbon — Data Trust Platform
 inventory: host_rbac

@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
-import GuideHub from '../GuideHub';
+import GuideHub, { pickEntryLesson } from '../GuideHub';
 import GuideNudge from '../GuideNudge';
 import LiveCard from '../LiveCard';
 import enGuide from '../../../i18n/locales/en/guide.json';
@@ -147,9 +147,28 @@ describe('Lesson coach', () => {
     fireEvent.click(screen.getByText('Check my answer'));
     expect(await screen.findByText(/Not quite/)).toBeInTheDocument();
     expect(screen.queryByText('Because scoped.')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText('Data Entry')).toBeEnabled());
+    fireEvent.click(screen.getByLabelText('Data Entry'));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Check my answer' })).toBeEnabled());
+    fireEvent.click(screen.getByText('Check my answer'));
+    await waitFor(() => expect(postGuideEvent.mock.calls.filter((call) => call[2]?.event === 'answered')).toHaveLength(2));
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Check my answer' })).toBeEnabled();
   });
 
-  it('waits for the host check and offers to check again', async () => {
+  it('shows only the wrong alert when a failed check also comes back as waiting', async () => {
+    postGuideEvent.mockResolvedValue({ correct: false, state: 'started', waiting: 'host' });
+    await openCheck();
+    fireEvent.click(screen.getByLabelText('Factors'));
+    fireEvent.click(screen.getByText('Check my answer'));
+    expect(await screen.findByText(/Not quite/)).toBeInTheDocument();
+    expect(screen.queryByText(/Your answer is right/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/finishes when the app shows/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Because scoped.')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+  });
+
+  it('shows only the waiting line when the answer is right and the app has not caught up', async () => {
     fetchGuideLesson.mockResolvedValue({ ...DETAIL, id: 'D2', host_required: true });
     postGuideEvent.mockResolvedValue({ correct: true, state: 'started', waiting: 'host' });
     renderHub({ lessonId: 'D2' });
@@ -159,8 +178,19 @@ describe('Lesson coach', () => {
     fireEvent.click(screen.getByLabelText('Data Entry'));
     fireEvent.click(screen.getByText('Check my answer'));
     expect(await screen.findByText(/finishes when the app shows/)).toBeInTheDocument();
+    expect(screen.queryByText(/Not quite/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Because scoped.')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+    await waitFor(() => expect(screen.getByLabelText('Factors')).toBeEnabled());
+    fireEvent.click(screen.getByLabelText('Factors'));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Check my answer' })).toBeEnabled());
+    fireEvent.click(screen.getByText('Check my answer'));
+    await waitFor(() => expect(postGuideEvent.mock.calls.filter((call) => call[2]?.event === 'answered')).toHaveLength(2));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Check again' })).toBeEnabled());
     fireEvent.click(screen.getByText('Check again'));
-    await waitFor(() => expect(postGuideEvent).toHaveBeenCalledWith('carbon', 'D2', { event: 'check' }, 't'));
+    await waitFor(() => expect(postGuideEvent.mock.calls.filter((call) => call[2]?.event === 'check')).toHaveLength(1));
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Check again' })).toBeEnabled();
   });
 
   it('shows the blocker text and no fix button when the user cannot fix it', async () => {
@@ -170,6 +200,150 @@ describe('Lesson coach', () => {
     renderHub({ lessonId: 'D1' });
     expect(await screen.findByText('No open period')).toBeInTheDocument();
     expect(screen.queryByText('Fix it')).not.toBeInTheDocument();
+  });
+});
+
+const STAGE = {
+  app_id: 'carbon',
+  next_id: 'D2',
+  recommended_track: 'D',
+  resume: { id: 'D3', step: 2 },
+  tracks: [
+    { id: 'C', total: 1, done: 0, title: 'The period and the figure' },
+    { id: 'D', total: 4, done: 1, title: 'Enter and gather data' },
+  ],
+  lessons: [
+    { id: 'D1', track: 'D', phase: 'gather', title: 'What I owe', state: 'done', minutes: 2, stage: 'entry', target: 'my-data.list', is_next: false, blocker: null },
+    { id: 'D2', track: 'D', phase: 'gather', title: 'Enter one activity row', state: 'started', minutes: 3, stage: 'entry', target: 'my-data.add-row', is_next: true, blocker: null },
+    { id: 'D3', track: 'D', phase: 'gather', title: "Why my total didn't move", state: 'started', minutes: 2, stage: '', is_next: false, blocker: null },
+    { id: 'D7', track: 'D', phase: 'gather', title: 'Bring many rows', state: 'offered', minutes: 3, stage: 'entry', target: 'my-data.bulk-import', is_next: false, blocker: null },
+    { id: 'C2', track: 'C', phase: 'gather', title: "Read a period's status", state: 'offered', minutes: 2, stage: '', is_next: false, blocker: null },
+  ],
+};
+
+describe('Data-entry stage', () => {
+  it('opens the first unfinished data-entry lesson', () => {
+    expect(pickEntryLesson(STAGE.lessons.filter((lesson) => lesson.stage))).toBe('D2');
+    expect(pickEntryLesson([
+      { id: 'D1', state: 'offered' },
+      { id: 'D2', state: 'started', target: 'my-data.add-row' },
+    ])).toBe('D1');
+    expect(pickEntryLesson([
+      { id: 'D2', state: 'done', target: 'my-data.add-row' },
+      { id: 'D7', state: 'offered', target: 'my-data.bulk-import' },
+    ])).toBe('D7');
+  });
+
+  it('does not resume a calculation quiz when data entry is unfinished', async () => {
+    const onOpen = vi.fn();
+    fetchGuide.mockResolvedValue(STAGE);
+    renderHub({ onOpen });
+    await waitFor(() => expect(onOpen).toHaveBeenCalledWith('D2', { replace: true }));
+    expect(onOpen).not.toHaveBeenCalledWith('D3', expect.anything());
+  });
+
+  it('teaches the row and keeps the other lessons quiet', async () => {
+    fetchGuide.mockResolvedValue(STAGE);
+    fetchGuideLesson.mockResolvedValue({
+      ...DETAIL,
+      id: 'D2',
+      route: '/carbon/my-data',
+      copy: {
+        ...DETAIL.copy,
+        title: 'Enter one activity row',
+        know: 'A row is one activity.',
+        do: 'Open Data Entry and save one row.',
+        dont: 'Do not round.',
+      },
+    });
+    renderHub({ lessonId: 'D2' });
+    expect(await screen.findByText('A row is one activity.')).toBeInTheDocument();
+    expect(screen.getByText('Open Data Entry and save one row.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open Data Entry' })).toBeInTheDocument();
+    expect(screen.queryByText('Know')).not.toBeInTheDocument();
+    const entry = screen.getByTestId('guide-entry');
+    expect(entry).toHaveTextContent('1 of 3 done');
+    expect(entry).toHaveTextContent('What I owe');
+    expect(entry).toHaveTextContent('Enter one activity row');
+    expect(entry).toHaveTextContent('Bring many rows');
+    expect(entry).not.toHaveTextContent("Why my total didn't move");
+    expect(screen.queryByText('Recommended')).not.toBeInTheDocument();
+    const later = screen.getByTestId('guide-later');
+    expect(later).not.toHaveClass('Mui-expanded');
+    fireEvent.click(screen.getByText('Later'));
+    expect(later).toHaveTextContent("Why my total didn't move");
+    expect(later).toHaveTextContent("Read a period's status");
+    expect(later).not.toHaveTextContent('Enter one activity row');
+    expect(later).not.toHaveTextContent('What I owe');
+    expect(screen.getByTestId('guide-lesson-D1')).toHaveTextContent('Done');
+    expect(screen.getByTestId('guide-lesson-D3')).not.toHaveTextContent('Next');
+  });
+
+  it('checks a saved row with one sentence and no scope quiz', async () => {
+    const rowCopy = {
+      title: 'Enter one activity row',
+      know: 'A row is one activity.',
+      do: 'Open Data Entry and save one row.',
+      dont: 'Do not round.',
+      question: 'This lesson finishes when Data Entry shows a row you saved.',
+      options: [],
+      explain: 'Because scoped.',
+    };
+    fetchGuide.mockResolvedValue(STAGE);
+    fetchGuideLesson.mockResolvedValue({
+      ...DETAIL,
+      id: 'D2',
+      state: 'started',
+      host_required: true,
+      route: '/carbon/my-data',
+      question: { kind: 'host', options: 0, params: {} },
+      copy: rowCopy,
+    });
+    postGuideEvent.mockResolvedValue({ correct: null, state: 'started', waiting: 'host' });
+    renderHub({ lessonId: 'D2' });
+    expect(await screen.findByText('A row is one activity.')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Check'));
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument();
+    expect(screen.queryByText(/GHG scope/i)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Check for a saved row' }));
+    expect(await screen.findByText('No saved row yet.')).toBeInTheDocument();
+    expect(screen.queryByText(/Your answer is right/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Not quite/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Because scoped.')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+    const again = await screen.findByRole('button', { name: 'Check again' });
+    await waitFor(() => expect(again).toBeEnabled());
+    fireEvent.click(again);
+    await waitFor(() => expect(postGuideEvent.mock.calls.filter((call) => call[2]?.event === 'check')).toHaveLength(2));
+    expect(screen.getAllByText('No saved row yet.')).toHaveLength(1);
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Check again' })).toBeEnabled();
+  });
+
+  it('shows only the done state once the row is in the app', async () => {
+    fetchGuide.mockResolvedValue(STAGE);
+    fetchGuideLesson.mockResolvedValue({
+      ...DETAIL,
+      id: 'D2',
+      state: 'done',
+      host_required: true,
+      question: { kind: 'host', options: 0, params: {} },
+      copy: {
+        title: 'Enter one activity row',
+        know: 'A row is one activity.',
+        do: 'Open Data Entry and save one row.',
+        dont: 'Do not round.',
+        question: 'This lesson finishes when Data Entry shows a row you saved.',
+        options: [],
+        explain: 'Because scoped.',
+      },
+    });
+    renderHub({ lessonId: 'D2' });
+    expect(await screen.findByText('Lesson complete.')).toBeInTheDocument();
+    expect(screen.queryByText('Because scoped.')).not.toBeInTheDocument();
+    expect(screen.queryByText('No saved row yet.')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Your answer is right/)).not.toBeInTheDocument();
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
   });
 });
 
@@ -233,6 +407,14 @@ describe('Guide i18n (GUIDE-I18N)', () => {
 
   it('has the same keys in English and Arabic', () => {
     expect(flat(arGuide).sort()).toEqual(flat(enGuide).sort());
+  });
+
+  it('does not describe the guide as only the data-entry lessons', () => {
+    expect(enGuide.hub.entry.description).toMatch(/Later/);
+    expect(enGuide.hub.entry.description).not.toMatch(/type one row/i);
+    expect(arGuide.hub.entry.description).toMatch(/لاحق/);
+    expect(enGuide.coach.waitingRow).not.toMatch(/answer is right/i);
+    expect(arGuide.coach.waitingRow).not.toMatch(/صحيحة/);
   });
 
   it('has no empty strings', () => {

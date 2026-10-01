@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import PropTypes from 'prop-types';
 import {
-  Alert, Box, Button, FormControlLabel, Radio, RadioGroup, Stack, Step, StepLabel, Stepper, Typography,
+  Accordion, AccordionDetails, AccordionSummary, Alert, Box, Button, FormControlLabel, Paper, Radio, RadioGroup,
+  Stack, Step, StepLabel, Stepper, Typography,
 } from '@mui/material';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -18,7 +20,7 @@ const STEPS = ['know', 'do', 'check', 'after'];
  * One lesson in four cards: Know, Do, Check, After.
  * The text comes from the pack; the server decides right or wrong and whether the host check holds.
  */
-export default function LessonCoach({ appId, lessonId, lang, onChanged, onNext, onExit }) {
+export default function LessonCoach({ appId, lessonId, lang, onChanged, onNext, onExit, variant }) {
   const { t } = useTranslation('guide');
   const { token } = useAuth();
   const navigate = useNavigate();
@@ -86,8 +88,111 @@ export default function LessonCoach({ appId, lessonId, lang, onChanged, onNext, 
 
   const copy = lesson.copy || {};
   const done = lesson.state === 'done';
-  const waiting = result?.waiting === 'host' || (lesson.state === 'started' && lesson.host_required && result?.correct);
+  const hostCheck = lesson.question?.kind === 'host';
+  const wrong = result?.correct === false && !done;
+  const waiting = !done && !wrong && (
+    result?.waiting === 'host'
+    || (!hostCheck && lesson.state === 'started' && lesson.host_required && result?.correct === true)
+  );
+  const showExplain = Boolean(result?.correct) && !wrong && !waiting && !(variant === 'class' && done);
   const blocker = lesson.blocker;
+
+  const check = (
+    <Stack spacing={1.5}>
+      {hostCheck ? (
+        <>
+          <Typography sx={FONT.body2}>{copy.question}</Typography>
+          {!done && !waiting && (
+            <Box>
+              <Button variant="contained" size="small" disabled={busy} onClick={() => send({ event: 'check' })}>
+                {t('coach.checkRow')}
+              </Button>
+            </Box>
+          )}
+        </>
+      ) : (
+        <>
+          <Typography sx={FONT.body2}>{copy.question}</Typography>
+          <RadioGroup value={choice ?? ''} onChange={(event) => setChoice(Number(event.target.value))}>
+            {(copy.options || []).map((label, index) => (
+              <FormControlLabel key={label} value={index} control={<Radio size="small" />} label={label} disabled={done} />
+            ))}
+          </RadioGroup>
+          <Box>
+            <Button
+              variant="contained"
+              size="small"
+              disabled={choice == null || busy || done}
+              onClick={() => send({ event: 'answered', choice })}
+            >
+              {t('coach.submit')}
+            </Button>
+          </Box>
+        </>
+      )}
+      {wrong && <Alert severity="error">{t('coach.wrong')}</Alert>}
+      {showExplain && <Alert severity="success">{copy.explain}</Alert>}
+      {waiting && (
+        <Alert
+          severity="info"
+          action={<Button color="inherit" size="small" disabled={busy} onClick={() => send({ event: 'check' })}>{t('coach.checkAgain')}</Button>}
+        >
+          {hostCheck ? t('coach.waitingRow') : t('coach.waitingHost')}
+        </Alert>
+      )}
+    </Stack>
+  );
+
+  if (variant === 'class') {
+    return (
+      <Paper variant="outlined" data-testid="guide-coach" sx={{ p: 2.5, borderRadius: 1.5 }}>
+        <Stack spacing={1.5}>
+          <Stack direction="row" alignItems="baseline" justifyContent="space-between">
+            <Typography component="h2" sx={FONT.heading}>{copy.title}</Typography>
+            <Typography sx={{ ...FONT.caption, color: 'text.secondary' }}>{t('coach.minutes', { count: lesson.minutes })}</Typography>
+          </Stack>
+          {blocker && (
+            <Alert
+              severity="warning"
+              action={blocker.path ? (
+                <Button color="inherit" size="small" onClick={() => navigate(blocker.path)}>{t('coach.fix')}</Button>
+              ) : null}
+            >
+              <strong>{blocker.title || blocker.code}</strong>
+              {blocker.body ? ` ${blocker.body}` : ''}
+            </Alert>
+          )}
+          <Typography sx={{ ...FONT.body2, fontSize: '0.95rem', lineHeight: 1.5 }}>{copy.know}</Typography>
+          <Typography sx={FONT.body2}>{copy.do}</Typography>
+          {lesson.route && (
+            <Box>
+              <Button size="small" variant="contained" onClick={() => navigate(lesson.route)}>{t('coach.openDataEntry')}</Button>
+            </Box>
+          )}
+          {copy.dont && (
+            <Typography sx={{ ...FONT.caption, color: 'text.secondary' }}>{copy.dont}</Typography>
+          )}
+          {done && <Alert severity="success">{t('coach.done')}</Alert>}
+          {done && onNext && (
+            <Box>
+              <Button size="small" variant="outlined" onClick={onNext}>{t('coach.next')}</Button>
+            </Box>
+          )}
+          <Accordion
+            disableGutters
+            elevation={0}
+            defaultExpanded={false}
+            sx={{ border: 1, borderColor: 'divider', borderRadius: 1, '&:before': { display: 'none' } }}
+          >
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Typography sx={{ ...FONT.bodySmall, color: 'text.secondary' }}>{t('coach.step.check')}</Typography>
+            </AccordionSummary>
+            <AccordionDetails>{check}</AccordionDetails>
+          </Accordion>
+        </Stack>
+      </Paper>
+    );
+  }
 
   return (
     <Box data-testid="guide-coach" sx={{ border: 1, borderColor: 'divider', borderRadius: 1.5, p: 2, bgcolor: 'background.paper' }}>
@@ -132,36 +237,7 @@ export default function LessonCoach({ appId, lessonId, lang, onChanged, onNext, 
         </Stack>
       )}
 
-      {step === 2 && (
-        <Stack spacing={1.5}>
-          <Typography sx={FONT.body2}>{copy.question}</Typography>
-          <RadioGroup value={choice ?? ''} onChange={(event) => setChoice(Number(event.target.value))}>
-            {(copy.options || []).map((label, index) => (
-              <FormControlLabel key={label} value={index} control={<Radio size="small" />} label={label} disabled={done} />
-            ))}
-          </RadioGroup>
-          <Box>
-            <Button
-              variant="contained"
-              size="small"
-              disabled={choice == null || busy || done}
-              onClick={() => send({ event: 'answered', choice })}
-            >
-              {t('coach.submit')}
-            </Button>
-          </Box>
-          {result?.correct === false && <Alert severity="error">{t('coach.wrong')}</Alert>}
-          {(result?.correct || done) && <Alert severity="success">{copy.explain}</Alert>}
-          {waiting && !done && (
-            <Alert
-              severity="info"
-              action={<Button color="inherit" size="small" disabled={busy} onClick={() => send({ event: 'check' })}>{t('coach.checkAgain')}</Button>}
-            >
-              {t('coach.waitingHost')}
-            </Alert>
-          )}
-        </Stack>
-      )}
+      {step === 2 && check}
 
       {step === 3 && (
         <Stack spacing={1.5}>
@@ -190,6 +266,7 @@ LessonCoach.propTypes = {
   onChanged: PropTypes.func,
   onNext: PropTypes.func,
   onExit: PropTypes.func,
+  variant: PropTypes.oneOf(['steps', 'class']),
 };
 
-LessonCoach.defaultProps = { lang: 'en', onChanged: undefined, onNext: undefined, onExit: undefined };
+LessonCoach.defaultProps = { lang: 'en', onChanged: undefined, onNext: undefined, onExit: undefined, variant: 'steps' };

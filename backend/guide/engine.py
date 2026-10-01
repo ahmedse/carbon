@@ -99,6 +99,8 @@ def _question_probe(lesson: Mapping[str, Any], ctx: Ctx) -> dict:
 def question_for(lesson: Mapping[str, Any], ctx: Ctx) -> dict:
     """Question shape for the coach. The correct option is never in this payload."""
     spec = lesson.get("question") or {}
+    if spec.get("kind") == "host":
+        return {"kind": "host", "options": 0, "params": {}}
     options = int(spec.get("options") or 3)
     if spec.get("kind") == "probe":
         return {"options": options, "params": dict(_question_probe(lesson, ctx).get("params") or {})}
@@ -168,15 +170,11 @@ def evaluate_lessons(
             "blocker": blocker_for(lesson, ctx),
             "route": lesson.get("route") or "",
             "target": lesson.get("target") or "",
+            "stage": str(lesson.get("stage") or ""),
             "is_next": False,
         })
     rows.sort(key=lambda row: row["priority"])
-    next_id = None
-    for row in rows:
-        if row["state"] in ("offered", "started") and row["blocker"] is None:
-            row["is_next"] = True
-            next_id = row["id"]
-            break
+    next_id = _choose_next(rows)
     tracks = []
     for track in TRACKS:
         members = [row for row in rows if row["track"] == track]
@@ -186,13 +184,17 @@ def evaluate_lessons(
                 "total": len(members),
                 "done": sum(1 for row in members if row["state"] == "done"),
             })
-    recommended = next(
-        (
-            track for track in RECOMMEND_ORDER
-            if any(r["track"] == track and r["state"] != "done" and r["blocker"] is None for r in rows)
-        ),
-        None,
-    )
+    if any(row.get("stage") for row in rows):
+        # A stage owns the recommendation until its lessons are finished.
+        recommended = next((row["track"] for row in rows if row["id"] == next_id), None)
+    else:
+        recommended = next(
+            (
+                track for track in RECOMMEND_ORDER
+                if any(r["track"] == track and r["state"] != "done" and r["blocker"] is None for r in rows)
+            ),
+            None,
+        )
     return {
         "tracks": tracks,
         "recommended_track": recommended,
@@ -200,6 +202,28 @@ def evaluate_lessons(
         "next_id": next_id,
         "resume": resume_of(rows, progress),
     }
+
+
+def _choose_next(rows: list[dict]) -> str | None:
+    """One lesson to offer.
+
+    A pack stage (for example data entry) owns "next" until those lessons are
+    finished or the first unfinished one is blocked. Quiet lessons stay listed.
+    Without a stage, the first unfinished unblocked lesson wins, as before.
+    """
+    staged = [row for row in rows if row.get("stage")]
+    pool = staged if staged else rows
+    for row in pool:
+        if row["state"] in ("done", "snoozed"):
+            continue
+        if staged and row.get("blocker"):
+            return None
+        if row["state"] in ("offered", "started") and row.get("blocker") is None:
+            row["is_next"] = True
+            return row["id"]
+        if staged:
+            return None
+    return None
 
 
 def resume_of(rows: Iterable[Mapping[str, Any]], progress: Mapping[tuple[str, str], Mapping[str, Any]]) -> dict | None:
@@ -271,12 +295,20 @@ def apply_event(ctx: Ctx, lesson: Mapping[str, Any], event: str, choice: int | N
             if row.state in ("offered", "snoozed"):
                 row.state = "started"
             row.snoozed_until = None
-            if event == "answered":
+            host_check = (lesson.get("question") or {}).get("kind") == "host"
+            if event == "answered" and not host_check:
                 ok = choice is not None and check_choice(lesson, ctx, choice)
                 out["correct"] = ok
-                if ok:
-                    row.signal = "answer"
-            if row.signal == "answer":
+                # A failed answer is the whole outcome. Drop an earlier pass so
+                # the host wait cannot ride along on the same check.
+                row.signal = "answer" if ok else ""
+            if host_check and event == "check":
+                ctx.started_at = row.started_at
+                if host_met(lesson, ctx):
+                    row.state, row.done_at, row.signal = "done", now, signal_for(lesson)
+                else:
+                    out["waiting"] = "host"
+            elif out["correct"] is not False and row.signal == "answer":
                 ctx.started_at = row.started_at
                 if host_met(lesson, ctx):
                     row.state, row.done_at, row.signal = "done", now, signal_for(lesson)

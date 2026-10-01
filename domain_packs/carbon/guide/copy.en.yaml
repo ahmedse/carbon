@@ -21,15 +21,10 @@ lessons:
     explain: "Data Entry is scoped to your org units. The Chairman page shows the whole picture and Emission Factors is configuration."
   D2:
     title: "Enter one activity row"
-    know: "A row records one activity: litres of fuel, kWh of electricity. Enter the amount in the unit the factor expects. Your source's scope decides which factor applies."
-    do: "On Data Entry, add one row to your source and save it. The lesson completes when the row exists and you have answered."
+    know: "A row is one activity — litres of fuel, or kilowatt-hours — written in the unit the factor expects."
+    do: "Open Data Entry, add that row to your source, and save it."
     dont: "Do not round or convert to another unit to look tidy. Enter what the meter or invoice says."
-    question: "Which GHG scope is {source} in?"
-    options:
-      - "Scope 1: direct emissions"
-      - "Scope 2: purchased energy"
-      - "Scope 3: value chain"
-    explain: "The scope is set when the source is declared. It decides which factor is used, so check it before you enter."
+    question: "This lesson finishes when Data Entry shows a row you saved."
   D3:
     title: "Why my total didn't move"
     know: "Saving a row records activity. It does not calculate emissions. A calculation turns rows into emissions, and it is run by someone with the calculate permission, usually the carbon lead."
@@ -76,8 +71,8 @@ lessons:
     explain: "Coverage is an inventory decision with its own permission. The data owner supplies rows, the lead decides coverage."
   D7:
     title: "Bring many rows: bulk import"
-    know: "For many rows, import a file. The wizard has three steps: upload, map your columns to the table's fields, then validate. It takes one file of up to 10 MB."
-    do: "On your table choose Import, drop one file, map each column, and fix what validation flags."
+    know: "Many rows are the same job in one file: upload, map each column, then validate."
+    do: "On your table, choose Import and drop one file of up to 10 MB."
     dont: "Do not split one month across several files. Keep one file per import."
     question: "What are the wizard's steps, in order?"
     options:
