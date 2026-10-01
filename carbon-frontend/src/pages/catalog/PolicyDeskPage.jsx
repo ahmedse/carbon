@@ -21,6 +21,7 @@ import {
 } from '@mui/material';
 import PolicyIcon from '@mui/icons-material/Policy';
 import PublishIcon from '@mui/icons-material/Publish';
+import VisibilityIcon from '@mui/icons-material/Visibility';
 import { useTranslation } from 'react-i18next';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import LoadingSkeleton from '../../components/Page/LoadingSkeleton';
@@ -49,8 +50,15 @@ function passLabel(t, passed) {
   return passed ? t('policyPass') : t('policyFail');
 }
 
+function readCitation(detail, row) {
+  if (typeof detail?.citation === 'string') return detail.citation;
+  if (typeof row?.citation === 'string') return row.citation;
+  return '';
+}
+
 export default function PolicyDeskPage() {
   const { t } = useTranslation('catalog');
+  const { t: tCommon } = useTranslation('common');
   const { token } = useAuth();
   const { notify } = useNotification();
   const [params] = useSearchParams();
@@ -63,7 +71,8 @@ export default function PolicyDeskPage() {
   const [stateFilter, setStateFilter] = useState('');
   const [highlightId, setHighlightId] = useState(null);
 
-  const [publishTarget, setPublishTarget] = useState(null);
+  const [dialogMode, setDialogMode] = useState(null);
+  const [activeRow, setActiveRow] = useState(null);
   const [detail, setDetail] = useState(null);
   const [detailError, setDetailError] = useState('');
   const [publishing, setPublishing] = useState(false);
@@ -102,8 +111,16 @@ export default function PolicyDeskPage() {
     label: t(`policyState_${value}`),
   }));
 
-  const openPublish = async (row) => {
-    setPublishTarget(row);
+  const closeDialog = () => {
+    setDialogMode(null);
+    setActiveRow(null);
+    setDetail(null);
+    setDetailError('');
+  };
+
+  const openRecord = async (row, mode) => {
+    setDialogMode(mode);
+    setActiveRow(row);
     setDetail(null);
     setDetailError('');
     try {
@@ -114,12 +131,12 @@ export default function PolicyDeskPage() {
   };
 
   const confirmPublish = async () => {
-    if (!publishTarget) return;
+    if (!activeRow || dialogMode !== 'publish') return;
     setPublishing(true);
     setDetailError('');
     try {
-      await publishPolicyVersion(publishTarget.id, token);
-      setPublishTarget(null);
+      await publishPolicyVersion(activeRow.id, token);
+      closeDialog();
       notify({ message: t('policyPublished'), type: 'success' });
       await loadData();
     } catch (err) {
@@ -158,20 +175,50 @@ export default function PolicyDeskPage() {
     {
       field: 'citation',
       headerName: t('policyCitation'),
-      flex: 1,
-      minWidth: 140,
-      valueGetter: (value) => value || '—',
+      flex: 1.6,
+      minWidth: 220,
+      renderCell: (p) => {
+        const text = p.value || '—';
+        return (
+          <Tooltip title={text === '—' ? '' : text}>
+            <Box
+              component="span"
+              sx={{
+                display: 'block',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                width: '100%',
+              }}
+            >
+              {text}
+            </Box>
+          </Tooltip>
+        );
+      },
     },
-    { field: 'effective_date', headerName: t('policyEffective'), width: 130 },
+    { field: 'effective_date', headerName: t('policyEffective'), width: 118 },
     {
       field: 'actions',
       headerName: t('policyActions'),
-      width: 120,
+      width: 96,
       sortable: false,
       renderCell: (p) => {
         const row = p.row;
         return (
           <Box sx={{ display: 'flex', gap: 0.25 }}>
+            <Tooltip title={t('policyView')}>
+              <IconButton
+                size="small"
+                aria-label={t('policyView')}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  openRecord(row, 'view');
+                }}
+              >
+                <VisibilityIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
             {row.state === 'draft' && (
               <Tooltip title={t('policySubmit')}>
                 <IconButton
@@ -193,7 +240,7 @@ export default function PolicyDeskPage() {
                   aria-label={t('policyPublish')}
                   onClick={(event) => {
                     event.stopPropagation();
-                    openPublish(row);
+                    openRecord(row, 'publish');
                   }}
                 >
                   <PublishIcon sx={{ fontSize: 16 }} />
@@ -207,6 +254,9 @@ export default function PolicyDeskPage() {
   ];
 
   const event = detail?.event;
+  const citation = readCitation(detail, activeRow);
+  const recordState = detail?.state || activeRow?.state;
+  const publishingMode = dialogMode === 'publish';
 
   return (
     <>
@@ -244,16 +294,17 @@ export default function PolicyDeskPage() {
       )}
 
       <SystemDialog
-        open={Boolean(publishTarget)}
-        title={t('policyPublishTitle')}
-        onClose={() => setPublishTarget(null)}
-        onCancel={() => setPublishTarget(null)}
+        open={Boolean(activeRow)}
+        title={publishingMode ? t('policyPublishTitle') : t('policyViewTitle')}
+        onClose={closeDialog}
+        onCancel={closeDialog}
+        cancelLabel={publishingMode ? undefined : tCommon('close')}
         height={560}
-        actions={(
+        actions={publishingMode ? (
           <Button size="small" variant="contained" onClick={confirmPublish} disabled={publishing || !detail}>
             {publishing ? t('policyWorking') : t('policyPublish')}
           </Button>
-        )}
+        ) : null}
       >
         <Stack spacing={1} sx={{ pt: 0.5 }}>
           {detailError ? <Alert severity="error">{detailError}</Alert> : null}
@@ -262,11 +313,20 @@ export default function PolicyDeskPage() {
             <>
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
                 <FormField label={t('policy')}>
-                  <TextField size="small" fullWidth value={detail.policy || ''} disabled inputProps={{ 'aria-label': t('policy') }} />
+                  <TextField size="small" fullWidth value={detail.policy || activeRow?.policy || ''} disabled inputProps={{ 'aria-label': t('policy') }} />
                 </FormField>
                 <FormField label={t('policyVersion')}>
-                  <TextField size="small" fullWidth value={detail.version || ''} disabled inputProps={{ 'aria-label': t('policyVersion') }} />
+                  <TextField size="small" fullWidth value={detail.version || activeRow?.version || ''} disabled inputProps={{ 'aria-label': t('policyVersion') }} />
                 </FormField>
+              </Stack>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Typography variant="body2">{t('policyState')}</Typography>
+                <Chip
+                  size="small"
+                  variant="outlined"
+                  color={STATE_TONE[recordState] || 'default'}
+                  label={t(`policyState_${recordState}`, { defaultValue: recordState || '—' })}
+                />
               </Stack>
               <Typography variant="body2">
                 {t('policyExamples')}: {passLabel(t, detail.examples?.passed)}
@@ -274,8 +334,8 @@ export default function PolicyDeskPage() {
               <Typography variant="body2">
                 {t('policyFloor')}: {passLabel(t, detail.floors?.passed)}
               </Typography>
-              <Typography variant="body2">
-                {detail.citation ? t('policyCitation') : t('policyCitationMissing')}
+              <Typography variant="body2" sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}>
+                {citation ? `${t('policyCitation')}: ${citation}` : t('policyCitationMissing')}
               </Typography>
               <Typography variant="subtitle2">{t('policyDiff')}</Typography>
               {detail.diff?.length ? (

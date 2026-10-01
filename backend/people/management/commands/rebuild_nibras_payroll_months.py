@@ -15,7 +15,6 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from mdm.models import OrgUnit
-from people.compensation_service import CompensationService
 from people.governance.sod import SUBJECT_PAYROLL_RUN, SUBJECT_WPS_FILING
 from people.models import (
     ComplianceRule,
@@ -29,9 +28,9 @@ from people.models import (
 from people.payroll_service import PayrollRunService, PayrollServiceError
 
 
-def _snapshot_2026_1():
+def _snapshot_version(version):
     rows = {}
-    for rule in ComplianceRule.objects.filter(version="2026.1").order_by("rule_id", "pk"):
+    for rule in ComplianceRule.objects.filter(version=version).order_by("rule_id", "pk"):
         rows[(rule.rule_id, rule.pk)] = json.dumps(rule.inputs_schema, sort_keys=True, default=str)
     return rows
 
@@ -60,7 +59,8 @@ class Command(BaseCommand):
         if preparer is None or committer is None or preparer.pk == committer.pk:
             raise CommandError("need two distinct users")
 
-        before = _snapshot_2026_1()
+        before_2026_1 = _snapshot_version("2026.1")
+        before_2026_2 = _snapshot_version("2026.2")
         deleted = self._purge()
         self.stdout.write(f"deleted {deleted}")
 
@@ -72,15 +72,20 @@ class Command(BaseCommand):
             end = date(year, month, monthrange(year, month)[1])
             months.append((start, end))
 
+        if (
+            PayrollRun.objects.exists()
+            or PayslipLine.objects.exists()
+            or PayrollRunValidation.objects.exists()
+            or WpsFiling.objects.exists()
+            or LieuDay.objects.exists()
+            or SoDPreparation.objects.filter(
+                subject_type__in=(SUBJECT_PAYROLL_RUN, SUBJECT_WPS_FILING),
+            ).exists()
+        ):
+            raise CommandError("payroll tables were not empty after purge")
+
         svc = PayrollRunService()
         for start, end in months:
-            missing = self._missing_basic(root, end)
-            if missing:
-                self.stdout.write(self.style.ERROR(
-                    f"FAILED {start}→{end}: {len(missing)} employees lack verified basic; "
-                    f"sample={missing[:12]}"
-                ))
-                continue
             try:
                 run = self._commit_month(svc, root, start, end, preparer, committer)
             except Exception as exc:  # noqa: BLE001 — report the month and continue
@@ -92,51 +97,36 @@ class Command(BaseCommand):
                 )[:8]
             )
             self.stdout.write(self.style.SUCCESS(
-                f"committed {start}→{end} run={run.pk} lines={run.lines.count()} sample={versions}"
+                f"committed {start}→{end} run={run.pk} lines={run.lines.count()} "
+                f"exceptions={len(run.exceptions or [])} sample={versions}"
             ))
 
-        after = _snapshot_2026_1()
-        if before != after:
+        if _snapshot_version("2026.1") != before_2026_1:
             raise CommandError("version 2026.1 formula bytes changed")
-        self.stdout.write(self.style.SUCCESS("2026.1 formula bytes unchanged"))
+        if _snapshot_version("2026.2") != before_2026_2:
+            raise CommandError("version 2026.2 formula bytes changed")
+        self.stdout.write(self.style.SUCCESS("2026.1 and 2026.2 formula bytes unchanged"))
 
     def _purge(self) -> dict:
         run_ids = list(PayrollRun.objects.values_list("pk", flat=True))
         wps_ids = list(WpsFiling.objects.filter(payroll_run_id__in=run_ids).values_list("pk", flat=True))
+        # Also drop SoD left behind after an earlier run delete. Every remaining
+        # payroll_run / wps_filing subject is a payroll artifact.
         counts = {
             "runs": len(run_ids),
             "lines": PayslipLine.objects.filter(payroll_run_id__in=run_ids).count(),
             "validations": PayrollRunValidation.objects.filter(payroll_run_id__in=run_ids).count(),
             "wps": len(wps_ids),
             "lieu": LieuDay.objects.filter(payroll_run_id__in=run_ids).count(),
-            "sod_runs": SoDPreparation.objects.filter(
-                subject_type=SUBJECT_PAYROLL_RUN, subject_id__in=run_ids,
-            ).count(),
-            "sod_wps": SoDPreparation.objects.filter(
-                subject_type=SUBJECT_WPS_FILING, subject_id__in=wps_ids,
-            ).count(),
+            "sod_runs": SoDPreparation.objects.filter(subject_type=SUBJECT_PAYROLL_RUN).count(),
+            "sod_wps": SoDPreparation.objects.filter(subject_type=SUBJECT_WPS_FILING).count(),
         }
         with transaction.atomic():
-            SoDPreparation.objects.filter(
-                subject_type=SUBJECT_PAYROLL_RUN, subject_id__in=run_ids,
-            ).delete()
-            SoDPreparation.objects.filter(
-                subject_type=SUBJECT_WPS_FILING, subject_id__in=wps_ids,
-            ).delete()
+            SoDPreparation.objects.filter(subject_type=SUBJECT_PAYROLL_RUN).delete()
+            SoDPreparation.objects.filter(subject_type=SUBJECT_WPS_FILING).delete()
             PayrollRun.objects.filter(pk__in=run_ids).update(source_run=None)
             PayrollRun.objects.filter(pk__in=run_ids).delete()
         return counts
-
-    def _missing_basic(self, root, end):
-        ids = root.get_descendant_ids(include_self=True)
-        missing = []
-        qs = root.employees.model.objects.filter(org_unit_id__in=ids, is_active=True)
-        from django.db.models import Q
-        qs = qs.filter(Q(join_date__isnull=True) | Q(join_date__lte=end))
-        for emp in qs.iterator():
-            if CompensationService.verified_basic_amount(emp, as_of=end) is None:
-                missing.append(emp.employee_no)
-        return missing
 
     def _commit_month(self, svc, root, start, end, preparer, committer):
         run = PayrollRun.objects.create(

@@ -158,12 +158,12 @@ class PayrollRunSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'org_unit', 'period_start', 'period_end', 'status',
             'kind', 'source_run', 'covers_start', 'covers_end',
-            'created_at', 'committed_at',
+            'created_at', 'committed_at', 'exceptions',
             'preparer_username', 'commit_requires_other_user',
         ]
         read_only_fields = [
             'id', 'status', 'kind', 'source_run', 'covers_start', 'covers_end',
-            'created_at', 'committed_at',
+            'created_at', 'committed_at', 'exceptions',
             'preparer_username', 'commit_requires_other_user',
         ]
 

@@ -35,19 +35,26 @@ const versions = [
 
 vi.mock('../api/catalog', () => ({
   fetchPolicyVersions: vi.fn(async () => ({ count: versions.length, results: versions })),
-  fetchPolicyVersion: vi.fn(async () => ({
-    id: 7,
-    policy: 'sample-policy',
-    version: '2026.2',
-    state: 'in_review',
-    citation: 'cited text',
-    examples: { passed: true, results: [] },
-    floors: { passed: false, results: [] },
-    diff: [{ field: 'citation', before: 'old', after: 'cited text' }],
-    event: { action: 'submit', before: { lifecycle: 'draft' }, after: { lifecycle: 'in_review' } },
-    preparer_id: 2,
-    publisher_id: null,
-  })),
+  fetchPolicyVersion: vi.fn(async (id) => {
+    const authoritative = id === 8;
+    return {
+      id,
+      policy: 'sample-policy',
+      version: authoritative ? '2026.1' : '2026.2',
+      state: authoritative ? 'authoritative' : 'in_review',
+      citation: authoritative
+        ? 'Kuwait Labour Law (Private Sector) Law No. 6 of 2010; GOFSCO HRMS Issues (Issues with Hard Task HRMS System.docx, 2026-07-28)'
+        : 'cited text',
+      examples: { passed: true, results: [{ index: 0, expected: '6.000', actual: '6.000', passed: true }] },
+      floors: { passed: authoritative, results: [] },
+      diff: authoritative ? [] : [{ field: 'citation', before: 'old', after: 'cited text' }],
+      event: authoritative
+        ? null
+        : { action: 'submit', before: { lifecycle: 'draft' }, after: { lifecycle: 'in_review' } },
+      preparer_id: 2,
+      publisher_id: authoritative ? 3 : null,
+    };
+  }),
   publishPolicyVersion: vi.fn(),
   submitPolicyVersion: vi.fn(),
 }));
@@ -100,5 +107,21 @@ describe('policy desk', () => {
     await waitFor(() => {
       expect(catalogApi.publishPolicyVersion).toHaveBeenCalledWith(7, 'test-token');
     });
+  });
+
+  it('opens an authoritative version from the eye and shows the full citation', async () => {
+    const user = userEvent.setup();
+    renderDesk();
+    await screen.findAllByText('sample-policy');
+    const viewButtons = screen.getAllByRole('button', { name: 'View' });
+    expect(viewButtons).toHaveLength(2);
+    await user.click(viewButtons[1]);
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('Authoritative')).toBeInTheDocument();
+    expect(within(dialog).getByText(/Issues with Hard Task HRMS System\.docx/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/Examples:\s*Pass/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/Floor:\s*Pass/)).toBeInTheDocument();
+    expect(within(dialog).queryByRole('button', { name: 'Publish' })).not.toBeInTheDocument();
+    expect(catalogApi.fetchPolicyVersion).toHaveBeenCalledWith(8, 'test-token');
   });
 });

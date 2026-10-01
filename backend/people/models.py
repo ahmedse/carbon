@@ -277,6 +277,15 @@ class PayrollRun(models.Model):
         blank=True,
         help_text="Original period end a retro reprices. Null on a regular run.",
     )
+    exceptions = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=(
+            "Named per-employee holds from compute: missing join date, "
+            "leave not priced, or missing verified basic. Other employees "
+            "are still priced."
+        ),
+    )
 
     class Meta:
         ordering = ['-period_start']

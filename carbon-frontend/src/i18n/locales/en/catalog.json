@@ -865,6 +865,8 @@
   "policyState_authoritative": "Authoritative",
   "policyState_superseded": "Superseded",
   "policySubmit": "Submit",
+  "policyView": "View",
+  "policyViewTitle": "Policy version",
   "policyPublish": "Publish",
   "policyPublishTitle": "Publish version",
   "policyPublished": "Version published",

@@ -204,10 +204,33 @@ def price(rule, quantity: Decimal, extras: dict, package, basic) -> dict:
     return result
 
 
-def priced_lines(employee, start: date, end: date, package, basic, *, rule_as_of=None) -> list:
+def priced_lines(employee, start: date, end: date, package, basic, *, rule_as_of=None, holds=None) -> list:
+    """Price posting rules. ``holds`` collects per-rule refusals instead of aborting.
+
+    The six-month gate and a missing join date still refuse that line. Other
+    rules for the same employee continue. Omit ``holds`` and the refusal
+    still raises.
+    """
     rows = []
     for rule in posting_rules(employee, as_of=rule_as_of):
-        quantity, extras = fact_for(rule, employee, start, end)
+        try:
+            quantity, extras = fact_for(rule, employee, start, end)
+        except MissingPolicyFactError as exc:
+            if holds is not None and exc.fact == "join_date":
+                holds.append({
+                    "reason": "missing join date",
+                    "detail": "leave not priced",
+                })
+                continue
+            raise
+        except ServiceGateError as exc:
+            if holds is not None:
+                holds.append({
+                    "reason": "leave not priced",
+                    "detail": str(exc),
+                })
+                continue
+            raise
         if quantity is None:
             continue
         rows.append(price(rule, quantity, extras, package, basic))

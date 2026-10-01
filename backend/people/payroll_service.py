@@ -15,8 +15,9 @@
 #
 # ADR 0029: gross is resolved from verified monthly earnings on the compensation
 # ledger (basic required; housing/transport/etc. fold into the package), never
-# from ``Employee.basic_salary``. Fail closed when no verified monthly ``basic``
-# line exists for the period. GOSI withholding applies to Kuwaiti nationals only.
+# from ``Employee.basic_salary``. A missing verified basic, a missing join date
+# on a gated leave line, or a six-month gate holds that employee only. Everyone
+# else is still computed. GOSI withholding applies to Kuwaiti nationals only.
 #
 # ADR 0025 lineage seam: any payslip line derived from a governed measurement
 # (an AttendanceRecord backed by a dataschema.DataRow) carries ``data_row_id`` /
@@ -33,7 +34,7 @@ from django.utils import timezone
 
 from . import calculation_engine
 from .compensation_service import CompensationService
-from .associated_pay import ServiceGateError, priced_lines
+from .associated_pay import priced_lines
 from .calculation_engine import MissingPolicyFactError
 from .models import AttendanceRecord, ComplianceRule, Employee, LieuDay, PayrollRun, PayslipLine
 
@@ -75,6 +76,28 @@ def _refuse_loan_above_policy(rule, wage, amount):
         "Loan deduction exceeds the published wage fraction. "
         "The installment schedule was not rewritten."
     )
+
+
+def _named_exception(employee, reason, *, detail=""):
+    """One employee held on the run. The company compute continues."""
+    return {
+        "employee_no": employee.employee_no,
+        "full_name": employee.full_name,
+        "reason": reason,
+        "detail": detail,
+    }
+
+
+def _dedupe_exceptions(rows):
+    seen = set()
+    unique = []
+    for row in rows:
+        key = (row.get("employee_no"), row.get("reason"))
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(row)
+    return unique
 
 
 def _fact_window(run):
@@ -270,12 +293,16 @@ class PayrollRunService:
             LieuDay.objects.filter(payroll_run=run).delete()
             run.lines.all().delete()
             lines_created = 0
+            exceptions: list[dict] = []
             for employee in employees:
-                lines_created += self._compute_employee(
+                created, holds = self._compute_employee(
                     run, employee, gosi_rule, loan_rule, net_rule, as_of=as_of,
                 )
+                lines_created += created
+                exceptions.extend(holds)
+            run.exceptions = _dedupe_exceptions(exceptions)
             run.status = "computed"
-            run.save(update_fields=["status"])
+            run.save(update_fields=["status", "exceptions"])
             from people.governance.sod import (
                 SUBJECT_PAYROLL_RUN,
                 record_preparer,
@@ -293,11 +320,13 @@ class PayrollRunService:
             "status": run.status,
             "employees": len(employees),
             "lines_created": lines_created,
+            "exceptions": list(run.exceptions or []),
         }
 
     def _compute_employee(self, run, employee, gosi_rule, loan_rule, net_rule, *, as_of=None):
         rules = ComplianceRule.objects
         created = 0
+        holds: list[dict] = []
 
         # 1. gross — verified monthly earnings from the ledger (ADR-0029).
         # ``basic`` is required; housing/transport/etc. fold into the package
@@ -305,12 +334,16 @@ class PayrollRunService:
         window_start, window_end = _fact_window(run)
         package = self._verified_earnings_package(employee, as_of=window_end)
         if package is None:
-            raise PayrollServiceError(
-                f"Employee {employee.employee_no} has no verified monthly "
-                f"'basic' compensation ledger line for period ending "
-                f"{run.period_end}; refusing to compute payroll from "
-                f"Employee.basic_salary."
-            )
+            return 0, [_named_exception(
+                employee,
+                "missing verified basic",
+                detail=(
+                    f"Employee {employee.employee_no} has no verified monthly "
+                    f"'basic' compensation ledger line for period ending "
+                    f"{run.period_end}; refusing to compute payroll from "
+                    f"Employee.basic_salary."
+                ),
+            )]
         measurements = self._attendance_measurements(employee, run)
         gross_inputs = {
             "basic": package,
@@ -340,18 +373,22 @@ class PayrollRunService:
         #    Posted only when an authoritative rule names a payslip line and the
         #    employee has the fact. Earnings increase net; deductions reduce it.
         basic_amount = CompensationService.verified_basic_amount(employee, as_of=window_end)
+        line_holds: list[dict] = []
         try:
             associated = priced_lines(
                 employee, window_start, window_end, package, basic_amount,
                 rule_as_of=as_of or run.period_end,
+                holds=line_holds,
             )
         except MissingPolicyFactError as exc:
             raise PayrollServiceError(
                 f"Employee {employee.employee_no} is missing fact '{exc.fact}'.",
                 code="missing_fact",
             ) from exc
-        except ServiceGateError as exc:
-            raise PayrollServiceError(str(exc), code="service_gate") from exc
+        for item in line_holds:
+            holds.append(_named_exception(
+                employee, item["reason"], detail=item.get("detail") or "",
+            ))
         associated_earnings = Decimal("0")
         associated_deductions = []
         for item in associated:
@@ -401,7 +438,7 @@ class PayrollRunService:
         self._line_from_result(run, employee, "net", net)
         created += 1
 
-        return created
+        return created, holds
 
     @staticmethod
     def _verified_earnings_package(employee, *, as_of) -> Decimal | None:
@@ -676,7 +713,21 @@ class PayrollRunService:
         )
 
     def _run_validation(self, run):
-        findings = self.validation_seam.validate_run(run)
+        findings = list(self.validation_seam.validate_run(run))
+        holds = list(run.exceptions or [])
+        if holds:
+            findings.append(make_finding(
+                "employee_hold",
+                severity=SEVERITY_WARNING,
+                passed=False,
+                checked=len(holds),
+                failed=len(holds),
+                sample_failures=[
+                    f"{row.get('employee_no')} {row.get('full_name')}: {row.get('reason')}"
+                    + (f" ({row.get('detail')})" if row.get("detail") else "")
+                    for row in holds
+                ],
+            ))
         return summarize(findings)
 
     # --- WPS export ---------------------------------------------------------

@@ -198,10 +198,64 @@ def test_leave_pay_refuses_before_the_published_service_minimum():
     employee = _employee(org, "E-SHORT", "1000.000", joined=date(2026, 5, 1))
     _leave(employee, "annual", "3")
     run = PayrollRun.objects.create(org_unit=org, period_start=START, period_end=END)
-    with pytest.raises(PayrollServiceError) as ctx:
-        PayrollRunService().compute(run, user=_actors()[0])
-    assert ctx.value.code == "service_gate"
-    assert run.lines.count() == 0 or PayrollRun.objects.get(pk=run.pk).status == "draft"
+    result = PayrollRunService().compute(run, user=_actors()[0])
+    run.refresh_from_db()
+    assert result["status"] == "computed"
+    assert not run.lines.filter(employee=employee, line_type__code="leave_pay").exists()
+    assert any(row["reason"] == "leave not priced" and row["employee_no"] == "E-SHORT" for row in run.exceptions)
+    assert LeaveRecord.objects.filter(employee=employee, status="approved").exists()
+
+
+@pytest.mark.django_db
+def test_missing_join_date_does_not_block_another_employees_lines():
+    org = _org()
+    _core_rules()
+    _rule(
+        "sheet-leave",
+        "2026.2",
+        "leave",
+        _cited(
+            {"type": "scaled_rate", "params": {
+                "base_inputs": ["total_salary"], "divisor": 26, "quantity_input": "leave_days",
+            }},
+            line="leave_pay",
+            source="leave_days",
+            extra={"leave_type_codes": ["annual"], "min_service_months": 6},
+            applies="direct",
+        ),
+    )
+    held = _employee(org, "E-HELD", "1000.000", joined=None)
+    paid = _employee(org, "E-PAID", "800.000", joined=date(2020, 1, 1))
+    untouched = _employee(org, "E-NULL", "700.000", joined=None)
+    _leave(held, "annual", "4")
+    _leave(paid, "annual", "2")
+    run = PayrollRun.objects.create(org_unit=org, period_start=START, period_end=END)
+    prep, appr = _actors()
+    PayrollRunService().compute(run, user=prep)
+    run.refresh_from_db()
+    assert run.lines.filter(employee=paid).exists()
+    assert run.lines.filter(employee=paid, line_type__code="leave_pay").exists()
+    assert run.lines.filter(employee=untouched, line_type__code="gross").exists()
+    assert not run.lines.filter(employee=held, line_type__code="leave_pay").exists()
+    held_rows = [row for row in run.exceptions if row["employee_no"] == "E-HELD"]
+    assert held_rows == [{
+        "employee_no": "E-HELD",
+        "full_name": "E-HELD",
+        "reason": "missing join date",
+        "detail": "leave not priced",
+    }]
+    assert not any(row["employee_no"] == "E-NULL" for row in run.exceptions)
+    held.refresh_from_db()
+    assert held.join_date is None
+    assert LeaveRecord.objects.filter(employee=held, status="approved", days=Decimal("4")).exists()
+    service = PayrollRunService()
+    validated = service.validate(run, user=prep)
+    assert validated["status"] == "validated", validated
+    assert any(row["rule_key"] == "employee_hold" and row["severity"] == "warning" for row in validated["findings"])
+    committed = service.commit(run, user=appr)
+    assert committed["status"] == "committed"
+    run.refresh_from_db()
+    assert run.exceptions == held_rows
 
 
 @pytest.mark.django_db

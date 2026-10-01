@@ -865,6 +865,8 @@
   "policyState_authoritative": "معتمد",
   "policyState_superseded": "مستبدل",
   "policySubmit": "إرسال",
+  "policyView": "عرض",
+  "policyViewTitle": "إصدار السياسة",
   "policyPublish": "نشر",
   "policyPublishTitle": "نشر الإصدار",
   "policyPublished": "نُشر الإصدار",

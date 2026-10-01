@@ -387,27 +387,32 @@ class PayrollRunServiceTests(TestCase):
         self.assertIn("measurements", gross.inputs)
         self.assertEqual(gross.inputs["basic_source"], "ledger")
 
-    def test_compute_fails_without_verified_ledger(self):
-        """Payroll must fail closed when only Employee.basic_salary exists."""
+    def test_missing_verified_basic_holds_that_employee_only(self):
+        """A missing ledger holds that employee. Neighbours are still priced."""
         orphan = Employee.objects.create(
             org_unit=self.hq, employee_no="E-NO-LEDGER", full_name="No Ledger",
             basic_salary=Decimal("9999.000"), join_date=date(2024, 1, 1),
         )
-        # Scope only this employee by putting the run on a dedicated org unit.
-        lone = OrgUnit.objects.create(name="Lone", slug="lone", parent=self.hq)
-        orphan.org_unit = lone
-        orphan.save(update_fields=["org_unit"])
-
-        run = PayrollRun.objects.create(
-            org_unit=lone,
-            period_start=date(2026, 8, 1),
-            period_end=date(2026, 8, 31),
+        run = self._run()
+        result = self._compute(run)
+        self.assertEqual(result["status"], "computed")
+        self.assertFalse(PayslipLine.objects.filter(payroll_run=run, employee=orphan).exists())
+        self.assertTrue(PayslipLine.objects.filter(payroll_run=run, employee=self.in_scope).exists())
+        self.assertNotIn(
+            Decimal("9999.000"),
+            list(PayslipLine.objects.filter(payroll_run=run).values_list("amount", flat=True)),
         )
-        with self.assertRaises(PayrollServiceError) as ctx:
-            self._compute(run)
-        self.assertIn("E-NO-LEDGER", str(ctx.exception))
-        self.assertIn("verified", str(ctx.exception).lower())
-        self.assertFalse(PayslipLine.objects.filter(payroll_run=run).exists())
+        held = [row for row in result["exceptions"] if row["employee_no"] == "E-NO-LEDGER"]
+        self.assertEqual(held, [{
+            "employee_no": "E-NO-LEDGER",
+            "full_name": "No Ledger",
+            "reason": "missing verified basic",
+            "detail": held[0]["detail"],
+        }])
+        self.assertIn("verified", held[0]["detail"].lower())
+        self.assertIn("basic_salary", held[0]["detail"])
+        run.refresh_from_db()
+        self.assertEqual(run.exceptions, result["exceptions"])
 
     # --- WPS export (NIR-5H) ----------------------------------------------
 

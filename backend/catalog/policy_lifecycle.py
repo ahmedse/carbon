@@ -339,7 +339,10 @@ def detail(pk):
     if row is None:
         return None
     body = to_public(plane, row)
+    # preview() reports citation as a boolean. The desk record keeps the text.
+    citation = body.get("citation") or ""
     body.update(preview(plane, row))
+    body["citation"] = citation
     return body
 
 
