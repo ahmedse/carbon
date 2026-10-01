@@ -128,6 +128,19 @@ def test_prepend_domain_context_includes_system_prompt_extension():
     )
     assert "AASTMT university campus" in result
     assert "Always cite the specific table, field, and row counts" in result
+    ext = EmissionsDomainAI.system_prompt_extension
+    assert "any question" not in ext.lower()
+    assert "emission factors" in ext
+    assert "reporting periods" in ext
+    assert "declared inventory sources" in ext
+    assert "coverage gaps" in ext
+    assert "this turn's tool payload" in ext
+    assert "one activity row" in ext
+    assert "other campuses stated in tonnes" in ext
+    assert "market-based Scope 2" in ext
+    assert "waste kilograms" in ext
+    assert "assurance" in ext
+    assert "Chat writes" in ext
     # The structured prefix still leads; the extension trails it, before the
     # user message.
     assert result.index("[Domain: emissions]") < result.index(

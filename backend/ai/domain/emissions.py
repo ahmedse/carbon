@@ -100,8 +100,14 @@ class EmissionsDomainAI(DomainAIOperations):
         "Reporting periods follow the fiscal year. "
         "Always cite the specific table, field, and row counts when making data claims. "
         "Unit hierarchy: factors (kg CO₂e per activity unit) → calculations (kg CO₂e) → "
-        "dashboard/report totals (tonnes CO₂e = kg ÷ 1000). To answer any question about factors, "
-        "calculations, or totals, call the host API to read live data — never state a factor value from memory."
+        "dashboard/report totals (tonnes CO₂e = kg ÷ 1000). "
+        "In bounds: emission factors, reporting periods, declared inventory sources, "
+        "coverage gaps, kilograms only when that number is in this turn's tool payload, "
+        "and how to save one activity row. "
+        "Out of bounds: other campuses stated in tonnes, market-based Scope 2, "
+        "waste kilograms, assurance, and Chat writes. "
+        "Chat does not create or change host records. "
+        "Never state a factor value or a kilogram figure from memory."
     )
 
     # ── Manifest: workspace context enrichment ────────────────────────────
