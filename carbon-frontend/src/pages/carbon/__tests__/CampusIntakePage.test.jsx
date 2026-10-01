@@ -13,6 +13,7 @@ vi.mock('../../../api/emissions-extended', () => ({
   fetchCampusIntake: (...args) => fetchCampusIntake(...args),
   uploadCampusIntake: vi.fn(),
   enterCampusStream: vi.fn(),
+  recordDiscoveredActivity: vi.fn(),
 }));
 
 const LEAVES = {

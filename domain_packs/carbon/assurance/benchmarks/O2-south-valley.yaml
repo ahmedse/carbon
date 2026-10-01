@@ -65,14 +65,19 @@ close:
   tonnes_co2e_on_panel: "0"
 gate: >
   Opens only after O1 remains passed and south_valley_inventory.csv exists
-  for the single open period with one diesel stream. The FY 2025-26 file
-  is quoted and excluded. Until then the campus stays declared or excluded
-  insufficient_data (CR-EXC-01).
+  for the single open period with one diesel stream. The FY 2025-26 file may be stored and shown on the locked FY 2025-26
+  period. It never adds kilograms to the open period. Until the
+  open-period file exists the campus stays declared or excluded
+  insufficient_data (CR-EXC-01). Both diesel streams stay out of one
+  scope-1 total.
 evidence: >
   O2-south-valley.yaml status closed. Date 1 Oct 2026. Product Carbon on
   AASTMT. south_valley_scope12_fy2526.csv quotes 700000 kWh, generators
-  25000 L, and mobile diesel 125500 L. south_valley_inventory.csv is
-  absent. Kilograms null. Outcome b.
+  25000 L, and mobile diesel 125500 L. Those quantities may be stored
+  on locked FY 2025-26. They do not add kilograms to the open period.
+  south_valley_inventory.csv is absent. Kilograms null. Outcome b.
+  Date 1 Oct 2026.
 limit: >
-  Does not invent kg. Does not open a second ReportingPeriod.
-  evaluate_o1 is not this checklist. Does not pass O3 or O4.
+  Does not invent kg. Does not open FY 2025-26. A missing factor stores
+  activity with inventory kg absent, not zero. evaluate_o1 is not this
+  checklist. Does not pass O3 or O4.

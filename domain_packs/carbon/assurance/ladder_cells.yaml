@@ -214,9 +214,13 @@ subjects:
         product: Carbon on AASTMT
         locked: 2026-10-01
         meaning: >
-          Principles P-01–P-25 and the 20 CR rules each name target,
-          product, evidence, date, and limit. CARBON-PACK-SPEC.md has
-          the rank-2 headings. Catalogue stays planned.
+          Principles P-01–P-26 and the 20 CR rules each name target,
+          product, evidence, date, and limit. P-26: activity for a locked
+          later year may be stored and shown on that year; it never adds
+          kilograms to the open period; a missing factor stores activity
+          with inventory kg absent, not zero. CARBON-PACK-SPEC.md has
+          the rank-2 headings. Catalogue stays planned. This sentence
+          is rank 2.
         evidence: >
           domain_packs/carbon/assurance/principles.yaml.
           domain_packs/carbon/assurance/rules/*.yaml.

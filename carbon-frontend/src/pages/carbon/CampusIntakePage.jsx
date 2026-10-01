@@ -16,7 +16,7 @@ import LoadingSkeleton from '../../components/Page/LoadingSkeleton';
 import WorkflowCard from '../../components/Cards/WorkflowCard';
 import FilteredDataGrid from '../../components/FilteredDataGrid';
 import { SearchSelect } from '../../components/Form';
-import { enterCampusStream, fetchCampusIntake, uploadCampusIntake } from '../../api/emissions-extended';
+import { enterCampusStream, fetchCampusIntake, recordDiscoveredActivity, uploadCampusIntake } from '../../api/emissions-extended';
 
 function exclusionText(t, row) {
   return t(`intake.exclusion.${row.code}`, row);
@@ -60,6 +60,7 @@ export default function CampusIntakePage() {
   const [dieselStream, setDieselStream] = useState('');
   const [method, setMethod] = useState('location_based');
   const [entryNote, setEntryNote] = useState('');
+  const [recordNote, setRecordNote] = useState('');
 
   const load = useCallback(async () => {
     setPhase('loading');
@@ -87,6 +88,7 @@ export default function CampusIntakePage() {
   );
   const rows = (leaf?.activity_rows || []).map((row, index) => ({ id: index, ...row }));
   const streams = Array.isArray(payload?.streams) ? payload.streams : [];
+  const lockedBoard = (Array.isArray(payload?.periods) ? payload.periods : []).find((row) => row.role === 'locked') || null;
   const stream = streams.find((row) => row.id === streamId) || null;
   const campuses = useMemo(() => {
     const names = [...new Set(streams.map((row) => row.campus).filter(Boolean))];
@@ -115,6 +117,17 @@ export default function CampusIntakePage() {
     setDieselStream('');
     setMethod(next?.scope === 2 ? (next.method || 'location_based') : 'location_based');
     setEntryNote('');
+  }
+
+  async function onRecordDiscovered() {
+    try {
+      const result = await recordDiscoveredActivity(token);
+      const lockedMissing = (result?.exclusions || []).some((row) => row.code === 'locked_period_absent');
+      setRecordNote(lockedMissing ? t('intake.lockedAbsent') : t('intake.recorded'));
+      await load();
+    } catch (err) {
+      setRecordNote(err?.message || t('intake.loadFailed'));
+    }
   }
 
   async function onSaveStream() {
@@ -236,6 +249,45 @@ export default function CampusIntakePage() {
               highlightRow={(row) => row.id === streamId}
               hideSearch
             />
+          )}
+
+          <WorkflowCard
+            icon={<FactCheckIcon />}
+            title={t('intake.recordDiscovered')}
+            description={t('intake.recordDiscoveredHint')}
+            onClick={onRecordDiscovered}
+          />
+          {recordNote && <Alert severity="info">{recordNote}</Alert>}
+
+          {lockedBoard && (
+            <Box>
+              <Typography variant="h6">
+                {t('intake.streamsFor', { name: lockedBoard.name, status: t('intake.periodLocked') })}
+              </Typography>
+              <FilteredDataGrid
+                embedded
+                title={lockedBoard.name}
+                rows={lockedBoard.streams || []}
+                columns={[
+                  { field: 'campus', headerName: t('intake.campus'), flex: 1 },
+                  { field: 'source_name', headerName: t('intake.source'), flex: 1.4 },
+                  { field: 'scope', headerName: t('intake.scope'), width: 90 },
+                  {
+                    field: 'status',
+                    headerName: t('intake.status'),
+                    width: 220,
+                    valueGetter: (_value, row) => statusLabel(t, row.status),
+                  },
+                  {
+                    field: 'inventory_kg',
+                    headerName: t('intake.inventoryKg'),
+                    width: 140,
+                    valueGetter: (value) => (value == null || value === '' ? t('intake.kgAbsent') : String(value)),
+                  },
+                ]}
+                hideSearch
+              />
+            </Box>
           )}
 
           <WorkflowCard

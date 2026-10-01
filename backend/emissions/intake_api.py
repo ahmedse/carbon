@@ -13,6 +13,7 @@ from emissions.campus_intake import (
     intake_catalogue,
     record_assurance,
     record_contractual_factor,
+    store_discovered_activity,
     template_csv,
 )
 from emissions.views import CarbonBrandPermission
@@ -25,9 +26,21 @@ class CampusIntakeAPIView(APIView):
         payload = intake_catalogue()
         board = coverage_board(request.user)
         payload["streams"] = board["streams"]
+        payload["periods"] = board["periods"]
         payload["coverage_complete"] = False
         payload["entry_period"] = board["open_period"]
         return Response(payload)
+
+
+class CampusIntakeDiscoveredAPIView(APIView):
+    """Record named-file quantities on the period they belong to. Writes no kilogram."""
+
+    permission_classes = [IsAuthenticated, CarbonBrandPermission]
+
+    def post(self, request):
+        result = store_discovered_activity(user=request.user)
+        status = 201 if result["written"] else 200
+        return Response(result, status=status)
 
 
 class CampusIntakeEntryAPIView(APIView):

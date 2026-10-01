@@ -495,7 +495,14 @@
     "savedAwaiting": "Activity stored. The inventory kilogram is absent.",
     "savedEntered": "Activity stored. The calculation is on the open period.",
     "kgAbsent": "Absent",
-    "selectStream": "Choose a missing stream from the list, then enter its quantity."
+    "selectStream": "Choose a missing stream from the list, then enter its quantity.",
+    "periodOpen": "Open period",
+    "periodLocked": "Locked period",
+    "recordDiscovered": "Record discovered files on their year",
+    "recordDiscoveredHint": "Quantities are copied from the file. A locked year stays locked. This does not add kilograms to the open period.",
+    "recorded": "Activity stored on its own year. No inventory kilogram was added.",
+    "lockedAbsent": "FY 2025-26 is not a locked period here, so those rows were not stored.",
+    "streamsFor": "{{name}} · {{status}}"
   },
   "myData": {
     "title": "My Data",

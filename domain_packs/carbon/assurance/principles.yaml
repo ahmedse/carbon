@@ -8,8 +8,9 @@ product: Carbon on AASTMT
 locked: 2026-09-29
 limit: >
   P-01–P-20 govern the O1 leaf. P-21–P-25 lock Dual Scope 2, O2–O4, O5,
-  P2, and P1 as closed contracts. They do not pass those leaves. GHG
-  Protocol Corporate Standard version 3 is a draft (CR-INV-01).
+  P2, and P1 as closed contracts. They do not pass those leaves. P-26
+  locks later-year activity and a missing factor. GHG Protocol
+  Corporate Standard version 3 is a draft (CR-INV-01).
 
 principles:
   - id: P-01
@@ -403,3 +404,26 @@ principles:
       No VVB is named on carbon_dev.
     locked: 2026-09-30
     limit: Does not invent a VVB. Does not treat Egypt FRA credits as assurance.
+
+  - id: P-26
+    name: A later year stays on that year
+    statement: >
+      Activity for a locked later year may be stored and shown on that year.
+      It never adds kilograms to the open period. A missing factor stores
+      activity with inventory kg absent, not zero.
+    binds: [CR-INT-01, CR-DQ-01, CR-PER-01]
+    violation: >
+      A FY 2025-26 quantity is added to the open FY 2023-24 inventory
+      kilograms, or a missing factor is stored as 0 kg.
+    target: O2
+    product: Carbon on AASTMT
+    evidence: >
+      emissions/campus_intake.py store_discovered_activity.
+      emissions/tests/test_campus_intake.py. Date 1 Oct 2026.
+      The open period stays the O1 quote. FY 2025-26 stays locked.
+    locked: 2026-10-01
+    limit: >
+      Does not open FY 2025-26. Does not pass O2, O3, O4, or O5.
+      Does not invent a New Alamein file. Does not change the open-period
+      O1 kilograms. Does not deploy. EMISSIONS_AUTO_CALC stays off.
+      evaluate_o1 stays pure.

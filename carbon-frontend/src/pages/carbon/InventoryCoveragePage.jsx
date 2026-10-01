@@ -26,12 +26,17 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import PageContainer from '../../components/layout/PageContainer';
+import EmptyState from '../../components/Page/EmptyState';
+import LoadingSkeleton from '../../components/Page/LoadingSkeleton';
+import WorkflowCard from '../../components/Cards/WorkflowCard';
+import { SearchSelect } from '../../components/Form';
 import { Scope2MethodChip } from './Scope2Labels';
 
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import FactCheckIcon from '@mui/icons-material/FactCheck';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import StandardDataGrid from '../../components/StandardDataGrid';
@@ -593,6 +598,9 @@ export default function InventoryCoveragePage() {
   const [goals, setGoals] = useState([]);
   const [actions, setActions] = useState([]);
   const [streams, setStreams] = useState([]);
+  const [streamPeriods, setStreamPeriods] = useState([]);
+  const [streamPeriodId, setStreamPeriodId] = useState('');
+  const [streamError, setStreamError] = useState('');
 
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState(0);
@@ -623,9 +631,15 @@ export default function InventoryCoveragePage() {
       setActions(Array.isArray(aData) ? aData : aData?.results || []);
       try {
         const intake = await fetchCampusIntake(token);
+        const boards = Array.isArray(intake?.periods) ? intake.periods : [];
+        setStreamPeriods(boards);
         setStreams(Array.isArray(intake?.streams) ? intake.streams : []);
-      } catch {
+        setStreamPeriodId((current) => current || (boards[0] ? String(boards[0].id) : ''));
+        setStreamError('');
+      } catch (err) {
         setStreams([]);
+        setStreamPeriods([]);
+        setStreamError(err?.message || t('intake.loadFailed'));
       }
     } catch (err) {
       notifyFromError(err, 'Failed to load inventory coverage data');
@@ -636,7 +650,7 @@ export default function InventoryCoveragePage() {
     } finally {
       setLoading(false);
     }
-  }, [token, notifyFromError]);
+  }, [token, notifyFromError, t]);
 
   useEffect(() => {
     loadAll();
@@ -997,38 +1011,91 @@ export default function InventoryCoveragePage() {
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         {t('intake.notComplete')}
       </Typography>
-      <FilteredDataGrid
-        embedded
-        title={t('intake.streamsTitle')}
-        rows={streams}
-        columns={[
-          { field: 'campus', headerName: t('intake.campus'), flex: 1 },
-          { field: 'source_name', headerName: t('intake.source'), flex: 1.2 },
-          { field: 'scope', headerName: t('intake.scope'), width: 90 },
-          {
-            field: 'status',
-            headerName: t('intake.status'),
-            width: 200,
-            valueGetter: (_value, row) => {
-              const key = {
-                entered: 'intake.statusEntered',
-                excluded: 'intake.statusExcluded',
-                missing: 'intake.statusMissing',
-                awaiting_factor: 'intake.statusAwaiting',
-              }[row?.status] || 'intake.statusMissing';
-              return t(key);
-            },
-          },
-          {
-            field: 'inventory_kg',
-            headerName: t('intake.inventoryKg'),
-            width: 140,
-            valueGetter: (value) => (value == null || value === '' ? t('intake.kgAbsent') : String(value)),
-          },
-        ]}
-        hideSearch
-        loading={loading}
+      {loading && streamPeriods.length === 0 && streams.length === 0 && (
+        <LoadingSkeleton variant="table" />
+      )}
+      {streamError && (
+        <Alert
+          severity="error"
+          sx={{ mb: 2 }}
+          action={(
+            <Button color="inherit" size="small" onClick={loadAll}>
+              {t('common:retry')}
+            </Button>
+          )}
+        >
+          {streamError}
+        </Alert>
+      )}
+      <WorkflowCard
+        icon={<FactCheckIcon />}
+        title={t('intake.recordDiscovered')}
+        description={t('intake.recordDiscoveredHint')}
+        onClick={() => navigate('/carbon/onboarding/intake')}
       />
+      {streamPeriods.length > 0 && (
+        <Box sx={{ maxWidth: 420, my: 2 }}>
+          <SearchSelect
+            label={t('intake.period')}
+            options={streamPeriods.map((board) => ({
+              value: String(board.id),
+              label: t('intake.streamsFor', {
+                name: board.name,
+                status: board.role === 'locked' ? t('intake.periodLocked') : t('intake.periodOpen'),
+              }),
+            }))}
+            value={streamPeriodId}
+            onChange={(option) => setStreamPeriodId(option?.value ? String(option.value) : '')}
+          />
+        </Box>
+      )}
+      {(streamPeriods.length > 0 ? streamPeriods : [{ id: 'open', name: t('intake.periodOpen'), role: 'open', streams }]).map((board) => (
+        <Box key={board.id} sx={{ mb: 2 }}>
+          <Typography variant="subtitle1">
+            {t('intake.streamsFor', {
+              name: board.name,
+              status: board.role === 'locked' ? t('intake.periodLocked') : t('intake.periodOpen'),
+            })}
+          </Typography>
+          {(board.streams || []).length === 0 && (
+            <EmptyState title={t('intake.emptyTitle')} description={t('intake.notComplete')} />
+          )}
+          {(board.streams || []).length > 0 && (
+            <FilteredDataGrid
+              embedded
+              title={board.name || t('intake.streamsTitle')}
+              rows={board.streams}
+              columns={[
+                { field: 'campus', headerName: t('intake.campus'), flex: 1 },
+                { field: 'source_name', headerName: t('intake.source'), flex: 1.2 },
+                { field: 'scope', headerName: t('intake.scope'), width: 90 },
+                {
+                  field: 'status',
+                  headerName: t('intake.status'),
+                  width: 200,
+                  valueGetter: (_value, row) => {
+                    const key = {
+                      entered: 'intake.statusEntered',
+                      excluded: 'intake.statusExcluded',
+                      missing: 'intake.statusMissing',
+                      awaiting_factor: 'intake.statusAwaiting',
+                    }[row?.status] || 'intake.statusMissing';
+                    return t(key);
+                  },
+                },
+                {
+                  field: 'inventory_kg',
+                  headerName: t('intake.inventoryKg'),
+                  width: 140,
+                  valueGetter: (value) => (value == null || value === '' ? t('intake.kgAbsent') : String(value)),
+                },
+              ]}
+              hideSearch
+              loading={loading}
+            />
+          )}
+        </Box>
+      ))}
 
       {/* Reporting period selector */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>

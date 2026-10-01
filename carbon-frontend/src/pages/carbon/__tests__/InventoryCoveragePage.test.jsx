@@ -120,4 +120,60 @@ describe('Inventory coverage O1 quote honesty', () => {
     expect(targetPct.value ?? '').toBe('');
     expect(createCoverageGoal).not.toHaveBeenCalled();
   });
+
+  it('lists the open period and the locked year without a zero kilogram', async () => {
+    fetchCampusIntake.mockResolvedValue({
+      coverage_complete: false,
+      streams: [],
+      periods: [
+        {
+          id: 15,
+          name: 'FY 2023-24',
+          role: 'open',
+          status: 'open',
+          streams: [
+            {
+              id: 'open-sv',
+              campus: 'South Valley',
+              source_name: 'South Valley electricity',
+              scope: 2,
+              status: 'missing',
+              inventory_kg: null,
+            },
+          ],
+        },
+        {
+          id: 16,
+          name: 'FY 2025-26',
+          role: 'locked',
+          status: 'locked',
+          streams: [
+            {
+              id: 'locked-sv',
+              campus: 'South Valley',
+              source_name: 'South Valley electricity',
+              scope: 2,
+              status: 'entered',
+              inventory_kg: null,
+            },
+            {
+              id: 'locked-na',
+              campus: 'New Alamein',
+              source_name: 'New Alamein electricity',
+              scope: 2,
+              status: 'missing',
+              inventory_kg: null,
+            },
+          ],
+        },
+      ],
+    });
+    renderPage();
+    expect(await screen.findByText(/FY 2023-24/)).toBeInTheDocument();
+    expect(screen.getByText(/FY 2025-26/)).toBeInTheDocument();
+    expect(screen.getAllByText('Missing').length).toBeGreaterThan(0);
+    expect(screen.getByText('Entered')).toBeInTheDocument();
+    expect(screen.getAllByText('Absent').length).toBeGreaterThan(0);
+    expect(screen.queryByText(/^0 kg$/)).not.toBeInTheDocument();
+  });
 });

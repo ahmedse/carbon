@@ -798,6 +798,15 @@ export async function enterCampusStream(token, fields) {
   });
 }
 
+/** Copy named-file quantities onto the period they belong to. The server stores no kilogram. */
+export async function recordDiscoveredActivity(token) {
+  return apiFetch(`${API_ROUTES.emissionsIntake}discovered/`, {
+    token,
+    method: 'POST',
+    body: {},
+  });
+}
+
 export async function fetchChairmanData({ reporting_period_id } = {}, token) {
   const params = new URLSearchParams();
   if (reporting_period_id) params.append("reporting_period_id", reporting_period_id);

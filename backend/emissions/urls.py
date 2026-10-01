@@ -43,6 +43,7 @@ from .onboarding_o1 import OnboardingO1APIView
 from .intake_api import (
     AssuranceEngagementAPIView,
     CampusIntakeAPIView,
+    CampusIntakeDiscoveredAPIView,
     CampusIntakeEntryAPIView,
     CampusIntakeTemplateAPIView,
     CampusIntakeUploadAPIView,
@@ -184,6 +185,7 @@ urlpatterns = [
     path('coverage/', InventoryCoverageAPIView.as_view(), name='inventory-coverage'),
     path('onboarding/o1/', OnboardingO1APIView.as_view(), name='onboarding-o1'),
     path('intake/', CampusIntakeAPIView.as_view(), name='campus-intake'),
+    path('intake/discovered/', CampusIntakeDiscoveredAPIView.as_view(), name='campus-intake-discovered'),
     path('intake/entry/', CampusIntakeEntryAPIView.as_view(), name='campus-intake-entry'),
     path('intake/<str:leaf_id>/template/', CampusIntakeTemplateAPIView.as_view(), name='campus-intake-template'),
     path('intake/<str:leaf_id>/upload/', CampusIntakeUploadAPIView.as_view(), name='campus-intake-upload'),

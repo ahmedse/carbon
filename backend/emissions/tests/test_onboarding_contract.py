@@ -71,11 +71,15 @@ class OnboardingContractTests(unittest.TestCase):
             for key in ("target", "product", "evidence", "locked", "limit"):
                 self.assertTrue(str(row.get(key, "")).strip(), f"{row['id']} {key}")
 
-    def test_twenty_five_principles_bind_rules(self):
+    def test_principles_bind_rules(self):
         data = yaml.safe_load((PACK / "assurance" / "principles.yaml").read_text(encoding="utf-8"))
         ids = [row["id"] for row in data["principles"]]
-        self.assertEqual(ids, [f"P-{i:02d}" for i in range(1, 26)])
+        self.assertEqual(ids, [f"P-{i:02d}" for i in range(1, 27)])
         self.assertEqual(data["target"], "O1")
+        p26 = data["principles"][-1]
+        self.assertEqual(p26["id"], "P-26")
+        self.assertIn("locked later year", p26["statement"])
+        self.assertIn("inventory kg absent, not zero", p26["statement"])
 
     def test_principles_and_rules_name_the_p12_sentence(self):
         # P-12. A row is not ready without target, product, evidence, date, limit.
@@ -89,6 +93,7 @@ class OnboardingContractTests(unittest.TestCase):
             "P-23": "O5",
             "P-24": "P2",
             "P-25": "P1",
+            "P-26": "O2",
         }
         for row in principles["principles"]:
             for key in ("target", "product", "evidence", "locked", "limit"):

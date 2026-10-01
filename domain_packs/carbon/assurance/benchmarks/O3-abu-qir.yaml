@@ -59,14 +59,20 @@ close:
 gate: >
   Opens only after O1 remains passed and abu_qir_inventory.csv exists
   for the single open period with one diesel stream. The FY 2025-26
-  monthly files are quoted. June electricity is blank, not zero. Diesel
-  is not labelled generators or fleet. Until then the campus stays
-  declared or excluded insufficient_data (CR-EXC-01).
+  monthly files may be stored and shown on the locked FY 2025-26 period.
+  They never add kilograms to the open period. June electricity stays
+  blank, not zero. Diesel that is not labelled generators or fleet stays
+  unlabelled and out of a scope-1 total. Until the open-period file
+  exists the campus stays declared or excluded insufficient_data
+  (CR-EXC-01).
 evidence: >
   O3-abu-qir.yaml status closed. Date 1 Oct 2026. Product Carbon on
   AASTMT. abu_qir_monthly_electricity_fy2526.csv and
-  abu_qir_fuel_fy2526.csv exist. abu_qir_inventory.csv is absent.
-  Kilograms null. Outcome b.
+  abu_qir_fuel_fy2526.csv exist and may be stored on locked FY 2025-26.
+  They do not add kilograms to the open period. abu_qir_inventory.csv
+  is absent. June electricity stays blank. Unlabelled diesel stays out
+  of a scope-1 total. Kilograms null. Outcome b. Date 1 Oct 2026.
 limit: >
-  Does not invent kg. Does not open a second ReportingPeriod.
-  evaluate_o1 is not this checklist. Does not pass O2 or O4.
+  Does not invent kg. Does not open FY 2025-26. A missing factor stores
+  activity with inventory kg absent, not zero. evaluate_o1 is not this
+  checklist. Does not pass O2 or O4.

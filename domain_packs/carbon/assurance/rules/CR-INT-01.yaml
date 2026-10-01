@@ -1,13 +1,16 @@
 id: CR-INT-01
 journey: INV
 meaning: >
-  O2, O3, O4, O5, market-based Scope 2, and P1 are operable without
-  inventing a kilogram. A discovered file is quoted cell by cell. An
-  open-period file that is absent stays a named wait, with the columns
-  required, and the coverage panel shows 0 tCO2e because no Calculation
-  was stored. Market-based stays absent until a ContractualScope2Factor
-  row differs from the grid factor. P1 records five VVB fields and
-  not_assured stays unmet until all five are present. P2 stays shape_only.
+  Activity for a locked later year may be stored and shown on that year.
+  It never adds kilograms to the open period. A missing factor stores
+  activity with inventory kg absent, not zero. O2, O3, O4, O5,
+  market-based Scope 2, and P1 are operable without inventing a kilogram.
+  A discovered file is quoted cell by cell. An open-period file that is
+  absent stays a named wait, with the columns required, and the coverage
+  panel shows 0 tCO2e because no Calculation was stored. Market-based
+  stays absent until a ContractualScope2Factor row differs from the grid
+  factor. P1 records five VVB fields and not_assured stays unmet until
+  all five are present. P2 stays shape_only.
 source: >
   domain_packs/carbon/assurance/benchmarks/O2-south-valley.yaml,
   O3-abu-qir.yaml, O4-new-alamein.yaml, O5-scope3-waste.yaml,
@@ -16,19 +19,23 @@ source: >
 owner: carbon-inventory-lead
 failure: >
   A leaf is marked passed without its open-period file, a discovered
-  FY file is posted onto the FY 2023-24 period, a kilogram is stored
-  from a blank month or from both diesel streams, market-based copies
-  0.4584 or an Egypt residual mix, or not_assured is marked met with
-  fewer than five VVB fields.
+  FY file is posted onto the FY 2023-24 period, a later-year quantity
+  adds kilograms to the open period, a missing factor is stored as 0 kg,
+  a kilogram is stored from a blank month or from both diesel streams,
+  market-based copies 0.4584 or an Egypt residual mix, or not_assured
+  is marked met with fewer than five VVB fields.
 validation: >
   intake catalogue kilograms are null. Open-period inventory filenames
   are absent. Discovered FY files that exist are quoted.
   test_campus_intake.py. evaluate_o1 stays pure.
 implementation: >
   Template download, upload validation, append-only DataRow,
-  archive and restate, activity times factor only when the row matches
-  the single open period and the factor is legal. Campus writes use
-  carbon:enter_data on that org (CR-OWN-01).
+  archive and restate. Activity for a locked later year is stored on
+  that year and is not calculated into the open period. A missing
+  factor stores the activity and leaves inventory kg absent, not zero.
+  Activity times factor only when the row matches the single open
+  period and the factor is legal. Campus writes use carbon:enter_data
+  on that org (CR-OWN-01). FY 2025-26 is not opened.
 confidence: high-code
 catalogue: planned
 residual: >

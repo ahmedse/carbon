@@ -546,91 +546,320 @@ def _source_for(org, spec: dict):
     return qs.order_by("id").first()
 
 
-def coverage_board(user=None) -> dict[str, Any]:
-    """One row per required stream. Missing when no file and no rows exist.
+LATER_START = "2025-07-01"
+LATER_END = "2026-06-30"
 
-    Entered requires this period's linked tables and a Calculation.
-    A percent is not returned. Inventory kilograms come only from those
-    calculations. Later-year files are named and are not summed.
-    """
+
+def _locked_later_period():
+    """The locked FY 2025-26 period. This does not create it and does not open it."""
+    from datetime import date
+
+    from emissions.models import ReportingPeriod
+
+    return (
+        ReportingPeriod.objects.filter(
+            status="locked",
+            start_date=date(2025, 7, 1),
+            end_date=date(2026, 6, 30),
+        )
+        .order_by("id")
+        .first()
+    )
+
+
+def _add_file_row(rows: list[dict[str, str]], **fields: str) -> None:
+    rows.append({key: "" if value is None else str(value) for key, value in fields.items()})
+
+
+def file_activity_rows() -> list[dict[str, str]]:
+    """Copy quantities from the named files. A blank cell is not a row and not zero."""
+    rows: list[dict[str, str]] = []
+    diesel_hits = []
+    for raw in _read_csv(SV_SCOPE12):
+        label = raw.get("activity_data") or ""
+        quantity = raw.get("quantity") or ""
+        unit = raw.get("unit") or ""
+        source = raw.get("source") or ""
+        scope = raw.get("scope") or ""
+        if not quantity:
+            continue
+        if label == "Electricity":
+            _add_file_row(
+                rows,
+                campus="South Valley",
+                org_unit_name="South Valley",
+                source_name="South Valley electricity",
+                named="true",
+                leaf_id="O2",
+                scope=scope,
+                unit=unit,
+                quantity=quantity,
+                stream=source,
+                month="",
+                source_file=_basename(SV_SCOPE12),
+                period_role="locked",
+                in_scope_total="false",
+                reason="",
+            )
+        elif label == "Diesel":
+            diesel_hits.append((source, quantity, unit, scope))
+        else:
+            _add_file_row(
+                rows,
+                campus="South Valley",
+                org_unit_name="South Valley",
+                source_name=label or source,
+                named="false",
+                leaf_id="",
+                scope=scope,
+                unit=unit,
+                quantity=quantity,
+                stream=source,
+                month="",
+                source_file=_basename(SV_SCOPE12),
+                period_role="locked",
+                in_scope_total="false",
+                reason="outside_named_source",
+            )
+    both = len(diesel_hits) >= 2
+    for source, quantity, unit, scope in diesel_hits:
+        _add_file_row(
+            rows,
+            campus="South Valley",
+            org_unit_name="South Valley",
+            source_name="South Valley diesel",
+            named="true",
+            leaf_id="O2",
+            scope=scope,
+            unit=unit,
+            quantity=quantity,
+            stream=source,
+            month="",
+            source_file=_basename(SV_SCOPE12),
+            period_role="locked",
+            in_scope_total="false",
+            reason="diesel_stream_both" if both else "",
+        )
+    for raw in _read_csv(AQ_ELEC):
+        month = raw.get("month") or ""
+        kwh = raw.get("total_kwh") or ""
+        if not kwh:
+            continue
+        _add_file_row(
+            rows,
+            campus="Abu Qir",
+            org_unit_name="Abu Qir",
+            source_name="Abu Qir electricity",
+            named="true",
+            leaf_id="O3",
+            scope="",
+            unit="kWh",
+            quantity=kwh,
+            stream="",
+            month=month,
+            source_file=_basename(AQ_ELEC),
+            period_role="locked",
+            in_scope_total="false",
+            reason="",
+        )
+    for raw in _read_csv(AQ_FUEL):
+        month = raw.get("month") or ""
+        diesel = raw.get("diesel_l") or ""
+        if diesel:
+            _add_file_row(
+                rows,
+                campus="Abu Qir",
+                org_unit_name="Abu Qir",
+                source_name="Abu Qir diesel",
+                named="true",
+                leaf_id="O3",
+                scope="",
+                unit="L",
+                quantity=diesel,
+                stream="",
+                month=month,
+                source_file=_basename(AQ_FUEL),
+                period_role="locked",
+                in_scope_total="false",
+                reason="diesel_stream_unlabelled",
+            )
+        for column, label in (("gasoline_92_l", "gasoline 92"), ("gasoline_95_l", "gasoline 95")):
+            qty = raw.get(column) or ""
+            if not qty:
+                continue
+            _add_file_row(
+                rows,
+                campus="Abu Qir",
+                org_unit_name="Abu Qir",
+                source_name=label,
+                named="false",
+                leaf_id="",
+                scope="",
+                unit="L",
+                quantity=qty,
+                stream="",
+                month=month,
+                source_file=_basename(AQ_FUEL),
+                period_role="locked",
+                in_scope_total="false",
+                reason="outside_named_source",
+            )
+    for raw in _read_csv(SV_INVENTORY):
+        label = (raw.get("activity_data") or raw.get("source_of_emission") or "").strip()
+        quantity = raw.get("quantity") or ""
+        if label == "Waste Disposal" and (raw.get("unit") or "").lower() == "ton" and quantity:
+            _add_file_row(
+                rows,
+                campus="Smart Village",
+                org_unit_name="Smart Village",
+                source_name="Smart Village waste disposal",
+                named="true",
+                leaf_id="O5",
+                scope=raw.get("scope") or "",
+                unit=raw.get("unit") or "ton",
+                quantity=quantity,
+                stream="",
+                month="",
+                source_file=_basename(SV_INVENTORY),
+                period_role="open",
+                in_scope_total="false",
+                reason="awaiting_factor",
+            )
+    return rows
+
+
+def _base_stream(spec: dict, user) -> dict[str, Any]:
+    org_name = spec["org_unit_name"]
+    return {
+        "id": spec["id"],
+        "leaf_id": spec["leaf_id"],
+        "campus": spec["campus"],
+        "org_unit_name": org_name,
+        "source_name": spec["source_name"],
+        "scope": spec["scope"],
+        "scope3_category": spec["scope3_category"],
+        "activity_type": spec["activity_type"],
+        "activity_unit": spec["activity_unit"],
+        "method": spec["method"] or None,
+        "status": "missing",
+        "reason": None,
+        "inventory_kg": None,
+        "in_scope_total": False,
+        "later_year_files": spec["later_year_files"],
+        "writable": user_may_write(user, org_name) if user is not None else False,
+        "screen": "/carbon/onboarding/intake",
+    }
+
+
+def _stream_for(spec: dict, period, user) -> dict[str, Any]:
+    """Status for one required stream on one period. Kilograms only from that period's calculations."""
     from dataschema.models import DataRow
     from emissions.models import Calculation, InventorySourceStatus
+    from mdm.models import OrgUnit
 
+    row = _base_stream(spec, user)
+    row["period_id"] = period.id
+    row["period_name"] = period.name
+    row["period_status"] = period.status
+    org = OrgUnit.objects.filter(name=spec["org_unit_name"], is_active=True).first()
+    source = _source_for(org, spec) if org is not None else None
+    status = None
+    if source is not None:
+        status = (
+            InventorySourceStatus.objects.filter(source=source, reporting_period=period)
+            .order_by("id")
+            .first()
+        )
+    if status is not None and status.status == "excluded" and status.exclusion_reason:
+        notes = (status.notes or "").strip()
+        if status.exclusion_reason == "other" and not notes:
+            row["reason"] = "exclusion_notes"
+        else:
+            row["status"] = "excluded"
+            row["reason"] = status.exclusion_reason
+        return row
+    linked_ids = []
+    if status is not None:
+        linked_ids = list(status.linked_tables.values_list("id", flat=True))
+    calcs = Calculation.objects.none()
+    if linked_ids:
+        calcs = Calculation.objects.filter(
+            reporting_period=period,
+            is_stale=False,
+            superseded_by__isnull=True,
+            data_row__is_archived=False,
+            data_row__data_table_id__in=linked_ids,
+        )
+    if linked_ids and calcs.exists():
+        total = sum((calc.co2e_kg for calc in calcs), Decimal("0"))
+        row["status"] = "entered"
+        row["inventory_kg"] = format(total, "f")
+        row["in_scope_total"] = True
+        if spec["scope"] == 2:
+            methods = {calc.scope2_method for calc in calcs if calc.scope2_method}
+            row["method"] = next(iter(methods), "location_based")
+        return row
+    start = period.start_date.isoformat()
+    end = period.end_date.isoformat()
+    live = DataRow.objects.filter(
+        is_archived=False,
+        values__source_name=spec["source_name"],
+        values__period_start=start,
+        values__period_end=end,
+    )
+    if org is not None:
+        live = live.filter(data_table__module__org_unit=org)
+    if not live.exists():
+        return row
+    reasons = {(item.values or {}).get("reason") or "" for item in live}
+    reasons.discard("")
+    row["inventory_kg"] = None
+    row["in_scope_total"] = False
+    if spec["leaf_id"] == "O5" or "awaiting_factor" in reasons:
+        row["status"] = "awaiting_factor"
+        row["reason"] = "awaiting_factor"
+        return row
+    row["status"] = "entered"
+    if "diesel_stream_both" in reasons:
+        row["reason"] = "diesel_stream_both"
+    elif "diesel_stream_unlabelled" in reasons:
+        row["reason"] = "diesel_stream_unlabelled"
+    return row
+
+
+def _period_board(period, user, role: str) -> dict[str, Any]:
+    return {
+        "id": period.id,
+        "name": period.name,
+        "status": period.status,
+        "role": role,
+        "start_date": period.start_date.isoformat(),
+        "end_date": period.end_date.isoformat(),
+        "streams": [_stream_for(spec, period, user) for spec in required_stream_specs()],
+    }
+
+
+def coverage_board(user=None) -> dict[str, Any]:
+    """Required streams for the open period and, when it exists, locked FY 2025-26.
+
+    A percent is not returned. Inventory kilograms come only from calculations
+    on that same period. Later-year activity does not mark the open period entered.
+    """
     period = _open_period_or_none()
-    streams = []
-    for spec in required_stream_specs():
-        org_name = spec["org_unit_name"]
-        row = {
-            "id": spec["id"],
-            "leaf_id": spec["leaf_id"],
-            "campus": spec["campus"],
-            "org_unit_name": org_name,
-            "source_name": spec["source_name"],
-            "scope": spec["scope"],
-            "scope3_category": spec["scope3_category"],
-            "activity_type": spec["activity_type"],
-            "activity_unit": spec["activity_unit"],
-            "method": spec["method"] or None,
-            "status": "missing",
-            "reason": None,
-            "inventory_kg": None,
-            "later_year_files": spec["later_year_files"],
-            "writable": user_may_write(user, org_name) if user is not None else False,
-            "screen": "/carbon/onboarding/intake",
-        }
-        if period is None:
+    locked = _locked_later_period()
+    periods = []
+    if period is not None:
+        periods.append(_period_board(period, user, "open"))
+    if locked is not None and (period is None or locked.id != period.id):
+        periods.append(_period_board(locked, user, "locked"))
+    if period is None:
+        streams = []
+        for spec in required_stream_specs():
+            row = _base_stream(spec, user)
             row["reason"] = "open_period_count"
             streams.append(row)
-            continue
-        from mdm.models import OrgUnit
-
-        org = OrgUnit.objects.filter(name=org_name, is_active=True).first()
-        source = _source_for(org, spec) if org is not None else None
-        status = None
-        if source is not None:
-            status = (
-                InventorySourceStatus.objects.filter(source=source, reporting_period=period)
-                .order_by("id")
-                .first()
-            )
-        if status is not None and status.status == "excluded" and status.exclusion_reason:
-            notes = (status.notes or "").strip()
-            if status.exclusion_reason == "other" and not notes:
-                row["reason"] = "exclusion_notes"
-            else:
-                row["status"] = "excluded"
-                row["reason"] = status.exclusion_reason
-            streams.append(row)
-            continue
-        linked_ids = []
-        if status is not None:
-            linked_ids = list(status.linked_tables.values_list("id", flat=True))
-        calcs = Calculation.objects.none()
-        if linked_ids:
-            calcs = Calculation.objects.filter(
-                reporting_period=period,
-                is_stale=False,
-                superseded_by__isnull=True,
-                data_row__is_archived=False,
-                data_row__data_table_id__in=linked_ids,
-            )
-        if linked_ids and calcs.exists():
-            total = sum((calc.co2e_kg for calc in calcs), Decimal("0"))
-            row["status"] = "entered"
-            row["inventory_kg"] = format(total, "f")
-            if spec["scope"] == 2:
-                methods = {calc.scope2_method for calc in calcs if calc.scope2_method}
-                row["method"] = next(iter(methods), "location_based")
-            streams.append(row)
-            continue
-        live = DataRow.objects.filter(is_archived=False, values__source_name=spec["source_name"])
-        if org is not None:
-            live = live.filter(data_table__module__org_unit=org)
-        if live.exists():
-            row["status"] = "awaiting_factor"
-            row["reason"] = "awaiting_factor"
-            row["inventory_kg"] = None
-        streams.append(row)
+    else:
+        streams = next(item["streams"] for item in periods if item["role"] == "open")
     return {
         "product": "Carbon on AASTMT",
         "locked": "2026-10-01",
@@ -638,10 +867,204 @@ def coverage_board(user=None) -> dict[str, Any]:
         "open_period": None if period is None else {
             "id": period.id,
             "name": period.name,
+            "status": period.status,
             "start_date": period.start_date.isoformat(),
             "end_date": period.end_date.isoformat(),
         },
+        "periods": periods,
         "streams": streams,
+    }
+
+
+def open_period_inventory_kg() -> dict[str, str] | None:
+    """Sum of Calculation.co2e_kg on the single open period. Later years are not included."""
+    period = _open_period_or_none()
+    if period is None:
+        return None
+    from emissions.models import Calculation
+
+    totals: dict[str, Decimal] = {}
+    calcs = Calculation.objects.filter(
+        reporting_period=period,
+        is_stale=False,
+        superseded_by__isnull=True,
+        data_row__is_archived=False,
+    )
+    for calc in calcs:
+        key = str(calc.scope)
+        totals[key] = totals.get(key, Decimal("0")) + calc.co2e_kg
+    return {key: format(value, "f") for key, value in totals.items()}
+
+
+def store_discovered_activity(*, user) -> dict[str, Any]:
+    """Store file quantities on the period they belong to. Never calculates them.
+
+    FY 2025-26 rows land on the locked period. Waste 73.0 ton lands on the
+    open period with inventory kg absent. This does not open a period, does
+    not archive an existing row, and does not create a Calculation.
+    """
+    from django.conf import settings
+
+    from core.models import Module
+    from dataschema.models import DataField, DataRow, DataTable, normalize_name
+    from mdm.models import OrgUnit
+
+    if getattr(settings, "EMISSIONS_AUTO_CALC", False):
+        return _blank_result(errors=["auto calc"])
+    open_period = _open_period_or_none()
+    locked = _locked_later_period()
+    window = academy_period()
+    exclusions: list[dict[str, str]] = []
+    if locked is None:
+        exclusions.append(_exclusion("locked_period_absent"))
+    if open_period is None:
+        exclusions.append(_exclusion("open_period_count"))
+    elif (
+        open_period.start_date.isoformat() != window["start_date"]
+        or open_period.end_date.isoformat() != window["end_date"]
+    ):
+        exclusions.append(_exclusion(
+            "period_mismatch",
+            file="open",
+            file_period="dates",
+            start=window["start_date"],
+            end=window["end_date"],
+        ))
+        open_period = None
+    stored = []
+    skipped = []
+    for item in file_activity_rows():
+        target = locked if item["period_role"] == "locked" else open_period
+        if target is None:
+            skipped.append(item["source_name"])
+            continue
+        if item["period_role"] == "locked" and target.status != "locked":
+            skipped.append(item["source_name"])
+            continue
+        if "fy2526" in item["source_file"] and open_period is not None and target.id == open_period.id:
+            exclusions.append(_exclusion(
+                "period_mismatch",
+                file=item["source_file"],
+                file_period="fy2526",
+                start=open_period.start_date.isoformat(),
+                end=open_period.end_date.isoformat(),
+            ))
+            continue
+        if not user_may_write(user, item["org_unit_name"]):
+            skipped.append(item["source_name"])
+            continue
+        org = OrgUnit.objects.filter(name=item["org_unit_name"], is_active=True).first()
+        if org is None:
+            exclusions.append(_exclusion("org_absent", label=item["org_unit_name"]))
+            skipped.append(item["source_name"])
+            continue
+        start = target.start_date.isoformat()
+        end = target.end_date.isoformat()
+        activity_key = "|".join([
+            item["source_file"], item["source_name"], item["month"], item["quantity"], item["unit"], item["stream"], start,
+        ])
+        already = DataRow.objects.filter(is_archived=False, values__activity_key=activity_key)
+        if item["leaf_id"] == "O5":
+            already = already | DataRow.objects.filter(
+                is_archived=False,
+                values__source_name=item["source_name"],
+                values__quantity_tonne=item["quantity"],
+                values__period_start=start,
+            )
+        if already.exists():
+            skipped.append(activity_key)
+            continue
+        label = item["source_name"] if item["named"] == "true" else f"{item['campus']} {item['source_name']}"
+        module, _ = Module.objects.get_or_create(
+            name=f"Campus intake {label}"[:100],
+            defaults={"description": "P-26", "scope": 3 if item["leaf_id"] == "O5" else (2 if item["unit"] == "kWh" else 1), "org_unit": org},
+        )
+        if module.org_unit_id != org.id:
+            module.org_unit = org
+            module.save(update_fields=["org_unit"])
+        table_name = normalize_name(f"intake {label}")[:64]
+        table, _ = DataTable.objects.get_or_create(
+            module=module,
+            name=table_name,
+            defaults={"title": label},
+        )
+        values = {
+            "campus": item["campus"],
+            "source_name": item["source_name"],
+            "scope": item["scope"],
+            "unit": item["unit"],
+            "quantity": item["quantity"],
+            "stream": item["stream"],
+            "month": item["month"],
+            "source_file": item["source_file"],
+            "period_start": start,
+            "period_end": end,
+            "in_scope_total": item["in_scope_total"],
+            "reason": item["reason"],
+            "activity_key": activity_key,
+        }
+        if item["leaf_id"] == "O5":
+            values["quantity_tonne"] = item["quantity"]
+        for column, kind in (
+            ("campus", "text"),
+            ("source_name", "text"),
+            ("scope", "text"),
+            ("unit", "text"),
+            ("quantity", "text"),
+            ("quantity_tonne", "text"),
+            ("stream", "text"),
+            ("month", "text"),
+            ("source_file", "text"),
+            ("period_start", "text"),
+            ("period_end", "text"),
+            ("in_scope_total", "text"),
+            ("reason", "text"),
+            ("activity_key", "text"),
+        ):
+            DataField.objects.get_or_create(
+                data_table=table,
+                name=column,
+                defaults={"label": column, "type": kind},
+            )
+        created = DataRow.objects.create(
+            data_table=table,
+            values=values,
+            created_by=user if getattr(user, "pk", None) else None,
+            version=1,
+        )
+        if item["named"] == "true":
+            spec = next((candidate for candidate in required_stream_specs() if candidate["source_name"] == item["source_name"]), None)
+            if spec is not None:
+                _sync_coverage(
+                    org=org,
+                    spec=spec,
+                    period=target,
+                    table=table,
+                    calculated=False,
+                    stream_word="",
+                )
+        stored.append({
+            "id": created.id,
+            "source_name": item["source_name"],
+            "quantity": item["quantity"],
+            "unit": item["unit"],
+            "source_file": item["source_file"],
+            "campus": item["campus"],
+            "period_id": target.id,
+            "period_status": target.status,
+        })
+    if locked is not None:
+        locked.refresh_from_db()
+    if open_period is not None:
+        open_period.refresh_from_db()
+    return {
+        "written": bool(stored),
+        "kilograms": None,
+        "errors": [],
+        "exclusions": exclusions,
+        "archived_ids": [],
+        "current": stored,
+        "skipped": skipped,
     }
 
 

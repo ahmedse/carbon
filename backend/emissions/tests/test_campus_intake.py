@@ -12,10 +12,13 @@ from emissions.campus_intake import (
     assurance_status,
     coverage_board,
     enter_activity,
+    file_activity_rows,
     intake_catalogue,
     market_kg,
+    open_period_inventory_kg,
     record_assurance,
     record_contractual_factor,
+    store_discovered_activity,
 )
 from emissions.models import Calculation, EmissionFactor, ReportingPeriod
 from emissions.onboarding_o1 import evaluate_o1
@@ -111,6 +114,30 @@ class CatalogueTests(TestCase):
         self.assertFalse(assured["met"])
         quoted = next(row for row in result["checks"] if row["code"] == "summary_kg")
         self.assertEqual(quoted["kg"], "1239599.320800")
+
+    def test_file_rows_keep_blank_months_and_unlabelled_diesel(self):
+        rows = file_activity_rows()
+        electricity = next(row for row in rows if row["source_name"] == "South Valley electricity")
+        self.assertEqual(electricity["quantity"], "700000")
+        self.assertEqual(electricity["unit"], "kWh")
+        self.assertEqual(electricity["source_file"], "south_valley_scope12_fy2526.csv")
+        self.assertEqual(electricity["period_role"], "locked")
+        diesel = [row for row in rows if row["source_name"] == "South Valley diesel"]
+        self.assertEqual({row["quantity"] for row in diesel}, {"25000", "125500"})
+        self.assertTrue(all(row["in_scope_total"] == "false" and row["reason"] == "diesel_stream_both" for row in diesel))
+        self.assertFalse(any(
+            row["month"] == "2026-06-01" and row["source_name"] == "Abu Qir electricity" for row in rows
+        ))
+        abu_diesel = [row for row in rows if row["source_name"] == "Abu Qir diesel"]
+        self.assertGreater(len(abu_diesel), 0)
+        self.assertTrue(all(row["stream"] == "" and row["reason"] == "diesel_stream_unlabelled" for row in abu_diesel))
+        self.assertNotIn("0", {row["quantity"] for row in rows})
+        waste = next(row for row in rows if row["source_name"] == "Smart Village waste disposal")
+        self.assertEqual(waste["quantity"], "73.0")
+        self.assertEqual(waste["unit"], "ton")
+        self.assertEqual(waste["period_role"], "open")
+        self.assertFalse(any(row["campus"] == "New Alamein" for row in rows))
+        self.assertFalse(any("scope3_fy2526" in row["source_file"] for row in rows))
 
 
 class MarketAndAssuranceTests(TestCase):
@@ -370,3 +397,170 @@ class IntakeWriteTests(TestCase):
         self.assertIsNone(result["kilograms"])
         self.assertEqual(result["exclusions"][0]["code"], "market_absent")
         self.assertFalse(Calculation.objects.exists())
+
+    def test_later_year_rows_do_not_change_open_period_o1_kilograms(self):
+        from django.conf import settings
+        from dataschema.models import DataRow
+
+        self.assertFalse(settings.EMISSIONS_AUTO_CALC)
+        OrgUnit.objects.create(
+            name="Smart Village", slug="sv-o1-intake", parent=self.org.parent, org_type="department",
+        )
+        OrgUnit.objects.create(
+            name="New Alamein", slug="na-intake", parent=self.org.parent, org_type="department",
+        )
+        locked = ReportingPeriod.objects.create(
+            name="FY 2025-26", start_date=date(2025, 7, 1), end_date=date(2026, 6, 30),
+            status="locked", period_type="annual",
+        )
+        electricity = _factor(
+            code="EG-GRID-O1-DOUBLE", scope=2, category="electricity",
+            factor_value=Decimal("0.4584"), activity_unit="kWh", source="Test EG grid",
+        )
+        diesel = _factor(
+            code="DIESEL-O1-DOUBLE", scope=1, category="stationary_combustion",
+            factor_value=Decimal("2.68"), activity_unit="litre",
+            source="test double, not an AASTMT inventory factor",
+        )
+        power = apply_template(leaf_id="O1", rows=[{
+            "campus": "Smart Village",
+            "source_name": "Smart Village electricity",
+            "scope": "2",
+            "activity_unit": "kWh",
+            "quantity": "2704187",
+            "stream": "location-based",
+            "period_start": "2023-07-01",
+            "period_end": "2024-06-30",
+        }], user=self.user, factor=electricity)
+        fuel = apply_template(leaf_id="O1", rows=[{
+            "campus": "Smart Village",
+            "source_name": "Smart Village diesel",
+            "scope": "1",
+            "activity_unit": "litre",
+            "quantity": "3000",
+            "stream": "generators",
+            "period_start": "2023-07-01",
+            "period_end": "2024-06-30",
+        }], user=self.user, factor=diesel)
+        self.assertTrue(power["written"], power)
+        self.assertTrue(fuel["written"], fuel)
+        before = open_period_inventory_kg()
+        self.assertEqual(Decimal(before["2"]), Decimal("1239599.320800"))
+        self.assertEqual(Decimal(before["1"]), Decimal("8040.000000"))
+        o1_values = {
+            row.id: dict(row.values)
+            for row in DataRow.objects.filter(
+                is_archived=False,
+                values__source_name__in=["Smart Village electricity", "Smart Village diesel"],
+            )
+        }
+        calc_ids = set(Calculation.objects.values_list("id", flat=True))
+        stored = store_discovered_activity(user=self.user)
+        self.assertTrue(stored["written"], stored)
+        self.assertIsNone(stored["kilograms"])
+        self.assertFalse(Calculation.objects.filter(reporting_period=locked).exists())
+        self.assertEqual(set(Calculation.objects.values_list("id", flat=True)), calc_ids)
+        after = open_period_inventory_kg()
+        self.assertEqual(after, before)
+        locked.refresh_from_db()
+        self.period.refresh_from_db()
+        self.assertEqual(locked.status, "locked")
+        self.assertEqual(self.period.status, "open")
+        self.assertEqual(ReportingPeriod.objects.filter(status="open").count(), 1)
+        for row_id, values in o1_values.items():
+            current = DataRow.objects.get(pk=row_id)
+            self.assertFalse(current.is_archived)
+            self.assertEqual(current.values, values)
+        self.assertFalse(DataRow.objects.filter(
+            values__month="2026-06-01", values__source_name="Abu Qir electricity",
+        ).exists())
+        self.assertTrue(DataRow.objects.filter(
+            values__month="2026-06-01", values__source_name="Abu Qir diesel",
+        ).exists())
+        self.assertFalse(DataRow.objects.filter(values__quantity="0").exists())
+        abu_diesel = list(DataRow.objects.filter(is_archived=False, values__source_name="Abu Qir diesel"))
+        self.assertGreater(len(abu_diesel), 0)
+        self.assertTrue(all((row.values.get("stream") or "") == "" for row in abu_diesel))
+        self.assertTrue(all(row.values.get("reason") == "diesel_stream_unlabelled" for row in abu_diesel))
+        self.assertFalse(Calculation.objects.filter(data_row__in=abu_diesel).exists())
+        south_power = DataRow.objects.get(is_archived=False, values__source_name="South Valley electricity")
+        self.assertEqual(south_power.values["quantity"], "700000")
+        self.assertEqual(south_power.values["unit"], "kWh")
+        self.assertEqual(south_power.values["source_file"], "south_valley_scope12_fy2526.csv")
+        self.assertEqual(south_power.values["period_start"], "2025-07-01")
+        waste = DataRow.objects.get(is_archived=False, values__source_name="Smart Village waste disposal")
+        self.assertEqual(waste.values["quantity"], "73.0")
+        self.assertEqual(waste.values["unit"], "ton")
+        self.assertEqual(waste.values["period_start"], "2023-07-01")
+        self.assertFalse(Calculation.objects.filter(data_row=waste).exists())
+        board = coverage_board(self.user)
+        by_period = {row["role"]: row for row in board["periods"]}
+        open_streams = {row["source_name"]: row for row in by_period["open"]["streams"]}
+        locked_streams = {row["source_name"]: row for row in by_period["locked"]["streams"]}
+        self.assertEqual(open_streams["South Valley electricity"]["status"], "missing")
+        self.assertIsNone(open_streams["South Valley electricity"]["inventory_kg"])
+        self.assertEqual(open_streams["Abu Qir electricity"]["status"], "missing")
+        self.assertEqual(open_streams["Abu Qir diesel"]["status"], "missing")
+        self.assertEqual(open_streams["New Alamein electricity"]["status"], "missing")
+        self.assertEqual(open_streams["New Alamein diesel"]["status"], "missing")
+        self.assertEqual(open_streams["Smart Village electricity"]["status"], "entered")
+        self.assertEqual(Decimal(open_streams["Smart Village electricity"]["inventory_kg"]), Decimal("1239599.320800"))
+        self.assertEqual(Decimal(open_streams["Smart Village diesel"]["inventory_kg"]), Decimal("8040.000000"))
+        self.assertEqual(open_streams["Smart Village waste disposal"]["status"], "awaiting_factor")
+        self.assertIsNone(open_streams["Smart Village waste disposal"]["inventory_kg"])
+        self.assertEqual(locked_streams["South Valley electricity"]["status"], "entered")
+        self.assertIsNone(locked_streams["South Valley electricity"]["inventory_kg"])
+        self.assertFalse(locked_streams["South Valley electricity"]["in_scope_total"])
+        self.assertEqual(locked_streams["South Valley diesel"]["status"], "entered")
+        self.assertEqual(locked_streams["South Valley diesel"]["reason"], "diesel_stream_both")
+        self.assertIsNone(locked_streams["South Valley diesel"]["inventory_kg"])
+        self.assertEqual(locked_streams["Abu Qir electricity"]["status"], "entered")
+        self.assertIsNone(locked_streams["Abu Qir electricity"]["inventory_kg"])
+        self.assertEqual(locked_streams["Abu Qir diesel"]["status"], "entered")
+        self.assertEqual(locked_streams["Abu Qir diesel"]["reason"], "diesel_stream_unlabelled")
+        self.assertIsNone(locked_streams["Abu Qir diesel"]["inventory_kg"])
+        self.assertEqual(locked_streams["New Alamein electricity"]["status"], "missing")
+        self.assertEqual(locked_streams["New Alamein diesel"]["status"], "missing")
+        self.assertEqual(locked_streams["Smart Village waste disposal"]["status"], "missing")
+        row_count = DataRow.objects.count()
+        again = store_discovered_activity(user=self.user)
+        self.assertFalse(again["written"])
+        self.assertEqual(DataRow.objects.count(), row_count)
+        self.assertEqual(open_period_inventory_kg(), before)
+        assured = evaluate_o1(
+            periods=[{
+                "id": self.period.id, "name": "FY 2023-24", "status": "open",
+                "start_date": "2023-07-01", "end_date": "2024-06-30",
+                "period_type": "annual", "organizational_boundary": 1,
+            }],
+            boundaries=[{
+                "id": 1, "name": "AASTMT", "consolidation_approach": "operational_control",
+            }],
+            sources=[],
+            statuses=[],
+            summary={"total_calculations": 1, "by_scope": {"2": {"total_co2e_kg": "1239599.320800"}}},
+            factors=[],
+            goals=[],
+        )
+        self.assertFalse(next(row for row in assured["checks"] if row["code"] == "not_assured")["met"])
+
+    def test_campus_owner_records_only_their_campus(self):
+        from dataschema.models import DataRow
+
+        ReportingPeriod.objects.create(
+            name="FY 2025-26", start_date=date(2025, 7, 1), end_date=date(2026, 6, 30),
+            status="locked", period_type="annual",
+        )
+        OrgUnit.objects.create(
+            name="Smart Village", slug="sv-owner-intake", parent=self.org.parent, org_type="department",
+        )
+        group, _ = Group.objects.get_or_create(name="dataowners_group")
+        owner = User.objects.create_user(username="data.southvalley.files", password="AASTcarbonPa_132")
+        ScopedRole.objects.create(user=owner, group=group, org_unit=self.org, module=None, is_active=True)
+        stored = store_discovered_activity(user=owner)
+        campuses = {row["campus"] for row in stored["current"]}
+        self.assertEqual(campuses, {"South Valley"})
+        self.assertFalse(DataRow.objects.filter(values__campus="Abu Qir").exists())
+        self.assertFalse(DataRow.objects.filter(values__source_name="Smart Village waste disposal").exists())
+        self.assertIsNone(stored["kilograms"])
+        self.assertEqual(ReportingPeriod.objects.get(name="FY 2025-26").status, "locked")

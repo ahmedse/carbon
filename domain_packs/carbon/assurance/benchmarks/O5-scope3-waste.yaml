@@ -55,8 +55,10 @@ close:
 evidence: >
   O5-scope3-waste.yaml status closed. Date 1 Oct 2026. Product Carbon on
   AASTMT. smart_village_inventory_fy2324.csv quotes Waste Disposal 73.0 ton.
-  smart_village_waste_factor.csv is absent. 73.0 ton is not stored as kg.
-  Outcome b.
+  That activity may be stored on the open period. smart_village_waste_factor.csv
+  is absent, so inventory kg stays absent, not zero. 73.0 ton is not stored
+  as kg. Outcome b. Date 1 Oct 2026.
 limit: >
-  Does not invent kg from 73 tonne. Does not open a 15-category inventory.
+  Does not invent kg from 73 tonne. A missing factor stores activity with
+  inventory kg absent, not zero. Does not open a 15-category inventory.
   Does not treat a sector average as the academy footprint (P-05 tier 5).
