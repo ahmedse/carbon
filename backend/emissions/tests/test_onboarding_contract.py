@@ -31,6 +31,7 @@ RULES = (
     "CR-S3-01",
     "CR-ASR-01",
     "CR-DIS-01",
+    "CR-INT-01",
 )
 
 CLOSED_LEAF_TARGETS = {
@@ -38,6 +39,7 @@ CLOSED_LEAF_TARGETS = {
     "CR-S3-01": "O5",
     "CR-ASR-01": "P1",
     "CR-DIS-01": "P2",
+    "CR-INT-01": "O2",
 }
 
 
@@ -130,6 +132,38 @@ class OnboardingContractTests(unittest.TestCase):
             self.assertFalse(evidence_file.exists(), evidence_file)
             for key in ("target", "product", "evidence", "locked", "limit"):
                 self.assertTrue(str(data.get(key, "")).strip(), f"{leaf_id} {key}")
+
+    def test_discovered_files_are_quoted_and_not_calculated(self):
+        # CR-INT-01. Numbers below are cells in the named CSV, not a kilogram.
+        o2 = yaml.safe_load(
+            (PACK / "assurance" / "benchmarks" / "O2-south-valley.yaml").read_text(encoding="utf-8")
+        )
+        quoted = o2["close"]["quoted_activity"]
+        scope12 = (ROOT / o2["close"]["discovered_files"][0]["path"]).read_text(encoding="utf-8")
+        self.assertIn(",700000", scope12)
+        self.assertIn(",25000", scope12)
+        self.assertIn(",125500", scope12)
+        self.assertIn(",3680", scope12)
+        self.assertEqual(quoted["electricity_kwh"], "700000")
+        self.assertEqual(quoted["generators_diesel_l"], "25000")
+        self.assertEqual(quoted["mobile_diesel_l"], "125500")
+        self.assertIsNone(o2["close"]["kilograms"])
+        self.assertEqual(o2["close"]["tonnes_co2e_on_panel"], "0")
+        self.assertTrue((ROOT / o2["close"]["discovered_files"][0]["path"]).is_file())
+        o3 = yaml.safe_load(
+            (PACK / "assurance" / "benchmarks" / "O3-abu-qir.yaml").read_text(encoding="utf-8")
+        )
+        electricity = (ROOT / o3["close"]["discovered_files"][0]["path"]).read_text(encoding="utf-8")
+        self.assertIn("2026-06-01,", electricity)
+        self.assertIsNone(o3["close"]["kilograms"])
+        self.assertEqual(o3["close"]["june_electricity"], "blank")
+        o5 = yaml.safe_load(
+            (PACK / "assurance" / "benchmarks" / "O5-scope3-waste.yaml").read_text(encoding="utf-8")
+        )
+        inventory = (ROOT / o5["activity_line"]["file"]).read_text(encoding="utf-8")
+        self.assertIn(",73.0", inventory)
+        self.assertFalse((ROOT / o5["close"]["factor_file"]).exists())
+        self.assertIsNone(o5["close"]["kilograms"])
 
     def test_o5_is_category_5_waste(self):
         data = yaml.safe_load(

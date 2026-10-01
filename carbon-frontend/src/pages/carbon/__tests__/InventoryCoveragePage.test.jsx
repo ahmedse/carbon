@@ -26,6 +26,7 @@ const fetchCoverageGoals = vi.fn();
 const fetchCoverageActions = vi.fn();
 const fetchInventorySourceStatuses = vi.fn();
 const fetchCoverage = vi.fn();
+const fetchCampusIntake = vi.fn();
 const createCoverageGoal = vi.fn();
 
 vi.mock('../../../api/emissions-extended', () => ({
@@ -35,6 +36,7 @@ vi.mock('../../../api/emissions-extended', () => ({
   fetchCoverageActions: (...args) => fetchCoverageActions(...args),
   fetchInventorySourceStatuses: (...args) => fetchInventorySourceStatuses(...args),
   fetchCoverage: (...args) => fetchCoverage(...args),
+  fetchCampusIntake: (...args) => fetchCampusIntake(...args),
   createInventorySource: vi.fn(),
   updateInventorySource: vi.fn(),
   deleteInventorySource: vi.fn(),
@@ -63,6 +65,7 @@ beforeEach(() => {
   fetchCoverageActions.mockReset();
   fetchInventorySourceStatuses.mockReset();
   fetchCoverage.mockReset();
+  fetchCampusIntake.mockReset();
   createCoverageGoal.mockReset();
 
   fetchReportingPeriods.mockResolvedValue([{ id: 1, name: 'FY 2025' }]);
@@ -71,6 +74,27 @@ beforeEach(() => {
   fetchCoverageActions.mockResolvedValue([]);
   fetchInventorySourceStatuses.mockResolvedValue([]);
   fetchCoverage.mockResolvedValue(coverageFixture);
+  fetchCampusIntake.mockResolvedValue({
+    coverage_complete: false,
+    streams: [
+      {
+        id: 'O1:Smart Village electricity',
+        campus: 'Smart Village',
+        source_name: 'Smart Village electricity',
+        scope: 2,
+        status: 'entered',
+        inventory_kg: null,
+      },
+      {
+        id: 'O2:South Valley electricity',
+        campus: 'South Valley',
+        source_name: 'South Valley electricity',
+        scope: 2,
+        status: 'missing',
+        inventory_kg: null,
+      },
+    ],
+  });
 });
 
 describe('Inventory coverage O1 quote honesty', () => {

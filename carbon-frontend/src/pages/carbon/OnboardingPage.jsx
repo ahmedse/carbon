@@ -298,6 +298,9 @@ export default function OnboardingPage() {
           sx={{ display: 'grid', gap: 1, mt: 2, p: 1.5, border: 1, borderColor: 'divider', borderRadius: 1 }}
         >
           <Typography variant="subtitle2">{t('onboarding.closedLeavesTitle')}</Typography>
+          <Button size="small" onClick={() => navigate('/carbon/onboarding/intake')}>
+            {t('onboarding.openIntake')}
+          </Button>
           {CLOSED_LEAVES.map((key) => (
             <Typography key={key} variant="body2" color="text.secondary">{t(key)}</Typography>
           ))}

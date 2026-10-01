@@ -41,8 +41,22 @@ close:
     - EmissionFactor activity_unit tonne, scope 3, sourced, active
     - DataRow in tonne for the open period
     - Calculation.co2e_kg from activity × factor (CR-OFF-01, CR-DQ-01)
+  factor_file: raw/Carbon footprint app/csv/smart_village_waste_factor.csv
+  factor_file_exists: false
+  factor_columns:
+    - factor_code
+    - factor_value
+    - activity_unit
+    - source
+    - valid_from
+    - treatment
   kilograms: null
-evidence: O5-scope3-waste.yaml status closed. 73.0 ton is not stored as kg.
+  tonnes_co2e_on_panel: "0"
+evidence: >
+  O5-scope3-waste.yaml status closed. Date 1 Oct 2026. Product Carbon on
+  AASTMT. smart_village_inventory_fy2324.csv quotes Waste Disposal 73.0 ton.
+  smart_village_waste_factor.csv is absent. 73.0 ton is not stored as kg.
+  Outcome b.
 limit: >
   Does not invent kg from 73 tonne. Does not open a 15-category inventory.
   Does not treat a sector average as the academy footprint (P-05 tier 5).

@@ -13,3 +13,7 @@ blocks_release: []
 # 2026-09-30: CR-S2-01, CR-OFF-01, CR-REST-01, CR-OWN-01 are catalogue planned.
 # 2026-09-30 lock: CR-S2-02, CR-CAM-01, CR-S3-01, CR-ASR-01, CR-DIS-01 are
 # catalogue planned. Dual Scope 2, O2–O4, O5, P1, P2 stay closed until evidence.
+# 2026-10-01 lock: CR-INT-01 is catalogue planned. Target O2. Product Carbon
+# on AASTMT. Evidence is the named CSV paths in that rule. Limit: no invented
+# kilogram, one open period, benchmarks stay closed, market-based stays
+# absent, not_assured stays unmet, P2 stays shape_only. Not a deploy.

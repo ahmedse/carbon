@@ -1659,3 +1659,82 @@ class CoverageAction(models.Model):
     def __str__(self):
         return f"{self.get_action_type_display()} — {self.source}"
 
+
+class ContractualScope2Factor(models.Model):
+    """A market-based Scope 2 factor that is not the location-based grid factor.
+
+    An empty table means the method is absent. A row is not an Egypt residual
+    mix and is not a copy of the grid factor value.
+    """
+
+    emission_factor = models.OneToOneField(
+        'EmissionFactor',
+        on_delete=models.PROTECT,
+        related_name='contractual_scope2',
+    )
+    grid_factor = models.ForeignKey(
+        'EmissionFactor',
+        on_delete=models.PROTECT,
+        related_name='+',
+    )
+    is_active = models.BooleanField(default=True)
+    recorded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Contractual Scope 2 factor"
+        verbose_name_plural = "Contractual Scope 2 factors"
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+
+        ef = self.emission_factor
+        grid = self.grid_factor
+        if ef is None or grid is None:
+            return
+        if ef.pk and grid.pk and ef.pk == grid.pk:
+            raise ValidationError('The contractual factor must be a different row from the grid factor.')
+        if int(ef.scope or 0) != 2 or int(grid.scope or 0) != 2:
+            raise ValidationError('Both factors must be Scope 2.')
+        if not ef.is_active or not str(ef.source or '').strip() or not ef.valid_from:
+            raise ValidationError('The contractual factor needs an active source and valid_from.')
+        if 'residual' in str(ef.source or '').lower():
+            raise ValidationError('An Egypt residual mix is not a contractual factor.')
+        if ef.factor_value == grid.factor_value:
+            raise ValidationError('A copy of the grid factor is not a market-based factor.')
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.emission_factor.code} distinct from {self.grid_factor.code}"
+
+
+class AssuranceEngagement(models.Model):
+    """Five VVB fields for P1. Recording them does not assure the inventory."""
+
+    ENGAGEMENT_CHOICES = [
+        ('limited', 'Limited'),
+        ('reasonable', 'Reasonable'),
+    ]
+
+    reporting_period = models.ForeignKey(
+        'ReportingPeriod',
+        on_delete=models.CASCADE,
+        related_name='assurance_engagements',
+    )
+    assurer_name = models.CharField(max_length=200, blank=True, default='')
+    engagement_type = models.CharField(max_length=20, blank=True, default='')
+    standard = models.CharField(max_length=40, blank=True, default='')
+    opinion_date = models.DateField(null=True, blank=True)
+    statement_id = models.CharField(max_length=120, blank=True, default='')
+    recorded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-recorded_at']
+        verbose_name = "Assurance engagement"
+        verbose_name_plural = "Assurance engagements"
+
+    def __str__(self):
+        return self.assurer_name or f"Assurance #{self.pk}"
+

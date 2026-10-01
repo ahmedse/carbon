@@ -776,6 +776,28 @@ export async function fetchOnboardingO1(token) {
   return apiFetch(API_ROUTES.emissionsOnboardingO1, { token });
 }
 
+/** Campus intake catalogue. Kilograms in this payload are null. */
+export async function fetchCampusIntake(token) {
+  return apiFetch(API_ROUTES.emissionsIntake, { token });
+}
+
+export async function uploadCampusIntake(token, leafId, rows) {
+  return apiFetch(`${API_ROUTES.emissionsIntake}${leafId}/upload/`, {
+    token,
+    method: 'POST',
+    body: { rows },
+  });
+}
+
+/** One missing stream. Same DataRow pipeline as the template upload. */
+export async function enterCampusStream(token, fields) {
+  return apiFetch(`${API_ROUTES.emissionsIntake}entry/`, {
+    token,
+    method: 'POST',
+    body: fields,
+  });
+}
+
 export async function fetchChairmanData({ reporting_period_id } = {}, token) {
   const params = new URLSearchParams();
   if (reporting_period_id) params.append("reporting_period_id", reporting_period_id);

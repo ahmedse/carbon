@@ -48,14 +48,28 @@ coverage:
 close:
   evidence_file: raw/Carbon footprint app/csv/new_alamein_inventory.csv
   evidence_file_exists: false
+  discovered_files: []
+  required_columns:
+    - campus
+    - source_name
+    - scope
+    - activity_unit
+    - quantity
+    - stream
+    - period_start
+    - period_end
   kilograms: null
   diesel_stream: null
+  tonnes_co2e_on_panel: "0"
 gate: >
   Opens only after O1 remains passed and new_alamein_inventory.csv exists
-  with named kWh months and one diesel stream. Until then the campus stays
-  declared or excluded insufficient_data (CR-EXC-01). Source names contain
-  Alamein so CR-EXC-01 still matches.
-evidence: domain_packs/carbon/assurance/benchmarks/O4-new-alamein.yaml status closed. File new_alamein_inventory.csv is absent.
+  with named kWh months and one diesel stream. campuses.csv has_data is
+  false for New Alamein. The Alamein chairman brief is not an inventory.
+  Until then the campus stays declared or excluded insufficient_data
+  (CR-EXC-01). Source names contain Alamein so CR-EXC-01 still matches.
+evidence: >
+  O4-new-alamein.yaml status closed. Date 1 Oct 2026. Product Carbon on
+  AASTMT. new_alamein_inventory.csv is absent. Kilograms null. Outcome b.
 limit: >
   Does not invent kg. Does not open a second ReportingPeriod.
   evaluate_o1 is not this checklist. Does not pass O2 or O3.

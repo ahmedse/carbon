@@ -155,6 +155,7 @@ export const API_ROUTES = {
   emissionsCalculations: "carbon/calculations/",
   emissionsCalculationSummary: "carbon/calculations/summary/",
   emissionsOnboardingO1: "carbon/onboarding/o1/",
+  emissionsIntake: "carbon/intake/",
   emissionsRules: "carbon/rules/",
   emissionsVerification: "carbon/verifications/",
   emissionsGWP: "carbon/gwp/",
@@ -167,6 +168,7 @@ export const API_ROUTES = {
   emissionsCoverageGoals: "carbon/coverage-goals/",
   emissionsCoverageActions: "carbon/coverage-actions/",
   emissionsCoverage: "carbon/coverage/",
+  emissionsDisclosure: "carbon/disclosure/",
 };
 
 // Pulse AI Configuration

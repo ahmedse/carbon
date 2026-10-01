@@ -53,6 +53,7 @@ export default {
     items: [
       { type: 'group', label: 'Onboarding' },
       { label: 'Inventory onboarding', path: '/carbon/onboarding', role: '*' },
+      { label: 'Campus intake', path: '/carbon/onboarding/intake', role: '*' },
       { label: 'My guide',             path: '/guide/carbon',      role: '*' },
       { type: 'divider' },
 

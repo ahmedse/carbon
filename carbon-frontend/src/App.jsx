@@ -82,6 +82,7 @@ const CarbonDashboardPage = React.lazy(() => import("./pages/carbon/CarbonDashbo
 const AnalyticsDashboard = React.lazy(() => import("./pages/dashboards/AnalyticsDashboard"));
 const ChairmanDashboard = React.lazy(() => import("./pages/carbon/ChairmanDashboard"));
 const OnboardingPage = React.lazy(() => import("./pages/carbon/OnboardingPage"));
+const CampusIntakePage = React.lazy(() => import("./pages/carbon/CampusIntakePage"));
 const GuidePage = React.lazy(() => import("./pages/guide/GuidePage"));
 const ReportsPage = React.lazy(() => import("./pages/carbon/ReportsPage"));
 const MyDataPage = React.lazy(() => import("./pages/carbon/MyDataPage"));
@@ -304,6 +305,7 @@ export default function App() {
                 <Route path="/guide/:appId" element={<GuidePage />} />
                 <Route path="/guide/:appId/:lessonId" element={<GuidePage />} />
                 <Route path="/carbon/onboarding" element={<AppEnabledRoute appId="carbon"><OnboardingPage /></AppEnabledRoute>} />
+                <Route path="/carbon/onboarding/intake" element={<AppEnabledRoute appId="carbon"><CampusIntakePage /></AppEnabledRoute>} />
                 <Route path="/carbon/chairman" element={<AppEnabledRoute appId="carbon"><ChairmanDashboard /></AppEnabledRoute>} />
                 <Route path="/carbon/console" element={<AppEnabledRoute appId="carbon"><CarbonConsolePage /></AppEnabledRoute>} />
                 <Route path="/carbon/dashboard" element={<AppEnabledRoute appId="carbon"><CarbonDashboardPage /></AppEnabledRoute>} />

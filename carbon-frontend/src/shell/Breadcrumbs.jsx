@@ -102,6 +102,11 @@ const ROUTE_CONFIG = {
     icon: DashboardIcon,
     parent: '/carbon/console',
   },
+  '/carbon/onboarding/intake': {
+    label: 'Campus intake',
+    icon: DashboardIcon,
+    parent: '/carbon/onboarding',
+  },
   '/guide/carbon': {
     label: 'My guide',
     icon: DashboardIcon,

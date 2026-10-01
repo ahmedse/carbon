@@ -333,7 +333,7 @@ principles:
       word, one annual period, and an exclusion record for every other
       unmeasured campus. Status stays closed until the named source file
       exists. Absence is insufficient_data, not zero kilograms.
-    binds: [CR-CAM-01, CR-SRC-01, CR-EXC-01]
+    binds: [CR-CAM-01, CR-SRC-01, CR-EXC-01, CR-INT-01]
     violation: A campus leaf is marked passed without the named file, or kilograms are invented for a campus.
     target: O2
     product: Carbon on AASTMT

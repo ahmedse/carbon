@@ -35,6 +35,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
 import StandardDataGrid from '../../components/StandardDataGrid';
+import FilteredDataGrid from '../../components/FilteredDataGrid';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import SystemDialog from '../../components/SystemDialog';
 import PageHeader from '../../components/Page/PageHeader';
@@ -54,6 +55,7 @@ import {
   updateCoverageAction,
   deleteCoverageAction,
   fetchCoverage,
+  fetchCampusIntake,
 } from '../../api/emissions-extended';
 
 // ── ScopeChip ──────────────────────────────────────────────────────────
@@ -590,6 +592,7 @@ export default function InventoryCoveragePage() {
   const [statuses, setStatuses] = useState([]);
   const [goals, setGoals] = useState([]);
   const [actions, setActions] = useState([]);
+  const [streams, setStreams] = useState([]);
 
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState(0);
@@ -618,6 +621,12 @@ export default function InventoryCoveragePage() {
       setSources(Array.isArray(sData) ? sData : sData?.results || []);
       setGoals(Array.isArray(gData) ? gData : gData?.results || []);
       setActions(Array.isArray(aData) ? aData : aData?.results || []);
+      try {
+        const intake = await fetchCampusIntake(token);
+        setStreams(Array.isArray(intake?.streams) ? intake.streams : []);
+      } catch {
+        setStreams([]);
+      }
     } catch (err) {
       notifyFromError(err, 'Failed to load inventory coverage data');
       setPeriods([]);
@@ -984,6 +993,43 @@ export default function InventoryCoveragePage() {
         </Alert>
       )}
 
+      <Typography variant="h6">{t('intake.streamsTitle')}</Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        {t('intake.notComplete')}
+      </Typography>
+      <FilteredDataGrid
+        embedded
+        title={t('intake.streamsTitle')}
+        rows={streams}
+        columns={[
+          { field: 'campus', headerName: t('intake.campus'), flex: 1 },
+          { field: 'source_name', headerName: t('intake.source'), flex: 1.2 },
+          { field: 'scope', headerName: t('intake.scope'), width: 90 },
+          {
+            field: 'status',
+            headerName: t('intake.status'),
+            width: 200,
+            valueGetter: (_value, row) => {
+              const key = {
+                entered: 'intake.statusEntered',
+                excluded: 'intake.statusExcluded',
+                missing: 'intake.statusMissing',
+                awaiting_factor: 'intake.statusAwaiting',
+              }[row?.status] || 'intake.statusMissing';
+              return t(key);
+            },
+          },
+          {
+            field: 'inventory_kg',
+            headerName: t('intake.inventoryKg'),
+            width: 140,
+            valueGetter: (value) => (value == null || value === '' ? t('intake.kgAbsent') : String(value)),
+          },
+        ]}
+        hideSearch
+        loading={loading}
+      />
+
       {/* Reporting period selector */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
         <TextField
@@ -1008,7 +1054,7 @@ export default function InventoryCoveragePage() {
       <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }}>
         <Card sx={{ flex: 1, minWidth: 180 }}>
           <CardContent>
-            <Typography variant="overline" color="text.secondary">Coverage</Typography>
+            <Typography variant="overline" color="text.secondary">{t('intake.percentLabel')}</Typography>
             <CoverageBar value={coverage?.pct} />
           </CardContent>
         </Card>

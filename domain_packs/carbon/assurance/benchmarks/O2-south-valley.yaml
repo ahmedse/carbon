@@ -47,13 +47,32 @@ coverage:
 close:
   evidence_file: raw/Carbon footprint app/csv/south_valley_inventory.csv
   evidence_file_exists: false
+  discovered_files:
+    - path: raw/Carbon footprint app/csv/south_valley_scope12_fy2526.csv
+      exists: true
+    - path: raw/Carbon footprint app/csv/south_valley_scope3_fy2526.csv
+      exists: true
+      role: not this leaf
+  quoted_activity:
+    electricity_kwh: "700000"
+    generators_diesel_l: "25000"
+    mobile_diesel_l: "125500"
+    gasoline_l: "3680"
+    refrigerant_r404a_kg: "25"
+    refrigerant_other_kg: "80"
   kilograms: null
   diesel_stream: null
+  tonnes_co2e_on_panel: "0"
 gate: >
   Opens only after O1 remains passed and south_valley_inventory.csv exists
-  with named kWh months and one diesel stream. Until then the campus stays
-  declared or excluded insufficient_data (CR-EXC-01).
-evidence: domain_packs/carbon/assurance/benchmarks/O2-south-valley.yaml status closed. File south_valley_inventory.csv is absent.
+  for the single open period with one diesel stream. The FY 2025-26 file
+  is quoted and excluded. Until then the campus stays declared or excluded
+  insufficient_data (CR-EXC-01).
+evidence: >
+  O2-south-valley.yaml status closed. Date 1 Oct 2026. Product Carbon on
+  AASTMT. south_valley_scope12_fy2526.csv quotes 700000 kWh, generators
+  25000 L, and mobile diesel 125500 L. south_valley_inventory.csv is
+  absent. Kilograms null. Outcome b.
 limit: >
   Does not invent kg. Does not open a second ReportingPeriod.
   evaluate_o1 is not this checklist. Does not pass O3 or O4.

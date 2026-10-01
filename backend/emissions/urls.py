@@ -40,6 +40,14 @@ from .views import (
     DisclosureExportAPIView,
 )
 from .onboarding_o1 import OnboardingO1APIView
+from .intake_api import (
+    AssuranceEngagementAPIView,
+    CampusIntakeAPIView,
+    CampusIntakeEntryAPIView,
+    CampusIntakeTemplateAPIView,
+    CampusIntakeUploadAPIView,
+    ContractualFactorAPIView,
+)
 
 app_name = 'emissions'
 
@@ -89,6 +97,12 @@ for _view in (
     ChairmanAPIView,
     OnboardingO1APIView,
     DisclosureExportAPIView,
+    CampusIntakeAPIView,
+    CampusIntakeEntryAPIView,
+    CampusIntakeTemplateAPIView,
+    CampusIntakeUploadAPIView,
+    ContractualFactorAPIView,
+    AssuranceEngagementAPIView,
 ):
     _brand_gate(_view)
 
@@ -169,6 +183,12 @@ urlpatterns = [
     path('', include(coverage_action_router.urls)),
     path('coverage/', InventoryCoverageAPIView.as_view(), name='inventory-coverage'),
     path('onboarding/o1/', OnboardingO1APIView.as_view(), name='onboarding-o1'),
+    path('intake/', CampusIntakeAPIView.as_view(), name='campus-intake'),
+    path('intake/entry/', CampusIntakeEntryAPIView.as_view(), name='campus-intake-entry'),
+    path('intake/<str:leaf_id>/template/', CampusIntakeTemplateAPIView.as_view(), name='campus-intake-template'),
+    path('intake/<str:leaf_id>/upload/', CampusIntakeUploadAPIView.as_view(), name='campus-intake-upload'),
+    path('intake/contractual-factor/', ContractualFactorAPIView.as_view(), name='contractual-factor'),
+    path('intake/assurance/', AssuranceEngagementAPIView.as_view(), name='assurance-engagement'),
     path('disclosure/', DisclosureExportAPIView.as_view(), name='disclosure-export'),
 
     
