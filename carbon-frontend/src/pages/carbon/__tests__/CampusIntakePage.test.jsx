@@ -9,10 +9,13 @@ import CampusIntakePage from '../CampusIntakePage';
 vi.mock('../../../auth/AuthContext', () => ({ useAuth: () => ({ token: 't' }) }));
 
 const fetchCampusIntake = vi.fn();
+const fetchCoverageRowSubmission = vi.fn();
+const submitCoverageRow = vi.fn();
 vi.mock('../../../api/emissions-extended', () => ({
   fetchCampusIntake: (...args) => fetchCampusIntake(...args),
+  fetchCoverageRowSubmission: (...args) => fetchCoverageRowSubmission(...args),
+  submitCoverageRow: (...args) => submitCoverageRow(...args),
   uploadCampusIntake: vi.fn(),
-  enterCampusStream: vi.fn(),
   recordDiscoveredActivity: vi.fn(),
 }));
 
@@ -75,6 +78,7 @@ const LEAVES = {
       method: 'location_based',
       status: 'missing',
       inventory_kg: null,
+      inventory_source_id: 42,
       later_year_files: ['south_valley_scope12_fy2526.csv'],
     },
   ],
@@ -90,6 +94,8 @@ function renderPage() {
 
 beforeEach(() => {
   fetchCampusIntake.mockReset();
+  fetchCoverageRowSubmission.mockReset();
+  submitCoverageRow.mockReset();
 });
 
 describe('Campus intake', () => {
@@ -104,10 +110,47 @@ describe('Campus intake', () => {
     expect(screen.queryByText(/^0 kg$/)).not.toBeInTheDocument();
     expect(screen.getByText(/not coverage complete/i)).toBeInTheDocument();
     expect(screen.getAllByText('South Valley electricity').length).toBeGreaterThan(0);
-    expect(screen.getByText('Missing')).toBeInTheDocument();
+    expect(screen.getAllByText('south_valley_scope12_fy2526.csv').length).toBeGreaterThan(0);
+  });
+
+  it('does not report Missing / Entered / Excluded — coverage is the only reporter', async () => {
+    fetchCampusIntake.mockResolvedValue(LEAVES);
+    renderPage();
+    expect(await screen.findByText(/700000/)).toBeInTheDocument();
+    expect(screen.queryByText('Missing')).not.toBeInTheDocument();
+    expect(screen.queryByText('Entered')).not.toBeInTheDocument();
+    expect(screen.queryByText('Excluded')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open submission' })).toBeInTheDocument();
+  });
+
+  it('locks the submission to a coverage row with campus/scope/unit prefilled', async () => {
+    fetchCampusIntake.mockResolvedValue(LEAVES);
+    fetchCoverageRowSubmission.mockResolvedValue({
+      source_name: 'South Valley diesel',
+      campus: 'South Valley',
+      scope: 1,
+      status: 'missing',
+      inventory_source_id: 42,
+      contract: {
+        source: 'benchmark_spec',
+        activity_unit: 'litre',
+        required: ['quantity', 'stream'],
+        optional: [],
+      },
+    });
+    render(
+      <MemoryRouter initialEntries={['/carbon/onboarding/intake?source=42']}>
+        <CampusIntakePage />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText(/South Valley diesel/)).toBeInTheDocument();
+    expect(screen.getByText(/Campus.*South Valley/)).toBeInTheDocument();
+    expect(screen.getByText(/litre/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save activity' })).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: /quantity/i })).toBeInTheDocument();
-    expect(screen.getAllByText('south_valley_scope12_fy2526.csv').length).toBeGreaterThan(0);
+    expect(fetchCoverageRowSubmission).toHaveBeenCalledWith('42', 't');
+    // No blank generic form: campus and source are not re-picked here.
+    expect(screen.queryByRole('combobox', { name: /^Campus$/ })).not.toBeInTheDocument();
   });
 
   it('shows a retry alert when the catalogue fails', async () => {
@@ -117,10 +160,11 @@ describe('Campus intake', () => {
     expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument();
   });
 
-  it('does not set page-local fontSize or hex', () => {
+  it('does not set page-local fontSize or hex, and does not report coverage status words', () => {
     const dir = dirname(fileURLToPath(import.meta.url));
     const src = readFileSync(resolve(dir, '..', 'CampusIntakePage.jsx'), 'utf8');
     expect(src).not.toMatch(/fontSize\s*:/);
     expect(src).not.toMatch(/#[0-9A-Fa-f]{3,8}\b/);
+    expect(src).not.toMatch(/intake\.status(Missing|Entered|Excluded)/);
   });
 });

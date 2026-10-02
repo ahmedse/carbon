@@ -1,0 +1,90 @@
+# Carbon coverage-target contract. Locked 2026-10-02.
+# Ready sentences for the two-layer Coverage model: TARGETS + STREAMS + TASKS.
+# Companion to data_entry_contract.yaml. It does not add a P-27 principle;
+# principles.yaml stays P-01..P-26.
+id: carbon-coverage-target-contract
+version: 1
+owner: carbon-inventory-lead
+target: O1
+product: Carbon on AASTMT
+locked: 2026-10-02
+limit: >
+  Does not pass O1, O2, O3, O4, O5, S2MB, P1, or P2. Does not invent a
+  kilogram. Does not open a second ReportingPeriod, does not reopen or re-lock
+  FY 2023-24 (15) or FY 2025-26 (16), and does not deploy. Does not edit
+  backend/ai/engine/**. A catalog-admin request/approval flow for Data Products
+  stays a Master decision and is not claimed here.
+locks:
+  - id: L-COV-TWO-LAYER
+    sentence: >
+      Coverage has TWO layers: TARGETS (the KPI layer, per cycle) and STREAMS
+      (the declared universe the targets are measured over).
+    target: O1
+    product: Carbon on AASTMT
+    evidence: >
+      emissions/models.py CoverageTarget (new) + InventorySource (1445) +
+      InventorySourceStatus (1511). emissions/coverage_targets.py
+      target_progress. Date 2 Oct 2026.
+    limit: >
+      A target does not replace the declared universe and a stream is not a
+      target. CoverageGoal stays the policy row a target may reference; it is
+      not surfaced and it is not silently promoted.
+  - id: L-TARGET-SHAPE
+    sentence: >
+      A target is period-scoped, has a measurable goal (percent or absolute), a
+      quality floor, a due date, an owner, and a status derived from real rows —
+      never a hand-set percent.
+    target: O1
+    product: Carbon on AASTMT
+    evidence: >
+      emissions/models.py CoverageTarget fields + emissions/coverage_targets.py
+      derive_target_status. emissions/tests/test_coverage_targets.py.
+      Date 2 Oct 2026.
+    limit: >
+      The declared goal_value is policy, not progress. The returned progress is
+      measured_not_claimed and the payload never says coverage_complete. An
+      absolute goal reports measured_kg only from real Calculations on that
+      period, else null.
+  - id: L-TARGET-TASKS
+    sentence: >
+      A target owns TASKS: bind a Data Product contract, complete rows through a
+      month, fill a named gap, secure a named factor. A task is done only on
+      host evidence.
+    target: O1
+    product: Carbon on AASTMT
+    evidence: >
+      emissions/models.py CoverageTask + emissions/coverage_targets.py
+      task_evidence. A done transition without evidence returns 400
+      task_evidence. emissions/tests/test_coverage_targets.py. Date 2 Oct 2026.
+    limit: >
+      bind_data_product may reference an EXISTING DataTable only. It does not
+      create a Data Product contract; that is the catalog-admin flow
+      (data_entry_contract.yaml, DESIGN ONLY pending Master). No task writes a
+      kilogram and no task opens a period.
+  - id: L-COV-SINGLE-REPORTER-2
+    sentence: >
+      Coverage remains the ONLY surface reporting Missing / Entered / Excluded.
+      Missing is not 0 kg. One open period. Close from Open stays rejected.
+    target: O1
+    product: Carbon on AASTMT
+    evidence: >
+      CR-INT-01 + CR-COV-01 + L-COV-SINGLE-REPORTER. CoverageTarget progress
+      reuses the same status vocabulary. Date 2 Oct 2026.
+    limit: >
+      It does not publish a single coverage percent as "coverage complete", and
+      it does not turn Absent into 0 kg.
+  - id: L-BENCHMARK-RECONCILE
+    sentence: >
+      The target layer reconciles with the existing coverage records without
+      deleting or loosening them: benchmark O1-smart-village.yaml and
+      CoverageGoal id 3 ("O1 Smart Village", draft tier 4 target 25%) stay
+      untouched.
+    target: O1
+    product: Carbon on AASTMT
+    evidence: >
+      domain_packs/carbon/assurance/benchmarks/O1-smart-village.yaml unchanged.
+      CoverageGoal is referenced by CoverageTarget.coverage_goal only; its
+      status is never written by a target. Date 2 Oct 2026.
+    limit: >
+      Does not delete or loosen any benchmark, does not mark O2-O5 passed, and
+      does not promote the draft CoverageGoal.

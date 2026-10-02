@@ -185,7 +185,11 @@ window.location.href = '/carbon/console';
 
 Rules (see `project.config.md`):
 - **RULE_5** — routes are absolute + namespace-prefixed; `VITE_BASE` stays `"/"`.
-- **RULE_15** — every new path must be added to `studioFromPath()` in `src/shell/Shell.jsx`.
+- **RULE_15** — studio resolution is registry-driven in `src/shell/studioFromPath.js`
+  (app prefixes from `src/apps/<id>/manifest.js`; app-scoped routers in
+  `APP_SCOPED_ROUTE_PREFIXES`). Register every new route prefix there — an
+  unregistered prefix resolves to `home` and empties the domain app sidebar. Never
+  add a per-route string match. Gate: `src/shell/__tests__/studioFromPath.test.js`.
 - **RULE_22** — every namespace root needs an index redirect (`/carbon` → `/carbon/console`);
   every `navigate()`/`Navigate`/`Link`/`to=`/`href=`/`path:` target must resolve to a route.
 - The audit script `.ai-toolkit/scripts/audit-routes.py` (run by `verify.sh frontend`)

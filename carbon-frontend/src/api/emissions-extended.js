@@ -798,6 +798,49 @@ export async function enterCampusStream(token, fields) {
   });
 }
 
+/**
+ * Read ONE coverage row's state on the open period plus its Data Product
+ * contract. GET carbon/inventory-sources/<id>/submit/
+ */
+export async function fetchCoverageRowSubmission(sourceId, token) {
+  return apiFetch(`${API_ROUTES.emissionsInventorySources}${sourceId}/submit/`, { token });
+}
+
+/**
+ * Submit one value against ONE coverage row. Campus, scope, unit and period
+ * are prefilled from the row; the body carries the value only.
+ * POST carbon/inventory-sources/<id>/submit/
+ */
+export async function submitCoverageRow(sourceId, fields, token) {
+  return apiFetch(`${API_ROUTES.emissionsInventorySources}${sourceId}/submit/`, {
+    token,
+    method: 'POST',
+    body: fields,
+  });
+}
+
+/**
+ * Declare or clear an exclusion for ONE coverage row on the single open period.
+ * Writes only InventorySourceStatus (status + reason + notes); no kilogram and
+ * no Calculation. POST carbon/inventory-sources/<id>/exclusion/
+ */
+export async function setCoverageRowExclusion(sourceId, { excluded, reason, notes } = {}, token) {
+  return apiFetch(`${API_ROUTES.emissionsInventorySources}${sourceId}/exclusion/`, {
+    token,
+    method: 'POST',
+    body: { excluded, reason, notes },
+  });
+}
+
+/**
+ * Required vs received counts for the open period and per active CoverageGoal.
+ * Counts only — no kilogram and no claimed coverage percent.
+ * GET carbon/coverage/reconciliation/
+ */
+export async function fetchCoverageReconciliation(token) {
+  return apiFetch(API_ROUTES.emissionsCoverageReconciliation, { token });
+}
+
 /** Copy named-file quantities onto the period they belong to. The server stores no kilogram. */
 export async function recordDiscoveredActivity(token) {
   return apiFetch(`${API_ROUTES.emissionsIntake}discovered/`, {
@@ -812,4 +855,127 @@ export async function fetchChairmanData({ reporting_period_id } = {}, token) {
   if (reporting_period_id) params.append("reporting_period_id", reporting_period_id);
   const qs = params.toString();
   return apiFetch(`${API_ROUTES.emissionsChairman}${qs ? `?${qs}` : ""}`, { token });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Coverage targets (layer 1) + tasks (two-layer Coverage, locked 2 Oct 2026)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Cycle dropdown + the target grid for the defaulted open period.
+ * GET carbon/coverage-targets/board/
+ */
+export async function fetchCoverageTargetBoard(token) {
+  return apiFetch(`${API_ROUTES.emissionsCoverageTargets}board/`, { token });
+}
+
+/**
+ * Targets for ONE reporting period (defaults server-side to the open period).
+ * GET carbon/coverage-targets/?reporting_period=<id>
+ */
+export async function fetchCoverageTargets({ reporting_period } = {}, token) {
+  const params = new URLSearchParams();
+  if (reporting_period) params.append("reporting_period", reporting_period);
+  const qs = params.toString();
+  return apiFetch(`${API_ROUTES.emissionsCoverageTargets}${qs ? `?${qs}` : ""}`, { token });
+}
+
+/** Target detail with its task list. GET carbon/coverage-targets/<id>/ */
+export async function fetchCoverageTarget(targetId, token) {
+  return apiFetch(`${API_ROUTES.emissionsCoverageTargets}${targetId}/`, { token });
+}
+
+/** Create a target (open period only). POST carbon/coverage-targets/ */
+export async function createCoverageTarget(data, token) {
+  return apiFetch(API_ROUTES.emissionsCoverageTargets, {
+    method: 'POST',
+    body: data,
+    token,
+  });
+}
+
+/** Update a target. PATCH carbon/coverage-targets/<id>/ */
+export async function updateCoverageTarget(targetId, data, token) {
+  return apiFetch(`${API_ROUTES.emissionsCoverageTargets}${targetId}/`, {
+    method: 'PATCH',
+    body: data,
+    token,
+  });
+}
+
+/** Delete a target. DELETE carbon/coverage-targets/<id>/ */
+export async function deleteCoverageTarget(targetId, token) {
+  return apiFetch(`${API_ROUTES.emissionsCoverageTargets}${targetId}/`, {
+    method: 'DELETE',
+    token,
+  });
+}
+
+/** Tasks under a target. GET carbon/coverage-tasks/?target=<id> */
+export async function fetchCoverageTasks({ target } = {}, token) {
+  const params = new URLSearchParams();
+  if (target) params.append('target', target);
+  const qs = params.toString();
+  return apiFetch(`${API_ROUTES.emissionsCoverageTasks}${qs ? `?${qs}` : ''}`, { token });
+}
+
+/** Create a task under a target. POST carbon/coverage-tasks/ */
+export async function createCoverageTask(data, token) {
+  return apiFetch(API_ROUTES.emissionsCoverageTasks, {
+    method: 'POST',
+    body: data,
+    token,
+  });
+}
+
+/** Update a task. A done transition needs host evidence. PATCH carbon/coverage-tasks/<id>/ */
+export async function updateCoverageTask(taskId, data, token) {
+  return apiFetch(`${API_ROUTES.emissionsCoverageTasks}${taskId}/`, {
+    method: 'PATCH',
+    body: data,
+    token,
+  });
+}
+
+/** Delete a task. DELETE carbon/coverage-tasks/<id>/ */
+export async function deleteCoverageTask(taskId, token) {
+  return apiFetch(`${API_ROUTES.emissionsCoverageTasks}${taskId}/`, {
+    method: 'DELETE',
+    token,
+  });
+}
+
+// ── Coverage target form lookups (real sources only) ──────────────────────
+// The target form needs a searchable Campus, a Campus-driven Org unit, and a
+// searchable Owner. These read the REAL sources (mdm.OrgUnit / accounts.User)
+// through carbon-scoped actions — no hardcoded ids, no fabricated options.
+
+/** Real campuses (mdm.OrgUnit org_type='campus'). GET carbon/coverage-targets/campuses/ */
+export async function fetchCoverageCampusOptions(token) {
+  const data = await apiFetch(`${API_ROUTES.emissionsCoverageTargets}campuses/`, { token });
+  return Array.isArray(data) ? data : (data?.results ?? []);
+}
+
+/**
+ * The selected campus's REAL descendant org units (the dependency).
+ * GET carbon/coverage-targets/org-units/?campus=<id>
+ * Returns { campus, count, results }.
+ */
+export async function fetchCoverageOrgUnitOptions({ campus } = {}, token) {
+  const params = new URLSearchParams();
+  if (campus) params.append('campus', campus);
+  const qs = params.toString();
+  return apiFetch(`${API_ROUTES.emissionsCoverageTargets}org-units/${qs ? `?${qs}` : ''}`, { token });
+}
+
+/**
+ * Real people who can own a target. GET carbon/coverage-targets/owners/?q=&page=&page_size=
+ * Returns { count, page, page_size, results }.
+ */
+export async function fetchCoverageOwnerOptions({ q, page = 1, pageSize = 200 } = {}, token) {
+  const params = new URLSearchParams();
+  if (q) params.append('q', q);
+  params.append('page', String(page));
+  params.append('page_size', String(pageSize));
+  return apiFetch(`${API_ROUTES.emissionsCoverageTargets}owners/?${params.toString()}`, { token });
 }

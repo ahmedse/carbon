@@ -1137,6 +1137,7 @@ cmd_help() {
     echo "  clean              Deep clean (stop, clear caches, archive logs)"
     echo "  clean-ports        Force-free :$BACKEND_PORT / :$FRONTEND_PORT (+ Vite spillover 5180–5185)"
     echo "  killall            Emergency: force kill everything"
+    echo "  export-people-slice  People review zip (no Pulse, no Data Trust product)"
     echo "  help               Show this help"
     echo ""
     echo -e "${CYAN}Examples:${NC}"
@@ -1152,6 +1153,7 @@ cmd_help() {
     echo "  ./manage.sh schedules      # Fire due plan schedules (cron: */5 * * * *)"
     echo "  ./manage.sh maintenance    # Pulse heartbeat (cron: 0 2 * * *)"
     echo "  ./manage.sh clean          # Full cleanup"
+    echo "  ./manage.sh export-people-slice  # Partner People source archive"
     echo ""
     echo -e "${CYAN}Ports:${NC}"
     echo "  Backend:   http://localhost:$BACKEND_PORT"
@@ -1192,6 +1194,10 @@ main() {
         clean)      cmd_clean ;;
         clean-ports|clean_ports|ports) cmd_clean_ports ;;
         killall)    cmd_killall ;;
+        export-people-slice|export_people_slice)
+            shift
+            exec "$PROJECT_ROOT/scripts/export_people_slice.sh" "$@"
+            ;;
         help|-h|--help) cmd_help ;;
         *)
             log_error "Unknown command: $cmd"

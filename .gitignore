@@ -208,3 +208,9 @@ backend/_test_login.py
 
 # Office temp lock files
 ~$*
+
+# Local DB dumps and snapshots (contain employee PII — never commit)
+backups/
+
+# Playwright / local test run artifacts
+test-results/

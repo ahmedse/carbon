@@ -1,0 +1,31 @@
+# R12 gold — same lecture, two real students (local consented pilot).
+#
+# Frozen under docs/pulse/aast-med/PILOT-EXCEPTION.md. This is NOT a production
+# cohort: the two accounts are the recorded local pilot accounts. Both ask the
+# SAME question on the SAME NMD1103 lecture and must receive the SAME cited
+# passage, with neither reply mentioning the other student, prior history, or
+# performance.
+#
+# Evidence: docs/pulse/aast-med/evidence/R12-pilot-transcript.json
+version: 1
+status: pilot
+draft: false
+required_n: 2
+frozen_n: 2
+course: NMD1103
+question: "what is Healthcare"
+passage_id: "NMD1103:file:1005:Virtual Tour in Hospital Facilities.pdf"
+exception: docs/pulse/aast-med/PILOT-EXCEPTION.md
+cases:
+  - id: R12-1
+    student: pilot_student_a
+    course: NMD1103
+    ask: "what is Healthcare"
+    expect_passage_id: "NMD1103:file:1005:Virtual Tour in Hospital Facilities.pdf"
+    expect_no_cross_student: true
+  - id: R12-2
+    student: pilot_student_b
+    course: NMD1103
+    ask: "what is Healthcare"
+    expect_passage_id: "NMD1103:file:1005:Virtual Tour in Hospital Facilities.pdf"
+    expect_no_cross_student: true

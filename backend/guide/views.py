@@ -53,6 +53,85 @@ def _pack_ids(available) -> set[str]:
     return {row["pack"] for row in available}
 
 
+def _merge_steps(structure, copy) -> list[dict]:
+    """Structure steps (route, target) merged with pack copy (title, do)."""
+    rows = []
+    copied = copy if isinstance(copy, list) else []
+    for index, spec in enumerate(structure or []):
+        text = copied[index] if index < len(copied) and isinstance(copied[index], dict) else {}
+        rows.append({
+            "title": text.get("title") or "",
+            "do": text.get("do") or "",
+            "route": spec.get("route") or "",
+            "target": spec.get("target") or "",
+        })
+    return rows
+
+
+def _journey_payload(app_id: str, lang: str) -> dict:
+    """Pack stages, competencies and journey copy, merged for one language.
+
+    Domain-free by construction: every title, step script and competency string
+    is read from the pack copy. This module supplies shape only.
+    """
+    pack = packs.load_pack(app_id)
+    copy = packs.copy_for(app_id, lang)
+    journey_copy = copy.get("journey") or {}
+    stage_copy = copy.get("stages") or {}
+    comp_copy = copy.get("competencies") or {}
+
+    stages = []
+    for row in pack.get("stages") or []:
+        key = str(row.get("key") or row.get("n") or "")
+        text = stage_copy.get(key) or stage_copy.get(str(row.get("n"))) or {}
+        stages.append({
+            "n": row.get("n"),
+            "key": key,
+            "title": text.get("title") or key,
+            "what": text.get("what") or "",
+            "lessons": list(row.get("lessons") or []),
+            "competencies": list(row.get("competencies") or []),
+            "pending": bool(row.get("pending")),
+            "lead": list(row.get("lead") or []),
+            "owner": list(row.get("owner") or []),
+        })
+
+    competencies = []
+    for row in pack.get("competencies") or []:
+        key = str(row.get("key") or "")
+        text = comp_copy.get(key) or {}
+        competencies.append({
+            "key": key,
+            "title": text.get("title") or key,
+            "good": text.get("good") or "",
+            "kind": row.get("kind") or "host",
+            "probe": row.get("probe") or "",
+            "lesson": row.get("lesson") or "",
+        })
+
+    return {
+        "title": journey_copy.get("title") or "",
+        "intro": journey_copy.get("intro") or "",
+        "glossary": [str(term) for term in (pack.get("journey") or {}).get("glossary") or []],
+        "stages": stages,
+        "competencies": competencies,
+    }
+
+
+def _enrich_lessons(app_id: str, lang: str, rows: list[dict]) -> None:
+    """Add steps and declared completion from the pack to each engine row."""
+    pack = packs.load_pack(app_id)
+    copy = packs.copy_for(app_id, lang)
+    lesson_copy = copy.get("lessons") or {}
+    spec_by_id = {row.get("id"): row for row in pack.get("lessons") or []}
+    for row in rows:
+        spec = spec_by_id.get(row.get("id")) or {}
+        text = (lesson_copy.get(row.get("id")) or {})
+        row["steps"] = _merge_steps(spec.get("steps") or [], text.get("steps") or [])
+        row["completion"] = spec.get("completion") or ("host" if spec.get("host") else "answer")
+        row["competency"] = spec.get("competency") or ""
+
+
 def _listing(ctx, available, now):
     return engine.evaluate_lessons(ctx, available, engine.load_progress(ctx.user, _pack_ids(available)), now)
 
@@ -67,7 +146,8 @@ class GuideListAPIView(APIView):
         if setup is None:
             return Response({"detail": "No guide for this app."}, status=404)
         ctx, available = setup
-        copy = packs.copy_for(app_id, _lang(request))
+        lang = _lang(request)
+        copy = packs.copy_for(app_id, lang)
         listing = _listing(ctx, available, timezone.now())
         for row in listing["tracks"]:
             row.update({k: v for k, v in (copy.get("tracks", {}).get(row["id"]) or {}).items() if k in ("title", "blurb")})
@@ -75,6 +155,8 @@ class GuideListAPIView(APIView):
             row["title"] = (copy.get("lessons", {}).get(row["id"]) or {}).get("title", row["id"])
             if row["blocker"]:
                 row["blocker"] = {**row["blocker"], **(copy.get("blockers", {}).get(row["blocker"]["code"]) or {})}
+        _enrich_lessons(app_id, lang, listing["lessons"])
+        listing["journey"] = _journey_payload(app_id, lang)
         listing["app_id"] = app_id
         return Response(listing)
 

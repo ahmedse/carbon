@@ -23,12 +23,14 @@ import DevelopmentBanner from './DevelopmentBanner';
 import ErrorBoundary from './ErrorBoundary';
 import { AIWorkspace } from './AIWorkspace';
 import { AITaskTransferProvider } from './AITaskTransferContext';
+import { JourneyInspectorTabRegistrar } from '../inspector/tabs/journeyTabs';
 import { NotesProvider, useNotes } from '../notes/NotesContext';
 import { NotesDrawer } from '../notes/NotesDrawer';
 import { useIsMobile, usePulseFullscreen } from '../hooks/useIsMobile';
 import { useVisualViewportHeight } from '../hooks/useVisualViewportHeight';
 import { rememberLastPath } from './sessionRestore';
 import { ChevronEnd } from '../i18n/DirectionalIcons';
+import { studioFromPath } from './studioFromPath';
 
 /** Docked Pulse may grow until traditional still has ~320px (editor min). */
 function dockedPulseMaxSize() {
@@ -51,29 +53,6 @@ const STUDIO_PATHS = {
   learn: '/learn',
   teach: '/teach',
 };
-
-function studioFromPath(pathname) {
-  if (pathname.startsWith('/carbon')) return 'carbon';
-  if (pathname.startsWith('/emissions') || pathname.startsWith('/dataschema')) return 'carbon';
-  if (pathname.startsWith('/catalog')) return 'catalog';
-  if (pathname.startsWith('/dq')) return 'catalog';
-  if (pathname.startsWith('/modules')) return 'catalog';
-  if (pathname.startsWith('/scopes')) return 'carbon';
-  if (pathname.startsWith('/people')) return 'people';
-  if (pathname.startsWith('/my')) return 'my';
-  if (pathname.startsWith('/team')) return 'team';
-  if (pathname.startsWith('/learn')) return 'learn';
-  if (pathname.startsWith('/teach')) return 'teach';
-  // Domain apps live under /apps/<appId>/… — studio id is the app id (healthy, gradevance, …)
-  const appsMatch = pathname.match(/^\/apps\/([^/]+)/);
-  if (appsMatch) return appsMatch[1];
-  if (pathname.startsWith('/apps')) return 'apps';
-  if (pathname.startsWith('/admin/ai')) return 'ai-admin';
-  if (pathname.startsWith('/admin')) return 'admin';
-  if (pathname.startsWith('/settings')) return 'settings';
-  if (pathname.startsWith('/help') || pathname.startsWith('/feedback')) return 'help';
-  return 'home';
-}
 
 function NotesShortcutBridge() {
   const { toggleOpen } = useNotes();
@@ -233,6 +212,8 @@ export function Shell() {
     if (path) navigate(path);
   };
 
+  // Exactly one side drawer system: the Notes drawer (Notes + Journey tabs).
+  // Journey is a tab inside it, not a second docked panel.
   const DOCKED_PANES = isMobile ? [] : [<NotesDrawer key="notes" />];
   const renderContentPane = () => (
     <Box sx={{ display: 'flex', height: '100%', minWidth: 0, flex: 1, width: '100%' }}>
@@ -516,6 +497,7 @@ export function Shell() {
 
         <NotesProvider>
           <NotesShortcutBridge />
+          <JourneyInspectorTabRegistrar />
           <AITaskTransferProvider onRequestOpen={openCopilot}>
             <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden', minWidth: 0 }}>
               {copilotVisible && !pulseFullscreen ? renderCopilotDesktop() : renderContentPane()}

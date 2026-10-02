@@ -13,6 +13,7 @@ from __future__ import annotations
 from guide import engine, packs, registry
 
 COPY_KEYS = ("title", "know", "do", "dont", "question", "explain")
+COMPLETION_KINDS = ("host", "answer", "ack")
 
 
 def _known_capabilities() -> set[str]:
@@ -28,6 +29,92 @@ def pack_ids() -> list[str]:
     if not packs.PACKS_ROOT.is_dir():
         return []
     return sorted(p.name for p in packs.PACKS_ROOT.iterdir() if (p / "guide" / "guide.yaml").is_file())
+
+
+def _journey_problems(pack_id: str, loaded: dict, copies: dict[str, dict]) -> list[str]:
+    """Validate the engine-read journey blocks: stages, competencies, steps.
+
+    Domain-free: this reads shape and copy only, never a host object. A pack
+    that passes here is usable by the engine with zero engine edits.
+    """
+    problems: list[str] = []
+    lessons = loaded["lessons"]
+    known_lessons = {row["id"] for row in lessons}
+    stages = loaded.get("stages") or []
+    competencies = loaded.get("competencies") or []
+    comp_keys = {row.get("key") for row in competencies}
+
+    seen_n: set = set()
+    seen_key: set = set()
+    for row in stages:
+        n = row.get("n")
+        key = row.get("key")
+        where = f"{pack_id}.stage[{n}]"
+        if n in seen_n:
+            problems.append(f"{where}: duplicate stage n")
+        seen_n.add(n)
+        if not key or key in seen_key:
+            problems.append(f"{where}: stage key must be unique and present")
+        seen_key.add(key)
+        members = list(row.get("lessons") or [])
+        for lesson_id in members:
+            if lesson_id not in known_lessons:
+                problems.append(f"{where}: unknown lesson {lesson_id}")
+        for comp_key in row.get("competencies") or []:
+            if competencies and comp_key not in comp_keys:
+                problems.append(f"{where}: unknown competency {comp_key}")
+        if row.get("pending") and members:
+            problems.append(f"{where}: a pending stage lists lessons")
+
+    seen_c: set = set()
+    for row in competencies:
+        key = row.get("key")
+        where = f"{pack_id}.competency[{key}]"
+        if not key or key in seen_c:
+            problems.append(f"{where}: competency key must be unique and present")
+        seen_c.add(key)
+        kind = row.get("kind")
+        if kind not in COMPLETION_KINDS:
+            problems.append(f"{where}: kind must be host, answer or ack")
+        if row.get("lesson") and row["lesson"] not in known_lessons:
+            problems.append(f"{where}: unknown lesson {row['lesson']}")
+        if kind == "host":
+            if not row.get("probe"):
+                problems.append(f"{where}: a host competency needs a probe")
+            elif registry.find(pack_id, "host", row["probe"]) is None:
+                problems.append(f"{where}: host probe {row['probe']} is not registered")
+        for lang, copy in copies.items():
+            text = (copy.get("competencies") or {}).get(key)
+            if not text or not str(text.get("title") or "").strip():
+                problems.append(f"{where}: {lang} copy is missing title")
+
+    for row in lessons:
+        lid = row["id"]
+        where = f"{pack_id}.{lid}"
+        spec_steps = row.get("steps") or []
+        completion = row.get("completion")
+        if completion and completion not in COMPLETION_KINDS:
+            problems.append(f"{where}: completion must be host, answer or ack")
+        for index, step in enumerate(spec_steps):
+            if not isinstance(step, dict) or not step.get("route"):
+                problems.append(f"{where}.steps[{index}]: needs a route")
+        for lang, copy in copies.items():
+            text = (copy.get("lessons") or {}).get(lid) or {}
+            step_copy = text.get("steps") or []
+            if spec_steps and len(step_copy) != len(spec_steps):
+                problems.append(f"{where}: {lang} copy needs {len(spec_steps)} step scripts")
+            for index, step in enumerate(step_copy):
+                if not str((step or {}).get("title") or "").strip():
+                    problems.append(f"{where}.steps[{index}]: {lang} copy is missing a title")
+                if not str((step or {}).get("do") or "").strip():
+                    problems.append(f"{where}.steps[{index}]: {lang} copy is missing a do line")
+
+    glossary = (loaded.get("journey") or {}).get("glossary") or []
+    if not isinstance(glossary, list) or any(
+        not isinstance(term, str) or not term.strip() for term in glossary
+    ):
+        problems.append(f"{pack_id}.journey: glossary must be a list of non-empty terms")
+    return problems
 
 
 def check_pack(pack_id: str, known_caps: set[str]) -> list[str]:
@@ -89,6 +176,7 @@ def check_pack(pack_id: str, known_caps: set[str]) -> list[str]:
                 problems.append(f"{where}: {lang} copy needs {options} options")
         if qkind == "static" and not 0 <= int(spec.get("correct", -1)) < options:
             problems.append(f"{where}: correct index out of range")
+    problems += _journey_problems(pack_id, loaded, copies)
     return problems
 
 

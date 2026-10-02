@@ -52,9 +52,12 @@ export default {
     section: 'Carbon Footprint',
     items: [
       { type: 'group', label: 'Onboarding' },
-      { label: 'Inventory onboarding', path: '/carbon/onboarding', role: '*' },
+      { label: 'Journey', path: '/carbon/onboarding', role: '*' },
+      // Coverage is the driver: the row decides what is owed and reports
+      // Missing / Entered / Excluded. Campus intake is reached from a row.
+      { label: 'Coverage', path: '/carbon/admin/inventory-coverage', role: 'carbon:admin' },
+      { label: 'Coverage targets', path: '/carbon/admin/coverage-targets', role: 'carbon:admin' },
       { label: 'Campus intake', path: '/carbon/onboarding/intake', role: '*' },
-      { label: 'My guide',             path: '/guide/carbon',      role: '*' },
       { type: 'divider' },
 
       // ── Executive (strategic read — board / management) ──
@@ -91,7 +94,6 @@ export default {
       { label: 'SBTi Targets',         path: '/carbon/admin/targets',      role: 'carbon:admin' },
       { label: 'Organizational Boundaries', path: '/carbon/admin/boundaries', role: 'carbon:admin' },
       { label: 'Base Years',               path: '/carbon/admin/base-years',  role: 'carbon:admin' },
-      { label: 'Inventory Coverage',       path: '/carbon/admin/inventory-coverage', role: 'carbon:admin' },
       { label: 'Reporting Periods',        path: '/carbon/reporting/periods',  role: 'carbon:admin' },
     ],
   },

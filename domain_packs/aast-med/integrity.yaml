@@ -1,0 +1,17 @@
+# Live-assessment integrity guard for the Moodle Ask door.
+# The signed page snapshot is the only input. A turn refuses when the OPEN
+# activity is one of these assessment modules, or when a signed timing window
+# for the open course is active. This is not a message-phrase list: it never
+# scans chat history for words, and it never names the exam or its content.
+#
+# The frozen S3 rung: never answer a live assessment; the question bank and
+# exams are never ingestible. This guard is the session-live half of that rung.
+version: 1
+answer: A live assessment is open. Pulse does not answer, hint, or advise while an assessment is open.
+# Open-activity module types that mean an assessment is in front of the user.
+# The frozen refuse list already keeps these modules out of the pack; this
+# guard makes an OPEN one refuse even before a passage could be cited.
+modules:
+  - quiz
+  - qbank
+  - lesson

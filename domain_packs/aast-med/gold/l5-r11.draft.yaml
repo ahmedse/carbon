@@ -1,0 +1,54 @@
+# DRAFT aast-med R11 gold — NOT passable on its own.
+#
+# Four frozen cases proving a teaching/study draft is labelled draft (ADR-0046)
+# and claims no Moodle write. Chat proposes; the staff member applies the note
+# in the existing Extra tab. This is CODE work: the draft door already exists
+# (`_staff_draft_answer`), and the cases freeze its contract.
+#
+# DRAFT, not-pass. Medicine L5 stays `not_passable` while R12 has no cases and
+# student_cohorts is empty (R16). Nothing here opens a student surface.
+version: 1
+status: draft
+draft: true
+not_pass: true
+required_n: 4
+frozen_n: 4
+human_approval_required: true
+real_world_prerequisite: >-
+  A human must approve the draft labelling as curriculum behaviour. R11 itself
+  needs no real-world data, but medicine L5 cannot flip until R12 has two real
+  students and student_cohorts is non-empty (R16). No host write happens in
+  any case: the reply is a proposal the staff member pastes into the Extra tab.
+cases:
+  - id: R11-1
+    course: MED520
+    ask: "draft an extra note about alopecia"
+    passage_family: file
+    expect_label: "Draft extra note (proposal only"
+    expect_no_write: "No write was made. Paste and save it in the Extra tab."
+    claims_moodle_write: false
+    host_effect: none
+  - id: R11-2
+    course: NMD1103
+    ask: "draft a note about hand hygiene"
+    passage_family: file
+    expect_label: "Draft extra note (proposal only"
+    expect_no_write: "No write was made. Paste and save it in the Extra tab."
+    claims_moodle_write: false
+    host_effect: none
+  - id: R11-3
+    course: NMD3101
+    ask: "draft a note about immunology"
+    passage_family: google
+    expect_label: "Draft extra note (proposal only"
+    expect_no_write: "No write was made. Paste and save it in the Extra tab."
+    claims_moodle_write: false
+    host_effect: none
+  - id: R11-4
+    course: NMD1301
+    ask: "draft an extra note about altruism"
+    passage_family: youtube
+    expect_label: "Draft extra note (proposal only"
+    expect_no_write: "No write was made. Paste and save it in the Extra tab."
+    claims_moodle_write: false
+    host_effect: none

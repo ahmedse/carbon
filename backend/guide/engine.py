@@ -198,6 +198,10 @@ def evaluate_lessons(
     return {
         "tracks": tracks,
         "recommended_track": recommended,
+        # A wildcard capability ("*", e.g. a platform superuser) is never
+        # "no work" and may read every track's split of a stage, not one role's.
+        # Capability-based and domain-free: no username, no pack knows this.
+        "all_tracks": "*" in ctx.caps,
         "lessons": rows,
         "next_id": next_id,
         "resume": resume_of(rows, progress),

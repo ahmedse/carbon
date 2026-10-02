@@ -1,0 +1,92 @@
+# Carbon data-entry contract. Locked 2026-10-02.
+# Six ready sentences (P-12): each names target, product, evidence, date, limit.
+# This file is the pack lock for the coverage -> Data Product -> submission path.
+# It does not add a P-27 principle; principles.yaml stays P-01..P-26.
+id: carbon-data-entry-contract
+version: 1
+owner: carbon-inventory-lead
+target: O1
+product: Carbon on AASTMT
+locked: 2026-10-02
+limit: >
+  Does not pass O1, O2, O3, O4, O5, S2MB, P1, or P2. Does not invent a
+  kilogram. Does not open a second ReportingPeriod. Does not deploy. Does
+  not edit backend/ai/engine/**. A catalog-admin request/approval flow for
+  Data Products stays a Master decision and is not claimed here.
+locks:
+  - id: L-COV-DRIVER
+    sentence: >
+      Coverage is the DRIVER: the open period's required row is
+      InventorySource (org_unit x scope x scope3_category x source_name)
+      plus its per-period InventorySourceStatus.
+    target: O1
+    product: Carbon on AASTMT
+    evidence: >
+      emissions/models.py InventorySource (1445) + InventorySourceStatus (1511).
+      emissions/campus_intake.py coverage_board and coverage_row_state.
+      Date 2 Oct 2026.
+    limit: >
+      A CoverageGoal is the target percent and tier for a target year. It is
+      not the driver of one submission and it is not a reporting_period row.
+  - id: L-COV-SINGLE-REPORTER
+    sentence: >
+      Coverage is the ONLY surface that reports Missing / Entered / Excluded
+      for a required stream.
+    target: O1
+    product: Carbon on AASTMT
+    evidence: >
+      InventoryCoveragePage.jsx renders the status words. CampusIntakePage.jsx
+      does not. CR-INT-01. Date 2 Oct 2026.
+    limit: >
+      It does not publish a single coverage percent as "coverage complete",
+      and it does not turn Absent into 0 kg.
+  - id: L-VERB-PREFILLED
+    sentence: >
+      Intake is a VERB reached from one coverage row, with campus, scope,
+      unit, and period prefilled; the client sends the value only.
+    target: O1
+    product: Carbon on AASTMT
+    evidence: >
+      POST /carbon-api/carbon/inventory-sources/<id>/submit/
+      (CoverageRowSubmissionAPIView, emissions/intake_api.py).
+      emissions/campus_intake.py enter_for_source. Date 2 Oct 2026.
+    limit: >
+      It does not let the form re-pick what is owed, and it does not accept a
+      hand-typed campus/scope/unit that disagrees with the coverage row.
+  - id: L-CONTRACT
+    sentence: >
+      A Data Product is the CONTRACT a stream conforms to: org unit, scope,
+      unit, period, fields, validation.
+    target: O1
+    product: Carbon on AASTMT
+    evidence: >
+      core.models.Module + dataschema.models.DataTable + DataField.
+      emissions/campus_intake.py contract_for_source. Date 2 Oct 2026.
+    limit: >
+      The bound DataTable is created on first write today, so the intake
+      contract falls back to the locked benchmark required_stream_specs when
+      no DataTable exists yet. A catalog-admin request/approval flow is not
+      built and is not claimed.
+  - id: L-COVERED
+    sentence: >
+      A stream is covered only when its linked table is populated AND a
+      Calculation exists for that same reporting period.
+    target: O1
+    product: Carbon on AASTMT
+    evidence: >
+      InventorySourceStatus.linked_tables + Calculation on the same
+      reporting_period. CR-COV-01. Date 2 Oct 2026.
+    limit: >
+      A link stored on another period does not carry forward, and a tier is
+      not a coverage percent.
+  - id: L-MISSING-NOT-ZERO
+    sentence: >
+      Missing is not 0 kg, and onboarding keeps exactly one open period.
+    target: O1
+    product: Carbon on AASTMT
+    evidence: >
+      coverage_board streams with inventory_kg null. CR-INT-01 + CR-PER-01.
+      Date 2 Oct 2026.
+    limit: >
+      Does not reopen or re-lock FY 2023-24 (15) or FY 2025-26 (16). Does not
+      write 0 kg for a missing stream and does not open a second period.

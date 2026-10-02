@@ -9,6 +9,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+import re
 import yaml
 
 _ROOT = Path(__file__).resolve().parents[2] / "domain_packs" / "aast-med"
@@ -20,6 +21,9 @@ _GREET = _ROOT / "greet_asks.yaml"
 _COURSE = _ROOT / "course_asks.yaml"
 _TOPIC = _ROOT / "topic_asks.yaml"
 _REFERENCE = _ROOT / "reference_asks.yaml"
+_EXPLAIN = _ROOT / "explain_asks.yaml"
+_QUIZ = _ROOT / "quiz_asks.yaml"
+_STAFF = _ROOT / "staff_asks.yaml"
 _ACCESS = _ROOT / "access_reasons.yaml"
 
 
@@ -316,13 +320,14 @@ def _short_span(text: str, limit: int) -> str:
 
 
 def _load_course_bank(shortname: str) -> dict[str, dict]:
-    from ai.moodle_bank import load_c3, load_c4_drive, load_c4_files, load_c5_youtube
+    from ai.moodle_bank import load_c3, load_c4_drive, load_c4_files, load_c5_youtube, load_extra
 
     return {
         **load_c3(shortname),
         **load_c4_files(shortname),
         **load_c4_drive(shortname),
         **load_c5_youtube(shortname),
+        **load_extra(shortname),
     }
 
 
@@ -418,6 +423,7 @@ def fact_answer(message: str, snapshot: dict[str, Any] | None) -> str | None:
         load_c4_drive,
         load_c4_files,
         load_c5_youtube,
+        load_extra,
     )
 
     page = snapshot or {}
@@ -438,6 +444,7 @@ def fact_answer(message: str, snapshot: dict[str, Any] | None) -> str | None:
         **load_c4_files(shortname),
         **load_c4_drive(shortname),
         **load_c5_youtube(shortname),
+        **load_extra(shortname),
     }
     return cite_open_activity(
         message,
@@ -565,11 +572,67 @@ def _prefer_lecture_rows(rows: list[dict], num: int | None) -> list[dict]:
 def _resolve_named_lecture(
     message: str, page: dict[str, Any], bank: dict[str, dict]
 ) -> tuple[dict[str, Any] | None, list[dict], int | None]:
-    """Section on this page plus bank rows for that lecture number/name."""
+    """Section on this page plus bank rows for that lecture number/name.
+
+    Resolution order is deterministic and additive, so the L-number golds
+    keep their answer: (1) a snapshot section whose title carries the
+    number (``L10``), (2) a snapshot section whose section number equals the
+    lecture number (week/session courses), (3) a bank row title that carries
+    the number. In (2) and (3) the rows are matched by the section name, so a
+    course whose snapshot titles carry no L-number still cites the lecture.
+    """
     num = _lecture_number(message)
     sections = [row for row in (page.get("sections") or []) if isinstance(row, dict)]
     off_sec = _pulse_off_sections(page)
     off_cm = _pulse_off_cmids(page)
+
+    def _strict_matched(section: dict[str, Any]) -> list[dict]:
+        section_name = str(section.get("name") or "")
+        matched = [
+            row
+            for row in bank.values()
+            if not _row_cmid_off(row, off_cm)
+            and _row_matches_lecture(row, num, section_name)
+            and (num is None or _name_has_lecture_num(str(row.get("name") or ""), num) or num == _lecture_token_from_name(section_name))
+        ]
+        if num is not None:
+            matched = [row for row in matched if _name_has_lecture_num(str(row.get("name") or ""), num)]
+        return matched
+
+    def _section_rows(section: dict[str, Any]) -> list[dict]:
+        """Rows for a section. L-number rows win; else match by section name.
+
+        A generic page row ("Lecture Video") carries the section number but
+        not the topic words, so it is a last-resort match for the section.
+        """
+        section_name = str(section.get("name") or "")
+        base = [
+            row
+            for row in bank.values()
+            if not _row_cmid_off(row, off_cm)
+            and str(row.get("text") or "").strip()
+            and _row_matches_lecture(row, num, section_name)
+        ]
+        if not base:
+            try:
+                number = int(section.get("number"))
+            except (TypeError, ValueError):
+                number = None
+            if number is not None:
+                base = [
+                    row
+                    for row in bank.values()
+                    if not _row_cmid_off(row, off_cm)
+                    and str(row.get("text") or "").strip()
+                    and row.get("sectionnum") is not None
+                    and int(row.get("sectionnum") or -1) == number
+                ]
+        if num is not None:
+            named = [row for row in base if _name_has_lecture_num(str(row.get("name") or ""), num)]
+            if named:
+                return named
+        return base
+
     section = None
     for row in sections:
         name = str(row.get("name") or "")
@@ -578,28 +641,43 @@ def _resolve_named_lecture(
                 continue
             section = row
             break
-    if section is None and num is not None:
-        # Fall back to bank names when the snapshot title uses a different number.
+    if section is not None:
+        matched = _strict_matched(section)
+        if matched:
+            return section, _prefer_lecture_rows(matched, num), num
+        # The snapshot section names the lecture but no bank row carries the
+        # L-number: keep the section and match its rows by name.
+        named_rows = _section_rows(section)
+        if named_rows:
+            return section, _prefer_lecture_rows(named_rows, num), num
+
+    # Week/session courses number their lectures by section number.
+    if num is not None:
+        for row in sections:
+            try:
+                number = int(row.get("number"))
+            except (TypeError, ValueError):
+                continue
+            if number != num or _section_number_off(row, off_sec):
+                continue
+            number_rows = _section_rows(row)
+            if number_rows:
+                return row, _prefer_lecture_rows(number_rows, num), num
+
+    # Fall back to bank names when the snapshot title uses a different number.
+    if num is not None:
         for row in bank.values():
             if _row_cmid_off(row, off_cm):
                 continue
             if _name_has_lecture_num(str(row.get("name") or ""), num):
-                section = {"number": None, "name": str(row.get("name") or "")}
-                break
+                bank_section = {"number": None, "name": str(row.get("name") or "")}
+                named_rows = _section_rows(bank_section)
+                if named_rows:
+                    return bank_section, _prefer_lecture_rows(named_rows, num), num
+
     if section is None:
         return None, [], num
-    section_name = str(section.get("name") or "")
-    matched = [
-        row
-        for row in bank.values()
-        if not _row_cmid_off(row, off_cm)
-        and _row_matches_lecture(row, num, section_name)
-        and (num is None or _name_has_lecture_num(str(row.get("name") or ""), num) or num == _lecture_token_from_name(section_name))
-    ]
-    if num is not None:
-        matched = [row for row in matched if _name_has_lecture_num(str(row.get("name") or ""), num)]
-    preferred = _prefer_lecture_rows(matched, num)
-    return section, preferred, num
+    return section, [], num
 
 
 def _lecture_about_answer(message: str, snapshot: dict[str, Any] | None) -> str:
@@ -732,6 +810,7 @@ def _topic_spec() -> dict[str, Any]:
         "prefixes": prefixes,
         "miss": str(data.get("miss") or "This is not in this course.").strip(),
         "cite_span": int(data.get("cite_span") or 200),
+        "body_cite_span": int(data.get("body_cite_span") or 160),
         "short_max_tokens": int(short.get("max_tokens") or 0),
         "short_stopwords": stopwords,
         "short_greetings": greetings,
@@ -846,15 +925,97 @@ def _snapshot_title_activity_ids(page: dict[str, Any] | None, topic: str) -> set
     return ids
 
 
-def _rows_for_topic(
+def _topic_word_pattern(topic: str):
+    """Word-boundary matcher for a topic phrase. Vocabulary stays in the pack."""
+    parts = [part for part in re.split(r"\s+", str(topic or "").strip()) if part]
+    if not parts:
+        return None
+    phrase = r"\s+".join(re.escape(part) for part in parts)
+    return re.compile(rf"(?<![A-Za-z0-9]){phrase}(?![A-Za-z0-9])", re.IGNORECASE)
+
+
+_BODY_KIND_RANK = {"file": 0, "page": 1, "book": 1, "label": 2, "google": 3, "youtube": 4}
+
+
+def _body_rank(row: dict, count: int) -> tuple:
+    """Most occurrences, then lowest cmid, then kind, then longest text."""
+    activity = int(row.get("activity_id") or 0)
+    cmid = activity if activity > 0 else 10 ** 9
+    return (
+        -count,
+        cmid,
+        _BODY_KIND_RANK.get(str(row.get("kind") or ""), 5),
+        -len(str(row.get("text") or "")),
+    )
+
+
+def _body_topic_rows(rows: list[dict], topic: str) -> list[dict]:
+    """Passages whose body holds the topic word. Whole-word, occurrence-ranked."""
+    pattern = _topic_word_pattern(topic)
+    if pattern is None:
+        return []
+    scored: list[tuple[dict, int]] = []
+    for row in rows:
+        text = str(row.get("text") or "")
+        if not text.strip():
+            continue
+        count = len(pattern.findall(text))
+        if count:
+            scored.append((row, count))
+    scored.sort(key=lambda item: _body_rank(item[0], item[1]))
+    return [row for row, _count in scored]
+
+
+def _bounded_body_span(text: str, pattern, limit: int) -> str:
+    """Exact substring around the matched word, sentence-bounded and capped."""
+    match = pattern.search(text)
+    if match is None or limit <= 0:
+        return ""
+    return _window_around(text, match.start(), match.end(), limit)
+
+
+def _window_around(text: str, start: int, end: int, limit: int) -> str:
+    """Exact substring around one match, sentence-bounded and capped.
+
+    The result is always a contiguous slice of ``text``, so a caller can
+    assert ``span in text`` with no normalization.
+    """
+    if limit <= 0:
+        return ""
+    sent_start = text.rfind(". ", 0, start)
+    sent_start = 0 if sent_start < 0 else sent_start + 2
+    sent_end = text.find(". ", end)
+    sent_end = len(text) if sent_end < 0 else sent_end + 1
+    if sent_end - sent_start <= limit:
+        return text[sent_start:sent_end].strip()
+    seg_start = max(sent_start, start - 24)
+    seg_end = min(sent_end, seg_start + limit)
+    if seg_end < end:
+        seg_end = end
+        seg_start = max(sent_start, seg_end - limit)
+    while 0 < seg_end < len(text) and text[seg_end - 1:seg_end].isalnum() and text[seg_end:seg_end + 1].isalnum():
+        seg_end -= 1
+    while seg_start > 0 and text[seg_start - 1:seg_start].isalnum() and text[seg_start:seg_start + 1].isalnum():
+        seg_start += 1
+    # A capped window can land on leading punctuation ("," / ";"). Move to the
+    # next word start, never past the match, so the span begins on a word.
+    while seg_start < start and not text[seg_start].isalnum():
+        seg_start += 1
+    span = text[seg_start:seg_end].strip()
+    if len(span) > limit:
+        span = span[:limit].rstrip()
+    return span
+
+
+def _topic_rows(
     bank: dict[str, dict],
     topic: str,
     page: dict[str, Any] | None = None,
-) -> list[dict]:
-    """Title matches win. Incidental text hits only when no title match exists.
+) -> tuple[list[dict], str]:
+    """Rows for a topic plus the origin: snapshot, title, body, or none.
 
-    Snapshot section/activity titles and bank activity names both count as
-    titles. Snapshot-titled open-activity ids win when present.
+    Title matches win. The body search runs only when no title match exists,
+    and it is whole-word and occurrence-ranked (R-body2/R-body3).
     """
     needle = topic.casefold()
     snap_ids = _snapshot_title_activity_ids(page, topic)
@@ -872,7 +1033,7 @@ def _rows_for_topic(
             and str(row.get("text") or "").strip()
         ]
         if snap_hits:
-            return _prefer_topic_rows(snap_hits)
+            return _prefer_topic_rows(snap_hits), "snapshot"
     title_hits = [
         row
         for row in rows_iter
@@ -880,7 +1041,7 @@ def _rows_for_topic(
         and str(row.get("text") or "").strip()
     ]
     if title_hits:
-        return _prefer_topic_rows(title_hits)
+        return _prefer_topic_rows(title_hits), "title"
     bag = page if isinstance(page, dict) else {}
     off_sec = _pulse_off_sections(bag)
     named = [
@@ -889,14 +1050,20 @@ def _rows_for_topic(
         if isinstance(row, dict) and needle in str(row.get("name") or "").casefold()
     ]
     if named and all(_section_number_off(row, off_sec) for row in named):
-        return []
-    text_hits = [
-        row
-        for row in rows_iter
-        if needle in str(row.get("text") or "").casefold()
-        and str(row.get("text") or "").strip()
-    ]
-    return _prefer_topic_rows(text_hits)
+        return [], "none"
+    body_hits = _body_topic_rows(rows_iter, topic)
+    if not body_hits:
+        return [], "none"
+    return body_hits, "body"
+
+
+def _rows_for_topic(
+    bank: dict[str, dict],
+    topic: str,
+    page: dict[str, Any] | None = None,
+) -> list[dict]:
+    """Title matches win. Whole-word body hits only when no title match exists."""
+    return _topic_rows(bank, topic, page=page)[0]
 
 
 def _prefer_topic_rows(rows: list[dict]) -> list[dict]:
@@ -957,16 +1124,22 @@ def topic_answer(
     page = snapshot if isinstance(snapshot, dict) else {}
     course = page.get("course") if isinstance(page.get("course"), dict) else {}
     shortname = str(course.get("shortname") or "").strip()
-    miss = _topic_spec()["miss"]
+    spec = _topic_spec()
+    miss = spec["miss"]
     if not shortname:
         return miss
     bank = _load_course_bank(shortname)
-    rows = _rows_for_topic(bank, topic, page=page)
+    rows, origin = _topic_rows(bank, topic, page=page)
     if not rows:
         return miss
     head = _topic_section_line(page, topic, rows)
     primary = rows[0]
-    span = _short_span(str(primary.get("text") or ""), int(_topic_spec()["cite_span"]))
+    text = str(primary.get("text") or "")
+    if origin == "body":
+        pattern = _topic_word_pattern(topic)
+        span = _bounded_body_span(text, pattern, int(spec["body_cite_span"])) if pattern else ""
+    else:
+        span = _short_span(text, int(spec["cite_span"]))
     if not span:
         return miss
     parts = [head, f"{primary['id']}\n{span}"]
@@ -1070,3 +1243,433 @@ def reference_answer(
     if len(parts) < 2:
         return _topic_spec()["miss"]
     return "\n".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# T2 Explain · T3 Quiz · T5 Staff coworker (frozen 2 Oct 2026).
+# Vocabulary lives in explain_asks.yaml / quiz_asks.yaml / staff_asks.yaml.
+# Every emitted span is a contiguous slice of a selected passage's text, so a
+# caller can assert ``span in passage_text`` with no normalization.
+# ---------------------------------------------------------------------------
+
+
+def _doc(path: Path) -> dict[str, Any]:
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    return data if isinstance(data, dict) else {}
+
+
+def _str_tuple(data: dict[str, Any], key: str) -> tuple[str, ...]:
+    return tuple(
+        str(item).casefold()
+        for item in (data.get(key) or [])
+        if str(item).strip()
+    )
+
+
+@lru_cache(maxsize=1)
+def _explain_spec() -> dict[str, Any]:
+    data = _doc(_EXPLAIN)
+    return {
+        "prefixes": _str_tuple(data, "prefixes"),
+        "miss": str(data.get("miss") or "This is not in this course.").strip(),
+        "max_spans": int(data.get("max_spans") or 3),
+        "span": int(data.get("span") or 220),
+        "min_span": int(data.get("min_span") or 30),
+        "label": str(data.get("label") or "Verbatim spans from {passage}:").strip(),
+    }
+
+
+@lru_cache(maxsize=1)
+def _quiz_spec() -> dict[str, Any]:
+    data = _doc(_QUIZ)
+    return {
+        "prefixes": _str_tuple(data, "prefixes"),
+        "miss": str(data.get("miss") or "This is not in this course.").strip(),
+        "max_items": int(data.get("max_items") or 3),
+        "span": int(data.get("span") or 260),
+        "label": str(
+            data.get("label") or "Practice from this course — answers are verbatim spans."
+        ).strip(),
+    }
+
+
+@lru_cache(maxsize=1)
+def _staff_spec() -> dict[str, Any]:
+    data = _doc(_STAFF)
+    return {
+        "off_list": str(data.get("off_list") or "This is not on the course list.").strip(),
+        "gap_miss": str(data.get("gap_miss") or "No pack gaps found for this course.").strip(),
+        "ilo_miss": str(data.get("ilo_miss") or "No pack passage contains those terms.").strip(),
+        "gap_label": str(data.get("gap_label") or "Not in the pack on {course}:").strip(),
+        "ilo_label": str(data.get("ilo_label") or "Pack passages containing those terms:").strip(),
+        "draft_label": str(
+            data.get("draft_label")
+            or "Draft extra note (proposal only — apply it in the Extra tab):"
+        ).strip(),
+        "gap_max": int(data.get("gap_max") or 8),
+        "ilo_max": int(data.get("ilo_max") or 5),
+        "draft_max_spans": int(data.get("draft_max_spans") or 3),
+        "draft_span": int(data.get("draft_span") or 220),
+        "stopwords": frozenset(
+            str(word).casefold().strip()
+            for word in (data.get("stopwords") or [])
+            if str(word).strip()
+        ),
+        "gap_prefixes": _str_tuple(data, "gap_prefixes"),
+        "ilo_prefixes": _str_tuple(data, "ilo_prefixes"),
+        "draft_prefixes": _str_tuple(data, "draft_prefixes"),
+    }
+
+
+def _is_other_door(message: str) -> bool:
+    """True when another door already owns the message shape."""
+    return (
+        is_section_ask(message)
+        or is_course_ask(message)
+        or is_lecture_ask(message)
+        or is_fact_ask(message)
+        or is_reference_ask(message)
+        or _is_identity_ask(message)
+        or is_greet_ask(message)
+    )
+
+
+def _prefix_topic(message: str, prefixes: tuple[str, ...]) -> str | None:
+    """Remainder after the first matching pack prefix, else None."""
+    text = " ".join((message or "").casefold().split())
+    if not text:
+        return None
+    for prefix in prefixes:
+        if not text.startswith(prefix):
+            continue
+        topic = text[len(prefix) :].strip(" \t.?!:;,\"'")
+        if not topic or _topic_meta_blocked(topic):
+            return None
+        return topic
+    return None
+
+
+def _sentence_ranges(text: str) -> list[tuple[int, int]]:
+    ranges: list[tuple[int, int]] = []
+    start = 0
+    i = 0
+    n = len(text)
+    while i < n:
+        if text[i] in ".!?\n":
+            ranges.append((start, i + 1))
+            start = i + 1
+            while start < n and text[start] in " \t\r\n":
+                start += 1
+            i = start
+            continue
+        i += 1
+    ranges.append((start, n))
+    return ranges
+
+
+def _exact_spans(text: str, limit: int, min_span: int) -> list[str]:
+    """Sentence-bounded slices of text; each is an exact substring, deduped."""
+    raw = str(text or "")
+    out: list[str] = []
+    seen: set[str] = set()
+    for start, end in _sentence_ranges(raw):
+        seg = raw[start:end].strip()
+        if len(seg) < min_span:
+            continue
+        if limit > 0 and len(seg) > limit:
+            cut = seg[:limit]
+            if " " in cut:
+                cut = cut.rsplit(" ", 1)[0]
+            seg = cut.strip()
+        if seg and seg not in seen:
+            seen.add(seg)
+            out.append(seg)
+    return out
+
+
+def _keep_substrings(candidates: list[str], text: str) -> list[str]:
+    """A proposal survives only when it is an exact substring of the passage.
+
+    The door writes no prose, so it proposes nothing; this guard makes the
+    honesty rule explicit and testable: a non-substring is dropped, never
+    printed.
+    """
+    return [item for item in candidates if item and item in text]
+
+
+def _seed_resolved_topic(state: Any, topic: str, shortname: str, rows: list[dict]) -> None:
+    if not isinstance(state, dict):
+        return
+    from ai.moodle_ask_state import set_resolved_topic
+
+    set_resolved_topic(
+        state,
+        topic=topic,
+        shortname=shortname,
+        passage_ids=[str(row["id"]) for row in rows if row.get("id")],
+    )
+
+
+def is_explain_ask(message: str) -> bool:
+    if _is_other_door(message):
+        return False
+    return _prefix_topic(message, _explain_spec()["prefixes"]) is not None
+
+
+def explain_answer(
+    message: str,
+    snapshot: dict[str, Any] | None,
+    state: dict[str, Any] | None = None,
+) -> str | None:
+    """T2 — 2–3 verbatim spans from ONE selected passage, plus its id."""
+    if _is_other_door(message):
+        return None
+    spec = _explain_spec()
+    topic = _prefix_topic(message, spec["prefixes"])
+    if topic is None:
+        return None
+    page = snapshot if isinstance(snapshot, dict) else {}
+    course = page.get("course") if isinstance(page.get("course"), dict) else {}
+    shortname = str(course.get("shortname") or "").strip()
+    if not shortname:
+        return spec["miss"]
+    bank = _load_course_bank(shortname)
+    rows, _origin = _topic_rows(bank, topic, page=page)
+    if not rows:
+        return spec["miss"]
+    primary = rows[0]
+    primary_text = str(primary.get("text") or "")
+    spans = _keep_substrings(
+        _exact_spans(primary_text, spec["span"], spec["min_span"]),
+        primary_text,
+    )[: spec["max_spans"]]
+    if not spans:
+        return spec["miss"]
+    head = _topic_section_line(page, topic, rows)
+    label = spec["label"].replace("{passage}", str(primary["id"]))
+    parts = [head, label]
+    for span in spans:
+        parts.append(f"- {span}")
+    _seed_resolved_topic(state, topic, shortname, rows)
+    return "\n".join(parts)
+
+
+def is_quiz_ask(message: str) -> bool:
+    if _is_other_door(message):
+        return False
+    return _prefix_topic(message, _quiz_spec()["prefixes"]) is not None
+
+
+def _quiz_items(
+    rows: list[dict],
+    topic: str,
+    max_items: int,
+    limit: int,
+) -> list[tuple[dict, str, str]]:
+    """(row, cloze question, verbatim answer span) from passages only."""
+    pattern = _topic_word_pattern(topic)
+    if pattern is None:
+        return []
+    items: list[tuple[dict, str, str]] = []
+    seen: set[str] = set()
+    for row in rows:
+        text = str(row.get("text") or "")
+        for match in pattern.finditer(text):
+            answer = _window_around(text, match.start(), match.end(), limit)
+            if not answer or answer in seen:
+                continue
+            cloze = pattern.sub("____", answer, count=1)
+            if "____" not in cloze:
+                continue
+            seen.add(answer)
+            items.append((row, cloze, answer))
+            if len(items) >= max_items:
+                return items
+    return items
+
+
+def quiz_answer(
+    message: str,
+    snapshot: dict[str, Any] | None,
+    state: dict[str, Any] | None = None,
+) -> str | None:
+    """T3 — cloze items whose answers are verbatim spans, or an exact miss."""
+    if _is_other_door(message):
+        return None
+    spec = _quiz_spec()
+    topic = _prefix_topic(message, spec["prefixes"])
+    if topic is None:
+        return None
+    page = snapshot if isinstance(snapshot, dict) else {}
+    course = page.get("course") if isinstance(page.get("course"), dict) else {}
+    shortname = str(course.get("shortname") or "").strip()
+    if not shortname:
+        return spec["miss"]
+    bank = _load_course_bank(shortname)
+    rows, _origin = _topic_rows(bank, topic, page=page)
+    if not rows:
+        return spec["miss"]
+    items = _quiz_items(rows, topic, spec["max_items"], spec["span"])
+    if not items:
+        return spec["miss"]
+    head = _topic_section_line(page, topic, rows)
+    parts = [head, spec["label"]]
+    for index, (row, cloze, answer) in enumerate(items, 1):
+        name = str(row.get("name") or "").strip() or str(row.get("id") or "")
+        parts.append(f"Q{index} — from {name} [{row['id']}]")
+        parts.append(cloze)
+        parts.append(f"Answer: {answer}")
+    return "\n".join(parts)
+
+
+def _staff_ask(message: str) -> tuple[str, str] | None:
+    spec = _staff_spec()
+    text = " ".join((message or "").casefold().split())
+    if not text:
+        return None
+    for prefix in spec["gap_prefixes"]:
+        if text.startswith(prefix):
+            return ("gap", "")
+    for prefix in spec["ilo_prefixes"]:
+        if text.startswith(prefix):
+            topic = text[len(prefix) :].strip(" \t.?!:;,\"'")
+            return ("ilo", topic) if topic else None
+    for prefix in spec["draft_prefixes"]:
+        if text.startswith(prefix):
+            topic = text[len(prefix) :].strip(" \t.?!:;,\"'")
+            return ("draft", topic) if topic else None
+    return None
+
+
+def _staff_term_hits(
+    shortname: str,
+    query: str,
+    spec: dict[str, Any],
+) -> list[tuple[dict, str]]:
+    """Passages ranked by how many query terms they contain (whole-word)."""
+    terms = [
+        term
+        for term in re.findall(r"[a-z0-9]+", str(query or "").casefold())
+        if len(term) > 2 and term not in spec["stopwords"]
+    ]
+    unique = list(dict.fromkeys(terms))
+    if not unique:
+        return []
+    patterns = [
+        re.compile(rf"(?<![A-Za-z0-9]){re.escape(term)}(?![A-Za-z0-9])", re.IGNORECASE)
+        for term in unique
+    ]
+    bank = _load_course_bank(shortname)
+    scored: list[tuple[dict, int]] = []
+    for row in bank.values():
+        text = str(row.get("text") or "")
+        if not text:
+            continue
+        hits = sum(1 for pattern in patterns if pattern.search(text))
+        if hits:
+            scored.append((row, hits))
+    scored.sort(
+        key=lambda item: (
+            -item[1],
+            int(item[0].get("activity_id") or 0),
+            str(item[0].get("id") or ""),
+        )
+    )
+    out: list[tuple[dict, str]] = []
+    for row, _hits in scored[: int(spec["ilo_max"])]:
+        text = str(row.get("text") or "")
+        window = ""
+        for pattern in patterns:
+            match = pattern.search(text)
+            if match is not None:
+                window = _window_around(text, match.start(), match.end(), 160)
+                break
+        out.append((row, window))
+    return out
+
+
+def _staff_gap_answer(shortname: str, spec: dict[str, Any]) -> str:
+    from ai.moodle_bank import course_roster
+
+    roster = course_roster(shortname)
+    if not roster.get("ok"):
+        return spec["off_list"]
+    gaps = [row for row in (roster.get("activities") or []) if not row.get("in_pack")]
+    if not gaps:
+        return spec["gap_miss"]
+    gaps.sort(
+        key=lambda row: (
+            int(row.get("sectionnum") or 0),
+            int(row.get("cmid") or 0),
+            str(row.get("name") or ""),
+        )
+    )
+    parts = [spec["gap_label"].replace("{course}", shortname)]
+    for row in gaps[: int(spec["gap_max"])]:
+        name = str(row.get("name") or "(untitled)")
+        kind = str(row.get("kind") or "?")
+        parts.append(f"- Section {row.get('sectionnum')}: {name} ({kind})")
+    if len(gaps) > int(spec["gap_max"]):
+        parts.append(f"…and {len(gaps) - int(spec['gap_max'])} more not-in-pack activities.")
+    return "\n".join(parts)
+
+
+def _staff_ilo_answer(shortname: str, topic: str, spec: dict[str, Any]) -> str:
+    hits = _staff_term_hits(shortname, topic, spec)
+    if not hits:
+        return spec["ilo_miss"]
+    parts = [spec["ilo_label"].replace("{course}", shortname)]
+    for row, window in hits:
+        name = str(row.get("name") or "").strip() or str(row["id"])
+        parts.append(f"- {name} [{row['id']}]")
+        if window:
+            parts.append(window)
+    return "\n".join(parts)
+
+
+def _staff_draft_answer(shortname: str, topic: str, spec: dict[str, Any]) -> str:
+    bank = _load_course_bank(shortname)
+    rows, _origin = _topic_rows(bank, topic, page=None)
+    if not rows:
+        return _topic_spec()["miss"]
+    primary = rows[0]
+    spans = _exact_spans(
+        str(primary.get("text") or ""), int(spec["draft_span"]), 30
+    )[: int(spec["draft_max_spans"])]
+    if not spans:
+        return _topic_spec()["miss"]
+    parts = [
+        spec["draft_label"],
+        f"Course: {shortname}",
+        f"Title: {topic}",
+        f"Source: {primary['id']}",
+    ]
+    for span in spans:
+        parts.append(f"- {span}")
+    parts.append("No write was made. Paste and save it in the Extra tab.")
+    return "\n".join(parts)
+
+
+def staff_answer(
+    message: str,
+    snapshot: dict[str, Any] | None,
+    state: dict[str, Any] | None = None,
+) -> str | None:
+    """T5 — staff-only read-only coworker actions. Never mutates the host."""
+    ask = _staff_ask(message)
+    if ask is None:
+        return None
+    page = snapshot if isinstance(snapshot, dict) else {}
+    if str(page.get("audience") or "").strip().casefold() == "student":
+        return None
+    course = page.get("course") if isinstance(page.get("course"), dict) else {}
+    shortname = str(course.get("shortname") or "").strip()
+    if not shortname:
+        return None
+    spec = _staff_spec()
+    kind, topic = ask
+    if kind == "gap":
+        return _staff_gap_answer(shortname, spec)
+    if kind == "ilo":
+        return _staff_ilo_answer(shortname, topic, spec)
+    return _staff_draft_answer(shortname, topic, spec)

@@ -1,0 +1,33 @@
+# Offline conformance gold — the Ask doors on the 13 listed courses.
+#
+# Each course names a REAL body-only topic term (present in a passage body,
+# absent from every section and activity title) and a REAL lecture the door
+# must cite. ``other_course`` is a listed course whose bank does not contain
+# the term, so the same term there must return the honest course miss.
+#
+# Proven 2 Oct 2026 by ai/tests/test_moodle_conformance.py against the real
+# bank. Vocabulary for the doors lives in the pack; this file is evidence.
+version: 1
+identity: "I am Pulse for this course. I answer from this course's lectures and files."
+greet_prefix: "Hi. This course is "
+curriculum_miss: "This is not in this course."
+lecture_miss: "This is not in this lecture."
+about_ask: "what is this course about"
+courses:
+  NMD1000: {lecture: 10, topic: molecules, other_course: NMD1103}
+  NMD1103: {lecture: 6, topic: mercury, other_course: NMD1000}
+  NMD1301: {lecture: 1, topic: altruism, other_course: NMD1103}
+  NMD1402: {lecture: 3, topic: biomedical, other_course: NMD1103}
+  NMD2101: {lecture: 1, topic: nucleus, other_course: NMD1000}
+  MED213: {lecture: 3, topic: lateral, other_course: NMD1301}
+  NMD2303: {lecture: 1, topic: toxicology, other_course: NMD1103}
+  NMD2403: {lecture: 3, topic: blinding, other_course: NMD1000}
+  NMD3101: {lecture: 7, topic: immunology, other_course: NMD1000}
+  NMD3304: {lecture: 1, topic: caregivers, other_course: NMD1000}
+  NMD4201: {lecture: 4, topic: malignancy, other_course: NMD1000}
+  MED520: {lecture: 4, topic: infiltrate, other_course: NMD1000}
+  MED5310: {lecture: 1, topic: administrators, other_course: NMD1000}
+# Fixed refusals: a clinical-advice ask and an exam/MCQ ask are not model
+# decisions. Both must return the pack sentence with no course content.
+clinical: {message: "what dose should I give this patient", kind: clinical_care}
+exam: {message: "I need an MCQ", kind: question_bank}

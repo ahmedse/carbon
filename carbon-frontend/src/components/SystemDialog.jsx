@@ -10,6 +10,8 @@ const MIN_WIDTH = 420;
 const MIN_HEIGHT = 320;
 const DEFAULT_WIDTH = 720;
 const DEFAULT_HEIGHT = 520;
+// Keeps the draggable window inside the visible viewport on short screens.
+const WINDOW_MARGIN = 24;
 
 export default function SystemDialog({
   open,
@@ -39,13 +41,30 @@ export default function SystemDialog({
   const dragStartRef = useRef(null);
   const resizeStartRef = useRef(null);
   const contentRef = useRef(null);
+  const [viewport, setViewport] = useState(() => ({
+    width: typeof window === 'undefined' ? 1280 : window.innerWidth,
+    height: typeof window === 'undefined' ? 800 : window.innerHeight,
+  }));
 
   useEffect(() => {
     if (!open || isMobile) return;
     const viewportWidth = window.innerWidth;
-    const initialLeft = Math.max(24, Math.round((viewportWidth - size.width) / 2));
-    setPosition((prev) => ({ top: 80, left: prev.left || initialLeft }));
+    const initialLeft = Math.max(WINDOW_MARGIN, Math.round((viewportWidth - size.width) / 2));
+    setPosition((prev) => ({ top: prev.top || 80, left: prev.left || initialLeft }));
   }, [open, size.width, isMobile]);
+
+  // A dialog with a fixed top + height can push its DialogActions footer past
+  // the bottom of a short viewport, where it overlaps the last form fields.
+  // Track the viewport so the window (and its footer) always stays on screen.
+  useEffect(() => {
+    if (isMobile) return undefined;
+    const onResize = () => setViewport({
+      width: window.innerWidth,
+      height: window.innerHeight,
+    });
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [isMobile]);
 
   useEffect(() => {
     if (isMobile) return undefined;
@@ -53,16 +72,18 @@ export default function SystemDialog({
       if (dragging && dragStartRef.current) {
         event.preventDefault();
         const { startX, startY, startLeft, startTop } = dragStartRef.current;
+        // Clamp against the effective (viewport-fitted) height, not the raw one.
+        const dragHeight = Math.min(size.height, Math.max(1, window.innerHeight - 2 * WINDOW_MARGIN));
         setPosition({
-          left: Math.max(24, Math.min(window.innerWidth - size.width - 24, startLeft + event.clientX - startX)),
-          top: Math.max(24, Math.min(window.innerHeight - size.height - 24, startTop + event.clientY - startY)),
+          left: Math.max(WINDOW_MARGIN, Math.min(window.innerWidth - size.width - WINDOW_MARGIN, startLeft + event.clientX - startX)),
+          top: Math.max(WINDOW_MARGIN, Math.min(window.innerHeight - dragHeight - WINDOW_MARGIN, startTop + event.clientY - startY)),
         });
       }
       if (resizing && resizeStartRef.current) {
         event.preventDefault();
         const { startX, startY, startWidth, startHeight } = resizeStartRef.current;
-        const newWidth = Math.max(minWidth, Math.min(window.innerWidth - position.left - 24, startWidth + event.clientX - startX));
-        const newHeight = Math.max(minHeight, Math.min(window.innerHeight - position.top - 24, startHeight + event.clientY - startY));
+        const newWidth = Math.max(minWidth, Math.min(window.innerWidth - position.left - WINDOW_MARGIN, startWidth + event.clientX - startX));
+        const newHeight = Math.max(minHeight, Math.min(window.innerHeight - position.top - WINDOW_MARGIN, startHeight + event.clientY - startY));
         setSize({ width: Math.min(parseInt(maxWidth, 10) || newWidth, newWidth), height: Math.min(parseInt(maxHeight, 10) || newHeight, newHeight) });
       }
     };
@@ -122,6 +143,16 @@ export default function SystemDialog({
     else if (onClose) onClose();
   };
 
+  // Fit the desktop window inside the visible viewport so the footer is
+  // always on screen and only the content region scrolls. Mobile uses
+  // fullScreen, where the same flex column keeps the footer pinned.
+  const maxWindowHeight = Math.max(1, viewport.height - 2 * WINDOW_MARGIN);
+  const effectiveHeight = Math.min(size.height, maxWindowHeight);
+  const effectiveTop = Math.min(
+    Math.max(position.top, WINDOW_MARGIN),
+    Math.max(WINDOW_MARGIN, viewport.height - effectiveHeight - WINDOW_MARGIN),
+  );
+
   return (
     <Dialog
       open={open}
@@ -136,10 +167,10 @@ export default function SystemDialog({
           ? undefined
           : {
               position: 'absolute',
-              top: position.top,
+              top: effectiveTop,
               left: position.left,
               width: size.width,
-              height: size.height,
+              height: effectiveHeight,
               margin: 0,
               overflow: 'hidden',
               display: 'flex',
@@ -159,7 +190,7 @@ export default function SystemDialog({
             }
           : {
               minWidth,
-              minHeight,
+              minHeight: Math.min(minHeight, effectiveHeight),
               maxWidth,
               maxHeight,
             },
@@ -193,7 +224,7 @@ export default function SystemDialog({
         </IconButton>
       </DialogTitle>
 
-      <DialogContent ref={contentRef} sx={{ flex: 1, overflow: 'auto', pb: 2 }}>
+      <DialogContent ref={contentRef} sx={{ flex: 1, minHeight: 0, overflow: 'auto', pb: 2 }}>
         {children}
       </DialogContent>
 

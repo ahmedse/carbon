@@ -18,11 +18,15 @@ owns:
   lecture_asks: lecture_asks.yaml
   topic_asks: topic_asks.yaml
   reference_asks: reference_asks.yaml
+  explain_asks: explain_asks.yaml
+  quiz_asks: quiz_asks.yaml
+  staff_asks: staff_asks.yaml
   fact_asks: fact_asks.yaml
   identity_asks: identity_asks.yaml
   greet_asks: greet_asks.yaml
   course_asks: course_asks.yaml
   access_reasons: access_reasons.yaml
+  integrity: integrity.yaml
   courses: courses.yaml
   inventory: inventory.json
   bank_nmd1103: bank/course-meat-13/NMD1103.jsonl
@@ -38,6 +42,10 @@ owns:
   gold_c6: gold/c6.yaml
   bank_ext: bank/course-ext-13
   gold_l5: gold/l5.yaml
+  gold_l5_curriculum_draft: gold/l5-curriculum.draft.yaml
+  gold_l5_r11_draft: gold/l5-r11.draft.yaml
+  gold_l5_r12_pilot: gold/l5-r12.pilot.yaml
+  gold_conformance: gold/conformance-13.yaml
   gold_a3_roster: gold/a3-roster.yaml
   gold_nmd2101_restore: gold/nmd2101_restore.yaml
   keys_nmd1103: bank/course-keys-13/NMD1103.jsonl

@@ -38,8 +38,13 @@ function readLs(key, fallback) {
     const raw = localStorage.getItem(key);
     if (raw === null || raw === undefined) return fallback;
     if (typeof fallback === 'boolean') return raw === 'true';
-    const num = Number(raw);
-    return Number.isFinite(num) ? num : fallback;
+    if (typeof fallback === 'number') {
+      const num = Number(raw);
+      return Number.isFinite(num) ? num : fallback;
+    }
+    // String preferences (e.g. the active drawer tab) round-trip verbatim so
+    // they survive reload — carbon-notes-tab must not fall back to "notes".
+    return raw === '' ? fallback : raw;
   } catch {
     return fallback;
   }

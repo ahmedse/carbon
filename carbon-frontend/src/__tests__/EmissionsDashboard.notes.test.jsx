@@ -14,6 +14,7 @@ vi.mock('../api/api', () => ({
 
 vi.mock('../api/emissions', () => ({
   fetchEmissionsDashboard: vi.fn(),
+  fetchReportingPeriods: vi.fn().mockResolvedValue([]),
   triggerCalculations: vi.fn(),
 }));
 

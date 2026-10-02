@@ -6,6 +6,10 @@
 version: 1
 miss: This is not in this course.
 cite_span: 200
+# Body fallback cap. Title-matched activities keep cite_span. A body topic
+# gets a bounded verbatim span around the matched word (never a new sentence,
+# never the model). 160 matches the R-body4 contract.
+body_cite_span: 160
 # First matching prefix wins. Topic is stripped remainder (punctuation dropped).
 # "tell me more about lecture N" stays on lecture_asks (lecture door runs first
 # and is_lecture_ask excludes those from this door). A non-lecture complement

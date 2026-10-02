@@ -10,7 +10,9 @@ meaning: >
   data-entry period is Calendar year 2026. Required streams for that
   year start missing. The coverage panel lists a missing stream as
   missing. Inventory kg stays absent. A missing stream is not 0 kg.
-  Market-based
+  Intake is a VERB reached from one coverage row, with campus, scope, unit
+  and period prefilled; the client sends the value only. A Data Product is
+  the CONTRACT a stream conforms to. Missing is not 0 kg. Market-based
   stays absent until a ContractualScope2Factor row differs from the grid
   factor. P1 records five VVB fields and not_assured stays unmet until
   all five are present. P2 stays shape_only.

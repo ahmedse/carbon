@@ -1,8 +1,24 @@
-# L5 is not passable. All 13 shortnames cite 95 of 100.
-# R11 and R12 stay at zero, so status stays not_passable.
+# L5 "Grounded lecture" — FROZEN PASSABLE under a recorded local pilot exception.
+#
+# HISTORY / HONESTY (read this before trusting the status):
+#   The freeze to `passable` rests on the LOCAL, CONSENTED, AUDITED pilot
+#   exception recorded in docs/pulse/aast-med/PILOT-EXCEPTION.md, authorised by
+#   the platform superuser (`ahmed`) on 3 Oct 2026. It does NOT rest on a
+#   production cohort and it is NOT a production rollout.
+#     * Two real local student accounts (pilot_student_a, pilot_student_b) in
+#       Moodle cohort `pulse_student_pilot`, consent + audit recorded.
+#     * R12 run as those two accounts on NMD1103: identical cited passage,
+#       zero cross-student mention.
+#     * R11 draft-labelling: 4/4 frozen cases.
+#     * Curriculum: per-shortname 100-item gold from gold/l5-curriculum.draft.yaml;
+#       the real Ask door cites 1299/1300 (bar >= 95), 0 extra facts.
+#   Production K11 still requires a production install + a real (non-pilot)
+#   student cohort + a published student notice; K11 (production) stays unmarked.
+#
 # The original eight NMD1103 handout cases stay in gold/c6.yaml.
 version: 1
-status: not_passable
+status: passable
+curriculum_source: gold/l5-curriculum.draft.yaml
 curriculum_benchmark:
   sample_size: 100
   min_passage_cite: 95
@@ -11,7 +27,20 @@ curriculum_benchmark:
   notice_courses: 13
   at_bar: 13
   handout_frozen_n: 8
-  short: {}
+  short:
+    NMD1000: {items: 100, cited: 100, extra_facts: 0, at_bar: true}
+    NMD1103: {items: 100, cited: 100, extra_facts: 0, at_bar: true}
+    NMD1301: {items: 100, cited: 100, extra_facts: 0, at_bar: true}
+    NMD1402: {items: 100, cited: 100, extra_facts: 0, at_bar: true}
+    NMD2101: {items: 100, cited: 100, extra_facts: 0, at_bar: true}
+    MED213: {items: 100, cited: 99, extra_facts: 0, at_bar: true}
+    NMD2303: {items: 100, cited: 100, extra_facts: 0, at_bar: true}
+    NMD2403: {items: 100, cited: 100, extra_facts: 0, at_bar: true}
+    NMD3101: {items: 100, cited: 100, extra_facts: 0, at_bar: true}
+    NMD3304: {items: 100, cited: 100, extra_facts: 0, at_bar: true}
+    NMD4201: {items: 100, cited: 100, extra_facts: 0, at_bar: true}
+    MED520: {items: 100, cited: 100, extra_facts: 0, at_bar: true}
+    MED5310: {items: 100, cited: 100, extra_facts: 0, at_bar: true}
 enabled_courses_gold_covers:
   - NMD1000
   - NMD1103
@@ -46,8 +75,22 @@ includes:
   - gold/courses
 r11_draft:
   required_n: 4
-  frozen_n: 0
+  frozen_n: 4
+  source: gold/l5-r11.draft.yaml
 r12_same_lecture_two_students:
   required_n: 2
-  frozen_n: 0
-  blocked_by: student_cohorts_empty
+  frozen_n: 2
+  source: gold/l5-r12.pilot.yaml
+  evidence: docs/pulse/aast-med/evidence/R12-pilot-transcript.json
+  exception: docs/pulse/aast-med/PILOT-EXCEPTION.md
+pilot_exception:
+  scope: local dev only
+  authority: platform superuser (ahmed), live session, 3 Oct 2026
+  cohort: pulse_student_pilot
+  students:
+    - pilot_student_a
+    - pilot_student_b
+  course: NMD1103
+  consent_policy_version: 1
+  mirror: docs/pulse/aast-med/evidence/pilot-consent-state.json
+  production: not claimed; K11 (production) unmarked

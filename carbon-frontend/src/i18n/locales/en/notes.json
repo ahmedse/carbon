@@ -3,7 +3,8 @@
     "label": "Notes drawer"
   },
   "tabs": {
-    "notes": "Notes"
+    "notes": "Notes",
+    "journey": "Journey"
   },
   "panel": {
     "label": "Notes panel",

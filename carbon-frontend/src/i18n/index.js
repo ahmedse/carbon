@@ -42,6 +42,8 @@ import enMigration from './locales/en/migration.json';
 import arMigration from './locales/ar/migration.json';
 import enGuide from './locales/en/guide.json';
 import arGuide from './locales/ar/guide.json';
+import enJourney from './locales/en/journey.json';
+import arJourney from './locales/ar/journey.json';
 
 const STORAGE_KEY = 'carbon.lang';
 const SUPPORTED_LANGS = ['en', 'ar'];
@@ -58,13 +60,13 @@ function getInitialLanguage() {
 
 i18n.use(initReactI18next).init({
   resources: {
-    en: { common: enCommon, shell: enShell, auth: enAuth, errors: enErrors, ai: enAi, catalog: enCatalog, notes: enNotes, emissions: enEmissions, evidence: enEvidence, importexport: enImportExport, connections: enConnections, dq: enDq, dataschema: enDataschema, people: enPeople, my: enMy, team: enTeam, excellence: enExcellence, migration: enMigration, guide: enGuide },
-    ar: { common: arCommon, shell: arShell, auth: arAuth, errors: arErrors, ai: arAi, catalog: arCatalog, notes: arNotes, emissions: arEmissions, evidence: arEvidence, importexport: arImportExport, connections: arConnections, dq: arDq, dataschema: arDataschema, people: arPeople, my: arMy, team: arTeam, excellence: arExcellence, migration: arMigration, guide: arGuide },
+    en: { common: enCommon, shell: enShell, auth: enAuth, errors: enErrors, ai: enAi, catalog: enCatalog, notes: enNotes, emissions: enEmissions, evidence: enEvidence, importexport: enImportExport, connections: enConnections, dq: enDq, dataschema: enDataschema, people: enPeople, my: enMy, team: enTeam, excellence: enExcellence, migration: enMigration, guide: enGuide, journey: enJourney },
+    ar: { common: arCommon, shell: arShell, auth: arAuth, errors: arErrors, ai: arAi, catalog: arCatalog, notes: arNotes, emissions: arEmissions, evidence: arEvidence, importexport: arImportExport, connections: arConnections, dq: arDq, dataschema: arDataschema, people: arPeople, my: arMy, team: arTeam, excellence: arExcellence, migration: arMigration, guide: arGuide, journey: arJourney },
   },
   lng: getInitialLanguage(),
   fallbackLng: 'en',
   supportedLngs: SUPPORTED_LANGS,
-  ns: ['common', 'shell', 'auth', 'errors', 'ai', 'catalog', 'notes', 'emissions', 'evidence', 'importexport', 'connections', 'dq', 'dataschema', 'people', 'my', 'team', 'excellence', 'migration', 'guide'],
+  ns: ['common', 'shell', 'auth', 'errors', 'ai', 'catalog', 'notes', 'emissions', 'evidence', 'importexport', 'connections', 'dq', 'dataschema', 'people', 'my', 'team', 'excellence', 'migration', 'guide', 'journey'],
   defaultNS: 'common',
   interpolation: {
     // React already escapes — no double escaping.

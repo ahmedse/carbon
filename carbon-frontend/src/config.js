@@ -168,6 +168,9 @@ export const API_ROUTES = {
   emissionsCoverageGoals: "carbon/coverage-goals/",
   emissionsCoverageActions: "carbon/coverage-actions/",
   emissionsCoverage: "carbon/coverage/",
+  emissionsCoverageReconciliation: "carbon/coverage/reconciliation/",
+  emissionsCoverageTargets: "carbon/coverage-targets/",
+  emissionsCoverageTasks: "carbon/coverage-tasks/",
   emissionsDisclosure: "carbon/disclosure/",
 };
 

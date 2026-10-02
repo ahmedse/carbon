@@ -1,0 +1,86 @@
+{
+    "consent": {
+        "policy_version": 1,
+        "consent": [
+            {
+                "userid": 3057,
+                "username": "pilot_student_a",
+                "course": "NMD1103",
+                "policy_version": 1,
+                "granted": true,
+                "granted_at": 1790979886,
+                "timecreated": 1790979886
+            },
+            {
+                "userid": 3058,
+                "username": "pilot_student_b",
+                "course": "NMD1103",
+                "policy_version": 1,
+                "granted": true,
+                "granted_at": 1790979887,
+                "timecreated": 1790979887
+            },
+            {
+                "userid": 3057,
+                "username": "pilot_student_a",
+                "course": "NMD1103",
+                "policy_version": 1,
+                "granted": false,
+                "granted_at": 1790979901,
+                "timecreated": 1790979901
+            },
+            {
+                "userid": 3057,
+                "username": "pilot_student_a",
+                "course": "NMD1103",
+                "policy_version": 1,
+                "granted": true,
+                "granted_at": 1790979901,
+                "timecreated": 1790979901
+            }
+        ],
+        "audit": [
+            {
+                "userid": 3057,
+                "username": "pilot_student_a",
+                "course": "NMD1103",
+                "event": "consent_grant",
+                "reason": "granted",
+                "timecreated": 1790979886
+            },
+            {
+                "userid": 3058,
+                "username": "pilot_student_b",
+                "course": "NMD1103",
+                "event": "consent_grant",
+                "reason": "granted",
+                "timecreated": 1790979887
+            },
+            {
+                "userid": 3057,
+                "username": "pilot_student_a",
+                "course": "NMD1103",
+                "event": "consent_revoke",
+                "reason": "revoked",
+                "timecreated": 1790979901
+            },
+            {
+                "userid": 3057,
+                "username": "pilot_student_a",
+                "course": "NMD1103",
+                "event": "consent_grant",
+                "reason": "granted",
+                "timecreated": 1790979901
+            }
+        ]
+    },
+    "student_notice": {
+        "text": "Pulse is available to students in the named student cohort, on the named course shortnames. It answers from the lecture you have open. It does not grade or enrol you. It never shows another student's answers or work. It does not give clinical doses or diagnose patients. If the fact is not in that lecture, it says so. You may withdraw consent at any time; withdrawing stops Pulse for you.",
+        "published": true,
+        "authorid": 2,
+        "author": "Admin User",
+        "published_at": 1790979887,
+        "cohorts": "pulse_student_pilot",
+        "shortnames": "NMD1103"
+    }
+}

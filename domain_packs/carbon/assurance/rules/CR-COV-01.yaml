@@ -1,7 +1,12 @@
 id: CR-COV-01
 journey: INV
 meaning: >
-  CoverageGoal for onboarding, once InventorySource rows exist, uses scope
+  Coverage is the DRIVER: the open period's required row is InventorySource
+  (org_unit x scope x scope3_category x source_name) plus its per-period
+  InventorySourceStatus, and Coverage is the ONLY surface that reports
+  Missing / Entered / Excluded for a required stream. A stream is covered
+  only when its linked table is populated AND a Calculation exists for that
+  same reporting period. CoverageGoal for onboarding, once InventorySource rows exist, uses scope
   "1+2", completeness_definition materiality_bounded, min_quality_tier 4
   (Estimated), and status draft. target_coverage_pct is not written before
   at least the two O1 sources exist. InventorySourceStatus covered is legal

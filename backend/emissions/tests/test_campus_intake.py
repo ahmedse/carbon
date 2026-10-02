@@ -10,17 +10,30 @@ from accounts.models import ScopedRole, User
 from emissions.campus_intake import (
     apply_template,
     assurance_status,
+    contract_for_source,
     coverage_board,
+    coverage_row_state,
     enter_activity,
+    enter_for_source,
     file_activity_rows,
     intake_catalogue,
     market_kg,
     open_period_inventory_kg,
+    reconciliation_summary,
     record_assurance,
     record_contractual_factor,
+    set_exclusion,
     store_discovered_activity,
+    validate_contract,
 )
-from emissions.models import Calculation, EmissionFactor, ReportingPeriod
+from emissions.models import (
+    Calculation,
+    CoverageGoal,
+    EmissionFactor,
+    InventorySource,
+    InventorySourceStatus,
+    ReportingPeriod,
+)
 from emissions.onboarding_o1 import evaluate_o1
 from mdm.models import OrgUnit
 
@@ -713,3 +726,365 @@ class IntakeWriteTests(TestCase):
         self.assertFalse(DataRow.objects.filter(values__source_name="Smart Village waste disposal").exists())
         self.assertIsNone(stored["kilograms"])
         self.assertEqual(ReportingPeriod.objects.get(name="FY 2025-26").status, "locked")
+
+
+class CoverageRowSubmissionTests(TestCase):
+    """A submission binds to ONE coverage row; campus/scope/unit/period are prefilled."""
+
+    def setUp(self):
+        self.user = User.objects.create_superuser(username="ahmed", password="AdminPa_132")
+        self.period = ReportingPeriod.objects.create(
+            name="Calendar year 2026", start_date=date(2026, 1, 1),
+            end_date=date(2026, 12, 31), status="open", period_type="annual",
+        )
+        root = OrgUnit.objects.create(name="AASTMT", slug="cr-root", org_type="company")
+        self.org = OrgUnit.objects.create(
+            name="South Valley", slug="cr-sv", parent=root, org_type="department",
+        )
+        self.other = OrgUnit.objects.create(
+            name="Abu Qir", slug="cr-aq", parent=root, org_type="department",
+        )
+        self.factor = _factor()
+
+    def _source(self, name="South Valley diesel", scope=1, org=None):
+        return InventorySource.objects.create(
+            org_unit=org or self.org, scope=scope, source_name=name,
+        )
+
+    def test_coverage_board_rows_carry_the_inventory_source_id(self):
+        source = self._source()
+        board = coverage_board(self.user)
+        by_name = {row["source_name"]: row for row in board["streams"]}
+        self.assertEqual(by_name["South Valley diesel"]["inventory_source_id"], source.id)
+        self.assertEqual(by_name["South Valley diesel"]["status"], "missing")
+        self.assertIsNone(by_name["Abu Qir diesel"]["inventory_source_id"])
+
+    def test_submit_prefills_campus_scope_unit_from_the_coverage_row(self):
+        from dataschema.models import DataRow
+
+        source = self._source()
+        result = enter_for_source(
+            source=source, user=self.user,
+            fields={"quantity": "10", "stream": "generators"}, factor=self.factor,
+        )
+        self.assertTrue(result["written"], result)
+        self.assertEqual(Decimal(result["kilograms"][0]), Decimal("25.0"))
+        stored = DataRow.objects.get(is_archived=False)
+        self.assertEqual(stored.values["campus"], "South Valley")
+        self.assertEqual(stored.values["scope"], "1")
+        self.assertEqual(stored.values["activity_unit"], "litre")
+        self.assertEqual(stored.values["period_start"], "2026-01-01")
+        state = coverage_row_state(source, self.user)
+        self.assertEqual(state["status"], "entered")
+        self.assertEqual(state["inventory_source_id"], source.id)
+        self.assertEqual(Decimal(state["inventory_kg"]), Decimal("25.000000"))
+
+    def test_submit_uses_the_rows_own_campus(self):
+        """Submitting to a row pre-fills that row's campus, not a hand-picked one."""
+        from dataschema.models import DataRow
+
+        south = self._source(name="South Valley diesel", org=self.org)
+        abu = self._source(name="Abu Qir diesel", org=self.other)
+        result = enter_for_source(
+            source=abu, user=self.user,
+            fields={"quantity": "7", "stream": "fleet"}, factor=self.factor,
+        )
+        self.assertTrue(result["written"], result)
+        stored = DataRow.objects.get(is_archived=False)
+        self.assertEqual(stored.values["campus"], "Abu Qir")
+        self.assertEqual(DataRow.objects.filter(values__campus="South Valley").count(), 0)
+        self.assertEqual(coverage_row_state(abu, self.user)["status"], "entered")
+        self.assertEqual(coverage_row_state(south, self.user)["status"], "missing")
+
+    def test_submit_denies_a_campus_owner_outside_their_org(self):
+        group, _ = Group.objects.get_or_create(name="dataowners_group")
+        owner = User.objects.create_user(username="data.cr.sv", password="AASTcarbonPa_132")
+        ScopedRole.objects.create(user=owner, group=group, org_unit=self.org, module=None, is_active=True)
+        foreign = self._source(name="Abu Qir diesel", org=self.other)
+        denied = enter_for_source(
+            source=foreign, user=owner,
+            fields={"quantity": "5", "stream": "generators"}, factor=self.factor,
+        )
+        self.assertFalse(denied["written"])
+        self.assertIn("org scope", denied["errors"])
+
+    def test_submit_rejects_a_row_without_a_benchmark_spec(self):
+        rogue = InventorySource.objects.create(
+            org_unit=self.org, scope=1, source_name="Rogue source",
+        )
+        result = enter_for_source(
+            source=rogue, user=self.user, fields={"quantity": "1"}, factor=self.factor,
+        )
+        self.assertFalse(result["written"])
+        self.assertIn("coverage_row", result["errors"])
+
+    def test_submit_endpoint_returns_the_coverage_row_state(self):
+        from django.urls import reverse
+        from rest_framework.test import APIClient
+
+        source = self._source()
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse("carbon:coverage-row-submit", args=[source.id])
+        get_resp = client.get(url)
+        self.assertEqual(get_resp.status_code, 200, get_resp.data)
+        self.assertEqual(get_resp.data["status"], "missing")
+        post_resp = client.post(
+            url, {"quantity": "10", "stream": "generators", "factor_code": self.factor.code},
+            format="json",
+        )
+        self.assertEqual(post_resp.status_code, 201, post_resp.data)
+        self.assertTrue(post_resp.data["written"])
+        self.assertEqual(post_resp.data["coverage_row"]["status"], "entered")
+        self.assertEqual(post_resp.data["coverage_row"]["inventory_source_id"], source.id)
+        missing = client.get(reverse("carbon:coverage-row-submit", args=[999999]))
+        self.assertEqual(missing.status_code, 404)
+
+    def test_coverage_row_get_returns_the_data_product_contract(self):
+        from django.urls import reverse
+        from rest_framework.test import APIClient
+
+        source = self._source()
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse("carbon:coverage-row-submit", args=[source.id])
+        resp = client.get(url)
+        self.assertEqual(resp.status_code, 200, resp.data)
+        contract = resp.data["contract"]
+        self.assertEqual(contract["source"], "benchmark_spec")
+        self.assertIsNone(contract["data_table_id"])
+        self.assertEqual(contract["org_unit_name"], "South Valley")
+        self.assertEqual(contract["activity_unit"], "litre")
+        self.assertEqual(contract["value_field"], "quantity")
+        self.assertIn("quantity", contract["required"])
+        self.assertIn("stream", contract["required"])
+
+    def test_contract_moves_to_a_real_datatable_after_the_first_write(self):
+        from dataschema.models import DataTable
+
+        source = self._source()
+        before = contract_for_source(source)
+        self.assertEqual(before["source"], "benchmark_spec")
+        self.assertIsNone(before["data_table_id"])
+
+        result = enter_for_source(
+            source=source, user=self.user,
+            fields={"quantity": "10", "stream": "generators"}, factor=self.factor,
+        )
+        self.assertTrue(result["written"], result)
+        self.assertIn("contract", result)
+        self.assertEqual(DataTable.objects.count(), 1)
+        after = contract_for_source(source)
+        self.assertEqual(after["source"], "datatable")
+        self.assertIsNotNone(after["data_table_id"])
+        self.assertEqual(after["data_table_id"], DataTable.objects.get().id)
+        self.assertIn("quantity", after["fields"])
+        self.assertEqual(after["writable_fields"], ["quantity", "stream"])
+
+    def test_submit_rejects_a_field_outside_the_contract(self):
+        from dataschema.models import DataRow
+
+        source = self._source()
+        result = enter_for_source(
+            source=source, user=self.user,
+            fields={"quantity": "10", "stream": "generators", "campus": "Abu Qir"},
+            factor=self.factor,
+        )
+        self.assertFalse(result["written"])
+        self.assertIn("contract_fields", result["errors"])
+        self.assertEqual(result["unknown"], ["campus"])
+        self.assertFalse(DataRow.objects.exists())
+
+    def test_submit_requires_the_contract_value(self):
+        from dataschema.models import DataRow
+
+        source = self._source()
+        result = enter_for_source(
+            source=source, user=self.user,
+            fields={"stream": "generators"}, factor=self.factor,
+        )
+        self.assertFalse(result["written"])
+        self.assertIn("contract_value", result["errors"])
+        self.assertEqual(result["missing"], ["quantity"])
+        self.assertFalse(DataRow.objects.exists())
+
+        no_stream = enter_for_source(
+            source=source, user=self.user,
+            fields={"quantity": "10"}, factor=self.factor,
+        )
+        self.assertFalse(no_stream["written"])
+        self.assertIn("contract_value", no_stream["errors"])
+        self.assertEqual(no_stream["missing"], ["stream"])
+
+    def test_validate_contract_passes_a_conforming_row(self):
+        source = self._source()
+        check = validate_contract(source, {"quantity": "10", "stream": "fleet", "factor_code": "X"})
+        self.assertTrue(check["ok"], check)
+        self.assertEqual(check["errors"], [])
+
+    def test_reconciliation_counts_and_never_claims_complete(self):
+        from dataschema.models import DataRow
+
+        source = self._source()
+        before = reconciliation_summary(self.user)
+        self.assertFalse(before["coverage_complete"])
+        self.assertNotIn("pct", before)
+        self.assertNotIn("coverage_pct", before)
+        self.assertEqual(before["counts"]["required"], 9)
+        self.assertEqual(before["counts"]["missing"], 9)
+        self.assertIsNotNone(before["open_period"])
+        self.assertEqual(before["open_period"]["id"], self.period.id)
+
+        result = enter_for_source(
+            source=source, user=self.user,
+            fields={"quantity": "10", "stream": "generators"}, factor=self.factor,
+        )
+        self.assertTrue(result["written"], result)
+        after = reconciliation_summary(self.user)
+        self.assertEqual(after["counts"]["required"], 9)
+        self.assertEqual(after["counts"]["entered"], 1)
+        self.assertEqual(after["counts"]["missing"], 8)
+        self.assertEqual(after["counts"]["excluded"], 0)
+        # No kilogram leaks into the reconciliation payload.
+        self.assertNotIn("inventory_kg", str(after))
+        self.assertNotIn("1239599", str(after))
+        self.assertTrue(DataRow.objects.exists())
+
+    def test_reconciliation_marks_an_excluded_source_and_counts_it(self):
+        source = self._source()
+        InventorySourceStatus.objects.create(
+            source=source, reporting_period=self.period,
+            status="excluded", exclusion_reason="insufficient_data",
+        )
+        summary = reconciliation_summary(self.user)
+        self.assertEqual(summary["counts"]["excluded"], 1)
+        self.assertEqual(summary["counts"]["missing"], 8)
+        self.assertEqual(summary["counts"]["entered"], 0)
+
+    def test_reconciliation_reports_per_goal_counts_without_a_percent_claim(self):
+        from decimal import Decimal as _Decimal
+
+        self._source()
+        goal = CoverageGoal.objects.create(
+            org_unit=self.org, name="South Valley 1+2", scope="1+2",
+            target_coverage_pct=_Decimal("80.00"), target_year=2026, status="active",
+        )
+        summary = reconciliation_summary(self.user)
+        row = next(item for item in summary["goals"] if item["goal_id"] == goal.id)
+        self.assertEqual(row["scope"], "1+2")
+        self.assertEqual(row["org_unit_name"], "South Valley")
+        self.assertEqual(row["target_coverage_pct"], "80.00")
+        # South Valley has two required streams; none received yet.
+        self.assertEqual(row["required"], 2)
+        self.assertEqual(row["missing"], 2)
+        self.assertNotIn("pct", row)
+        self.assertNotIn("coverage_complete", row)
+        self.assertFalse(summary["coverage_complete"])
+
+    def test_reconciliation_endpoint_returns_counts(self):
+        from django.urls import reverse
+        from rest_framework.test import APIClient
+
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        resp = client.get(reverse("carbon:coverage-reconciliation"))
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual(resp.data["counts"]["required"], 9)
+        self.assertFalse(resp.data["coverage_complete"])
+        self.assertNotIn("pct", resp.data["counts"])
+
+    def test_exclusion_writes_only_the_open_period_and_no_kilogram(self):
+        from emissions.models import Calculation, InventorySourceStatus
+
+        source = self._source()
+        result = set_exclusion(
+            source=source, user=self.user, excluded=True,
+            reason="insufficient_data", notes="meter missing",
+        )
+        self.assertTrue(result["written"], result)
+        self.assertEqual(result["reason"], "insufficient_data")
+        self.assertEqual(result["coverage_row"]["status"], "excluded")
+        self.assertEqual(result["coverage_row"]["reason"], "insufficient_data")
+        status = InventorySourceStatus.objects.get()
+        self.assertEqual(status.reporting_period_id, self.period.id)
+        self.assertEqual(status.status, "excluded")
+        # Coverage is a status surface: no kilogram value and no Calculation.
+        self.assertFalse(Calculation.objects.exists())
+        self.assertIsNone(result["kilograms"])
+        self.assertIsNone(result["coverage_row"]["inventory_kg"])
+
+    def test_exclusion_requires_a_vocabulary_reason_and_notes_for_other(self):
+        source = self._source()
+        bad = set_exclusion(source=source, user=self.user, excluded=True, reason="because")
+        self.assertFalse(bad["written"])
+        self.assertIn("exclusion_reason", bad["errors"])
+        other = set_exclusion(source=source, user=self.user, excluded=True, reason="other", notes="")
+        self.assertFalse(other["written"])
+        self.assertIn("exclusion_notes", other["errors"])
+        ok = set_exclusion(
+            source=source, user=self.user, excluded=True, reason="other", notes="boundary dispute",
+        )
+        self.assertTrue(ok["written"], ok)
+
+    def test_clearing_an_exclusion_restores_declared(self):
+        from emissions.models import InventorySourceStatus
+
+        source = self._source()
+        set_exclusion(source=source, user=self.user, excluded=True, reason="not_material")
+        cleared = set_exclusion(source=source, user=self.user, excluded=False)
+        self.assertTrue(cleared["written"], cleared)
+        self.assertFalse(cleared["excluded"])
+        status = InventorySourceStatus.objects.get()
+        self.assertEqual(status.status, "declared")
+        self.assertIsNone(status.exclusion_reason)
+        self.assertEqual(cleared["coverage_row"]["status"], "missing")
+
+    def test_clearing_a_row_that_is_not_excluded_is_rejected(self):
+        source = self._source()
+        result = set_exclusion(source=source, user=self.user, excluded=False)
+        self.assertFalse(result["written"])
+        self.assertIn("not_excluded", result["errors"])
+
+    def test_exclusion_denies_a_campus_owner_outside_their_org(self):
+        group, _ = Group.objects.get_or_create(name="dataowners_group")
+        owner = User.objects.create_user(username="excl.sv", password="AASTcarbonPa_132")
+        ScopedRole.objects.create(user=owner, group=group, org_unit=self.org, module=None, is_active=True)
+        foreign = self._source(name="Abu Qir diesel", org=self.other)
+        denied = set_exclusion(source=foreign, user=owner, excluded=True, reason="not_material")
+        self.assertFalse(denied["written"])
+        self.assertIn("org scope", denied["errors"])
+
+    def test_exclusion_endpoint_declares_and_clears(self):
+        from django.urls import reverse
+        from rest_framework.test import APIClient
+
+        from emissions.models import InventorySourceStatus
+
+        source = self._source()
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse("carbon:coverage-row-exclusion", args=[source.id])
+        declared = client.post(
+            url, {"excluded": True, "reason": "insufficient_data"}, format="json",
+        )
+        self.assertEqual(declared.status_code, 201, declared.data)
+        self.assertEqual(declared.data["coverage_row"]["status"], "excluded")
+        self.assertEqual(InventorySourceStatus.objects.get().status, "excluded")
+        bad = client.post(url, {"excluded": True, "reason": "nonsense"}, format="json")
+        self.assertEqual(bad.status_code, 400, bad.data)
+        cleared = client.post(url, {"excluded": False}, format="json")
+        self.assertEqual(cleared.status_code, 201, cleared.data)
+        self.assertEqual(InventorySourceStatus.objects.get().status, "declared")
+        not_found = client.post(
+            reverse("carbon:coverage-row-exclusion", args=[999999]),
+            {"excluded": True, "reason": "not_material"}, format="json",
+        )
+        self.assertEqual(not_found.status_code, 404)
+
+    def test_exclusion_refuses_when_no_open_period_exists(self):
+        self.period.status = "locked"
+        self.period.save(update_fields=["status"])
+        source = self._source()
+        result = set_exclusion(source=source, user=self.user, excluded=True, reason="not_material")
+        self.assertFalse(result["written"])
+        self.assertIn("open period count", result["errors"])

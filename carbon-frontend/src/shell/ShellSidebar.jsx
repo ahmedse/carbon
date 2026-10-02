@@ -52,6 +52,7 @@ import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
 import KeyboardIcon from '@mui/icons-material/Keyboard';
 import CalculateIcon from '@mui/icons-material/Calculate';
 import TrackChangesIcon from '@mui/icons-material/TrackChanges';
+import FlagIcon from '@mui/icons-material/Flag';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import ChatIcon from '@mui/icons-material/Chat';
 import ForumIcon from '@mui/icons-material/Forum';
@@ -175,10 +176,12 @@ const CARBON_ITEM_ICONS = {
   'SBTi Targets':         TrackChangesIcon,
   'Organizational Boundaries': AccountTreeIcon,
   'Base Years':               HistoryIcon,
+  'Coverage':                 TrackChangesIcon,
+  'Coverage targets':         FlagIcon,
   'Inventory Coverage':       TrackChangesIcon,
   'Inventory onboarding':     AssignmentTurnedInIcon,
+  'Journey':                  AssignmentTurnedInIcon,
   'Campus intake':            FactCheckIcon,
-  'My guide':                 SchoolIcon,
 };
 
 // People HRMS — filled / distinct glyphs (avoid thin-outline twins)

@@ -9,10 +9,14 @@ from rest_framework.views import APIView
 from emissions.campus_intake import (
     apply_template,
     coverage_board,
+    coverage_row_state,
     enter_activity,
+    enter_for_source,
     intake_catalogue,
+    reconciliation_summary,
     record_assurance,
     record_contractual_factor,
+    set_exclusion,
     store_discovered_activity,
     template_csv,
 )
@@ -61,6 +65,109 @@ class CampusIntakeEntryAPIView(APIView):
         if result["errors"] and not result["exclusions"]:
             status = 400
         return Response(result, status=status)
+
+
+class CoverageRowSubmissionAPIView(APIView):
+    """Submit activity against ONE coverage row (InventorySource).
+
+    GET  returns the row's Missing / Entered / Excluded state on the open period.
+    POST prefills campus, scope, unit and period from the row and stores one
+    value. The client never picks a leaf, campus, scope or unit by hand.
+    """
+
+    permission_classes = [IsAuthenticated, CarbonBrandPermission]
+
+    def _source(self, source_id):
+        from emissions.models import InventorySource
+
+        return (
+            InventorySource.objects.filter(pk=source_id, is_active=True)
+            .select_related("org_unit")
+            .first()
+        )
+
+    def get(self, request, source_id):
+        source = self._source(source_id)
+        if source is None:
+            return Response({"detail": "Coverage row not found."}, status=404)
+        return Response(coverage_row_state(source, request.user))
+
+    def post(self, request, source_id):
+        from emissions.models import EmissionFactor
+
+        source = self._source(source_id)
+        if source is None:
+            return Response({"detail": "Coverage row not found."}, status=404)
+        body = request.data if isinstance(request.data, dict) else {}
+        factor = None
+        factor_code = str(body.get("factor_code") or "").strip()
+        if factor_code:
+            factor = EmissionFactor.objects.filter(code=factor_code, is_active=True).first()
+            if factor is None:
+                return Response({"written": False, "kilograms": None, "errors": ["factor"]}, status=400)
+        result = enter_for_source(source=source, user=request.user, fields=body, factor=factor)
+        status = 201 if result["written"] else 200
+        if result["errors"] and not result["exclusions"]:
+            status = 400
+        payload = dict(result)
+        payload["coverage_row"] = coverage_row_state(source, request.user)
+        return Response(payload, status=status)
+
+
+class CoverageRowExclusionAPIView(APIView):
+    """Declare or clear an exclusion for ONE coverage row.
+
+    POST prefills the row and the single open period. It writes only the
+    open period's InventorySourceStatus; a locked or closed period is not a
+    write target. No kilogram and no Calculation is produced. ``reason`` is
+    required when excluding and must be one of the four vocabulary codes;
+    ``other`` also requires notes.
+    """
+
+    permission_classes = [IsAuthenticated, CarbonBrandPermission]
+
+    def post(self, request, source_id):
+        from emissions.models import InventorySource
+
+        source = (
+            InventorySource.objects.filter(pk=source_id, is_active=True)
+            .select_related("org_unit")
+            .first()
+        )
+        if source is None:
+            return Response({"detail": "Coverage row not found."}, status=404)
+        body = request.data if isinstance(request.data, dict) else {}
+        excluded = body.get("excluded", True)
+        if isinstance(excluded, str):
+            excluded = excluded.strip().lower() not in {"false", "0", "no", ""}
+        result = set_exclusion(
+            source=source,
+            user=request.user,
+            excluded=bool(excluded),
+            reason=body.get("reason") or "",
+            notes=body.get("notes") or "",
+        )
+        if result["written"]:
+            status = 201
+        elif result["errors"] and not result["exclusions"]:
+            status = 400
+        else:
+            status = 200
+        return Response(result, status=status)
+
+
+class CoverageReconciliationAPIView(APIView):
+    """Required vs received counts. Coverage is the only surface that says these.
+
+    GET returns counts (required, entered, excluded, missing, awaiting_factor)
+    for the open period and per active CoverageGoal. It returns no kilogram and
+    no "coverage complete" percent.
+    """
+
+    permission_classes = [IsAuthenticated, CarbonBrandPermission]
+
+    def get(self, request):
+        return Response(reconciliation_summary(request.user))
 
 
 class CampusIntakeTemplateAPIView(APIView):

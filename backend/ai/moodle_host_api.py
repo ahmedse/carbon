@@ -141,6 +141,51 @@ class MoodleRosterView(APIView):
 
 
 @method_decorator(csrf_exempt, name="dispatch")
+class MoodleIndexView(APIView):
+    """Staff HMAC extra index. Does not fetch Google or YouTube."""
+
+    authentication_classes: list = []
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        secret = configured_secret(getattr(settings, "MOODLE_PULSE_HMAC_SECRET", "") or "")
+        raw = request.body or b""
+        if not verify_signature(
+            secret,
+            request.headers.get("X-Pulse-Timestamp", ""),
+            raw,
+            request.headers.get("X-Pulse-Signature", ""),
+        ):
+            return Response({"ok": False, "error": "unauthorized"}, status=401)
+        try:
+            payload = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return Response({"ok": False, "error": "bad_json"}, status=400)
+        if not isinstance(payload, dict):
+            return Response({"ok": False, "error": "bad_json"}, status=400)
+        shortname = str(payload.get("shortname") or "").strip()
+        extras = payload.get("extras") or []
+        if not isinstance(extras, list):
+            return Response({"ok": False, "error": "bad_json"}, status=400)
+        from ai.moodle_bank import listed_shortnames, write_extra_index
+
+        if shortname not in listed_shortnames():
+            return Response(
+                {"ok": False, "error": "off_list", "shortname": shortname, "indexed": 0, "skipped": ["drive", "youtube"]},
+                status=404,
+            )
+        indexed = write_extra_index(shortname, extras)
+        return Response(
+            {
+                "ok": True,
+                "shortname": shortname,
+                "indexed": indexed,
+                "skipped": ["drive", "youtube"],
+            }
+        )
+
+
+@method_decorator(csrf_exempt, name="dispatch")
 class MoodleEmbedView(APIView):
     """Moodle asks for a one-time ticket. The browser redeems it for the pane."""
 

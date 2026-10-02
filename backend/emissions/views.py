@@ -14,9 +14,10 @@ from django.utils import timezone
 from decimal import Decimal
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 
-from .models import ReportingPeriod, EmissionFactor, GWP, Calculation, CalculationRule, ReportConfig, SBTiTarget, VerificationRecord, CalculationAudit, ExportAudit, OrganizationalBoundary, BaseYear, RecalculationTrigger, InventorySource, InventorySourceStatus, CoverageGoal, CoverageAction
+from .models import ReportingPeriod, EmissionFactor, GWP, Calculation, CalculationRule, ReportConfig, SBTiTarget, VerificationRecord, CalculationAudit, ExportAudit, OrganizationalBoundary, BaseYear, RecalculationTrigger, InventorySource, InventorySourceStatus, CoverageGoal, CoverageAction, CoverageTarget, CoverageTask
 from accounts.rbac_utils import org_scope_for_capability, user_is_global_admin
 from accounts.constants import ADMINS_GROUP
+from accounts.models import User
 from core.feedback import AppFeedback
 from catalog.audit_utils import emit_governance_event
 from core.models import Module
@@ -41,6 +42,9 @@ from .serializers import (
     InventorySourceStatusSerializer,
     CoverageGoalSerializer,
     CoverageActionSerializer,
+    CoverageTargetSerializer,
+    CoverageTargetDetailSerializer,
+    CoverageTaskSerializer,
 )
 from .services import (
     scope_calculations,
@@ -59,6 +63,7 @@ from .services import (
     ChairmanService,
     CalculationSummaryService,
     DisclosureService,
+    single_open_period,
 )
 from core.services import NotificationService
 
@@ -1572,6 +1577,320 @@ class CoverageActionViewSet(viewsets.ModelViewSet):
         action_status = self.request.query_params.get('status')
         if action_status:
             qs = qs.filter(status=action_status)
+        return qs
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+
+# ── Coverage target owner eligibility ──────────────────────────────────────
+# A Carbon Lead must only pick a real person or a designated data-owner
+# account as a target owner — never an automation / probe / shell / schema
+# fixture that happens to have a User row.
+#
+# Evidence from the aastmt dev directory: every non-human fixture (dbg_*,
+# shell_tester*, gov_*, probe-admin*, schemauser*, moodle-*, w6f_*, owner1/2,
+# admin1/2, analyst1, viewer1, carbon_lead_user) has an EMPTY first/last name,
+# no people.Employee link, and — for the data-owner fixtures — only a GLOBAL
+# duty row with no org unit. Real owners are either named humans (Ahmed Saied,
+# Mostafa Kamel, Ismael Abdel Ghafar) or data-owner accounts scoped to a real
+# OrgUnit (data.smartvillage, data.abuqir, alamein.finance).
+#
+# The rule below encodes exactly those signals, plus a documented reserved
+# username pattern so a future fixture cannot re-enter the picker just by
+# gaining a name. Do not replace this with a one-off list of names.
+AUTOMATION_USERNAME_PREFIXES = (
+    "dbg", "debug", "probe", "shell_tester", "schemauser",
+    "gov_", "moodle", "w6f_", "test_", "test-", "pytest", "qa_",
+)
+AUTOMATION_USERNAME_SUFFIXES = (
+    "_test", "-test", "_probe", "_tester", "_fixture", "_bot",
+)
+# Duty groups that designate a data owner across the platform.
+DATA_OWNER_GROUP_NAMES = ("dataowners_group", "carbon_data_owners_group")
+
+
+def _no_store(response):
+    """Mark a live directory lookup as uncacheable.
+
+    The owner / campus / org-unit lookups read small LIVE directories that
+    change when the seed runs or an admin edits a user. A pre-restart cached
+    ``owners`` list once served a stale 66-option directory. ``no-store`` is
+    scoped to these lookup actions only — no global middleware, and every
+    other endpoint keeps its existing caching. ``Vary`` keys the response to
+    the caller identity because these directories are RBAC-scoped.
+    """
+    response['Cache-Control'] = 'no-store'
+    response['Pragma'] = 'no-cache'
+    response['Vary'] = 'Authorization, Cookie'
+    return response
+
+
+def eligible_owner_queryset():
+    """Active users who are a real person or a designated data owner.
+
+    Excludes reserved automation / test accounts so a probe, shell tester or
+    schema fixture can never be chosen as a coverage-target owner. A user
+    qualifies through one of the real-world signals only:
+      * a human full name (first_name or last_name present),
+      * a live org-scoped data-owner duty (a real data-owner account), or
+      * a link to an active people.Employee record.
+    """
+    from django.apps import apps as django_apps
+    from accounts.models import ScopedRole
+
+    scoped_data_owner_ids = ScopedRole.objects.live().filter(
+        is_active=True,
+        org_unit__isnull=False,
+        group__name__in=DATA_OWNER_GROUP_NAMES,
+    ).values_list("user_id", flat=True)
+
+    employee_user_ids = []
+    try:
+        Employee = django_apps.get_model("people", "Employee")
+        employee_user_ids = list(
+            Employee.objects.filter(is_active=True, user__isnull=False)
+            .values_list("user_id", flat=True)
+        )
+    except LookupError:  # pragma: no cover — people app always installed today
+        employee_user_ids = []
+
+    qs = User.objects.filter(is_active=True).filter(
+        ~Q(first_name="", last_name="")
+        | Q(id__in=scoped_data_owner_ids)
+        | Q(id__in=employee_user_ids)
+    )
+    for prefix in AUTOMATION_USERNAME_PREFIXES:
+        qs = qs.exclude(username__istartswith=prefix)
+    for suffix in AUTOMATION_USERNAME_SUFFIXES:
+        qs = qs.exclude(username__iendswith=suffix)
+    return qs.order_by("username")
+
+
+class CoverageTargetViewSet(viewsets.ModelViewSet):
+    """Layer 1 of Coverage: period-scoped KPI targets with derived progress.
+
+    Writes are the open period only (a locked or closed period is not a write
+    target). Listing another period is read-only history for the cycle
+    dropdown. Progress is derived from real rows; a target never stores a
+    hand-set percent and never promotes a CoverageGoal.
+    """
+
+    permission_classes = [ReadAnyWriteAdmin]
+    required_write_capability = 'carbon:manage_inventory_coverage'
+
+    def get_serializer_class(self):
+        if self.action == 'retrieve':
+            return CoverageTargetDetailSerializer
+        return CoverageTargetSerializer
+
+    def get_queryset(self):
+        scope = org_scope_for_capability(self.request.user, 'carbon:view_console')
+        qs = CoverageTarget.objects.select_related(
+            'org_unit', 'reporting_period', 'owner', 'coverage_goal', 'created_by'
+        )
+        if not scope.unrestricted:
+            if not scope.ids:
+                return CoverageTarget.objects.none()
+            qs = qs.filter(org_unit_id__in=scope.ids)
+        period_id = self.request.query_params.get('reporting_period')
+        if period_id:
+            qs = qs.filter(reporting_period_id=period_id)
+        else:
+            # Default to the single open period — the cycle the lead works in.
+            open_period = single_open_period()
+            if open_period is not None:
+                qs = qs.filter(reporting_period_id=open_period.id)
+        target_status = self.request.query_params.get('status')
+        if target_status:
+            qs = qs.filter(status=target_status)
+        return qs.prefetch_related('tasks')
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+    @action(detail=False, methods=['get'], url_path='board')
+    def board(self, request):
+        """Cycle dropdown + the target grid for the defaulted open period."""
+        open_period = single_open_period()
+        periods = [
+            {
+                'id': row.id,
+                'name': row.name,
+                'status': row.status,
+                'start_date': row.start_date.isoformat() if row.start_date else '',
+                'end_date': row.end_date.isoformat() if row.end_date else '',
+            }
+            for row in ReportingPeriod.objects.all().order_by('-start_date', 'id')
+        ]
+        qs = self.get_queryset()
+        serializer = CoverageTargetSerializer(
+            qs, many=True, context=self.get_serializer_context()
+        )
+        return Response({
+            'product': 'Carbon on AASTMT',
+            'coverage_complete': False,
+            'note': (
+                'Targets are declared goals. Progress is measured from streams '
+                'with a real row on that period, labelled measured_not_claimed. '
+                'This is not a coverage-complete claim.'
+            ),
+            'open_period': None if open_period is None else {
+                'id': open_period.id,
+                'name': open_period.name,
+                'status': open_period.status,
+                'start_date': open_period.start_date.isoformat(),
+                'end_date': open_period.end_date.isoformat(),
+            },
+            'period_default': None if open_period is None else open_period.id,
+            'periods': periods,
+            'targets': serializer.data,
+        })
+
+    @action(detail=False, methods=['get'], url_path='campuses')
+    def campuses(self, request):
+        """Real campuses (OrgUnit org_type='campus') for the target form.
+
+        Reads the MDM OrgUnit source directly. The generic mdm/org-units list is
+        clipped to a single deployment root (ADR-0028) and returns nothing when a
+        deployment has more than one root; the target form still needs the real
+        campuses, so this action reads them under the caller's carbon scope.
+        """
+        from mdm.models import OrgUnit
+
+        scope = org_scope_for_capability(request.user, 'carbon:view_console')
+        qs = OrgUnit.objects.filter(org_type='campus', is_active=True).order_by('name')
+        if not scope.unrestricted:
+            if not scope.ids:
+                return _no_store(Response({'count': 0, 'results': []}))
+            qs = qs.filter(id__in=scope.ids)
+        results = [
+            {'id': row.id, 'name': row.name, 'code': row.code or ''}
+            for row in qs
+        ]
+        return _no_store(Response({'count': len(results), 'results': results}))
+
+    @action(detail=False, methods=['get'], url_path='org-units')
+    def org_units(self, request):
+        """The selected campus's REAL descendant org units (the dependency).
+
+        GET carbon/coverage-targets/org-units/?campus=<id>. Options come from the
+        OrgUnit parent hierarchy — never a fabricated list. A campus with no child
+        units returns an honest empty list plus its own row.
+        """
+        from mdm.models import OrgUnit
+
+        campus_id = request.query_params.get('campus')
+        if not campus_id:
+            return Response(
+                {'detail': 'campus query parameter is required'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            campus_id = int(campus_id)
+        except (TypeError, ValueError):
+            return Response(
+                {'detail': 'campus must be an integer'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        campus = OrgUnit.objects.filter(
+            pk=campus_id, org_type='campus', is_active=True
+        ).first()
+        if campus is None:
+            return Response(
+                {'detail': 'campus not found'}, status=status.HTTP_404_NOT_FOUND
+            )
+        scope = org_scope_for_capability(request.user, 'carbon:view_console')
+        ids = campus.get_descendant_ids(include_self=True)
+        if not scope.unrestricted:
+            ids = ids & set(scope.ids) if scope.ids else set()
+        rows = OrgUnit.objects.filter(id__in=ids, is_active=True).order_by('name')
+        results = [
+            {
+                'id': row.id,
+                'name': row.name,
+                'code': row.code or '',
+                'org_type': row.org_type,
+                'parent': row.parent_id,
+                'is_campus': row.id == campus.id,
+            }
+            for row in rows
+        ]
+        return _no_store(Response({
+            'campus': {'id': campus.id, 'name': campus.name},
+            'count': len(results),
+            'results': results,
+        }))
+
+    @action(detail=False, methods=['get'], url_path='owners')
+    def owners(self, request):
+        """Real platform people who can own a target (the accounts directory).
+
+        CoverageTarget.owner is an accounts.User FK. Owners are the eligible
+        real users only (``eligible_owner_queryset``): named humans, accounts
+        with an Employee link, and data-owner accounts scoped to a real org
+        unit. Probe / shell / schema / governance-automation fixtures are
+        excluded even though they have a User row. ``?q=`` filters *within*
+        that eligible set — it never bypasses the eligibility rule.
+        """
+        q = (request.query_params.get('q') or '').strip()
+        qs = eligible_owner_queryset()
+        if q:
+            qs = qs.filter(
+                Q(username__icontains=q)
+                | Q(first_name__icontains=q)
+                | Q(last_name__icontains=q)
+            )
+        try:
+            page = max(1, int(request.query_params.get('page', 1)))
+        except (TypeError, ValueError):
+            page = 1
+        try:
+            page_size = int(request.query_params.get('page_size', 200))
+        except (TypeError, ValueError):
+            page_size = 200
+        page_size = max(1, min(page_size, 200))
+        total = qs.count()
+        start = (page - 1) * page_size
+        results = []
+        for user in qs[start:start + page_size]:
+            full = (user.get_full_name() or '').strip()
+            results.append({
+                'id': user.id,
+                'username': user.username,
+                'full_name': full,
+                'label': f"{full} ({user.username})" if full else user.username,
+            })
+        return _no_store(Response({
+            'count': total,
+            'page': page,
+            'page_size': page_size,
+            'results': results,
+        }))
+
+
+class CoverageTaskViewSet(viewsets.ModelViewSet):
+    """Tasks under a CoverageTarget. A done transition needs host evidence."""
+
+    serializer_class = CoverageTaskSerializer
+    permission_classes = [ReadAnyWriteAdmin]
+    required_write_capability = 'carbon:manage_inventory_coverage'
+
+    def get_queryset(self):
+        scope = org_scope_for_capability(self.request.user, 'carbon:view_console')
+        qs = CoverageTask.objects.select_related(
+            'target', 'owner', 'data_table', 'stream_source', 'factor'
+        )
+        if not scope.unrestricted:
+            if not scope.ids:
+                return CoverageTask.objects.none()
+            qs = qs.filter(target__org_unit_id__in=scope.ids)
+        target_id = self.request.query_params.get('target')
+        if target_id:
+            qs = qs.filter(target_id=target_id)
+        task_status = self.request.query_params.get('status')
+        if task_status:
+            qs = qs.filter(status=task_status)
         return qs
 
     def perform_create(self, serializer):

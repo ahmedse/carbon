@@ -6,7 +6,7 @@
 // returns true. Today only Notes is registered, so this renders identically to
 // the pre-inspector drawer — zero behavior change until tabs are registered.
 
-import React, { useEffect, useMemo, useSyncExternalStore } from 'react';
+import React, { useMemo, useSyncExternalStore } from 'react';
 import { Box, Tabs, Tab, IconButton, Tooltip, Typography } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import PushPinOutlinedIcon from '@mui/icons-material/PushPinOutlined';
@@ -40,13 +40,11 @@ export function NotesPanel() {
     [contextTabs],
   );
 
-  // If the active tab no longer matches the current context (e.g. navigated
-  // away), fall back to Notes.
-  useEffect(() => {
-    if (activeTab !== 'notes' && !tabIds.includes(activeTab)) {
-      setActiveTab('notes');
-    }
-  }, [activeTab, tabIds, setActiveTab]);
+  // If the preferred tab no longer matches the current context (e.g. navigated
+  // away from the app that registers it), DISPLAY Notes without overwriting the
+  // persisted preference — so returning to that context restores the tab the
+  // user chose (defect: leaving /carbon used to clobber carbon-notes-tab).
+  const effectiveTab = tabIds.includes(activeTab) ? activeTab : 'notes';
 
   return (
     <Box
@@ -92,7 +90,7 @@ export function NotesPanel() {
 
       {/* Tab bar — Notes is the fixed first tab; contextual tabs auto-appended */}
       <Tabs
-        value={activeTab}
+        value={effectiveTab}
         onChange={(_, v) => setActiveTab(v)}
         variant="scrollable"
         scrollButtons={false}
@@ -117,10 +115,10 @@ export function NotesPanel() {
 
       {/* Active tab body */}
       <Box sx={{ flex: 1, overflow: 'hidden' }}>
-        {activeTab === 'notes' && <NotesTab />}
+        {effectiveTab === 'notes' && <NotesTab />}
         {contextTabs.map((provider) =>
-          activeTab === provider.id ? (
-            <Box key={provider.id} sx={{ height: '100%', overflow: 'auto' }}>
+          effectiveTab === provider.id ? (
+            <Box key={provider.id} data-drawer-scroll sx={{ height: '100%', overflow: 'auto' }}>
               {provider.render(context)}
             </Box>
           ) : null

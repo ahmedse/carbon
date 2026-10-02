@@ -78,12 +78,15 @@ const SBTiTargetsPage = React.lazy(() => import("./pages/carbon/SBTiTargetsPage"
 const OrganizationalBoundariesPage = React.lazy(() => import("./pages/carbon/OrganizationalBoundariesPage"));
 const BaseYearsPage = React.lazy(() => import("./pages/carbon/BaseYearsPage"));
 const InventoryCoveragePage = React.lazy(() => import("./pages/carbon/InventoryCoveragePage"));
+const CoverageTargetsPage = React.lazy(() => import("./pages/carbon/CoverageTargetsPage"));
+const CoverageTargetDetailPage = React.lazy(() => import("./pages/carbon/CoverageTargetDetailPage"));
 const ReportingPeriodsPage = React.lazy(() => import("./pages/emissions/ReportingPeriodsPage"));
 const CarbonConsolePage = React.lazy(() => import("./pages/carbon/CarbonConsolePage"));
 const CarbonDashboardPage = React.lazy(() => import("./pages/carbon/CarbonDashboardPage"));
 const AnalyticsDashboard = React.lazy(() => import("./pages/dashboards/AnalyticsDashboard"));
 const ChairmanDashboard = React.lazy(() => import("./pages/carbon/ChairmanDashboard"));
 const OnboardingPage = React.lazy(() => import("./pages/carbon/OnboardingPage"));
+const JourneyPage = React.lazy(() => import("./pages/carbon/JourneyPage"));
 const CampusIntakePage = React.lazy(() => import("./pages/carbon/CampusIntakePage"));
 const GuidePage = React.lazy(() => import("./pages/guide/GuidePage"));
 const ReportsPage = React.lazy(() => import("./pages/carbon/ReportsPage"));
@@ -306,7 +309,13 @@ export default function App() {
                 {/* Guide: one pack-driven page for every domain app that ships a guide pack. */}
                 <Route path="/guide/:appId" element={<GuidePage />} />
                 <Route path="/guide/:appId/:lessonId" element={<GuidePage />} />
-                <Route path="/carbon/onboarding" element={<AppEnabledRoute appId="carbon"><OnboardingPage /></AppEnabledRoute>} />
+                <Route path="/carbon/onboarding" element={<AppEnabledRoute appId="carbon"><JourneyPage /></AppEnabledRoute>} />
+                <Route path="/journey/:appId" element={<JourneyPage />} />
+                {/* Lesson reader: /journey/<appId>/<lessonId>. The old /guide/carbon/D2
+                    deep link keeps resolving the same lesson through the guide route
+                    above, so D2 is never renamed and no bookmarked lesson 404s. */}
+                <Route path="/journey/:appId/:lessonId" element={<JourneyPage />} />
+                <Route path="/carbon/onboarding/readiness" element={<AppEnabledRoute appId="carbon"><OnboardingPage /></AppEnabledRoute>} />
                 <Route path="/carbon/onboarding/intake" element={<AppEnabledRoute appId="carbon"><CampusIntakePage /></AppEnabledRoute>} />
                 <Route path="/carbon/chairman" element={<AppEnabledRoute appId="carbon"><ChairmanDashboard /></AppEnabledRoute>} />
                 <Route path="/carbon/console" element={<AppEnabledRoute appId="carbon"><CarbonConsolePage /></AppEnabledRoute>} />
@@ -326,6 +335,8 @@ export default function App() {
                 <Route path="/carbon/admin/boundaries" element={<AdminRoute appId="carbon" requiredCapability={CARBON_MANAGE_REPORTING_PERIODS}><OrganizationalBoundariesPage /></AdminRoute>} />
                 <Route path="/carbon/admin/base-years" element={<AdminRoute appId="carbon" requiredCapability={CARBON_MANAGE_REPORTING_PERIODS}><BaseYearsPage /></AdminRoute>} />
                 <Route path="/carbon/admin/inventory-coverage" element={<AdminRoute appId="carbon" requiredCapability={CARBON_MANAGE_INVENTORY_COVERAGE}><InventoryCoveragePage /></AdminRoute>} />
+                <Route path="/carbon/admin/coverage-targets" element={<AdminRoute appId="carbon" requiredCapability={CARBON_MANAGE_INVENTORY_COVERAGE}><CoverageTargetsPage /></AdminRoute>} />
+                <Route path="/carbon/admin/coverage-targets/:targetId" element={<AdminRoute appId="carbon" requiredCapability={CARBON_MANAGE_INVENTORY_COVERAGE}><CoverageTargetDetailPage /></AdminRoute>} />
                 <Route path="/carbon/reporting" element={<AdminRoute appId="carbon" requiredCapability={CARBON_GENERATE_REPORTS}><ReportsPage /></AdminRoute>} />
                 <Route path="/carbon/reporting/generate" element={<Navigate to="/carbon/reporting" replace />} />
                 <Route path="/carbon/reporting/saved" element={<Navigate to="/carbon/reporting" replace />} />

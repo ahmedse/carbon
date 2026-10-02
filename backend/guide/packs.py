@@ -36,7 +36,13 @@ def _mtime(*paths: Path) -> tuple[float, ...]:
 
 @lru_cache(maxsize=32)
 def _load_pack(pack_id: str, stamp: float) -> dict[str, Any]:
-    """Structure of one pack. Imports the probe module the pack lists."""
+    """Structure of one pack. Imports the probe module the pack lists.
+
+    The engine reads four structural blocks: ``lessons``, ``stages``,
+    ``competencies`` and ``journey``. They are domain-free shapes; every human
+    string is looked up in the pack copy. A pack is valid only when
+    ``guide_check`` passes, so a new pack needs no engine edit.
+    """
     del stamp
     data = yaml.safe_load((pack_dir(pack_id) / "guide.yaml").read_text(encoding="utf-8")) or {}
     module = data.get("probes")
@@ -47,7 +53,15 @@ def _load_pack(pack_id: str, stamp: float) -> dict[str, Any]:
         lesson = dict(row)
         lesson["pack"] = pack_id
         lessons.append(lesson)
-    return {"id": pack_id, "version": int(data.get("version") or 1), "probes": module, "lessons": lessons}
+    return {
+        "id": pack_id,
+        "version": int(data.get("version") or 1),
+        "probes": module,
+        "lessons": lessons,
+        "stages": [dict(row) for row in data.get("stages") or []],
+        "competencies": [dict(row) for row in data.get("competencies") or []],
+        "journey": dict(data.get("journey") or {}),
+    }
 
 
 def load_pack(pack_id: str) -> dict[str, Any]:

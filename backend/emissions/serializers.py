@@ -4,7 +4,8 @@
 from rest_framework import serializers
 from django.utils import timezone
 from django.db.models import Sum
-from .models import ReportingPeriod, EmissionFactor, GWP, Calculation, CalculationRule, ReportConfig, VerificationRecord, SBTiTarget, CalculationAudit, ExportAudit, OrganizationalBoundary, BaseYear, RecalculationTrigger, InventorySource, InventorySourceStatus, CoverageGoal, CoverageAction
+from .models import ReportingPeriod, EmissionFactor, GWP, Calculation, CalculationRule, ReportConfig, VerificationRecord, SBTiTarget, CalculationAudit, ExportAudit, OrganizationalBoundary, BaseYear, RecalculationTrigger, InventorySource, InventorySourceStatus, CoverageGoal, CoverageAction, CoverageTarget, CoverageTask
+from .coverage_targets import task_evidence, probe_task, target_progress
 
 
 class ReportingPeriodSerializer(serializers.ModelSerializer):
@@ -550,3 +551,163 @@ class CoverageActionSerializer(serializers.ModelSerializer):
         read_only_fields = ['created_at', 'updated_at', 'created_by',
                             'source_name', 'action_type_display', 'status_display',
                             'owner_username']
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Coverage Targets / Tasks serializers (two-layer Coverage, locked 2 Oct 2026)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def owner_display_name(user):
+    """Read-only human label for a CoverageTarget/CoverageTask owner.
+
+    The board and detail must never show a bare user id. Falls back to the
+    username when the account has no first/last name. No employee lookup here —
+    that would be an N+1 on the list serializer.
+    """
+    if user is None:
+        return None
+    full = (user.get_full_name() or '').strip()
+    return full or user.username
+
+
+class CoverageTaskSerializer(serializers.ModelSerializer):
+    """A task under a CoverageTarget. A done transition needs host evidence."""
+
+    task_type_display = serializers.CharField(source='get_task_type_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    owner_username = serializers.CharField(source='owner.username', read_only=True)
+    owner_name = serializers.SerializerMethodField()
+    data_table_name = serializers.CharField(source='data_table.name', read_only=True)
+    stream_source_name = serializers.CharField(source='stream_source.source_name', read_only=True)
+    factor_code = serializers.CharField(source='factor.code', read_only=True)
+    evidence = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CoverageTask
+        fields = '__all__'
+        read_only_fields = [
+            'created_at', 'updated_at', 'created_by',
+            'task_type_display', 'status_display', 'owner_username', 'owner_name',
+            'data_table_name', 'stream_source_name', 'factor_code', 'evidence',
+        ]
+
+    def get_owner_name(self, obj):
+        return owner_display_name(obj.owner)
+
+    def get_evidence(self, obj):
+        return task_evidence(obj)
+
+    def validate(self, attrs):
+        status_value = attrs.get('status', getattr(self.instance, 'status', 'open'))
+        if status_value == 'done':
+            evidence = task_evidence(probe_task(self.instance, attrs))
+            if not evidence['met']:
+                raise serializers.ValidationError({
+                    'status': 'task_evidence',
+                    'evidence': evidence,
+                })
+        return attrs
+
+
+class CoverageTargetSerializer(serializers.ModelSerializer):
+    """Layer 1 target for the grid: declared goal + DERIVED progress. No tasks."""
+
+    org_unit_name = serializers.CharField(source='org_unit.name', read_only=True)
+    campus_name = serializers.CharField(source='campus.name', read_only=True)
+    reporting_period_name = serializers.CharField(source='reporting_period.name', read_only=True)
+    scope_display = serializers.CharField(source='get_scope_display', read_only=True)
+    goal_kind_display = serializers.CharField(source='get_goal_kind_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    owner_username = serializers.CharField(source='owner.username', read_only=True)
+    owner_name = serializers.SerializerMethodField()
+    coverage_goal_name = serializers.CharField(source='coverage_goal.name', read_only=True)
+    progress = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CoverageTarget
+        fields = '__all__'
+        read_only_fields = [
+            'created_at', 'updated_at', 'created_by',
+            'org_unit_name', 'campus_name', 'reporting_period_name', 'scope_display',
+            'goal_kind_display', 'status_display', 'owner_username', 'owner_name',
+            'coverage_goal_name', 'progress',
+        ]
+
+    def get_owner_name(self, obj):
+        return owner_display_name(obj.owner)
+
+    def get_progress(self, obj):
+        return target_progress(obj)
+
+    @staticmethod
+    def _nearest_campus(org_unit):
+        """The org unit itself when it is a campus, else its nearest campus ancestor.
+
+        Walks the real ``parent`` hierarchy. Returns None when the unit is not
+        under any campus (honest: no fabricated campus).
+        """
+        seen = set()
+        current = org_unit
+        while current is not None and current.id not in seen:
+            seen.add(current.id)
+            if current.org_type == 'campus':
+                return current
+            current = current.parent
+        return None
+
+    def validate(self, attrs):
+        kind = attrs.get('goal_kind', getattr(self.instance, 'goal_kind', 'percent'))
+        value = attrs.get('goal_value', getattr(self.instance, 'goal_value', None))
+        unit = attrs.get('goal_unit', getattr(self.instance, 'goal_unit', ''))
+        scope = attrs.get('scope', getattr(self.instance, 'scope', ''))
+        category = attrs.get('scope3_category', getattr(self.instance, 'scope3_category', None))
+
+        if value is not None and value < 0:
+            raise serializers.ValidationError({'goal_value': 'goal_nonnegative'})
+        if kind == 'percent':
+            if value is not None and value > 100:
+                raise serializers.ValidationError({'goal_value': 'percent_lte_100'})
+            if unit:
+                raise serializers.ValidationError({'goal_unit': 'percent_has_no_unit'})
+        elif kind == 'absolute' and not str(unit or '').strip():
+            raise serializers.ValidationError({'goal_unit': 'absolute_needs_unit'})
+        if category is not None and '3' not in str(scope or ""):
+            raise serializers.ValidationError({'scope3_category': 'category_without_scope3'})
+
+        period = attrs.get(
+            'reporting_period', getattr(self.instance, 'reporting_period', None)
+        )
+        if period is not None:
+            from emissions.services import single_open_period
+
+            open_period = single_open_period()
+            if open_period is None:
+                raise serializers.ValidationError({'reporting_period': 'open_period_count'})
+            if period.id != open_period.id:
+                raise serializers.ValidationError({'reporting_period': 'period_not_open'})
+
+        # Campus / org unit dependency. The campus is the org_type='campus'
+        # OrgUnit; org_unit is the unit progress keys on and must be the campus
+        # or one of its REAL descendants. When the client does not send a campus
+        # we derive it from the real hierarchy, never fabricate one.
+        org_unit = attrs.get('org_unit', getattr(self.instance, 'org_unit', None))
+        campus = attrs.get('campus', getattr(self.instance, 'campus', None))
+        if campus is not None and campus.org_type != 'campus':
+            raise serializers.ValidationError({'campus': 'campus_not_a_campus'})
+        if campus is None and org_unit is not None:
+            campus = self._nearest_campus(org_unit)
+            attrs['campus'] = campus
+        if campus is not None and org_unit is not None:
+            if org_unit.id not in campus.get_descendant_ids(include_self=True):
+                raise serializers.ValidationError({'org_unit': 'org_unit_not_in_campus'})
+        return attrs
+
+
+class CoverageTargetDetailSerializer(CoverageTargetSerializer):
+    """Target detail: the grid fields plus the task list beneath the target."""
+
+    tasks = CoverageTaskSerializer(many=True, read_only=True)
+
+    class Meta(CoverageTargetSerializer.Meta):
+        fields = '__all__'

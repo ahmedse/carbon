@@ -17,6 +17,7 @@ _PACK = Path(__file__).resolve().parents[2] / "domain_packs" / "aast-med" / "ban
 _ROOT = _PACK / "course-meat-13"
 _KEYS = _PACK / "course-keys-13"
 _EXT = _PACK / "course-ext-13"
+_EXTRA = _PACK / "course-extra-13"
 
 
 def passage_id(shortname: str, kind: str, activity_id: int) -> str:
@@ -48,6 +49,7 @@ def load_c3(shortname: str, root: Path | None = None) -> dict[str, dict]:
             "course": shortname,
             "kind": kind,
             "activity_id": activity,
+            "sectionnum": int(row.get("sectionnum") or 0),
             "name": str(row.get("name") or ""),
             "text": text,
             "visible": bool(row.get("visible", True)),
@@ -124,6 +126,78 @@ def load_c5_youtube(shortname: str, ext_root: Path | None = None) -> dict[str, d
 def load_external(shortname: str, ext_root: Path | None = None) -> dict[str, dict]:
     """Drive bodies and captions for one course. Not file meat."""
     return {**load_c4_drive(shortname, ext_root), **load_c5_youtube(shortname, ext_root)}
+
+
+def load_extra(shortname: str, extra_root: Path | None = None) -> dict[str, dict]:
+    """Tutor extra files already indexed for one course. Not a Moodle resource."""
+    path = (extra_root or _EXTRA) / f"{shortname}.jsonl"
+    out: dict[str, dict] = {}
+    if not path.is_file():
+        return out
+    for row in _rows(path):
+        if str(row.get("course") or "") != shortname or str(row.get("kind") or "") != "extra":
+            continue
+        filename = str(row.get("filename") or "")
+        text = str(row.get("text") or "").strip()
+        if not filename or not text or not row.get("itemid"):
+            continue
+        itemid = int(row["itemid"])
+        pid = f"{shortname}:extra:{itemid}:{filename}"
+        out[pid] = {
+            "id": pid,
+            "course": shortname,
+            "kind": "extra",
+            "activity_id": -itemid,
+            "extra_itemid": itemid,
+            "source": f"extra:{filename}",
+            "name": str(row.get("name") or filename),
+            "text": text,
+            "world": listed_world(shortname),
+        }
+    return out
+
+
+def write_extra_index(shortname: str, extras: list[dict], extra_root: Path | None = None) -> int:
+    """Replace extra JSONL for one listed course. Does not fetch Drive or YouTube."""
+    if shortname not in listed_shortnames():
+        return 0
+    path = (extra_root or _EXTRA) / f"{shortname}.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines: list[str] = []
+    for item in extras:
+        if not isinstance(item, dict) or not item.get("itemid"):
+            continue
+        filename = str(item.get("filename") or "").strip()
+        title = str(item.get("title") or filename)
+        try:
+            itemid = int(item["itemid"])
+        except (TypeError, ValueError):
+            continue
+        if itemid <= 0 or not filename:
+            continue
+        sectionnum = int(item.get("sectionnum") or -1)
+        for passage in item.get("passages") or []:
+            if not isinstance(passage, dict):
+                continue
+            text = str(passage.get("text") or "").strip()
+            if not text:
+                continue
+            lines.append(
+                json.dumps(
+                    {
+                        "course": shortname,
+                        "itemid": itemid,
+                        "filename": filename,
+                        "kind": "extra",
+                        "name": title,
+                        "sectionnum": sectionnum,
+                        "text": text,
+                    },
+                    ensure_ascii=False,
+                )
+            )
+    path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
+    return len(lines)
 
 
 def _load_ext(shortname: str, *, family: str, kind: str, ext_root: Path | None) -> dict[str, dict]:
@@ -233,6 +307,59 @@ _ROSTER_URL_KINDS = {
     "youtube": "youtube",
 }
 
+# Stable join vocabulary between the bank and this Docker Moodle. The bank
+# keys carry production activity ids (NMD1103) that do not equal local cmids,
+# so the roster matches a Moodle module to a bank row by section + family +
+# name (the K7 join shape). Family is the only thing the two sides translate.
+_FAMILY_FILE = "file"
+_FAMILY_URL = "url"
+_FAMILY_KINDS = {"page": "page", "label": "label", "book": "book"}
+_URL_FAMILY_KINDS = {"url", "link", "youtube"}
+
+
+def roster_family(kind: str) -> str:
+    """Bank kind or Moodle modname → one of file / url / page / label / book / other."""
+    name = str(kind or "").strip().lower()
+    if name in {"file", "resource"}:
+        return _FAMILY_FILE
+    if name in _FAMILY_KINDS:
+        return _FAMILY_KINDS[name]
+    if name in _URL_FAMILY_KINDS or name.startswith("google"):
+        return _FAMILY_URL
+    return "other"
+
+
+def roster_key(sectionnum: int, kind: str, name: str) -> str:
+    """The section + family + name key a Moodle module and a bank row share."""
+    folded = " ".join(str(name or "").split()).lower()
+    return f"{int(sectionnum)}:{roster_family(kind)}:{folded}"
+
+
+def match_roster_activity(module: dict, activities: list[dict]) -> dict | None:
+    """A bank roster row for one Moodle module: local cmid first, stable key next.
+
+    Returns None when neither the cmid nor the section+family+name key matches,
+    so a caller never reads loaded without a real bank row behind it.
+    """
+    cmid = int(module.get("cmid") or 0)
+    if cmid:
+        for row in activities:
+            if int(row.get("cmid") or 0) == cmid:
+                return row
+    key = roster_key(
+        int(module.get("sectionnum") or 0),
+        str(module.get("modname") or module.get("kind") or ""),
+        str(module.get("name") or ""),
+    )
+    for row in activities:
+        if row.get("key") == key:
+            return row
+    return None
+
+
+def _roster_key_for_row(sectionnum: int, kind: str, name: str) -> str:
+    return roster_key(sectionnum, kind, name)
+
 
 def course_roster(shortname: str) -> dict:
     """Ask-read of loaders for one listed course. No passage text.
@@ -262,12 +389,15 @@ def course_roster(shortname: str) -> dict:
         for row in rows:
             if row.get("kind") not in _C3_KINDS:
                 continue
+            sectionnum = int(row.get("sectionnum") or 0)
+            kind = str(row.get("kind") or "")
             activities.append(
                 {
                     "cmid": cmid,
+                    "key": roster_key(sectionnum, kind, str(row.get("name") or "")),
                     "name": str(row.get("name") or ""),
-                    "kind": str(row.get("kind") or ""),
-                    "sectionnum": 0,
+                    "kind": kind,
+                    "sectionnum": sectionnum,
                     "status": "ok",
                     "source": "",
                     "in_pack": True,
@@ -275,6 +405,19 @@ def course_roster(shortname: str) -> dict:
             )
             seen.add(cmid)
             break
+    for row in load_extra(name).values():
+        activities.append(
+            {
+                "cmid": 0,
+                "itemid": int(row.get("extra_itemid") or 0),
+                "name": str(row.get("name") or ""),
+                "kind": "extra",
+                "sectionnum": -1,
+                "status": "ok",
+                "source": "extra",
+                "in_pack": True,
+            }
+        )
     return {"ok": True, "shortname": name, "activities": activities}
 
 
@@ -285,6 +428,7 @@ def _roster_loaded(shortname: str) -> dict[int, list[dict]]:
         load_c4_files(shortname),
         load_c4_drive(shortname),
         load_c5_youtube(shortname),
+        load_extra(shortname),
     ):
         for row in bank.values():
             activity = int(row["activity_id"])
@@ -317,11 +461,13 @@ def _roster_from_key(
         return None
     cmid = int(row["cmid"])
     kind, source = _roster_kind_source(row)
+    sectionnum = int(row.get("sectionnum") or 0)
     item = {
         "cmid": cmid,
+        "key": roster_key(sectionnum, kind or "link", str(row.get("name") or "")),
         "name": str(row.get("name") or ""),
         "kind": kind or "link",
-        "sectionnum": int(row.get("sectionnum") or 0),
+        "sectionnum": sectionnum,
         "status": "not_in_pack",
         "source": source,
         "in_pack": False,

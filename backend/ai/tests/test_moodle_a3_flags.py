@@ -55,6 +55,17 @@ def test_prepare_ask_honors_pulse_off_section():
     assert restored["pulse_off_sections"] == [12]
 
 
+def test_pulse_off_one_herpes_cmid_keeps_sibling():
+    snapshot = _med520_home()
+    snapshot["audience"] = "staff"
+    snapshot["pulse_off_cmids"] = [1127]
+    answer = topic_answer("herpes?", snapshot)
+    assert answer != _MISS
+    assert "1128" in (answer or "")
+    assert "MED520:file:1127:" not in (answer or "")
+    assert "PPT: Herpes updated" not in (answer or "").split("\n")[0]
+
+
 def test_pulse_off_open_activity_has_no_lecture_to_cite():
     snapshot = _off_herpes()
     snapshot["activity"] = {

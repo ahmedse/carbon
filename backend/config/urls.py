@@ -9,7 +9,7 @@ from accounts.views import ThrottledTokenObtainPairView, ThrottledTokenRefreshVi
 from accounts.password_reset_signals import NotifyingPasswordResetView
 from .health_views import health_check, metrics_view, prometheus_metrics_view
 from ai import workspace_api as ai_workspace_views
-from ai.moodle_host_api import MoodleAskView, MoodleEmbedSessionView, MoodleEmbedView, MoodleRosterView
+from ai.moodle_host_api import MoodleAskView, MoodleEmbedSessionView, MoodleEmbedView, MoodleIndexView, MoodleRosterView
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 from accounts.permissions import AdminOrSuperuserOnly
 
@@ -94,6 +94,7 @@ urlpatterns = [
     path(f'{api_prefix}/ai/workspace/', include('ai.workspace_urls')),
     path(f'{api_prefix}/ai/moodle/ask/', MoodleAskView.as_view(), name='ai-moodle-ask'),
     path(f'{api_prefix}/ai/moodle/roster/', MoodleRosterView.as_view(), name='ai-moodle-roster'),
+    path(f'{api_prefix}/ai/moodle/index/', MoodleIndexView.as_view(), name='ai-moodle-index'),
     path(f'{api_prefix}/ai/moodle/embed/', MoodleEmbedView.as_view(), name='ai-moodle-embed'),
     path(f'{api_prefix}/ai/moodle/embed/session/', MoodleEmbedSessionView.as_view(), name='ai-moodle-embed-session'),
     path(f'{api_prefix}/ai/work-objectives/', include('ai.work_objectives_urls')),

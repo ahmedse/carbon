@@ -2,6 +2,12 @@
 // Platform App Registry — list all installed domain apps here.
 // Shell reads this file at startup.
 // RULE: never import from Shell or platform core into this file.
+//
+// RULE_15: the shell's studio/sidebar resolution (src/shell/studioFromPath.js)
+// derives each app's route prefix from its manifest `routePrefix` below. Register
+// the manifest here and STUDIO RESOLUTION FOLLOWS — no per-route string match.
+// A new app-scoped ROUTER (/journey, /guide, /apps) must be added to
+// APP_SCOPED_ROUTE_PREFIXES in studioFromPath.js at the same time.
 
 import carbonManifest from './carbon/manifest.js';
 import healthyManifest from './healthy/manifest.js';

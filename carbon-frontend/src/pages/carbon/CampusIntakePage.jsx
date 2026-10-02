@@ -1,11 +1,13 @@
-// Campus intake for leaves that are not calculated yet.
-// The catalogue quotes named files. This page does not invent a kilogram.
+// Campus intake — a verb reached FROM a coverage row.
+// Coverage is the only surface that reports Missing / Entered / Excluded.
+// This page quotes named files. It does not invent a kilogram.
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Box, Button, TextField, Typography } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/Download';
 import FactCheckIcon from '@mui/icons-material/FactCheck';
 import { useTranslation } from 'react-i18next';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { useAuth } from '../../auth/AuthContext';
@@ -16,21 +18,16 @@ import LoadingSkeleton from '../../components/Page/LoadingSkeleton';
 import WorkflowCard from '../../components/Cards/WorkflowCard';
 import FilteredDataGrid from '../../components/FilteredDataGrid';
 import { SearchSelect } from '../../components/Form';
-import { enterCampusStream, fetchCampusIntake, recordDiscoveredActivity, uploadCampusIntake } from '../../api/emissions-extended';
+import {
+  fetchCampusIntake,
+  fetchCoverageRowSubmission,
+  recordDiscoveredActivity,
+  submitCoverageRow,
+  uploadCampusIntake,
+} from '../../api/emissions-extended';
 
 function exclusionText(t, row) {
   return t(`intake.exclusion.${row.code}`, row);
-}
-
-const STATUS_KEY = {
-  entered: 'intake.statusEntered',
-  excluded: 'intake.statusExcluded',
-  missing: 'intake.statusMissing',
-  awaiting_factor: 'intake.statusAwaiting',
-};
-
-function statusLabel(t, status) {
-  return t(STATUS_KEY[status] || 'intake.statusMissing');
 }
 
 function periodRoleLabel(t, role) {
@@ -54,6 +51,9 @@ function downloadTemplate(leaf) {
 export default function CampusIntakePage() {
   const { t } = useTranslation('emissions');
   const { token } = useAuth();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const sourceParam = searchParams.get('source');
   useDocumentTitle(t('intake.title'));
 
   const [phase, setPhase] = useState('loading');
@@ -61,12 +61,16 @@ export default function CampusIntakePage() {
   const [payload, setPayload] = useState(null);
   const [leafId, setLeafId] = useState('O2');
   const [uploadNote, setUploadNote] = useState('');
-  const [streamId, setStreamId] = useState('');
+  const [recordNote, setRecordNote] = useState('');
+
+  // Coverage-driven submission: the row decides campus, scope, unit, period.
+  const [coverageRow, setCoverageRow] = useState(null);
+  const [coveragePhase, setCoveragePhase] = useState('idle');
+  const [coverageError, setCoverageError] = useState('');
+  const [coverageNote, setCoverageNote] = useState('');
   const [quantity, setQuantity] = useState('');
   const [dieselStream, setDieselStream] = useState('');
   const [method, setMethod] = useState('location_based');
-  const [entryNote, setEntryNote] = useState('');
-  const [recordNote, setRecordNote] = useState('');
 
   const load = useCallback(async () => {
     setPhase('loading');
@@ -82,49 +86,51 @@ export default function CampusIntakePage() {
     }
   }, [token, t]);
 
+  const loadCoverageRow = useCallback(async () => {
+    if (!sourceParam) {
+      setCoverageRow(null);
+      setCoveragePhase('idle');
+      return;
+    }
+    setCoveragePhase('loading');
+    setCoverageError('');
+    try {
+      const data = await fetchCoverageRowSubmission(sourceParam, token);
+      setCoverageRow(data && typeof data === 'object' ? data : null);
+      setCoveragePhase('loaded');
+    } catch (err) {
+      setCoverageRow(null);
+      setCoverageError(err?.message || t('intake.loadFailed'));
+      setCoveragePhase('error');
+    }
+  }, [sourceParam, token, t]);
+
   useEffect(() => {
     load();
   }, [load]);
 
+  useEffect(() => {
+    loadCoverageRow();
+  }, [loadCoverageRow]);
+
   const leaves = Array.isArray(payload?.leaves) ? payload.leaves : [];
   const leaf = leaves.find((row) => row.id === leafId) || leaves[0] || null;
-  const options = useMemo(
-    () => leaves.map((row) => ({ value: row.id, label: `${row.id} · ${row.title}` })),
-    [leaves],
-  );
+  const options = leaves.map((row) => ({ value: row.id, label: `${row.id} · ${row.title}` }));
   const rows = (leaf?.activity_rows || []).map((row, index) => ({ id: index, ...row }));
   const streams = Array.isArray(payload?.streams) ? payload.streams : [];
   const historyBoards = (Array.isArray(payload?.periods) ? payload.periods : [])
     .filter((row) => row.role === 'locked' || row.role === 'closed');
-  const stream = streams.find((row) => row.id === streamId) || null;
-  const campuses = useMemo(() => {
-    const names = [...new Set(streams.map((row) => row.campus).filter(Boolean))];
-    return names.map((name) => ({ value: name, label: name }));
-  }, [streams]);
-  const sourceOptions = useMemo(
-    () => streams
-      .filter((row) => !stream?.campus || row.campus === stream.campus)
-      .map((row) => ({ value: row.id, label: row.source_name })),
-    [streams, stream?.campus],
-  );
+  const contract = coverageRow?.contract || {};
+  const requiredFields = Array.isArray(contract.required) ? contract.required : [];
+  const optionalFields = Array.isArray(contract.optional) ? contract.optional : [];
   const periodLabel = payload?.entry_period
     ? `${payload.entry_period.name} · ${payload.entry_period.start_date} – ${payload.entry_period.end_date}`
     : '';
-  const o1Locked = stream?.leaf_id === 'O1' && stream?.status === 'entered';
 
-  useEffect(() => {
-    if (streamId || streams.length === 0) return;
-    const next = streams.find((row) => row.status === 'missing' || row.status === 'awaiting_factor');
-    if (next) setStreamId(next.id);
-  }, [streamId, streams]);
-
-  function chooseStream(next) {
-    setStreamId(next?.id || '');
-    setQuantity('');
-    setDieselStream('');
-    setMethod(next?.scope === 2 ? (next.method || 'location_based') : 'location_based');
-    setEntryNote('');
-  }
+  const openCoverageRow = (row) => {
+    const id = row?.inventory_source_id;
+    if (id) navigate(`/carbon/onboarding/intake?source=${id}`);
+  };
 
   async function onRecordDiscovered() {
     try {
@@ -137,29 +143,32 @@ export default function CampusIntakePage() {
     }
   }
 
-  async function onSaveStream() {
-    if (!stream || o1Locked) return;
+  async function onSaveCoverageRow() {
+    if (!sourceParam || !coverageRow) return;
+    const body = { quantity };
+    if (requiredFields.includes('stream')) body.stream = dieselStream;
+    if (optionalFields.includes('method')) body.method = method;
+    if (contract.activity_type === 'waste') body.treatment = 'unspecified';
     try {
-      const result = await enterCampusStream(token, {
-        source_name: stream.source_name,
-        quantity,
-        stream: dieselStream,
-        method: stream.scope === 2 ? method : '',
-        treatment: stream.activity_type === 'waste' ? 'unspecified' : '',
-      });
+      const result = await submitCoverageRow(sourceParam, body, token);
+      if ((result?.errors || []).some((code) => code === 'contract_fields' || code === 'contract_value')) {
+        setCoverageNote(t('intake.contractRejected'));
+        return;
+      }
       if (result?.errors?.includes('org scope')) {
-        setEntryNote(t('intake.notComplete'));
+        setCoverageNote(t('intake.notComplete'));
         return;
       }
       if (result?.exclusions?.some((row) => row.code === 'market_absent')) {
-        setEntryNote(t('intake.marketAbsent'));
+        setCoverageNote(t('intake.marketAbsent'));
         return;
       }
-      setEntryNote(result?.kilograms ? t('intake.savedEntered') : t('intake.savedAwaiting'));
+      setCoverageNote(result?.kilograms ? t('intake.savedEntered') : t('intake.savedAwaiting'));
       setQuantity('');
-      await load();
+      setDieselStream('');
+      await Promise.all([loadCoverageRow(), load()]);
     } catch (err) {
-      setEntryNote(err?.message || t('intake.loadFailed'));
+      setCoverageNote(err?.message || t('intake.loadFailed'));
     }
   }
 
@@ -192,11 +201,105 @@ export default function CampusIntakePage() {
         subtitle={t('intake.subtitle')}
         description={t('intake.description')}
         actions={(
-          <Button variant="contained" size="small" onClick={load}>
+          <Button variant="contained" size="small" onClick={() => { load(); loadCoverageRow(); }}>
             {t('onboarding.refresh')}
           </Button>
         )}
       />
+
+      {/* Coverage-driven submission. The row decides campus, scope, unit, period. */}
+      {sourceParam && (
+        <Box sx={{ display: 'grid', gap: 1.25, mb: 2 }}>
+          <Alert severity="info">{t('intake.drivenByCoverage')}</Alert>
+          {coveragePhase === 'loading' && <LoadingSkeleton variant="table" />}
+          {coveragePhase === 'error' && (
+            <Alert
+              severity="error"
+              action={(
+                <Button color="inherit" size="small" onClick={loadCoverageRow}>
+                  {t('common:retry')}
+                </Button>
+              )}
+            >
+              {coverageError || t('intake.loadFailed')}
+            </Alert>
+          )}
+          {coveragePhase === 'loaded' && coverageRow && (
+            <Box
+              component="form"
+              onSubmit={(event) => { event.preventDefault(); onSaveCoverageRow(); }}
+              sx={{ display: 'grid', gap: 1.25 }}
+            >
+              <Typography variant="subtitle1">{coverageRow.source_name}</Typography>
+              <Typography variant="body2">
+                {t('intake.campus')}
+                {': '}
+                {coverageRow.campus}
+                {' · '}
+                {t('intake.scope')}
+                {' '}
+                {coverageRow.scope}
+                {' · '}
+                {t('intake.unit')}
+                {' '}
+                {contract.activity_unit || '—'}
+              </Typography>
+              <Typography variant="body2">
+                {t('intake.period')}
+                {': '}
+                {periodLabel || t('intake.noPeriod')}
+              </Typography>
+              <Alert severity={contract.source === 'datatable' ? 'success' : 'info'}>
+                {contract.source === 'datatable'
+                  ? t('intake.contractDatatable')
+                  : t('intake.contractFixture')}
+              </Alert>
+              {requiredFields.includes('quantity') && (
+                <TextField
+                  label={t('intake.quantity')}
+                  value={quantity}
+                  onChange={(event) => setQuantity(event.target.value)}
+                  size="small"
+                  required
+                />
+              )}
+              {requiredFields.includes('stream') && (
+                <SearchSelect
+                  label={t('intake.dieselStream')}
+                  options={[
+                    { value: 'generators', label: t('intake.generators') },
+                    { value: 'fleet', label: t('intake.fleet') },
+                  ]}
+                  value={dieselStream}
+                  onChange={(option) => setDieselStream(option?.value || '')}
+                />
+              )}
+              {optionalFields.includes('method') && (
+                <SearchSelect
+                  label={t('intake.method')}
+                  options={[
+                    { value: 'location_based', label: t('intake.locationBased') },
+                    { value: 'market_based', label: t('intake.marketBased') },
+                  ]}
+                  value={method}
+                  onChange={(option) => setMethod(option?.value || 'location_based')}
+                />
+              )}
+              {!payload?.entry_period && <Alert severity="warning">{t('intake.noPeriod')}</Alert>}
+              <Button
+                type="submit"
+                variant="contained"
+                size="small"
+                disabled={!quantity || (requiredFields.includes('stream') && !dieselStream)}
+              >
+                {t('intake.save')}
+              </Button>
+              <Typography variant="body2" color="text.secondary">{t('intake.enterHint')}</Typography>
+              {coverageNote && <Alert severity="info">{coverageNote}</Alert>}
+            </Box>
+          )}
+        </Box>
+      )}
 
       {phase === 'loading' && <LoadingSkeleton variant="table" />}
 
@@ -234,16 +337,14 @@ export default function CampusIntakePage() {
                 { field: 'activity_type', headerName: t('intake.activityType'), width: 130 },
                 { field: 'activity_unit', headerName: t('intake.unit'), width: 100 },
                 {
-                  field: 'status',
-                  headerName: t('intake.status'),
-                  width: 220,
-                  valueGetter: (_value, row) => statusLabel(t, row.status),
-                },
-                {
-                  field: 'inventory_kg',
-                  headerName: t('intake.inventoryKg'),
-                  width: 140,
-                  valueGetter: (value) => (value == null || value === '' ? t('intake.kgAbsent') : String(value)),
+                  field: 'inventory_source_id',
+                  headerName: t('intake.coverageRow'),
+                  width: 160,
+                  renderCell: (params) => (params.value ? (
+                    <Button size="small" onClick={() => openCoverageRow(params.row)}>
+                      {t('intake.openRow')}
+                    </Button>
+                  ) : '—'),
                 },
                 {
                   field: 'later_year_files',
@@ -252,8 +353,8 @@ export default function CampusIntakePage() {
                   valueGetter: (value) => (Array.isArray(value) && value.length ? value.join(', ') : ''),
                 },
               ]}
-              onRowClick={(params) => chooseStream(params?.row)}
-              highlightRow={(row) => row.id === streamId}
+              onRowClick={(params) => openCoverageRow(params?.row)}
+              highlightRow={(row) => String(row.inventory_source_id) === String(sourceParam)}
               hideSearch
             />
           )}
@@ -280,12 +381,6 @@ export default function CampusIntakePage() {
                   { field: 'source_name', headerName: t('intake.source'), flex: 1.4 },
                   { field: 'scope', headerName: t('intake.scope'), width: 90 },
                   {
-                    field: 'status',
-                    headerName: t('intake.status'),
-                    width: 220,
-                    valueGetter: (_value, row) => statusLabel(t, row.status),
-                  },
-                  {
                     field: 'inventory_kg',
                     headerName: t('intake.inventoryKg'),
                     width: 140,
@@ -297,96 +392,13 @@ export default function CampusIntakePage() {
             </Box>
           ))}
 
+          {/* Entry is reached from a coverage row. No blank generic form here. */}
           <WorkflowCard
             icon={<FactCheckIcon />}
             title={t('intake.enterTitle')}
-            description={stream ? stream.source_name : t('intake.selectStream')}
-            onClick={() => {
-              if (!stream) {
-                const missing = streams.find((row) => row.status === 'missing');
-                if (missing) chooseStream(missing);
-              }
-            }}
+            description={sourceParam ? t('intake.drivenByCoverage') : t('intake.coverageFirst')}
+            onClick={() => navigate('/carbon/admin/inventory-coverage')}
           />
-
-          {stream && (
-            <Box sx={{ display: 'grid', gap: 1.25 }} component="form" onSubmit={(event) => { event.preventDefault(); onSaveStream(); }}>
-              <SearchSelect
-                label={t('intake.campus')}
-                options={campuses}
-                value={stream.campus}
-                onChange={(option) => {
-                  const next = streams.find((row) => row.campus === option?.value && row.status !== 'entered');
-                  chooseStream(next || streams.find((row) => row.campus === option?.value) || null);
-                }}
-              />
-              <SearchSelect
-                label={t('intake.source')}
-                options={sourceOptions}
-                value={stream.id}
-                onChange={(option) => chooseStream(streams.find((row) => row.id === option?.value) || null)}
-              />
-              <Typography variant="body2">
-                {t('intake.period')}
-                {': '}
-                {periodLabel || t('intake.noPeriod')}
-              </Typography>
-              <Typography variant="body2">
-                {t('intake.scope')}
-                {' '}
-                {stream.scope}
-                {' · '}
-                {t('intake.activityType')}
-                {' '}
-                {stream.activity_type}
-                {' · '}
-                {t('intake.unit')}
-                {' '}
-                {stream.activity_unit}
-              </Typography>
-              {stream.activity_type === 'diesel' && (
-                <SearchSelect
-                  label={t('intake.dieselStream')}
-                  options={[
-                    { value: 'generators', label: t('intake.generators') },
-                    { value: 'fleet', label: t('intake.fleet') },
-                  ]}
-                  value={dieselStream}
-                  onChange={(option) => setDieselStream(option?.value || '')}
-                />
-              )}
-              {Number(stream.scope) === 2 && (
-                <SearchSelect
-                  label={t('intake.method')}
-                  options={[
-                    { value: 'location_based', label: t('intake.locationBased') },
-                    { value: 'market_based', label: t('intake.marketBased') },
-                  ]}
-                  value={method}
-                  onChange={(option) => setMethod(option?.value || 'location_based')}
-                />
-              )}
-              <TextField
-                label={t('intake.quantity')}
-                value={quantity}
-                onChange={(event) => setQuantity(event.target.value)}
-                size="small"
-                required
-              />
-              {o1Locked && <Alert severity="warning">{t('intake.o1Locked')}</Alert>}
-              {!payload?.entry_period && <Alert severity="warning">{t('intake.noPeriod')}</Alert>}
-              <Button
-                type="submit"
-                variant="contained"
-                size="small"
-                disabled={o1Locked || !payload?.entry_period || !quantity || (stream.activity_type === 'diesel' && !dieselStream)}
-              >
-                {t('intake.save')}
-              </Button>
-              <Typography variant="body2" color="text.secondary">{t('intake.enterHint')}</Typography>
-            </Box>
-          )}
-          {entryNote && <Alert severity="info">{entryNote}</Alert>}
 
           <SearchSelect
             label={t('intake.leaf')}

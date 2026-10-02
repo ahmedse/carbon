@@ -1,0 +1,72 @@
+# T5 Staff coworker — read-only actions over the signed roster and the pack.
+# No host mutation from Chat. A drafted note is a proposal for the Extra tab.
+version: 1
+off_list: This is not on the course list.
+gap_miss: No pack gaps found for this course.
+ilo_miss: No pack passage contains those terms.
+gap_label: "Not in the pack on {course}:"
+ilo_label: "Pack passages containing those terms ({course}):"
+draft_label: "Draft extra note (proposal only — apply it in the Extra tab):"
+gap_max: 8
+ilo_max: 5
+draft_max_spans: 3
+draft_span: 220
+# Terms too common to identify a lecture. Kept here, never in engine/.
+stopwords:
+  - the
+  - and
+  - for
+  - with
+  - from
+  - that
+  - this
+  - these
+  - those
+  - into
+  - about
+  - over
+  - under
+  - between
+  - within
+  - using
+  - their
+  - there
+  - when
+  - where
+  - which
+  - while
+  - have
+  - has
+  - can
+  - will
+  - shall
+  - must
+  - not
+  - are
+  - was
+  - were
+  - its
+  - his
+  - her
+  - our
+  - your
+# Longest prefix first.
+gap_prefixes:
+  - "which activities are not in the pack"
+  - "which activities are missing"
+  - "what is missing from the pack"
+  - "what is not in the pack"
+  - "missing activities"
+  - "pack gaps"
+ilo_prefixes:
+  - "which lectures cover "
+  - "which lecture covers "
+  - "which activities cover "
+  - "which activity covers "
+  - "find the lecture for "
+  - "find the activity for "
+  - "where do we cover "
+draft_prefixes:
+  - "draft an extra note about "
+  - "draft extra note about "
+  - "draft a note about "

@@ -774,6 +774,7 @@ def _base_stream(spec: dict, user) -> dict[str, Any]:
         "later_year_files": spec["later_year_files"],
         "writable": user_may_write(user, org_name) if user is not None else False,
         "screen": "/carbon/onboarding/intake",
+        "inventory_source_id": None,
     }
 
 
@@ -789,6 +790,7 @@ def _stream_for(spec: dict, period, user) -> dict[str, Any]:
     row["period_status"] = period.status
     org = OrgUnit.objects.filter(name=spec["org_unit_name"], is_active=True).first()
     source = _source_for(org, spec) if org is not None else None
+    row["inventory_source_id"] = source.id if source is not None else None
     status = None
     if source is not None:
         status = (
@@ -911,6 +913,74 @@ def coverage_board(user=None) -> dict[str, Any]:
         },
         "periods": periods,
         "streams": streams,
+    }
+
+
+_RECON_STATUSES = ("entered", "excluded", "awaiting_factor", "missing")
+
+
+def _reconcile_streams(streams: list[dict[str, Any]]) -> dict[str, int]:
+    counts = {key: 0 for key in _RECON_STATUSES}
+    counts["required"] = len(streams)
+    for row in streams:
+        status = str(row.get("status") or "missing")
+        if status in counts:
+            counts[status] += 1
+        else:
+            counts["missing"] += 1
+    return counts
+
+
+def reconciliation_summary(user=None) -> dict[str, Any]:
+    """Required vs received counts on the open period. No kilogram, no claimed percent.
+
+    Coverage is the only surface that says Missing / Entered / Excluded. This
+    roll-up merges the benchmark required-stream board with the per-period
+    InventorySourceStatus and reports counts. It does not turn a count into a
+    coverage percent and it does not invent a kilogram for a missing stream.
+    """
+    from emissions.models import CoverageGoal
+
+    board = coverage_board(user)
+    streams = list(board["streams"])
+    overall = _reconcile_streams(streams)
+    open_period = board.get("open_period")
+
+    goals = []
+    active = CoverageGoal.objects.select_related("org_unit").filter(status="active").order_by("id")
+    for goal in active:
+        scopes = {part.strip() for part in str(goal.scope or "").split("+") if part.strip()}
+        goal_streams = [
+            row for row in streams
+            if str(row.get("scope")) in scopes
+            and (
+                goal.org_unit_id is None
+                or row.get("org_unit_name") == goal.org_unit.name
+            )
+        ]
+        goal_counts = _reconcile_streams(goal_streams)
+        goals.append({
+            "goal_id": goal.id,
+            "name": goal.name,
+            "scope": goal.scope,
+            "org_unit_id": goal.org_unit_id,
+            "org_unit_name": goal.org_unit.name if goal.org_unit_id else None,
+            "target_year": goal.target_year,
+            "target_coverage_pct": str(goal.target_coverage_pct),
+            "completeness_definition": goal.completeness_definition,
+            **goal_counts,
+        })
+
+    return {
+        "product": "Carbon on AASTMT",
+        "coverage_complete": False,
+        "open_period": open_period,
+        "counts": overall,
+        "goals": goals,
+        "note": (
+            "Counts of required streams. Missing is not 0 kg. This is not a "
+            "coverage percent and it does not compare a count to target_coverage_pct."
+        ),
     }
 
 
@@ -1313,12 +1383,196 @@ def apply_template(*, leaf_id: str, rows: list[dict], user, factor=None) -> dict
     }
 
 
-def enter_activity(*, user, fields: dict, factor=None) -> dict[str, Any]:
-    """One missing stream on the single open period. A closed period is not a write target."""
-    source_name = str((fields or {}).get("source_name") or "").strip()
-    spec = next((item for item in required_stream_specs() if item["source_name"] == source_name), None)
-    if spec is None:
-        return _blank_result(errors=["source"])
+def _spec_for_source(source) -> dict[str, Any] | None:
+    """The exact required-stream spec for one coverage row.
+
+    Keyed by (org_unit, scope, scope3_category, source_name) — never by source_name
+    alone, so two campuses that share a name do not collide.
+    """
+    org_name = source.org_unit.name if getattr(source, "org_unit_id", None) else ""
+    for spec in required_stream_specs():
+        if (
+            spec["source_name"] == source.source_name
+            and int(spec["scope"]) == int(source.scope)
+            and spec.get("scope3_category") == source.scope3_category
+            and spec["org_unit_name"] == org_name
+        ):
+            return spec
+    return None
+
+
+def _spec_from_source(source) -> dict[str, Any]:
+    """Best-effort spec for a coverage row that is not named in a benchmark file."""
+    org_name = source.org_unit.name if getattr(source, "org_unit_id", None) else ""
+    unit = ""
+    return {
+        "id": f"source:{source.id}",
+        "leaf_id": "",
+        "campus": org_name,
+        "org_unit_name": org_name,
+        "source_name": source.source_name,
+        "scope": int(source.scope),
+        "scope3_category": source.scope3_category,
+        "activity_type": _activity_type(unit),
+        "activity_unit": unit,
+        "method": source.scope2_method or None,
+        "later_year_files": [],
+    }
+
+
+def coverage_row_state(source, user=None) -> dict[str, Any]:
+    """One coverage row's Missing / Entered / Excluded state on the open period.
+
+    Coverage is the only surface allowed to say these states (CR-INT-01). The
+    returned row carries ``inventory_source_id`` so a submission can be bound to
+    the coverage row rather than to a hand-typed source_name.
+    """
+    spec = _spec_for_source(source) or _spec_from_source(source)
+    period = _open_period_or_none()
+    if period is None:
+        row = _base_stream(spec, user)
+        row["reason"] = "open_period_count"
+    else:
+        row = _stream_for(spec, period, user)
+    row["inventory_source_id"] = source.id
+    row["contract"] = contract_for_source(source)
+    return row
+
+
+# Client keys a coverage-row submission may carry. factor_code is resolved to
+# an EmissionFactor by the view; the rest are the value the row asks for.
+_CLIENT_VALUE_KEYS = frozenset({"quantity", "stream", "method", "treatment", "factor_code"})
+
+
+def _bound_data_table(source):
+    """The DataTable intake already declared for this stream, if any.
+
+    Intake creates the Module/DataTable on first write (apply_template), so a
+    real contract only exists after the first submission. This lookup never
+    creates one.
+    """
+    from core.models import Module
+    from dataschema.models import DataTable, normalize_name
+
+    org = getattr(source, "org_unit", None)
+    if org is None:
+        return None
+    module = (
+        Module.objects.filter(name=f"Campus intake {source.source_name}"[:100], org_unit=org)
+        .order_by("id")
+        .first()
+    )
+    if module is None:
+        return None
+    return (
+        DataTable.objects.filter(
+            module=module, name=normalize_name(f"intake {source.source_name}")[:64]
+        )
+        .order_by("id")
+        .first()
+    )
+
+
+def contract_for_source(source) -> dict[str, Any]:
+    """The Data Product contract one coverage row conforms to.
+
+    Resolves the bound DataTable + DataField schema when intake has already
+    written it; otherwise falls back to the locked benchmark required-stream
+    spec. Both carry org unit, scope, unit, period and the accepted value
+    fields, so a row can be rejected before a DataRow is appended.
+    """
+    spec = _spec_for_source(source) or _spec_from_source(source)
+    period = _open_period_or_none()
+    unit = spec.get("activity_unit") or ""
+    activity_type = spec.get("activity_type") or _activity_type(unit)
+    value_field = "quantity_tonne" if unit in {"tonne", "ton"} else "quantity"
+    required = ["quantity"]
+    optional = []
+    if activity_type == "diesel":
+        required.append("stream")
+    if int(source.scope) == 2:
+        optional.append("method")
+    if activity_type == "waste":
+        optional.append("treatment")
+    writable = sorted((set(required) | set(optional)) & _CLIENT_VALUE_KEYS)
+
+    table = _bound_data_table(source)
+    if table is not None:
+        fields = list(
+            table.fields.filter(is_active=True, is_archived=False)
+            .order_by("order", "id")
+            .values_list("name", flat=True)
+        )
+        stored_value_field = value_field if value_field in fields else "quantity"
+        return {
+            "source": "datatable",
+            "data_table_id": table.id,
+            "data_table_name": table.name,
+            "module_id": table.module_id,
+            "org_unit_id": source.org_unit_id,
+            "org_unit_name": getattr(getattr(source, "org_unit", None), "name", ""),
+            "scope": int(source.scope),
+            "scope3_category": source.scope3_category,
+            "activity_type": activity_type,
+            "activity_unit": unit,
+            "period_id": period.id if period is not None else None,
+            "value_field": stored_value_field,
+            "fields": fields,
+            "required": required,
+            "optional": optional,
+            "writable_fields": writable,
+        }
+    # Benchmark fallback: the DataTable does not exist until the first write.
+    return {
+        "source": "benchmark_spec",
+        "data_table_id": None,
+        "data_table_name": None,
+        "module_id": None,
+        "org_unit_id": source.org_unit_id,
+        "org_unit_name": getattr(getattr(source, "org_unit", None), "name", ""),
+        "scope": int(source.scope),
+        "scope3_category": source.scope3_category,
+        "activity_type": activity_type,
+        "activity_unit": unit,
+        "period_id": period.id if period is not None else None,
+        "value_field": value_field,
+        "fields": [value_field],
+        "required": required,
+        "optional": optional,
+        "writable_fields": writable,
+    }
+
+
+def validate_contract(source, fields: dict) -> dict[str, Any]:
+    """Reject a submission that does not conform to the coverage row's contract.
+
+    The client sends the value only; campus, scope, unit and period come from
+    the row. A key outside the contract, a missing required value, or a
+    missing contract row all come back as explicit codes.
+    """
+    contract = contract_for_source(source)
+    body = fields if isinstance(fields, dict) else {}
+    submitted = {key for key in body if key != "factor_code"}
+    unknown = sorted(submitted - set(contract["writable_fields"]))
+    missing = sorted(
+        key for key in contract["required"] if not str(body.get(key) or "").strip()
+    )
+    errors = []
+    if unknown:
+        errors.append("contract_fields")
+    if missing:
+        errors.append("contract_value")
+    return {
+        "ok": not errors,
+        "contract": contract,
+        "errors": errors,
+        "unknown": unknown,
+        "missing": missing,
+    }
+
+
+def _enter_spec(*, spec: dict, user, fields: dict, factor=None) -> dict[str, Any]:
+    """Enter one value for one resolved required stream on the single open period."""
     if not user_may_write(user, spec["org_unit_name"]):
         return _blank_result(errors=["org scope"])
     period = _entry_window()
@@ -1329,7 +1583,7 @@ def enter_activity(*, user, fields: dict, factor=None) -> dict[str, Any]:
         return _blank_result(exclusions=[_exclusion("market_absent")])
     if spec["leaf_id"] == "O5":
         row = {
-            "source_name": source_name,
+            "source_name": spec["source_name"],
             "quantity_tonne": str((fields or {}).get("quantity") or "").strip(),
             "treatment": str((fields or {}).get("treatment") or "unspecified").strip() or "unspecified",
             "period_start": period["start_date"],
@@ -1343,7 +1597,7 @@ def enter_activity(*, user, fields: dict, factor=None) -> dict[str, Any]:
             return _blank_result(errors=["stream"])
         row = {
             "campus": spec["campus"],
-            "source_name": source_name,
+            "source_name": spec["source_name"],
             "scope": str(spec["scope"]),
             "activity_unit": spec["activity_unit"],
             "quantity": str((fields or {}).get("quantity") or "").strip(),
@@ -1352,6 +1606,97 @@ def enter_activity(*, user, fields: dict, factor=None) -> dict[str, Any]:
             "period_end": period["end_date"],
         }
     return apply_template(leaf_id=spec["leaf_id"], rows=[row], user=user, factor=factor)
+
+
+def enter_activity(*, user, fields: dict, factor=None) -> dict[str, Any]:
+    """One missing stream on the single open period. A closed period is not a write target."""
+    source_name = str((fields or {}).get("source_name") or "").strip()
+    spec = next((item for item in required_stream_specs() if item["source_name"] == source_name), None)
+    if spec is None:
+        return _blank_result(errors=["source"])
+    return _enter_spec(spec=spec, user=user, fields=fields, factor=factor)
+
+
+def enter_for_source(*, source, user, fields: dict, factor=None) -> dict[str, Any]:
+    """Submit against ONE coverage row.
+
+    Campus, scope, activity unit and period are prefilled from the coverage row
+    (the benchmark spec); the client sends the value only. Binding by row id,
+    not by a hand-typed source_name, is what stops the intake form from
+    re-choosing what is owed.
+    """
+    spec = _spec_for_source(source)
+    if spec is None:
+        return _blank_result(errors=["coverage_row"])
+    check = validate_contract(source, fields)
+    if not check["ok"]:
+        return _blank_result(
+            errors=check["errors"],
+            contract=check["contract"],
+            unknown=check["unknown"],
+            missing=check["missing"],
+        )
+    result = _enter_spec(spec=spec, user=user, fields=fields, factor=factor)
+    result["contract"] = check["contract"]
+    return result
+
+
+# Declared-universe exclusion reasons. Mirrors InventorySourceStatus.
+# EXCLUSION_REASON_CHOICES — one vocabulary, no free-text reason.
+_EXCLUSION_REASONS = frozenset(
+    {"not_material", "insufficient_data", "out_of_boundary", "other"}
+)
+
+
+def set_exclusion(*, source, user, excluded: bool, reason: str = "", notes: str = "") -> dict[str, Any]:
+    """Declare or clear an exclusion for ONE coverage row.
+
+    Coverage is the only surface that reports Excluded (L-COV-SINGLE-REPORTER),
+    so it is also the only surface that may declare one. This writes only the
+    single open period's InventorySourceStatus: a locked or closed period is not
+    a write target and is never reopened or re-locked. It writes no kilogram and
+    creates no Calculation. ``reason`` must be one of the four vocabulary codes;
+    ``other`` additionally requires notes, matching CR-EXC-01.
+    """
+    from emissions.models import InventorySourceStatus
+
+    period = _open_period_or_none()
+    if period is None:
+        return _blank_result(errors=["open period count"], exclusions=[_exclusion("open_period_count")])
+    org_name = source.org_unit.name if getattr(source, "org_unit_id", None) else ""
+    if not user_may_write(user, org_name):
+        return _blank_result(errors=["org scope"])
+    status, _ = InventorySourceStatus.objects.get_or_create(
+        source=source,
+        reporting_period=period,
+    )
+    if excluded:
+        reason = str(reason or "").strip()
+        notes = str(notes or "").strip()
+        if reason not in _EXCLUSION_REASONS:
+            return _blank_result(errors=["exclusion_reason"])
+        if reason == "other" and not notes:
+            return _blank_result(errors=["exclusion_notes"])
+        status.status = "excluded"
+        status.exclusion_reason = reason
+        status.notes = notes
+        status.save(update_fields=["status", "exclusion_reason", "notes"])
+    else:
+        if status.status != "excluded":
+            return _blank_result(errors=["not_excluded"])
+        status.status = "declared"
+        status.exclusion_reason = None
+        status.notes = ""
+        status.save(update_fields=["status", "exclusion_reason", "notes"])
+    payload = _blank_result()
+    payload.update({
+        "written": True,
+        "excluded": bool(excluded),
+        "period_id": period.id,
+        "reason": status.exclusion_reason,
+        "coverage_row": coverage_row_state(source, user),
+    })
+    return payload
 
 
 def record_contractual_factor(*, contractual, grid):

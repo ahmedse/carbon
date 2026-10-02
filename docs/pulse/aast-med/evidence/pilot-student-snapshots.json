@@ -1,0 +1,138 @@
+{
+    "pilot_student_a": {
+        "userid": 3057,
+        "snapshot": {
+            "audience": "student",
+            "courseid": 5,
+            "course": {
+                "id": 5,
+                "shortname": "NMD1103",
+                "fullname": "NMD1103: Clinical Skills 1",
+                "format": "weeks",
+                "category": "Semester 1",
+                "visible_to_user": true
+            },
+            "enrolled": true,
+            "sections": [
+                {
+                    "number": 0,
+                    "name": "Welcome to Clinical Skills 1 course ",
+                    "visible": true
+                },
+                {
+                    "number": 1,
+                    "name": "Session 1: Hospital Virtual Tour ",
+                    "visible": true
+                },
+                {
+                    "number": 2,
+                    "name": "Session 2: Safety Measures in Hospital ",
+                    "visible": true
+                },
+                {
+                    "number": 3,
+                    "name": "Session 3: Hand Hygiene",
+                    "visible": true
+                },
+                {
+                    "number": 4,
+                    "name": "Session 4: Personal Protective Equipement",
+                    "visible": true
+                },
+                {
+                    "number": 5,
+                    "name": "Session 5: Introduction to Consultation Skills ",
+                    "visible": true
+                },
+                {
+                    "number": 6,
+                    "name": "Session 6: Vital Signs Pulse",
+                    "visible": true
+                },
+                {
+                    "number": 7,
+                    "name": "Session 7: Vital signs Temperature ",
+                    "visible": true
+                },
+                {
+                    "number": 8,
+                    "name": "Blood Pressure",
+                    "visible": true
+                }
+            ],
+            "sections_truncated": false,
+            "pulse_off_cmids": [
+                4,
+                815
+            ]
+        }
+    },
+    "pilot_student_b": {
+        "userid": 3058,
+        "snapshot": {
+            "audience": "student",
+            "courseid": 5,
+            "course": {
+                "id": 5,
+                "shortname": "NMD1103",
+                "fullname": "NMD1103: Clinical Skills 1",
+                "format": "weeks",
+                "category": "Semester 1",
+                "visible_to_user": true
+            },
+            "enrolled": true,
+            "sections": [
+                {
+                    "number": 0,
+                    "name": "Welcome to Clinical Skills 1 course ",
+                    "visible": true
+                },
+                {
+                    "number": 1,
+                    "name": "Session 1: Hospital Virtual Tour ",
+                    "visible": true
+                },
+                {
+                    "number": 2,
+                    "name": "Session 2: Safety Measures in Hospital ",
+                    "visible": true
+                },
+                {
+                    "number": 3,
+                    "name": "Session 3: Hand Hygiene",
+                    "visible": true
+                },
+                {
+                    "number": 4,
+                    "name": "Session 4: Personal Protective Equipement",
+                    "visible": true
+                },
+                {
+                    "number": 5,
+                    "name": "Session 5: Introduction to Consultation Skills ",
+                    "visible": true
+                },
+                {
+                    "number": 6,
+                    "name": "Session 6: Vital Signs Pulse",
+                    "visible": true
+                },
+                {
+                    "number": 7,
+                    "name": "Session 7: Vital signs Temperature ",
+                    "visible": true
+                },
+                {
+                    "number": 8,
+                    "name": "Blood Pressure",
+                    "visible": true
+                }
+            ],
+            "sections_truncated": false,
+            "pulse_off_cmids": [
+                4,
+                815
+            ]
+        }
+    }
+}

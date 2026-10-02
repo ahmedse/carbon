@@ -1,9 +1,10 @@
 """Carbon guide pack over HTTP: scope, brand gate, writes, completion signals."""
 from __future__ import annotations
 
+import yaml
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
-from django.test import override_settings
+from django.test import SimpleTestCase, override_settings
 from django.urls import reverse
 from rest_framework.test import APITestCase
 
@@ -11,6 +12,7 @@ from accounts.models import ScopedRole
 from core.models import Module
 from dataschema.models import DataRow, DataTable
 from emissions.models import Calculation, InventorySource, InventorySourceStatus, ReportingPeriod
+from guide import engine, packs
 from guide.models import GuideProgress
 from mdm.models import OrgUnit
 
@@ -100,6 +102,23 @@ class CarbonGuideAPITests(APITestCase):
         self.assertEqual(self.progress("D2", event="started").status_code, 404)
         self.assertEqual(GuideProgress.objects.count(), 0)
 
+    def test_superuser_sees_every_lesson_and_every_track(self):
+        # GUIDE-COR-SUPERUSER: a wildcard caller reads all tracks and stations.
+        su = User.objects.create_superuser(username="guide_su", password="unused")
+        self.client.force_authenticate(su)
+        data = self.client.get(self.list_url).json()
+        self.assertTrue(data["all_tracks"])
+        ids = {r["id"] for r in data["lessons"]}
+        self.assertEqual(
+            ids,
+            {"D1", "D2", "D3", "D4", "D5", "D6", "D7", "C2", "C3",
+             "L1", "L2", "L3", "L4", "L5", "L6", "L7"},
+        )
+        self.assertEqual({t["id"] for t in data["tracks"]}, {"C", "D", "L"})
+        self.assertEqual(len(data["journey"]["stages"]), 7)
+        # Reading every track does not fake completion: nothing is done yet.
+        self.assertEqual({r["state"] for r in data["lessons"]}, {"offered"})
+
     # ── scope ───────────────────────────────────────────────────────────
     def test_scope_shows_only_my_sources(self):
         # GUIDE-COR-SCOPE
@@ -135,6 +154,34 @@ class CarbonGuideAPITests(APITestCase):
         en = self.detail("D1", lang="en").json()["copy"]
         self.assertNotEqual(ar["title"], en["title"])
         self.assertEqual(self.detail("D1", lang="fr").json()["copy"]["title"], en["title"])
+
+    # ── journey contract ────────────────────────────────────────────────
+    def test_listing_carries_the_journey_contract(self):
+        self.client.force_authenticate(self.owner)
+        data = self.client.get(self.list_url).json()
+        journey = data["journey"]
+        self.assertEqual(journey["title"], "Your carbon onboarding journey")
+        self.assertTrue(journey["glossary"])
+        keys = [row["key"] for row in journey["stages"]]
+        self.assertEqual(
+            keys,
+            ["setup", "coverage", "data_products", "data_entry", "calculation", "lock", "report"],
+        )
+        by_id = {row["id"]: row for row in data["lessons"]}
+        self.assertEqual(by_id["D2"]["completion"], "host")
+        self.assertEqual(len(by_id["D2"]["steps"]), 3)
+        self.assertEqual(by_id["D2"]["steps"][0]["route"], "/carbon/my-data")
+        comps = {row["key"]: row for row in journey["competencies"]}
+        self.assertEqual(comps["one_row"]["kind"], "host")
+        self.assertEqual(comps["one_row"]["title"], "Save one activity row for your source")
+
+    def test_arabic_journey_copy_is_mixed_language(self):
+        self.client.force_authenticate(self.owner)
+        ar = self.client.get(self.list_url, {"lang": "ar"}).json()["journey"]
+        en = self.client.get(self.list_url).json()["journey"]
+        self.assertNotEqual(ar["intro"], en["intro"])
+        # Allowlisted domain terms stay English inside the Arabic copy by design.
+        self.assertIn("reporting period", ar["intro"])
 
     def test_blocker_carries_copy_and_no_path_for_an_owner(self):
         self.client.force_authenticate(self.owner)
@@ -250,3 +297,50 @@ class CarbonGuideAPITests(APITestCase):
         listing = self.client.get(self.list_url).json()
         self.assertEqual(next(r for r in listing["lessons"] if r["id"] == "D1")["state"], "snoozed")
         self.assertEqual(listing["next_id"], "D2")
+
+
+class CarbonGuidePackDisplayTests(SimpleTestCase):
+    """The pack journey blocks (stages, competencies, steps) are engine-read."""
+
+    def _raw(self):
+        path = packs.pack_dir("carbon") / "guide.yaml"
+        return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+    def test_stage_map_is_a_seven_stage_spine_over_known_lessons(self):
+        raw = self._raw()
+        stages = raw["stages"]
+        self.assertEqual([row["n"] for row in stages], [1, 2, 3, 4, 5, 6, 7])
+        self.assertEqual(len({row["key"] for row in stages}), 7)
+        known = {row["id"] for row in raw["lessons"]}
+        placed: list[str] = []
+        for row in stages:
+            members = list(row.get("lessons") or [])
+            for lesson_id in members:
+                self.assertIn(lesson_id, known)
+            if row.get("pending"):
+                self.assertEqual(members, [])
+                self.assertEqual(row["key"], "data_products")
+            placed.extend(sorted(members))
+        # Every pack lesson sits in exactly one journey stage.
+        self.assertEqual(sorted(placed), sorted(known))
+        self.assertEqual(len(placed), len(set(placed)))
+
+    def test_journey_blocks_load_and_choose_next_staging_is_unchanged(self):
+        loaded = packs.load_pack("carbon")
+        # The journey blocks are now part of the engine pack shape.
+        self.assertEqual(len(loaded["stages"]), 7)
+        self.assertTrue(loaded["competencies"])
+        self.assertTrue(loaded["journey"]["glossary"])
+        by_id = {row["id"]: row for row in loaded["lessons"]}
+        # The per-lesson `stage:` key that _choose_next reads is unchanged.
+        self.assertEqual([by_id[i].get("stage") for i in ("D1", "D2", "D7")], ["entry"] * 3)
+        self.assertFalse(by_id["D3"].get("stage"))
+        self.assertFalse(by_id["D4"].get("stage"))
+        # D2 is not renamed; its completion is declared by the pack.
+        self.assertEqual(by_id["D2"]["completion"], "host")
+        self.assertTrue(by_id["D2"]["steps"])
+        rows = [
+            {"id": "D1", "stage": "entry", "state": "offered", "blocker": None},
+            {"id": "D3", "stage": "", "state": "offered", "blocker": None},
+        ]
+        self.assertEqual(engine._choose_next(rows), "D1")

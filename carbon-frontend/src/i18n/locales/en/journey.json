@@ -1,0 +1,131 @@
+{
+  "title": "Journey",
+  "subtitle": "{{role}} path · every station is open, nothing is locked",
+  "refresh": "Refresh",
+  "loadFailed": "Could not load your journey.",
+  "whatThisJourneyIs": "What this journey is",
+  "pathComplete": "Every station on this path is complete.",
+  "progress": {
+    "title": "Your progress",
+    "label": "Journey progress",
+    "stations": "{{done}} of {{total}} stations complete",
+    "outcomes": "{{done}} of {{total}} outcomes proven",
+    "streak": "{{n}} stations done in a row",
+    "youAreHere": "You are here: {{station}}"
+  },
+  "next": {
+    "whatsNext": "What's next: {{title}}",
+    "whatsNextWhere": "What's next: {{title}} · {{station}}"
+  },
+  "start": {
+    "body": "A short, honest walk through the carbon inventory job. Nothing is locked — work one station at a time, and finish it by doing the real thing in the app."
+  },
+  "scenario": {
+    "lead": "Your part: keep exactly one period open, cover or exclude every source, and run the calculation.",
+    "owner": "Your part: enter this period's activity rows for your own sources, from real meter or invoice readings.",
+    "observer": "Your part: read the period status and the quality tiers, and know what each figure means.",
+    "scene": "Scene {{n}} of {{total}}",
+    "mission": "Your mission",
+    "startLesson": "Start this lesson",
+    "aboutMinutes": "About {{minutes}} min",
+    "noMission": "This station has no lesson for your path yet. Read what it covers above.",
+    "roleTitle": "Which seat are you in?",
+    "roleBody": "This sets your path and the story you see. You can change it any time."
+  },
+  "celebrate": {
+    "title": "{{station}} is done",
+    "body": "The app proved it: {{outcome}}.",
+    "bodyPlain": "The app proved it — a real host action landed.",
+    "dismiss": "Dismiss"
+  },
+  "recall": {
+    "title": "Still remember?",
+    "body": "A quick look back at {{lesson}}. Retrieval beats re-reading.",
+    "start": "Try a 10-second check",
+    "loading": "Loading the check…",
+    "failed": "Could not load this check.",
+    "reveal": "Show the reasoning",
+    "reasoning": "The reasoning",
+    "unchanged": "Review only — your progress is unchanged."
+  },
+  "stationDone": {
+    "title": "You closed the loop on",
+    "body": "{{proven}} of {{total}} outcomes proven by the app. Nothing was clicked to done.",
+    "trueNow": "What's now true"
+  },
+  "mastery": {
+    "badge": "Mastered"
+  },
+  "periodChip": {
+    "label": "Open period",
+    "none": "None",
+    "many": "More than one",
+    "open": "Open"
+  },
+  "role": {
+    "label": "View as",
+    "lead": "Carbon Lead",
+    "owner": "Data Owner",
+    "observer": "Observer"
+  },
+  "rail": {
+    "label": "Journey stations",
+    "progress": "{{done}} of {{total}} done",
+    "here": "Here"
+  },
+  "completion": {
+    "done": "Done",
+    "inProgress": "In progress",
+    "todo": "To do"
+  },
+  "sections": {
+    "outcomesTitle": "Outcomes you can check",
+    "outcomes": "What good looks like",
+    "lessons": "Lessons"
+  },
+  "step": {
+    "goTo": "Go to {{page}}",
+    "stepOf": "Step {{n}} of {{total}}",
+    "focus": "Go to step {{n}}"
+  },
+  "lesson": {
+    "noSteps": "This lesson is checked in the app. Open it to see the live state.",
+    "none": "No lesson is owed on this station for your path.",
+    "stepCount": "Steps: {{steps}}"
+  },
+  "reader": {
+    "title": "Lesson",
+    "stationLabel": "Station",
+    "prev": "Previous lesson",
+    "next": "Next lesson",
+    "stationSummary": "Station summary",
+    "missing": {
+      "title": "Lesson not found",
+      "body": "This lesson is not on your path in this journey.",
+      "action": "Back to the journey"
+    }
+  },
+  "cta": {
+    "goThere": "Go there",
+    "viewReports": "Open reports"
+  },
+  "closedHistory": {
+    "title": "Closed history (read-only)",
+    "body": "These periods are closed and are never added to the open period.",
+    "dates": "{{start}} – {{end}}",
+    "note": "Read-only. Not summed into the open period."
+  },
+  "empty": {
+    "noRole": {
+      "title": "Journey is not open to you",
+      "body": "Your role has no work in this app journey."
+    },
+    "nothingOwed": {
+      "title": "Nothing is owed here yet",
+      "body": "This station has no outcome or lesson for your path."
+    }
+  },
+  "readiness": {
+    "link": "O1 readiness checklist"
+  }
+}

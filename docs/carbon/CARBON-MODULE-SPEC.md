@@ -46,6 +46,7 @@ This subject does not steal those tokens.
 | Covered with empty `linked_tables` | Checklist fail | O1 does not pass |
 | Chat states a tonne absent from the tool payload | CR-PULSE-01 fail | Chat does not write the row |
 | `EMISSIONS_AUTO_CALC` left default | No auto calculation on `DataRow` save | A silent footprint |
+| Open data-entry period is not the single status `open` row | Console, chairman header, and intake bind to that one period | FY 2023-24 shown as the open year. Closed-year kilograms added to Calendar year 2026. A missing stream shown as 0 kg |
 
 ## Budget
 

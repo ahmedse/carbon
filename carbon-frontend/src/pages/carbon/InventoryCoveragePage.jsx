@@ -61,6 +61,8 @@ import {
   deleteCoverageAction,
   fetchCoverage,
   fetchCampusIntake,
+  fetchCoverageReconciliation,
+  setCoverageRowExclusion,
 } from '../../api/emissions-extended';
 
 // ── ScopeChip ──────────────────────────────────────────────────────────
@@ -244,6 +246,26 @@ function CoverageBar({ value }) {
       </Typography>
     </Box>
   );
+}
+
+// ── Coverage reason label ──────────────────────────────────────────────
+
+const REASON_KEY = {
+  not_material: 'coverage.exclusionNotMaterial',
+  insufficient_data: 'coverage.exclusionInsufficient',
+  out_of_boundary: 'coverage.exclusionOutOfBoundary',
+  other: 'coverage.exclusionOther',
+  exclusion_notes: 'coverage.exclusionNotes',
+  awaiting_factor: 'intake.statusAwaiting',
+  diesel_stream_both: 'intake.exclusion.diesel_stream_both',
+  diesel_stream_unlabelled: 'intake.exclusion.diesel_stream_unlabelled',
+  open_period_count: 'intake.exclusion.open_period_count',
+};
+
+function reasonLabel(t, reason) {
+  if (!reason) return '—';
+  const key = REASON_KEY[reason];
+  return key ? t(key) : String(reason);
 }
 
 // ── SourceDialog ───────────────────────────────────────────────────────
@@ -581,6 +603,104 @@ function ActionDialog({ open, action, sources, onSave, onClose }) {
   );
 }
 
+// ── ExclusionDialog ────────────────────────────────────────────────────
+// Coverage is the only surface that reports Excluded, so it is also the only
+// surface that declares one. The reason comes from a fixed vocabulary; "other"
+// requires notes. Cancel clears the column, so the dialog never edits a value.
+
+function ExclusionDialog({ open, row, onSave, onClose }) {
+  const { t } = useTranslation('emissions');
+  const excluding = row?.status !== 'excluded';
+  const [reason, setReason] = useState('insufficient_data');
+  const [notes, setNotes] = useState('');
+
+  useEffect(() => {
+    if (open) {
+      setReason('insufficient_data');
+      setNotes('');
+    }
+  }, [open, row]);
+
+  const handleSave = () => {
+    if (excluding) {
+      onSave({ excluded: true, reason, notes: notes.trim() });
+    } else {
+      onSave({ excluded: false, reason: '', notes: '' });
+    }
+  };
+
+  const reasonOptions = [
+    ['not_material', t('coverage.exclusionNotMaterial')],
+    ['insufficient_data', t('coverage.exclusionInsufficient')],
+    ['out_of_boundary', t('coverage.exclusionOutOfBoundary')],
+    ['other', t('coverage.exclusionOther')],
+  ];
+
+  return (
+    <SystemDialog
+      open={open}
+      title={excluding ? t('coverage.exclusionTitle') : t('coverage.reincludeTitle')}
+      onClose={onClose}
+      onCancel={onClose}
+      cancelLabel={t('common:cancel')}
+      actions={
+        <Button variant="contained" size="small" onClick={handleSave}>
+          {excluding ? t('coverage.excludeRow') : t('coverage.reincludeRow')}
+        </Button>
+      }
+      width={520}
+      height={excluding ? 420 : 300}
+      minWidth={380}
+      minHeight={excluding ? 340 : 240}
+      maxWidth="calc(100vw - 32px)"
+      maxHeight="calc(100vh - 32px)"
+    >
+      <Box px={2} py={1}>
+        <Stack spacing={2}>
+          <Typography variant="body2" color="text.secondary">
+            {t('coverage.exclusionRowLabel', {
+              source: row?.source_name || '',
+              campus: row?.campus || '',
+            })}
+          </Typography>
+          {excluding ? (
+            <>
+              <TextField
+                label={t('coverage.exclusionReason')}
+                select
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                fullWidth
+                required
+                size="small"
+              >
+                {reasonOptions.map(([value, label]) => (
+                  <MenuItem key={value} value={value}>{label}</MenuItem>
+                ))}
+              </TextField>
+              <TextField
+                label={t('coverage.exclusionNotesField')}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                fullWidth
+                multiline
+                rows={3}
+                size="small"
+                required={reason === 'other'}
+                helperText={reason === 'other' ? t('coverage.exclusionNotesRequired') : t('coverage.exclusionNotesHint')}
+              />
+            </>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              {t('coverage.reincludeHint')}
+            </Typography>
+          )}
+        </Stack>
+      </Box>
+    </SystemDialog>
+  );
+}
+
 // ── Main Component ─────────────────────────────────────────────────────
 
 export default function InventoryCoveragePage() {
@@ -601,6 +721,7 @@ export default function InventoryCoveragePage() {
   const [streamPeriods, setStreamPeriods] = useState([]);
   const [streamPeriodId, setStreamPeriodId] = useState('');
   const [streamError, setStreamError] = useState('');
+  const [reconciliation, setReconciliation] = useState(null);
 
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState(0);
@@ -611,6 +732,7 @@ export default function InventoryCoveragePage() {
   const [currentSource, setCurrentSource] = useState(null);
   const [currentGoal, setCurrentGoal] = useState(null);
   const [currentAction, setCurrentAction] = useState(null);
+  const [exclusionRow, setExclusionRow] = useState(null);
 
   const [deleteConfirm, setDeleteConfirm] = useState(null); // { kind, id }
 
@@ -630,16 +752,21 @@ export default function InventoryCoveragePage() {
       setGoals(Array.isArray(gData) ? gData : gData?.results || []);
       setActions(Array.isArray(aData) ? aData : aData?.results || []);
       try {
-        const intake = await fetchCampusIntake(token);
+        const [intake, recon] = await Promise.all([
+          fetchCampusIntake(token),
+          fetchCoverageReconciliation(token).catch(() => null),
+        ]);
         const boards = Array.isArray(intake?.periods) ? intake.periods : [];
         setStreamPeriods(boards);
         setStreams(Array.isArray(intake?.streams) ? intake.streams : []);
         const openBoard = boards.find((row) => row.role === 'open') || boards[0];
         setStreamPeriodId((current) => current || (openBoard ? String(openBoard.id) : ''));
         setStreamError('');
+        setReconciliation(recon && typeof recon === 'object' ? recon : null);
       } catch (err) {
         setStreams([]);
         setStreamPeriods([]);
+        setReconciliation(null);
         setStreamError(err?.message || t('intake.loadFailed'));
       }
     } catch (err) {
@@ -769,6 +896,22 @@ export default function InventoryCoveragePage() {
       if (kind === 'source') await loadPeriodScoped(selectedPeriod);
     } catch (err) {
       notifyFromError(err, 'Failed to delete record');
+    }
+  };
+
+  const handleSaveExclusion = async ({ excluded, reason, notes }) => {
+    const sourceId = exclusionRow?.inventory_source_id;
+    if (!sourceId) return;
+    try {
+      await setCoverageRowExclusion(sourceId, { excluded, reason, notes }, token);
+      notify({
+        message: excluded ? t('coverage.exclusionSaved') : t('coverage.exclusionCleared'),
+        type: 'success',
+      });
+      setExclusionRow(null);
+      await loadAll();
+    } catch (err) {
+      notifyFromError(err, t('coverage.exclusionFailed'));
     }
   };
 
@@ -1094,11 +1237,59 @@ export default function InventoryCoveragePage() {
                   },
                 },
                 {
+                  field: 'reason',
+                  headerName: t('intake.reason'),
+                  width: 170,
+                  valueGetter: (_value, row) => reasonLabel(t, row?.reason),
+                },
+                {
                   field: 'inventory_kg',
                   headerName: t('intake.inventoryKg'),
                   width: 140,
                   valueGetter: (value) => (value == null || value === '' ? t('intake.kgAbsent') : String(value)),
                 },
+                {
+                  field: 'submit',
+                  headerName: t('coverage.entryAction'),
+                  width: 150,
+                  sortable: false,
+                  renderCell: (params) => (
+                    params.row?.inventory_source_id
+                    && (params.row?.status === 'missing' || params.row?.status === 'awaiting_factor')
+                  ) ? (
+                    <Button
+                      size="small"
+                      variant="contained"
+                      onClick={() => navigate(`/carbon/onboarding/intake?source=${params.row.inventory_source_id}`)}
+                    >
+                      {t('coverage.enterRow')}
+                    </Button>
+                  ) : null,
+                },
+                ...(isAdmin
+                  ? [
+                      {
+                        field: 'exclusion',
+                        headerName: t('coverage.exclusionAction'),
+                        width: 160,
+                        sortable: false,
+                        renderCell: (params) => (
+                          params.row?.inventory_source_id ? (
+                            <Button
+                              size="small"
+                              variant={params.row?.status === 'excluded' ? 'outlined' : 'text'}
+                              color={params.row?.status === 'excluded' ? 'inherit' : 'warning'}
+                              onClick={() => setExclusionRow(params.row)}
+                            >
+                              {params.row?.status === 'excluded'
+                                ? t('coverage.reincludeRow')
+                                : t('coverage.excludeRow')}
+                            </Button>
+                          ) : null
+                        ),
+                      },
+                    ]
+                  : []),
               ]}
               hideSearch
               loading={loading}
@@ -1141,6 +1332,52 @@ export default function InventoryCoveragePage() {
         <StatCard label="Completeness" value={coverage?.completeness_definition ?? '—'} />
         <StatCard label="Material Exclusions" value={coverage?.material_exclusions_count ?? '—'} />
       </Box>
+
+      {/* ── Reconciliation (read-only counts). Coverage is the only reporter. ── */}
+      <Typography variant="h6">{t('coverage.reconciliationTitle')}</Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+        {t('coverage.reconciliationHint')}
+      </Typography>
+      {reconciliation ? (
+        <>
+          <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }}>
+            <StatCard label={t('coverage.required')} value={reconciliation.counts?.required ?? '—'} />
+            <StatCard label={t('coverage.entered')} value={reconciliation.counts?.entered ?? '—'} />
+            <StatCard label={t('coverage.excluded')} value={reconciliation.counts?.excluded ?? '—'} />
+            <StatCard label={t('coverage.missing')} value={reconciliation.counts?.missing ?? '—'} />
+          </Box>
+          {(reconciliation.goals || []).length === 0 ? (
+            <EmptyState title={t('coverage.noGoals')} description={t('coverage.noGoalsHint')} />
+          ) : (
+            <FilteredDataGrid
+              embedded
+              title={t('coverage.goalsTitle')}
+              rows={reconciliation.goals || []}
+              getRowId={(row) => row.goal_id}
+              columns={[
+                { field: 'name', headerName: t('coverage.goalName'), flex: 1 },
+                { field: 'scope', headerName: t('intake.scope'), width: 90 },
+                { field: 'org_unit_name', headerName: t('coverage.orgUnit'), flex: 1 },
+                { field: 'required', headerName: t('coverage.required'), width: 100 },
+                { field: 'entered', headerName: t('coverage.entered'), width: 100 },
+                { field: 'excluded', headerName: t('coverage.excluded'), width: 100 },
+                { field: 'missing', headerName: t('coverage.missing'), width: 100 },
+                {
+                  field: 'target_coverage_pct',
+                  headerName: t('coverage.declaredTarget'),
+                  width: 140,
+                  valueGetter: (value) => (value == null ? '—' : `${value}%`),
+                },
+              ]}
+              hideSearch
+            />
+          )}
+        </>
+      ) : loading ? (
+        <LoadingSkeleton variant="table" />
+      ) : (
+        <EmptyState title={t('coverage.noGoals')} description={t('coverage.noGoalsHint')} />
+      )}
 
       {/* Section tabs */}
       <Tabs value={tab} onChange={(e, v) => setTab(v)} sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}>
@@ -1216,6 +1453,12 @@ export default function InventoryCoveragePage() {
         sources={sources}
         onSave={handleSaveAction}
         onClose={() => setActionOpen(false)}
+      />
+      <ExclusionDialog
+        open={!!exclusionRow}
+        row={exclusionRow}
+        onSave={handleSaveExclusion}
+        onClose={() => setExclusionRow(null)}
       />
 
       {/* Delete Confirmation Dialog */}

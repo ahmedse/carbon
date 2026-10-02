@@ -157,6 +157,10 @@ def prepare_ask(payload: dict[str, Any] | None) -> AskDecision:
     block = course_block(snapshot)
     if block:
         return AskDecision(answer=COURSE_LIST_ANSWERS[block], refusal=block)
+    from ai.moodle_integrity import integrity_answer, live_assessment_open
+
+    if live_assessment_open(snapshot, host_context):
+        return AskDecision(answer=integrity_answer(), refusal="live_assessment")
     from ai.moodle_refusals import answer_for, classify
     from ai.moodle_onboarding import answer as onboarding_answer
 
@@ -208,6 +212,13 @@ def page_context_from_snapshot(host_context: dict[str, Any], snapshot: dict[str,
         return (
             f"{COURSE_LIST_ANSWERS[block]}\n"
             "Do not name a course. Do not describe its contents."
+        )
+    from ai.moodle_integrity import integrity_answer, live_assessment_open
+
+    if live_assessment_open(snapshot):
+        return (
+            f"{integrity_answer()}\n"
+            "Do not answer, hint, teach, or advise. Do not name the activity."
         )
     course = snapshot.get("course") or {}
     sections = snapshot.get("sections") or []
@@ -276,14 +287,21 @@ def door_answer(
     state: dict[str, Any] | None = None,
 ) -> str | None:
     """Section, lecture, fact, topic, reference, greeting, and identity replies."""
+    from ai.moodle_integrity import integrity_answer, live_assessment_open
+
+    if live_assessment_open(snapshot):
+        return integrity_answer()
     from ai.moodle_page import (
         course_answer,
+        explain_answer,
         fact_answer,
         greet_answer,
         identity_answer,
         lecture_answer,
+        quiz_answer,
         reference_answer,
         section_answer,
+        staff_answer,
         topic_answer,
     )
 
@@ -291,14 +309,17 @@ def door_answer(
     for answer_for in (
         greet_answer,
         identity_answer,
+        staff_answer,
         course_answer,
         fact_answer,
         lecture_answer,
         section_answer,
+        quiz_answer,
+        explain_answer,
         topic_answer,
         reference_answer,
     ):
-        if answer_for in (topic_answer, reference_answer, identity_answer):
+        if answer_for in (topic_answer, reference_answer, identity_answer, explain_answer):
             answer = answer_for(message, snapshot, state=bag)
         else:
             answer = answer_for(message, snapshot)
@@ -374,9 +395,15 @@ def snapshot_from_page_context(text: str) -> dict[str, Any]:
         in_sections = False
         if line.startswith("Open activity ") and " cmid=" in line:
             name, _, tail = line[len("Open activity ") :].partition(" cmid=")
-            raw = tail.split()[0].strip().rstrip(".")
+            tokens = tail.split()
+            raw = tokens[0].strip().rstrip(".") if tokens else ""
             if raw.isdigit():
                 activity = {"name": name.strip(), "cmid": int(raw)}
+                for token in tokens[1:]:
+                    token = token.strip().rstrip(".")
+                    for prefix, key in (("module=", "module"), ("section=", "section")):
+                        if token.startswith(prefix) and token[len(prefix) :]:
+                            activity[key] = token[len(prefix) :]
             continue
         if line.startswith("Pulse-off sections:"):
             pulse_off_sections = _csv_ints(line.split(":", 1)[1])

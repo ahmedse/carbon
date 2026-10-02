@@ -1738,3 +1738,178 @@ class AssuranceEngagement(models.Model):
     def __str__(self):
         return self.assurer_name or f"Assurance #{self.pk}"
 
+
+class CoverageTarget(models.Model):
+    """Layer 1 of Coverage: a period-scoped KPI target for the declared universe.
+
+    Distinct from CoverageGoal (the policy / benchmark row a target may
+    reference). A target is bound to ONE ReportingPeriod (the cycle), carries a
+    measurable goal (percent or absolute), a quality floor, a due date and an
+    owner. Its status and progress are DERIVED from InventorySourceStatus and
+    Calculation rows on that period; a target never stores a hand-set percent.
+    Creating a target never changes any CoverageGoal.status.
+    """
+
+    TARGET_SCOPE_CHOICES = [
+        ('1', 'Scope 1'), ('2', 'Scope 2'), ('3', 'Scope 3'),
+        ('1+2', 'Scope 1+2'), ('1+2+3', 'Scope 1+2+3'),
+    ]
+    GOAL_KIND_CHOICES = [
+        ('percent', 'Percent of required streams'),
+        ('absolute', 'Absolute'),
+    ]
+    STATUS_CHOICES = [('draft', 'Draft'), ('active', 'Active'), ('archived', 'Archived')]
+
+    reporting_period = models.ForeignKey(
+        ReportingPeriod, on_delete=models.CASCADE, related_name='coverage_targets'
+    )
+    org_unit = models.ForeignKey(
+        'mdm.OrgUnit', on_delete=models.CASCADE, related_name='coverage_targets'
+    )
+    campus = models.ForeignKey(
+        'mdm.OrgUnit', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='coverage_target_campuses',
+        help_text=(
+            "The campus (mdm.OrgUnit with org_type='campus') this target belongs to. "
+            "org_unit stays the unit progress keys on; it is the campus or one of its "
+            "real descendants. This field never replaces the progress key."
+        ),
+    )
+    scope = models.CharField(max_length=20, choices=TARGET_SCOPE_CHOICES)
+    scope3_category = models.PositiveSmallIntegerField(
+        null=True, blank=True, help_text="Scope 3 category 1-15; null for scope 1/2"
+    )
+    name = models.CharField(max_length=200)
+    goal_kind = models.CharField(max_length=20, choices=GOAL_KIND_CHOICES, default='percent')
+    goal_value = models.DecimalField(
+        max_digits=14, decimal_places=4,
+        help_text="Percent (0-100) when goal_kind is percent; an amount when absolute",
+    )
+    goal_unit = models.CharField(
+        max_length=40, blank=True, default='',
+        help_text="Unit for an absolute goal (kg, kWh, litre, tonne); blank for percent",
+    )
+    min_quality_tier = models.PositiveSmallIntegerField(
+        choices=InventorySourceStatus.TIER_CHOICES, null=True, blank=True,
+        help_text="Minimum PCAF tier for a stream to count toward this target",
+    )
+    due_date = models.DateField(null=True, blank=True)
+    owner = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='coverage_targets_owned',
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
+    notes = models.TextField(blank=True, default='')
+    coverage_goal = models.ForeignKey(
+        CoverageGoal, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='targets',
+        help_text="Optional link to the policy CoverageGoal. A target never promotes it.",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='coverage_targets_created',
+    )
+
+    class Meta:
+        ordering = ['due_date', '-created_at']
+        verbose_name = "Coverage Target"
+        verbose_name_plural = "Coverage Targets"
+        constraints = [
+            models.UniqueConstraint(
+                fields=['reporting_period', 'org_unit', 'scope', 'scope3_category', 'name'],
+                name='uniq_coverage_target_binding',
+                nulls_distinct=False,
+            ),
+            models.CheckConstraint(
+                condition=models.Q(goal_value__gte=0),
+                name='coverage_target_goal_nonnegative',
+            ),
+            models.CheckConstraint(
+                condition=models.Q(goal_kind='absolute') | models.Q(goal_value__lte=100),
+                name='coverage_target_percent_lte_100',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['reporting_period', 'status']),
+            models.Index(fields=['org_unit', 'scope']),
+        ]
+
+    def __str__(self):
+        return f"{self.name} — {self.scope} @ {self.goal_value} ({self.reporting_period})"
+
+
+class CoverageTask(models.Model):
+    """A thing to achieve under a CoverageTarget. Done only on host evidence.
+
+    A task is never completed by a status flag alone: the API refuses a
+    transition to done unless task_evidence (emissions/coverage_targets.py) is
+    met. bind_data_product references an EXISTING DataTable; it never creates a
+    Data Product contract (that stays the catalog-admin flow).
+    """
+
+    TASK_TYPE_CHOICES = [
+        ('bind_data_product', 'Bind a Data Product contract'),
+        ('complete_rows', 'Complete rows through a month'),
+        ('fill_gap', 'Fill a named gap'),
+        ('secure_factor', 'Secure a missing factor'),
+        ('other', 'Other'),
+    ]
+    STATUS_CHOICES = [
+        ('open', 'Open'), ('in_progress', 'In Progress'),
+        ('done', 'Done'), ('blocked', 'Blocked'),
+    ]
+
+    target = models.ForeignKey(
+        CoverageTarget, on_delete=models.CASCADE, related_name='tasks'
+    )
+    task_type = models.CharField(max_length=30, choices=TASK_TYPE_CHOICES)
+    title = models.CharField(max_length=200)
+    detail = models.TextField(blank=True, default='')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='open')
+    due_date = models.DateField(null=True, blank=True)
+    owner = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='coverage_tasks_owned',
+    )
+    data_table = models.ForeignKey(
+        'dataschema.DataTable', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='coverage_tasks',
+        help_text="bind_data_product / complete_rows evidence: the bound contract table",
+    )
+    stream_source = models.ForeignKey(
+        InventorySource, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='coverage_tasks',
+        help_text="fill_gap / complete_rows evidence: the named stream",
+    )
+    factor = models.ForeignKey(
+        'EmissionFactor', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='coverage_tasks',
+        help_text="secure_factor evidence: the distinct factor",
+    )
+    through_month = models.DateField(
+        null=True, blank=True,
+        help_text="complete_rows: first day of the month rows must reach",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='coverage_tasks_created',
+    )
+
+    class Meta:
+        ordering = ['due_date', 'id']
+        verbose_name = "Coverage Task"
+        verbose_name_plural = "Coverage Tasks"
+        indexes = [
+            models.Index(fields=['target', 'status']),
+            models.Index(fields=['target', 'task_type']),
+        ]
+
+    def __str__(self):
+        return f"{self.get_task_type_display()} — {self.title}"
+

@@ -63,6 +63,23 @@ The user asked to remove the per-page panel and unify it with the global drawer.
 - **Do NOT re-try:** per-page hard-coded tab arrays; two parallel right drawers;
   prop-drilling page data into a global drawer.
 
+## Amendment — 2026-10-02 (drawer tab navigation + state)
+
+A registered drawer tab owns its own in-tab navigation; it MUST NOT mutate the
+main-area route. Concretely, for the Journey tab (`inspector/tabs/journeyTabs.jsx`):
+
+- A **row click / station tile / Prev/Next** updates the tab's persisted view state
+  (`inspector/useDrawerJourneyView.js`, localStorage `carbon-journey-view:<user>:<app>`,
+  the same persistence family as `carbon-notes-open` / `carbon-notes-tab`). The main
+  page and its scroll are never unmounted.
+- The **only** main-area navigation is the user's explicit labelled "Go to <page>"
+  step button (`onGo`), which points at a real host page.
+- The tab's active station/lesson and scroll offset survive navigation and reload;
+  `NotesPanel` displays the fallback tab without overwriting the persisted tab
+  preference when a contextual tab is unavailable.
+- Deep links (`/journey/<appId>/<lessonId>`) still render the reader on the main
+  route; the drawer mirrors that lesson without pushing back to the router.
+
 ## References
 
 - `docs/DESIGN-CONTEXTUAL-INSPECTOR-DRAWER.md` (full research + migration plan)

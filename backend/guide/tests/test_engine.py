@@ -150,3 +150,35 @@ class EngineTests(SimpleTestCase):
         out = engine.evaluate_lessons(_ctx("t:write"), catalog, {}, NOW)
         self.assertIsNone(out["next_id"])
         self.assertEqual(next(r for r in out["lessons"] if r["id"] == "D2")["blocker"]["code"], "gate_closed")
+
+
+class WildcardTrackTests(SimpleTestCase):
+    """A wildcard capability reads every track; a role reads one; no role is no work."""
+
+    CATALOG = [
+        _lesson("CD1", 10, track="C", any=["t:common"]),
+        _lesson("DD1", 20, track="D", any=["t:write"]),
+        _lesson("LD1", 30, track="L", any=["t:manage"]),
+    ]
+
+    def ids(self, out):
+        return {row["id"] for row in out["lessons"]}
+
+    def test_wildcard_sees_every_track_and_is_never_no_work(self):
+        out = engine.evaluate_lessons(_ctx("*"), self.CATALOG, {}, NOW)
+        self.assertTrue(out["all_tracks"])
+        self.assertEqual(self.ids(out), {"CD1", "DD1", "LD1"})
+        self.assertEqual({t["id"] for t in out["tracks"]}, {"C", "D", "L"})
+
+    def test_one_capability_sees_only_its_track(self):
+        out = engine.evaluate_lessons(_ctx("t:write"), self.CATALOG, {}, NOW)
+        self.assertFalse(out["all_tracks"])
+        self.assertEqual(self.ids(out), {"DD1"})
+        self.assertEqual({t["id"] for t in out["tracks"]}, {"D"})
+
+    def test_no_capability_has_no_work(self):
+        out = engine.evaluate_lessons(_ctx(), self.CATALOG, {}, NOW)
+        self.assertFalse(out["all_tracks"])
+        self.assertEqual(out["lessons"], [])
+        self.assertEqual(out["tracks"], [])
+        self.assertIsNone(out["recommended_track"])

@@ -231,6 +231,7 @@ export const MENU_ITEM_CAPABILITIES = {
   'SBTi Targets':         CARBON_MANAGE_SBTI_TARGETS,
   'Organizational Boundaries': CARBON_MANAGE_REPORTING_PERIODS,
   'Base Years':               CARBON_MANAGE_REPORTING_PERIODS,
+  'Coverage':                 CARBON_MANAGE_INVENTORY_COVERAGE,
   'Inventory Coverage':       CARBON_MANAGE_INVENTORY_COVERAGE,
   'Policy versions':          CATALOG_MANAGE_POLICIES,
 

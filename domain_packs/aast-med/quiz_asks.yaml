@@ -1,0 +1,21 @@
+# T3 Quiz — self-test from the course bank only. Vocabulary stays in this pack.
+# Every answer is a verbatim span from a passage that contains the topic. The
+# question is that span with the topic blanked out. No pack answer → exact
+# miss. The question bank and exams are excluded modules and are never loaded.
+version: 1
+miss: This is not in this course.
+max_items: 3
+# Character cap for a cloze item. The window is built around the topic match,
+# so the answer span always contains the topic and is an exact substring.
+span: 260
+label: "Practice from this course — answers are verbatim spans."
+# Longest prefix first.
+prefixes:
+  - "make a quiz about "
+  - "make a quiz on "
+  - "practice questions about "
+  - "practice questions on "
+  - "quiz me about "
+  - "quiz me on "
+  - "test me about "
+  - "test me on "

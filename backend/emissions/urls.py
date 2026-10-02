@@ -35,6 +35,8 @@ from .views import (
     InventorySourceStatusViewSet,
     CoverageGoalViewSet,
     CoverageActionViewSet,
+    CoverageTargetViewSet,
+    CoverageTaskViewSet,
     InventoryCoverageAPIView,
     ChairmanAPIView,
     DisclosureExportAPIView,
@@ -48,6 +50,9 @@ from .intake_api import (
     CampusIntakeTemplateAPIView,
     CampusIntakeUploadAPIView,
     ContractualFactorAPIView,
+    CoverageReconciliationAPIView,
+    CoverageRowExclusionAPIView,
+    CoverageRowSubmissionAPIView,
 )
 
 app_name = 'emissions'
@@ -94,6 +99,8 @@ for _view in (
     InventorySourceStatusViewSet,
     CoverageGoalViewSet,
     CoverageActionViewSet,
+    CoverageTargetViewSet,
+    CoverageTaskViewSet,
     InventoryCoverageAPIView,
     ChairmanAPIView,
     OnboardingO1APIView,
@@ -104,6 +111,9 @@ for _view in (
     CampusIntakeUploadAPIView,
     ContractualFactorAPIView,
     AssuranceEngagementAPIView,
+    CoverageRowSubmissionAPIView,
+    CoverageRowExclusionAPIView,
+    CoverageReconciliationAPIView,
 ):
     _brand_gate(_view)
 
@@ -153,6 +163,13 @@ coverage_goal_router.register(r'coverage-goals', CoverageGoalViewSet, basename='
 coverage_action_router = DefaultRouter()
 coverage_action_router.register(r'coverage-actions', CoverageActionViewSet, basename='coverage-action')
 
+# Coverage targets / tasks (two-layer Coverage, locked 2 Oct 2026)
+coverage_target_router = DefaultRouter()
+coverage_target_router.register(r'coverage-targets', CoverageTargetViewSet, basename='coverage-target')
+
+coverage_task_router = DefaultRouter()
+coverage_task_router.register(r'coverage-tasks', CoverageTaskViewSet, basename='coverage-task')
+
 urlpatterns = [
     # Calculation summary — MUST come before router include to avoid path collision
     path('calculations/summary/', CalculationSummaryAPIView.as_view(), name='calculation-summary'),
@@ -182,7 +199,24 @@ urlpatterns = [
     path('', include(inventory_source_status_router.urls)),
     path('', include(coverage_goal_router.urls)),
     path('', include(coverage_action_router.urls)),
+    path('', include(coverage_target_router.urls)),
+    path('', include(coverage_task_router.urls)),
     path('coverage/', InventoryCoverageAPIView.as_view(), name='inventory-coverage'),
+    path(
+        'inventory-sources/<int:source_id>/submit/',
+        CoverageRowSubmissionAPIView.as_view(),
+        name='coverage-row-submit',
+    ),
+    path(
+        'inventory-sources/<int:source_id>/exclusion/',
+        CoverageRowExclusionAPIView.as_view(),
+        name='coverage-row-exclusion',
+    ),
+    path(
+        'coverage/reconciliation/',
+        CoverageReconciliationAPIView.as_view(),
+        name='coverage-reconciliation',
+    ),
     path('onboarding/o1/', OnboardingO1APIView.as_view(), name='onboarding-o1'),
     path('intake/', CampusIntakeAPIView.as_view(), name='campus-intake'),
     path('intake/discovered/', CampusIntakeDiscoveredAPIView.as_view(), name='campus-intake-discovered'),

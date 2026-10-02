@@ -1,0 +1,16 @@
+---
+description: People partner share is a slice export only — never Pulse or Data Trust.
+alwaysApply: true
+---
+
+# People partner slice (share boundary)
+
+When asked to share, zip, or send Carbon source to a business partner:
+
+1. **Do not** grant monorepo access, sparse-checkout the whole tree, or copy `backend/ai`, Pulse docs, or Data Trust product apps (`catalog`, `dq`, `mdm`, `dataschema`, Catalog/DQ UI).
+2. **Do** use the committed exporter:
+   - Manifest: `shipping/people-slice/`
+   - Command: `./manage.sh export-people-slice` (or `./scripts/export_people_slice.sh`)
+3. The zip is a **review package**. It is not runnable and must not include secrets (`.env`, dumps, keys).
+4. To change what ships, edit `shipping/people-slice/include.txt` / `leak-paths.txt` and re-run the exporter — do not invent an ad-hoc file list.
+5. Do not start or kill `manage.sh` start/stop as part of an export.

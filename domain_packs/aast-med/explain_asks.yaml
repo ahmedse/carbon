@@ -1,0 +1,19 @@
+# T2 Explain — grounded multi-span. Vocabulary stays in this pack, never engine/.
+# An explain-class ask returns up to max_spans spans from ONE selected
+# passage. Every span is an exact substring of that passage's text. The door
+# emits fixed labels and verbatim spans only; it never writes a new sentence.
+version: 1
+miss: This is not in this course.
+max_spans: 3
+# Per-span character cap. A capped span is still a prefix of the sentence, so
+# it stays an exact substring of the passage.
+span: 220
+# Spans shorter than this are dropped (they read as fragments, not passages).
+min_span: 30
+# Fixed label. {passage} is replaced with the passage id.
+label: "Verbatim spans from {passage}:"
+# Longest prefix first.
+prefixes:
+  - "teach me about "
+  - "teach me "
+  - "explain "

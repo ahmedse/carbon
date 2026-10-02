@@ -98,17 +98,27 @@ const ROUTE_CONFIG = {
     parent: '/carbon/console',
   },
   '/carbon/onboarding': {
-    label: 'Inventory onboarding',
+    label: 'Journey',
     icon: DashboardIcon,
     parent: '/carbon/console',
+  },
+  '/carbon/onboarding/readiness': {
+    label: 'Readiness',
+    icon: DashboardIcon,
+    parent: '/carbon/onboarding',
   },
   '/carbon/onboarding/intake': {
     label: 'Campus intake',
     icon: DashboardIcon,
     parent: '/carbon/onboarding',
   },
+  '/journey/carbon': {
+    label: 'Journey',
+    icon: DashboardIcon,
+    parent: '/carbon/console',
+  },
   '/guide/carbon': {
-    label: 'My guide',
+    label: 'Journey',
     icon: DashboardIcon,
     parent: '/carbon/console',
   },
@@ -160,6 +170,11 @@ const ROUTE_CONFIG = {
   '/carbon/admin/targets': {
     label: 'SBTi Targets',
     icon: Co2Icon,
+    parent: '/carbon/console',
+  },
+  '/carbon/admin/inventory-coverage': {
+    label: 'Coverage',
+    icon: AccountTreeIcon,
     parent: '/carbon/console',
   },
   '/carbon/analytics': {

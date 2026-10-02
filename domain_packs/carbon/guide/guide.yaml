@@ -17,9 +17,113 @@
 # live       probe (kind live) that fills the coach's live card.
 # scope_cap  capability whose org scope decides "your sources".
 # question   static (correct = zero-based option index) or probe (kind question).
+# steps      the journey step timeline: title + exactly what to do, in copy.
+# completion declared finish: host (probe passes) | answer (correct) | ack (reserved).
 pack: carbon
 version: 1
 probes: emissions.guide_probes
+
+# ── Journey contract (2 Oct 2026) ──────────────────────────────────────────
+# Engine-read blocks, not display metadata. The engine returns them with copy
+# merged. `glossary` lists terms that stay English inside the Arabic UI, so the
+# UI can render them LTR without reordering the sentence.
+journey:
+  title_key: journey.title
+  intro_key: journey.intro
+  glossary:
+    - Campus intake
+    - emission factor
+    - activity data
+    - data quality tier
+    - boundary
+    - calculation
+    - coverage
+    - row
+    - reporting period
+    - scope
+
+# The station rail. `lessons` is the union list; `lead` / `owner` are this
+# pack's own role split (the engine ignores them). `pending: true` = no lesson
+# path yet. Lesson ids stay the progress keys (D2 is not renamed).
+stages:
+  - n: 1
+    key: setup
+    title_key: stage.setup.title
+    what_key: stage.setup.what
+    lessons: [L2, L3, C2, C3]
+    competencies: [open_period, sources_factors, period_status, tiers]
+    lead: [L2, L3, C2, C3]
+    owner: [C2, C3]
+  - n: 2
+    key: coverage
+    title_key: stage.coverage.title
+    what_key: stage.coverage.what
+    lessons: [L5, D6]
+    competencies: [cover_exclude, handoff]
+    lead: [L5]
+    owner: [D6]
+  - n: 3
+    key: data_products
+    title_key: stage.data_products.title
+    what_key: stage.data_products.what
+    pending: true
+    lessons: []
+    competencies: []
+    lead: []
+    owner: []
+  - n: 4
+    key: data_entry
+    title_key: stage.data_entry.title
+    what_key: stage.data_entry.what
+    lessons: [D1, D2, D7]
+    competencies: [what_owed, one_row, data_product]
+    lead: []
+    owner: [D1, D2, D7]
+  - n: 5
+    key: calculation
+    title_key: stage.calculation.title
+    what_key: stage.calculation.what
+    lessons: [L4, D3, D4]
+    competencies: [calculation, restate, quality]
+    lead: [L4]
+    owner: [D3, D4]
+  - n: 6
+    key: lock
+    title_key: stage.lock.title
+    what_key: stage.lock.what
+    lessons: [L1, L6, D5]
+    competencies: [boundary, legal_transition, lock_read]
+    lead: [L1, L6]
+    owner: [D5]
+  - n: 7
+    key: report
+    title_key: stage.report.title
+    what_key: stage.report.what
+    lessons: [L7]
+    competencies: [quote_scope]
+    lead: [L7]
+    owner: []
+
+# Checkable outcomes. `kind: host` is proven only when its probe passes.
+# Titles and "what good looks like" live in copy under `competencies.<key>`.
+competencies:
+  - {key: open_period, kind: host, probe: one_open_period, lesson: L2}
+  - {key: sources_factors, kind: host, probe: source_has_factor, lesson: L3}
+  - {key: period_status, kind: answer, lesson: C2}
+  - {key: tiers, kind: answer, lesson: C3}
+  - {key: cover_exclude, kind: host, probe: status_decided, lesson: L5}
+  - {key: handoff, kind: answer, lesson: D6}
+  - {key: what_owed, kind: answer, lesson: D1}
+  - {key: one_row, kind: host, probe: row_created, lesson: D2}
+  - {key: data_product, kind: answer, lesson: D7}
+  - {key: calculation, kind: host, probe: calculation_run_by_me, lesson: L4}
+  - {key: restate, kind: answer, lesson: D3}
+  - {key: quality, kind: answer, lesson: D4}
+  - {key: boundary, kind: host, probe: boundary_set, lesson: L1}
+  - {key: legal_transition, kind: answer, lesson: L6}
+  - {key: lock_read, kind: answer, lesson: D5}
+  - {key: quote_scope, kind: answer, lesson: L7}
+
 lessons:
   - id: D1
     track: D
@@ -34,6 +138,12 @@ lessons:
     route: /carbon/my-data
     target: my-data.list
     stage: entry
+    completion: answer
+    competency: what_owed
+    steps:
+      - {route: /carbon/onboarding/intake, target: campus-intake.rows}
+      - {route: /carbon/my-data, target: my-data.list}
+      - {route: /carbon/admin/inventory-coverage, target: coverage.sources}
     question: {kind: static, options: 3, correct: 0}
 
   - id: D2
@@ -50,6 +160,12 @@ lessons:
     route: /carbon/my-data
     target: my-data.add-row
     stage: entry
+    completion: host
+    competency: one_row
+    steps:
+      - {route: /carbon/my-data, target: my-data.list}
+      - {route: /carbon/my-data, target: my-data.add-row}
+      - {route: /carbon/my-data, target: my-data.quality}
     question: {kind: host}
 
   - id: D3
@@ -62,6 +178,10 @@ lessons:
     live: period
     route: /carbon/calculations
     target: calculations.list
+    completion: answer
+    competency: restate
+    steps:
+      - {route: /carbon/calculations, target: calculations.list}
     question: {kind: static, options: 3, correct: 1}
 
   - id: D4
@@ -74,6 +194,10 @@ lessons:
     live: period
     route: /carbon/my-data
     target: my-data.quality
+    completion: answer
+    competency: quality
+    steps:
+      - {route: /carbon/my-data, target: my-data.quality}
     question: {kind: static, options: 3, correct: 1}
 
   - id: D5
@@ -86,6 +210,10 @@ lessons:
     live: period
     route: /carbon/my-data
     target: my-data.period
+    completion: answer
+    competency: lock_read
+    steps:
+      - {route: /carbon/my-data, target: my-data.period}
     question: {kind: static, options: 3, correct: 1}
 
   - id: D6
@@ -100,6 +228,10 @@ lessons:
     scope_cap: carbon:enter_data
     route: /carbon/my-data
     target: my-data.coverage
+    completion: answer
+    competency: handoff
+    steps:
+      - {route: /carbon/my-data, target: my-data.coverage}
     question: {kind: static, options: 3, correct: 1}
 
   - id: D7
@@ -114,6 +246,10 @@ lessons:
     route: /carbon/my-data
     target: my-data.bulk-import
     stage: entry
+    completion: answer
+    competency: data_product
+    steps:
+      - {route: /carbon/my-data, target: my-data.bulk-import}
     question: {kind: static, options: 3, correct: 0}
 
   - id: C2
@@ -123,8 +259,12 @@ lessons:
     minutes: 2
     version: 1
     live: period
-    route: /carbon/onboarding
-    target: onboarding.period
+    route: /carbon/reporting/periods
+    target: periods.status
+    completion: answer
+    competency: period_status
+    steps:
+      - {route: /carbon/reporting/periods, target: periods.status}
     question: {kind: static, options: 3, correct: 0}
 
   - id: C3
@@ -135,8 +275,12 @@ lessons:
     version: 1
     live: sources
     scope_cap: carbon:view_console
-    route: /carbon/onboarding
-    target: onboarding.tier
+    route: /carbon/admin/inventory-coverage
+    target: coverage.sources
+    completion: answer
+    competency: tiers
+    steps:
+      - {route: /carbon/admin/inventory-coverage, target: coverage.sources}
     question: {kind: static, options: 3, correct: 1}
 
   - id: L2
@@ -150,6 +294,10 @@ lessons:
     host: one_open_period
     route: /carbon/reporting/periods
     target: periods.status
+    completion: answer
+    competency: open_period
+    steps:
+      - {route: /carbon/reporting/periods, target: periods.status}
     question: {kind: static, options: 3, correct: 0}
 
   - id: L3
@@ -164,6 +312,11 @@ lessons:
     host: source_has_factor
     route: /carbon/admin/inventory-coverage
     target: coverage.sources
+    completion: answer
+    competency: sources_factors
+    steps:
+      - {route: /carbon/admin/inventory-coverage, target: coverage.sources}
+      - {route: /carbon/admin/factors, target: factors.list}
     question: {kind: static, options: 3, correct: 0}
 
   - id: L5
@@ -179,6 +332,10 @@ lessons:
     host: status_decided
     route: /carbon/admin/inventory-coverage
     target: coverage.status
+    completion: answer
+    competency: cover_exclude
+    steps:
+      - {route: /carbon/admin/inventory-coverage, target: coverage.status}
     question: {kind: static, options: 3, correct: 1}
 
   # ── close: calculate, lock, submit, check. After every gathering lesson. ──
@@ -194,6 +351,10 @@ lessons:
     host: boundary_set
     route: /carbon/admin/boundaries
     target: boundaries.list
+    completion: answer
+    competency: boundary
+    steps:
+      - {route: /carbon/admin/boundaries, target: boundaries.list}
     question: {kind: static, options: 3, correct: 1}
 
   - id: L4
@@ -208,6 +369,11 @@ lessons:
     host: calculation_run_by_me
     route: /carbon/calculations
     target: calculations.run
+    completion: answer
+    competency: calculation
+    steps:
+      - {route: /carbon/calculations, target: calculations.run}
+      - {route: /carbon/calculations, target: calculations.list}
     question: {kind: static, options: 3, correct: 0}
 
   - id: L6
@@ -220,6 +386,10 @@ lessons:
     live: period
     route: /carbon/reporting/periods
     target: periods.transition
+    completion: answer
+    competency: legal_transition
+    steps:
+      - {route: /carbon/reporting/periods, target: periods.transition}
     question: {kind: static, options: 3, correct: 0}
 
   - id: L7
@@ -232,4 +402,8 @@ lessons:
     live: period
     route: /carbon/chairman
     target: chairman.total
+    completion: answer
+    competency: quote_scope
+    steps:
+      - {route: /carbon/chairman, target: chairman.total}
     question: {kind: static, options: 3, correct: 1}
