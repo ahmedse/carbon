@@ -126,8 +126,10 @@ class InboundBatchViewSet(viewsets.ModelViewSet):
         rows = (batch.smoke or {}).get('reject_rows') or []
         buf = io.StringIO()
         if rows:
-            fieldnames = list(rows[0].keys())
-            writer = csv.DictWriter(buf, fieldnames=fieldnames)
+            # Explicit columns: reject_rows also carry a structured ``issues``
+            # list the read-only viewer renders, which has no place in a CSV.
+            fieldnames = ['row', 'key', 'verdict', 'reason']
+            writer = csv.DictWriter(buf, fieldnames=fieldnames, extrasaction='ignore', restval='')
             writer.writeheader()
             for row in rows:
                 writer.writerow({key: _csv_safe_cell(row.get(key)) for key in fieldnames})

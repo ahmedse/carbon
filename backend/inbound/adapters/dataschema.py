@@ -78,32 +78,54 @@ def _coerce_rows(rows, fields) -> list[dict]:
     return coerced
 
 
+# One remediation hint per validator code (dataschema.validators).
+_FIX_BY_CODE = {
+    'required': 'Fill this column; the table marks it required.',
+    'invalid_type': 'Enter a value that matches the field type.',
+    'not_allowed': 'Use one of the allowed options.',
+    'not_in_reference': 'Use a code that exists in the referenced reference set.',
+    'invalid_date': 'Use a date in YYYY-MM-DD format.',
+    'below_min': 'Enter a value at or above the field minimum.',
+    'above_max': 'Enter a value at or below the field maximum.',
+    'pattern_mismatch': 'Match the pattern the field expects.',
+}
+
+
 def smoke_table(table, rows, **_kwargs) -> dict:
     from dataschema.validators import validate_row
+    from inbound.smoke import envelope, issue, row_result
 
     fields = _active_fields(table)
     rows = _coerce_rows(rows, fields)
     insert = reject = 0
-    sample = []
+    results = []
     reject_rows = []
     for i, row in enumerate(rows, start=1):
         errors = validate_row(row, fields)
-        if errors:
+        issues = [
+            issue(
+                str(e.get('field') or ''),
+                str(e.get('message') or 'This value is not valid.'),
+                _FIX_BY_CODE.get(str(e.get('code') or ''), 'Correct this value and run smoke again.'),
+            )
+            for e in errors
+        ]
+        if issues:
             reject += 1
-            reason = '; '.join(f"{e['field']}: {e['message']}" for e in errors)
             verdict = 'reject'
-            reject_rows.append({'row': i, 'key': str(i), 'verdict': verdict, 'reason': reason})
         else:
             insert += 1
             verdict = 'insert'
-            reason = ''
-        if len(sample) < 20:
-            sample.append({'row': i, 'key': str(i), 'verdict': verdict, 'reason': reason})
-    return {
-        'insert': insert, 'update': 0, 'skip': 0, 'reject': reject,
-        'sample': sample, 'reject_rows': reject_rows,
-        'reconcile_preview': {'data_rows': insert},
-    }
+        entry = row_result(i, str(i), verdict, issues)
+        results.append(entry)
+        if verdict == 'reject':
+            reject_rows.append(entry)
+    return envelope(
+        counts={'insert': insert, 'update': 0, 'skip': 0, 'reject': reject},
+        results=results,
+        reject_rows=reject_rows,
+        reconcile_preview={'data_rows': insert},
+    )
 
 
 def commit_table(table, rows, *, batch, user, smoke, **_kwargs) -> dict:

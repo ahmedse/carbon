@@ -1,7 +1,12 @@
+import logging
+
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
 from rest_framework.exceptions import APIException, ValidationError
 from rest_framework.response import Response
 from rest_framework.views import exception_handler
+
+logger = logging.getLogger(__name__)
 
 
 def data_trust_exception_handler(exc, context):
@@ -30,7 +35,25 @@ def data_trust_exception_handler(exc, context):
             if correlation_id:
                 payload['correlation_id'] = correlation_id
             response = Response(payload, status=exc.status_code)
+        elif isinstance(exc, DjangoValidationError):
+            # A host model rejected bad input (e.g. a date the field cannot
+            # parse). That is a 4xx request error, not an unhandled 500.
+            messages = getattr(exc, 'messages', None) or [str(exc)]
+            payload = {
+                'error': exc.__class__.__name__,
+                'message': 'Invalid value: ' + '; '.join(str(m) for m in messages),
+                'timestamp': timezone.now().isoformat(),
+                'path': request.path if request else None,
+            }
+            if correlation_id:
+                payload['correlation_id'] = correlation_id
+            response = Response(payload, status=400)
         else:
+            # Never swallow an unexpected failure silently: log the traceback
+            # before returning the generic envelope so it is diagnosable.
+            logger.exception(
+                'Unhandled server error at %s', request.path if request else '?',
+            )
             payload = {
                 'error': exc.__class__.__name__,
                 'message': 'An unexpected server error occurred.',

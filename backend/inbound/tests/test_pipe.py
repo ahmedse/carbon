@@ -297,6 +297,44 @@ def test_batch_rows_works_for_committed_batch(preparer, committer, get_token_for
 
 
 @pytest.mark.django_db
+def test_batch_rows_prefers_structured_results_over_sample(
+    preparer, get_token_for_user, fake_cartridge,
+):
+    """The full results list wins over the <=20 sample and carries issues.
+
+    A reject_rows entry without ``issues`` must not erase the structured issues
+    the results list already provided (legacy envelopes have no issues).
+    """
+    client = APIClient()
+    client.credentials(HTTP_AUTHORIZATION=f'Bearer {get_token_for_user(preparer)}')
+    created = client.post(f'{PREFIX}/batches/', {'kind': 'typed_object', 'target_key': 'test.widget'}, format='json')
+    bid = created.data['id']
+    client.post(f'{PREFIX}/batches/{bid}/file/', {'file': _csv('code\nA\nB\nC\n')}, format='multipart')
+    batch = InboundBatch.objects.get(id=bid)
+    batch.smoke = {
+        'insert': 2, 'update': 0, 'skip': 0, 'reject': 1,
+        'sample': [{'row': 1, 'key': 'A', 'verdict': 'insert', 'reason': ''}],
+        'results': [
+            {'row': 1, 'key': 'A', 'verdict': 'insert', 'reason': ''},
+            {'row': 2, 'key': 'B', 'verdict': 'reject', 'reason': 'code unresolved',
+             'issues': [{'field': 'code', 'message': 'code unresolved', 'fix': 'Use a known code.'}]},
+            {'row': 3, 'key': 'C', 'verdict': 'insert', 'reason': ''},
+        ],
+        'reject_rows': [{'row': 2, 'key': 'B', 'verdict': 'reject', 'reason': 'code unresolved'}],
+    }
+    batch.save(update_fields=['smoke'])
+
+    res = client.get(f'{PREFIX}/batches/{bid}/rows/?page=1&page_size=50')
+    assert res.status_code == 200
+    assert res.data['smoked'] is True
+    by_row = {row['row']: row for row in res.data['results']}
+    assert by_row[3]['verdict'] == 'insert'
+    assert by_row[3]['issues'] == []
+    assert by_row[2]['issues'][0]['field'] == 'code'
+    assert by_row[2]['issues'][0]['fix'] == 'Use a known code.'
+
+
+@pytest.mark.django_db
 def test_template_examples_index_and_download(preparer, get_token_for_user, fake_cartridge):
     client = APIClient()
     client.credentials(HTTP_AUTHORIZATION=f'Bearer {get_token_for_user(preparer)}')

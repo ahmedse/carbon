@@ -3,10 +3,15 @@
 
 from __future__ import annotations
 
+import re
+from datetime import date
 from decimal import Decimal, InvalidOperation
+
+from django.utils.dateparse import parse_date
 
 from catalog.audit_utils import emit_governance_event
 from inbound.registry import register
+from inbound.smoke import envelope, issue, row_result
 from mdm.models import OrgUnit, ReferenceValue
 
 from .models import Employee, LeaveEntitlement, LeaveRecord, Position
@@ -62,6 +67,60 @@ def _dec(value):
         return None
 
 
+_BOM = '\ufeff'
+_DATE_SPLIT = re.compile(r'[/.\-]')
+
+
+def _clean(value) -> str:
+    """Trim whitespace and a leading BOM; empty/whitespace-only -> ''."""
+    if value is None:
+        return ''
+    return str(value).replace(_BOM, '').strip()
+
+
+def _date(value):
+    """Parse a date cell deterministically, or return None when empty/unparseable.
+
+    Accepted, in this precedence:
+
+    * ``YYYY-MM-DD`` (ISO; also ``YYYY-M-D``) — year first.
+    * ``YYYY/M/D`` and ``YYYY.M.D`` — year first.
+    * the shipped template order ``M/D/YYYY`` and ``M/D/YY`` — month first.
+
+    ``/``, ``-`` and ``.`` are interchangeable, surrounding whitespace and a
+    leading BOM are ignored, and empty/whitespace-only is ``None`` (missing is
+    allowed; no date is invented). A value is only read day-first when that is
+    unambiguous — the first component is greater than 12 (``25/12/2024``);
+    otherwise the documented template order (month-first) wins, so
+    ``03/04/2024`` is 2024-03-04.
+    """
+    text = _clean(value)
+    if not text:
+        return None
+    parsed = parse_date(text)
+    if parsed is not None:
+        return parsed
+    parts = [part.strip() for part in _DATE_SPLIT.split(text)]
+    if len(parts) != 3 or not all(part.isdigit() for part in parts):
+        return None
+    first, second, third = parts
+    if len(first) == 4:
+        year, month, day = int(first), int(second), int(third)
+    elif len(third) in (2, 4):
+        if int(first) > 12:
+            day, month, year = int(first), int(second), int(third)
+        else:
+            month, day, year = int(first), int(second), int(third)
+        if len(third) == 2:
+            year += 2000 if year <= 68 else 1900
+    else:
+        return None
+    try:
+        return date(year, month, day)
+    except ValueError:
+        return None
+
+
 def _org(code: str):
     code = (code or '').strip()
     if not code:
@@ -94,8 +153,8 @@ def _position(title: str, org):
 
 def employee_snapshot_smoke(rows, **_kwargs):
     insert = update = skip = reject = 0
+    results = []
     reject_rows = []
-    sample = []
     existing = set(
         Employee.objects.filter(
             employee_no__in=[(r.get('employee_no') or '').strip() for r in rows if r.get('employee_no')],
@@ -103,30 +162,52 @@ def employee_snapshot_smoke(rows, **_kwargs):
     )
     for i, row in enumerate(rows, start=1):
         no = (row.get('employee_no') or '').strip()
-        reasons = []
+        issues = []
         if not no:
-            reasons.append('employee_no empty')
+            issues.append(issue(
+                'employee_no', 'employee_no empty',
+                'Fill the employee number column; it is the key for this row.',
+            ))
         if not (row.get('full_name') or '').strip():
-            reasons.append('full_name empty')
+            issues.append(issue(
+                'full_name', 'full_name empty',
+                'Fill the full name column.',
+            ))
         if _org(row.get('org_unit')) is None:
-            reasons.append('org_unit unresolved')
+            issues.append(issue(
+                'org_unit', 'org_unit unresolved',
+                'Use an existing org unit code, slug, or name.',
+            ))
         if _dec(row.get('basic_salary')) is None:
-            reasons.append('basic_salary missing')
-        verdict = 'reject' if reasons else ('update' if no in existing else 'insert')
-        if verdict == 'reject':
+            issues.append(issue(
+                'basic_salary', 'basic_salary missing',
+                'Enter a numeric basic salary (for example 100.000).',
+            ))
+        join_text = _clean(row.get('join_date'))
+        if join_text and _date(join_text) is None:
+            issues.append(issue(
+                'join_date', 'join_date invalid',
+                'Use a date like 2024-01-02 (YYYY-MM-DD) or 1/2/2024 (M/D/YYYY).',
+            ))
+        if issues:
+            verdict = 'reject'
             reject += 1
-            reject_rows.append({'row': i, 'key': no, 'verdict': verdict, 'reason': '; '.join(reasons)})
-        elif verdict == 'update':
+        elif no in existing:
+            verdict = 'update'
             update += 1
         else:
+            verdict = 'insert'
             insert += 1
-        if len(sample) < 20:
-            sample.append({'row': i, 'key': no, 'verdict': verdict, 'reason': '; '.join(reasons)})
-    return {
-        'insert': insert, 'update': update, 'skip': skip, 'reject': reject,
-        'sample': sample, 'reject_rows': reject_rows,
-        'reconcile_preview': {'employees': insert + update},
-    }
+        entry = row_result(i, no, verdict, issues)
+        results.append(entry)
+        if verdict == 'reject':
+            reject_rows.append(entry)
+    return envelope(
+        counts={'insert': insert, 'update': update, 'skip': skip, 'reject': reject},
+        results=results,
+        reject_rows=reject_rows,
+        reconcile_preview={'employees': insert + update},
+    )
 
 
 def employee_snapshot_commit(rows, *, batch, user, smoke, **_kwargs):
@@ -144,9 +225,12 @@ def employee_snapshot_commit(rows, *, batch, user, smoke, **_kwargs):
             'basic_salary': salary,
             'is_active': True if row.get('is_active') in (None, '') else _truthy(row.get('is_active')),
         }
-        for fld in ('name_en_given', 'name_en_family', 'civil_id', 'join_date'):
+        for fld in ('name_en_given', 'name_en_family', 'civil_id'):
             if row.get(fld):
                 defaults[fld] = row[fld]
+        join_date = _date(row.get('join_date'))
+        if join_date:
+            defaults['join_date'] = join_date
         if row.get('kuwaitization') not in (None, ''):
             defaults['kuwaitization'] = _truthy(row.get('kuwaitization'))
         if row.get('position'):
@@ -181,39 +265,55 @@ def employee_snapshot_commit(rows, *, batch, user, smoke, **_kwargs):
 
 def leave_balance_smoke(rows, **_kwargs):
     insert = update = skip = reject = 0
+    results = []
     reject_rows = []
-    sample = []
     for i, row in enumerate(rows, start=1):
         no = (row.get('employee_no') or '').strip()
-        reasons = []
+        issues = []
         emp = Employee.objects.filter(employee_no=no).first() if no else None
+        leave_type = _ref('leave_type', row.get('leave_type'))
         if emp is None:
-            reasons.append('employee not found')
+            issues.append(issue(
+                'employee_no', 'employee not found',
+                'Add the employee first, or correct the employee number.',
+            ))
         if not str(row.get('year') or '').isdigit():
-            reasons.append('year invalid')
-        if _ref('leave_type', row.get('leave_type')) is None:
-            reasons.append('leave_type unresolved')
+            issues.append(issue(
+                'year', 'year invalid',
+                'Enter the leave year as four digits (for example 2026).',
+            ))
+        if leave_type is None:
+            issues.append(issue(
+                'leave_type', 'leave_type unresolved',
+                'Use a leave type code that exists in the leave type reference set.',
+            ))
         if _dec(row.get('entitled_days')) is None:
-            reasons.append('entitled_days missing')
-        if reasons:
+            issues.append(issue(
+                'entitled_days', 'entitled_days missing',
+                'Enter the entitled days as a number.',
+            ))
+        if issues:
+            verdict = 'reject'
             reject += 1
-            reject_rows.append({'row': i, 'key': no, 'verdict': 'reject', 'reason': '; '.join(reasons)})
         else:
             exists = LeaveEntitlement.objects.filter(
-                employee=emp, year=int(row['year']),
-                leave_type=_ref('leave_type', row.get('leave_type')),
+                employee=emp, year=int(row['year']), leave_type=leave_type,
             ).exists()
             if exists:
                 update += 1
             else:
                 insert += 1
-        if len(sample) < 20:
-            sample.append({'row': i, 'key': no, 'verdict': 'reject' if reasons else 'ok', 'reason': '; '.join(reasons)})
-    return {
-        'insert': insert, 'update': update, 'skip': skip, 'reject': reject,
-        'sample': sample, 'reject_rows': reject_rows,
-        'reconcile_preview': {'entitlements': insert + update},
-    }
+            verdict = 'ok'
+        entry = row_result(i, no, verdict, issues)
+        results.append(entry)
+        if verdict == 'reject':
+            reject_rows.append(entry)
+    return envelope(
+        counts={'insert': insert, 'update': update, 'skip': skip, 'reject': reject},
+        results=results,
+        reject_rows=reject_rows,
+        reconcile_preview={'entitlements': insert + update},
+    )
 
 
 def leave_balance_commit(rows, *, batch, user, smoke, **_kwargs):
@@ -245,41 +345,71 @@ def leave_balance_commit(rows, *, batch, user, smoke, **_kwargs):
 
 def leave_history_smoke(rows, **_kwargs):
     insert = update = skip = reject = 0
+    results = []
     reject_rows = []
-    sample = []
     for i, row in enumerate(rows, start=1):
         no = (row.get('employee_no') or '').strip()
-        reasons = []
+        issues = []
         emp = Employee.objects.filter(employee_no=no).first() if no else None
+        leave_type = _ref('leave_type', row.get('leave_type'))
         if emp is None:
-            reasons.append('employee not found')
-        if _ref('leave_type', row.get('leave_type')) is None:
-            reasons.append('leave_type unresolved')
-        if not row.get('start_date') or not row.get('end_date'):
-            reasons.append('dates required')
+            issues.append(issue(
+                'employee_no', 'employee not found',
+                'Add the employee first, or correct the employee number.',
+            ))
+        if leave_type is None:
+            issues.append(issue(
+                'leave_type', 'leave_type unresolved',
+                'Use a leave type code that exists in the leave type reference set.',
+            ))
+        start_date = _date(row.get('start_date'))
+        end_date = _date(row.get('end_date'))
+        if not _clean(row.get('start_date')) or not _clean(row.get('end_date')):
+            issues.append(issue(
+                'start_date', 'dates required',
+                'Fill both the start date and the end date (YYYY-MM-DD or M/D/YYYY).',
+            ))
+        else:
+            if start_date is None:
+                issues.append(issue(
+                    'start_date', 'start_date invalid',
+                    'Use a date like 2024-01-02 (YYYY-MM-DD) or 1/2/2024 (M/D/YYYY).',
+                ))
+            if end_date is None:
+                issues.append(issue(
+                    'end_date', 'end_date invalid',
+                    'Use a date like 2024-01-10 (YYYY-MM-DD) or 1/10/2024 (M/D/YYYY).',
+                ))
         if _dec(row.get('days')) is None:
-            reasons.append('days missing')
-        if reasons:
+            issues.append(issue(
+                'days', 'days missing',
+                'Enter the number of leave days as a number.',
+            ))
+        if issues:
+            verdict = 'reject'
             reject += 1
-            reject_rows.append({'row': i, 'key': no, 'verdict': 'reject', 'reason': '; '.join(reasons)})
         else:
             exists = LeaveRecord.objects.filter(
                 employee=emp,
-                leave_type=_ref('leave_type', row.get('leave_type')),
-                start_date=row.get('start_date'),
-                end_date=row.get('end_date'),
+                leave_type=leave_type,
+                start_date=start_date,
+                end_date=end_date,
             ).exists()
             if exists:
                 update += 1
             else:
                 insert += 1
-        if len(sample) < 20:
-            sample.append({'row': i, 'key': no, 'verdict': 'reject' if reasons else 'ok', 'reason': '; '.join(reasons)})
-    return {
-        'insert': insert, 'update': update, 'skip': skip, 'reject': reject,
-        'sample': sample, 'reject_rows': reject_rows,
-        'reconcile_preview': {'leave_records': insert + update},
-    }
+            verdict = 'ok'
+        entry = row_result(i, no, verdict, issues)
+        results.append(entry)
+        if verdict == 'reject':
+            reject_rows.append(entry)
+    return envelope(
+        counts={'insert': insert, 'update': update, 'skip': skip, 'reject': reject},
+        results=results,
+        reject_rows=reject_rows,
+        reconcile_preview={'leave_records': insert + update},
+    )
 
 
 def leave_history_commit(rows, *, batch, user, smoke, **_kwargs):
@@ -290,14 +420,16 @@ def leave_history_commit(rows, *, batch, user, smoke, **_kwargs):
         emp = Employee.objects.filter(employee_no=(row.get('employee_no') or '').strip()).first()
         ltype = _ref('leave_type', row.get('leave_type'))
         days = _dec(row.get('days'))
-        if emp is None or ltype is None or days is None:
+        start_date = _date(row.get('start_date'))
+        end_date = _date(row.get('end_date'))
+        if emp is None or ltype is None or days is None or start_date is None or end_date is None:
             continue
         status = (row.get('status') or 'approved').strip().lower()
         if status not in dict(LeaveRecord.STATUS_CHOICES):
             status = 'approved'
         rec, created = LeaveRecord.objects.update_or_create(
             employee=emp, leave_type=ltype,
-            start_date=row.get('start_date'), end_date=row.get('end_date'),
+            start_date=start_date, end_date=end_date,
             defaults={'days': days, 'status': status},
         )
         emit_governance_event(

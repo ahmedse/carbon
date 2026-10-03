@@ -100,29 +100,48 @@ DEFAULT_PAGE_SIZE = 50
 MAX_PAGE_SIZE = 200
 
 
+def _merge_verdict(index: dict[int, dict], entry) -> None:
+    """Merge one persisted per-row entry, keeping the richest fields.
+
+    ``results`` (full), ``reject_rows`` (every reject) and ``sample`` (<=20) all
+    carry the same shape. A legacy or capped entry without ``issues`` must not
+    erase structured issues an earlier source already provided.
+    """
+    if not isinstance(entry, dict) or entry.get('row') is None:
+        return
+    try:
+        row_no = int(entry['row'])
+    except (TypeError, ValueError):
+        return
+    current = index.get(row_no) or {'key': '', 'verdict': '', 'reason': '', 'issues': []}
+    if entry.get('key'):
+        current['key'] = entry['key']
+    if entry.get('verdict'):
+        current['verdict'] = entry['verdict']
+    if entry.get('reason'):
+        current['reason'] = entry['reason']
+    issues = entry.get('issues')
+    if isinstance(issues, list) and issues:
+        current['issues'] = issues
+    index[row_no] = current
+
+
 def _row_verdicts(batch: InboundBatch) -> dict[int, dict]:
     """Index the persisted smoke envelope by 1-based file row.
 
-    The smoke envelope keeps a <=20 sample plus every reject, so a reject is
-    always known and a clean row that fell outside the sample carries an empty
-    verdict/reason. This mirrors the sample grid exactly — no second source.
+    ``results`` (the full per-row list) is the primary source; the <=20 sample
+    and every reject are merged for older envelopes that predate ``results``.
+    A row with no persisted entry stays absent — the viewer shows "not recorded"
+    rather than guessing a pass.
     """
     smoke = batch.smoke or {}
     index: dict[int, dict] = {}
     for row in smoke.get('sample') or []:
-        if isinstance(row, dict) and row.get('row') is not None:
-            index[int(row['row'])] = {
-                'key': row.get('key') or '',
-                'verdict': row.get('verdict') or '',
-                'reason': row.get('reason') or '',
-            }
+        _merge_verdict(index, row)
+    for row in smoke.get('results') or []:
+        _merge_verdict(index, row)
     for row in smoke.get('reject_rows') or []:
-        if isinstance(row, dict) and row.get('row') is not None:
-            index[int(row['row'])] = {
-                'key': row.get('key') or '',
-                'verdict': row.get('verdict') or 'reject',
-                'reason': row.get('reason') or '',
-            }
+        _merge_verdict(index, row)
     return index
 
 
@@ -130,11 +149,14 @@ def batch_rows(batch: InboundBatch, *, page: int = 1, page_size: int = DEFAULT_P
     """One read-only page of the batch file's rows.
 
     Reads from the same ``_all_rows`` re-parse path smoke and commit use, so no
-    staging table exists and nothing is written. Per-row verdict/reason come
-    from the persisted smoke envelope; a clean insert keeps ``reason == ''``.
+    staging table exists and nothing is written. Per-row verdict/reason/issues
+    come from the persisted smoke envelope; a clean insert keeps ``reason == ''``.
+    ``smoked`` is false before the first smoke, so the viewer never shows a
+    clean pass for an unsmoked batch.
     """
     rows = _all_rows(batch)
     verdicts = _row_verdicts(batch)
+    smoked = bool(batch.smoke)
     start = (page - 1) * page_size
     end = start + page_size
     results = []
@@ -145,6 +167,7 @@ def batch_rows(batch: InboundBatch, *, page: int = 1, page_size: int = DEFAULT_P
             'key': hit.get('key', ''),
             'verdict': hit.get('verdict', ''),
             'reason': hit.get('reason', ''),
+            'issues': hit.get('issues', []),
             'values': raw,
         })
     return {
@@ -154,6 +177,7 @@ def batch_rows(batch: InboundBatch, *, page: int = 1, page_size: int = DEFAULT_P
         'page_size': page_size,
         'count': len(rows),
         'max_page_size': MAX_PAGE_SIZE,
+        'smoked': smoked,
     }
 
 
