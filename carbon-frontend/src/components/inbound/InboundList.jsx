@@ -17,6 +17,7 @@ import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../NotificationProvider';
 import { createInboundBatch, fetchInboundBatches, fetchInboundTargets } from '../../api/inbound';
+import { formatDisplayDateTime } from '../../utils/dateUtils';
 import { INBOUND_STATUS_COLOR, inboundCaps } from './inboundAccess';
 import InboundExampleTemplates from './InboundExampleTemplates';
 
@@ -26,7 +27,7 @@ export default function InboundList({
   ns = 'people',
   icon: Icon = UploadIcon,
 }) {
-  const { t } = useTranslation(ns);
+  const { t, i18n } = useTranslation(ns);
   const { t: tCommon } = useTranslation('common');
   useDocumentTitle(t('importTitle'));
   const navigate = useNavigate();
@@ -158,7 +159,7 @@ export default function InboundList({
       field: 'updated_at',
       headerName: t('importColUpdated'),
       width: 170,
-      valueGetter: (value) => (value ? new Date(value).toLocaleString() : '—'),
+      valueGetter: (value) => (value ? formatDisplayDateTime(value, i18n.language) : '—'),
     },
     {
       field: 'prepared_by_username',
@@ -191,7 +192,7 @@ export default function InboundList({
         );
       },
     },
-  ], [t, navigate, listPath]);
+  ], [t, i18n.language, navigate, listPath]);
 
   const onCreate = async () => {
     if (!targetKey) return;

@@ -22,12 +22,8 @@ export default function InboundStatRow({ items = [] }) {
             {item.label}
           </Typography>
           <Typography
-            variant="subtitle1"
-            sx={{
-              fontWeight: 600,
-              fontFamily: 'ui-monospace, monospace',
-              color: item.tone === 'error' ? 'error.main' : 'text.primary',
-            }}
+            variant="mono"
+            color={item.tone === 'error' ? 'error' : 'textPrimary'}
           >
             {item.value ?? 0}
           </Typography>

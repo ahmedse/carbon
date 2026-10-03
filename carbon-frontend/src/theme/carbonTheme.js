@@ -195,6 +195,14 @@ const createCarbonTheme = (mode = 'light', direction = 'ltr', brandPalette = {})
         fontSize: '0.75rem',
         color: colors.text.secondary,
       },
+      // Monospace token for numbers/IDs/timestamps (design-system RULE 3/8).
+      // A theme variant, so components never inline a raw fontFamily.
+      mono: {
+        fontFamily: '"Roboto Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+        fontSize: '0.875rem',
+        fontWeight: 600,
+        lineHeight: 1.4,
+      },
     },
 
     shape: {

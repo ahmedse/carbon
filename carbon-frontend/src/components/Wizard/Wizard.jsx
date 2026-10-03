@@ -10,6 +10,15 @@
 //
 // `content` may be a React node or a function `(ctx) => node` receiving
 // `{ errors, clearErrors }` so a step can render its own inline field errors.
+//
+// Opt-in clickable steps:
+//   - `clickableSteps` (default false) renders each step as a focusable MUI
+//     `StepButton` instead of a display-only `StepLabel`. Default keeps today's
+//     linear behavior for every existing consumer.
+//   - `isStepEnabled(index)` (default () => true) gates which steps are
+//     reachable when `clickableSteps` is on. Selected steps call the same
+//     `setStep(index)`, so `onStepChange` fires exactly as it does for
+//     Next/Back.
 
 import React, { useState } from 'react';
 import PropTypes from 'prop-types';
@@ -18,6 +27,7 @@ import {
   Box,
   Button,
   Step,
+  StepButton,
   StepLabel,
   Stepper,
 } from '@mui/material';
@@ -47,6 +57,8 @@ function Wizard({
   cancelLabel = 'Cancel',
   submitting = false,
   disableFinish = false,
+  clickableSteps = false,
+  isStepEnabled = () => true,
 }) {
   const [activeStep, setActiveStep] = useState(initialStep);
   const [stepErrors, setStepErrors] = useState({});
@@ -97,7 +109,16 @@ function Wizard({
       <Stepper activeStep={activeStep} alternativeLabel sx={{ flexShrink: 0, mb: 2 }}>
         {steps.map((step, i) => (
           <Step key={step.key || i}>
-            <StepLabel>{step.label}</StepLabel>
+            {clickableSteps ? (
+              <StepButton
+                disabled={!isStepEnabled(i)}
+                onClick={() => setStep(i)}
+              >
+                {step.label}
+              </StepButton>
+            ) : (
+              <StepLabel>{step.label}</StepLabel>
+            )}
           </Step>
         ))}
       </Stepper>
@@ -169,6 +190,8 @@ Wizard.propTypes = {
   cancelLabel: PropTypes.string,
   submitting: PropTypes.bool,
   disableFinish: PropTypes.bool,
+  clickableSteps: PropTypes.bool,
+  isStepEnabled: PropTypes.func,
 };
 
 export default Wizard;

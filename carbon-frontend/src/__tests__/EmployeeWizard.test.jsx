@@ -272,4 +272,28 @@ describe('EmployeeWizard validation (NSR-4B)', () => {
     expect(onSave).toHaveBeenCalledTimes(1);
     expect(onSave.mock.calls[0][0]).not.toHaveProperty('opening_basic');
   });
+
+  it('cannot jump ahead to Review without valid required fields (opts out of clickableSteps)', () => {
+    render(
+      <EmployeeWizard
+        orgUnits={ORG_UNITS}
+        positions={POSITIONS}
+        token="tok"
+        employees={EMPLOYEES}
+        canViewCompensation
+        saving={false}
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    // EmployeeWizard does not opt into clickableSteps → Review is not a button.
+    expect(screen.queryByRole('button', { name: /^Review$/ })).not.toBeInTheDocument();
+
+    // Clicking the Review step label must NOT navigate past the required-field gate.
+    fireEvent.click(screen.getByText('Review'));
+
+    expect(screen.getByLabelText(/Full Name/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Review the details/i)).not.toBeInTheDocument();
+  });
 });

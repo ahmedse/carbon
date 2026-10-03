@@ -40,10 +40,17 @@ vi.mock('../components/FilteredDataGrid', () => ({
       <div data-testid="filter" onClick={() => props.onFilterChange('status', 'committed')}>apply-filter</div>
       <div data-testid="nextpage" onClick={() => props.onPaginationModelChange({ page: 1, pageSize: 25 })}>next</div>
       {props.rows.map((row) => <div key={row.id} data-testid="row">{row.original_filename}</div>)}
+      {props.rows.map((row) => (
+        <div key={`updated-${row.id}`} data-testid="updated">
+          {props.columns.find((c) => c.field === 'updated_at')?.valueGetter(row.updated_at, row)}
+        </div>
+      ))}
     </div>
   ),
 }));
 
+import i18n from '../i18n';
+import { formatDisplayDateTime } from '../utils/dateUtils';
 import InboundList from '../components/inbound/InboundList';
 
 function renderList() {
@@ -107,5 +114,19 @@ describe('People Import list — server-side paging (Defect 1)', () => {
     await waitFor(() => expect(mocks.fetchInboundBatches).toHaveBeenLastCalledWith('t', expect.objectContaining({
       page: 2,
     })));
+  });
+
+  it('formats updated_at with the shared locale-aware date util, not inline Date', async () => {
+    const updatedAt = '2026-10-03T13:07:00Z';
+    mocks.fetchInboundBatches.mockResolvedValue({
+      count: 1,
+      results: [{ id: 1, original_filename: 'alpha.csv', status: 'draft', updated_at: updatedAt }],
+    });
+    renderList();
+
+    // The cell text is exactly the util's output (inline toLocaleString would
+    // include seconds and a different format), so the util is the single source.
+    const cell = await screen.findByTestId('updated');
+    expect(cell.textContent).toBe(formatDisplayDateTime(updatedAt, i18n.language));
   });
 });

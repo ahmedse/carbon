@@ -206,6 +206,14 @@ Commit: hidden | ready | confirming | submitting | sod-forbidden | success
 As previously: file POST, mapping PUT, smoke POST, rejects GET, commit POST.
 Kind is not sent by the user on the People door — the batch already has it.
 
+Date fields accept ISO `YYYY-MM-DD` and the shipped template order `M/D/YYYY`
+(also `YYYY/M/D`, `YYYY.M.D`, and `/`, `-`, `.` separators; whitespace and a
+leading BOM are ignored). Ambiguous values stay month-first, so `03/04/2024` is
+`2024-03-04`; a value is only read day-first when it is unambiguous
+(`25/12/2024` → `2024-12-25`). An unparseable date is a Smoke reject that names
+the column and shows the accepted formats — never a commit-time 500. An empty
+date stays empty (no date is invented).
+
 ### A11y / perf / i18n
 Stepper current step announced (MUI Stepper in `Wizard`). Confirm dialog
 focus trap. Smoke >1s: spinner on Next, page stays. No papaparse on the

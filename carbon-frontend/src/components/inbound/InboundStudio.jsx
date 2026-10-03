@@ -146,6 +146,24 @@ export default function InboundStudio({
   const title = batch?.original_filename || t('importTitle');
   useDocumentTitle(title);
 
+  // Any step jump (node click, Next, Back) drops a pending commit confirm and
+  // any open crosswalk dialog — an approval must never survive an edit or a
+  // step change. Only state is touched; no server call.
+  const closeEditDialogs = useCallback(() => {
+    setConfirmOpen(false);
+    setWalkField(null);
+    setWalkDraft({});
+  }, []);
+
+  // A file or mapping edit invalidates smoke + consent client-side. The server
+  // already clears `smoke` and resets status on re-upload/re-map; this mirrors
+  // it in the UI so the smoke stat row, rejects and the allow-partial consent
+  // all reset from the same edit.
+  const resetEditState = useCallback(() => {
+    setAllowPartial(false);
+    closeEditDialogs();
+  }, [closeEditDialogs]);
+
   const load = useCallback(async () => {
     if (!token || !id) return;
     setLoading(true);
@@ -245,6 +263,9 @@ export default function InboundStudio({
 
   const persistMapping = useCallback(async (nextColumns, nextWalks) => {
     if (!batch || readOnly) return;
+    // A mapping change is an edit: drop any pending commit consent/dialog now,
+    // before the round-trip, so a failed save cannot leave a stale approval.
+    resetEditState();
     try {
       const next = await saveInboundMapping(token, batch.id, {
         columns: nextColumns,
@@ -254,10 +275,12 @@ export default function InboundStudio({
     } catch (err) {
       if (err?.status !== 400) notifyFromError(err, t('importMapFailed'));
     }
-  }, [batch, readOnly, token, notifyFromError, t]);
+  }, [batch, readOnly, token, notifyFromError, t, resetEditState]);
 
   const handleFile = async (file) => {
     if (!file || readOnly) return;
+    // A new file invalidates the prior smoke and any pending commit consent.
+    resetEditState();
     setBusy(true);
     try {
       const next = await uploadInboundFile(token, id, file, encoding);
@@ -472,6 +495,22 @@ export default function InboundStudio({
     return 0;
   }, [batch]);
 
+  // Clickable step nodes (opt-in Wizard). A step is reachable only at or before
+  // the furthest step the batch's own state has already unlocked, so a node
+  // click can never jump forward past a guard. The server still enforces every
+  // guard (commit-before-smoke 409, re-smoke/re-map/re-upload on committed 409,
+  // cross-kind 403, SoD); this only shapes the affordance.
+  const maxClickableStep = useMemo(() => {
+    const status = batch?.status;
+    if (!(batch?.headers || []).length) return 0;
+    if (status === 'draft') return 1;
+    if (status === 'mapped') return 2;
+    if (status === 'smoked') return canCommit ? 3 : 2;
+    if (status === 'failed') return 2;
+    if (status === 'committed') return canCommit ? 3 : 2;
+    return 0;
+  }, [batch, canCommit]);
+
   const fieldOptions = useMemo(() => [
     { value: '', label: t('importSkip') },
     ...fields.map((f) => ({
@@ -520,7 +559,7 @@ export default function InboundStudio({
               height={320}
               emptyMessage={t('importNoSample')}
               emptySubtext=""
-              dataGridProps={{ hideFooter: true }}
+              dataGridProps={{ density: 'compact', hideFooter: true }}
             />
           )}
         </Stack>
@@ -620,7 +659,7 @@ export default function InboundStudio({
             getRowId={(row) => row.id}
             height={420}
             emptyMessage={t('importUploadFirst')}
-            dataGridProps={{ getRowHeight: () => 56, hideFooter: true }}
+            dataGridProps={{ density: 'compact', getRowHeight: () => 56, hideFooter: true }}
           />
         </Stack>
       ),
@@ -668,6 +707,8 @@ export default function InboundStudio({
             token={token}
             batchId={batch.id}
             headers={batch.headers || []}
+            fields={fields}
+            columnMap={columns}
             ns={ns}
           />
         </Stack>
@@ -699,7 +740,7 @@ export default function InboundStudio({
               ]}
               getRowId={(row) => row.id}
               height={220}
-              dataGridProps={{ hideFooter: true }}
+              dataGridProps={{ density: 'compact', hideFooter: true }}
             />
           )}
           {rejects > 0 && (
@@ -770,6 +811,9 @@ export default function InboundStudio({
           key={`${batch.id}-${startStep}-${canCommit ? 'c' : 'p'}`}
           steps={steps}
           initialStep={startStep}
+          clickableSteps
+          isStepEnabled={(index) => index <= maxClickableStep}
+          onStepChange={closeEditDialogs}
           onFinish={() => {
             if (!canCommit) {
               navigate(listPath);

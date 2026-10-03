@@ -1,0 +1,64 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`InboundStatRow — typography comes from variants (Defect 10) > matches the compact stat-row markup snapshot 1`] = `
+<div
+  class="MuiStack-root css-pex525-MuiStack-root"
+>
+  <div
+    class="MuiBox-root css-18slukt"
+  >
+    <span
+      class="MuiTypography-root MuiTypography-caption css-1kdyij9-MuiTypography-root"
+    >
+      Insert
+    </span>
+    <span
+      class="MuiTypography-root MuiTypography-mono css-f62gvk-MuiTypography-root"
+    >
+      12
+    </span>
+  </div>
+  <div
+    class="MuiBox-root css-18slukt"
+  >
+    <span
+      class="MuiTypography-root MuiTypography-caption css-1kdyij9-MuiTypography-root"
+    >
+      Update
+    </span>
+    <span
+      class="MuiTypography-root MuiTypography-mono css-f62gvk-MuiTypography-root"
+    >
+      0
+    </span>
+  </div>
+  <div
+    class="MuiBox-root css-18slukt"
+  >
+    <span
+      class="MuiTypography-root MuiTypography-caption css-1kdyij9-MuiTypography-root"
+    >
+      Skip
+    </span>
+    <span
+      class="MuiTypography-root MuiTypography-mono css-f62gvk-MuiTypography-root"
+    >
+      0
+    </span>
+  </div>
+  <div
+    class="MuiBox-root css-18slukt"
+  >
+    <span
+      class="MuiTypography-root MuiTypography-caption css-1kdyij9-MuiTypography-root"
+    >
+      Reject
+    </span>
+    <span
+      class="MuiTypography-root MuiTypography-mono css-1trr1cj-MuiTypography-root"
+    >
+      3
+    </span>
+  </div>
+</div>
+`;
