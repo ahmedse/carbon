@@ -1,0 +1,152 @@
+# Carbon calculation run lifecycle.
+#
+# Activity times a factor produces a Calculation only when the factor's
+# activity_unit matches the row's unit and the factor is active and sourced.
+# Scope 2 carries a scope2_method (location_based or market_based); a market
+# figure needs a distinct contractual factor, never a grid copy or an Egypt
+# residual mix. Offsets, credits, RECs and EACs are never subtracted from the
+# inventory kilogram. Each run writes a CalculationAudit row.
+#
+# Backed by: emissions/views.py CalculateAPIView + BatchCalculateAPIView +
+# CalculationViewSet.recalculate; emissions/services.py
+# CalculationEngineService.apply_template; emissions/models.py
+# Calculation.create_from_data_row + CalculationAudit; emissions/inventory_math.py.
+id: calculation.run.lifecycle
+version: "1.0"
+owner: carbon-inventory-lead
+status: active
+benchmark: O1
+
+objects:
+  - type: calculation
+    selector: period_id
+
+inputs:
+  period_id:
+    type: string
+
+scope:
+  source: authenticated_host_context
+
+objective:
+  predicate: calculation.audited_and_factor_legal
+
+steps:
+  - id: select_scope
+    kind: command
+    capability: carbon.calculation.select_scope
+    depends_on: []
+    autonomy: observe
+    binds_to: data.table
+    consent: false
+    rule: CR-COV-01
+
+  - id: run_calculation
+    kind: command
+    capability: carbon.calculation.run
+    depends_on:
+      - select_scope
+    autonomy: act_confirm
+    binds_to: calculation
+    consent: true
+    idempotency_scope: period_id+table_id
+    unknown_outcome: escalate
+    rule: CR-FAC-01
+
+  - id: verify_factor_legal
+    kind: assertion
+    capability: carbon.calculation.factor_unit_legal
+    depends_on:
+      - run_calculation
+    autonomy: observe
+    binds_to: emission_factor
+    consent: false
+    rule: CR-FAC-01
+
+  - id: split_scope2
+    kind: assertion
+    capability: carbon.calculation.scope2_method_set
+    depends_on:
+      - verify_factor_legal
+    autonomy: observe
+    binds_to: calculation
+    consent: false
+    rule: CR-S2-01
+
+  - id: no_offsets
+    kind: assertion
+    capability: carbon.calculation.no_offsets_subtracted
+    depends_on:
+      - split_scope2
+    autonomy: observe
+    binds_to: calculation
+    consent: false
+    rule: CR-OFF-01
+
+  - id: supersede_stale
+    kind: command
+    capability: carbon.calculation.supersede_stale
+    depends_on:
+      - no_offsets
+    autonomy: act_confirm
+    binds_to: calculation
+    consent: true
+    idempotency_scope: period_id+data_row_id
+    unknown_outcome: escalate
+    rule: CR-REST-01
+
+  - id: audit_recorded
+    kind: assertion
+    capability: carbon.calculation.audit_recorded
+    depends_on:
+      - supersede_stale
+    autonomy: observe
+    binds_to: calculation_audit
+    consent: false
+    rule: CR-COV-01
+
+constraints:
+  precedence:
+    - from: select_scope
+      to: run_calculation
+    - from: run_calculation
+      to: verify_factor_legal
+    - from: verify_factor_legal
+      to: split_scope2
+    - from: split_scope2
+      to: no_offsets
+    - from: no_offsets
+      to: supersede_stale
+    - from: supersede_stale
+      to: audit_recorded
+
+evidence:
+  - type: DataTable
+    from_step: select_scope
+  - type: Calculation
+    from_step: run_calculation
+  - type: EmissionFactor
+    from_step: verify_factor_legal
+  - type: CalculationAudit
+    from_step: audit_recorded
+
+policies:
+  refuse_if:
+    - the factor activity unit does not match the row unit
+    - the factor is inactive or has no source or valid_from
+    - a Scope 2 market figure copies the grid factor or an Egypt residual mix
+    - a credit, offset, REC or EAC is subtracted from the inventory kilogram
+    - a stale calculation is edited in place instead of superseded
+  ask_if:
+    - the row has no factor yet and inventory kg stays absent
+    - a scope 2 row carries no method and would default to location_based
+
+exceptions: []
+
+kill_switch: false
+
+tests:
+  - name: happy-path-calculation-audited-and-factor-legal
+  - name: refuse-factor-unit-mismatch
+  - name: refuse-market-copy-of-grid-factor
+  - name: offsets-never-subtracted

@@ -1,0 +1,152 @@
+# Carbon data-completeness (coverage-target) lifecycle.
+#
+# Layer 1 of the two-layer Coverage model: TARGETS over STREAMS. A target is a
+# period-scoped KPI goal (percent or absolute) with a quality floor, a due date
+# and an owner. Its status and progress are DERIVED from real rows; a target
+# never stores a hand-set percent and never promotes a CoverageGoal.
+#
+# People declare the target and assign tasks. The enter/calculate steps are
+# host writes reached from a coverage row (Plane A) or staged by Agent with
+# RULE_21 consent (Plane B). Chat does not host-mutate (ADR-0046).
+#
+# Backed by: emissions/views.py CoverageTargetViewSet + CoverageTaskViewSet;
+# emissions/coverage_targets.py target_progress / task_evidence / task_closure;
+# emissions/intake_api.py CoverageRowSubmissionAPIView;
+# emissions/models.py CoverageTarget, CoverageTask, InventorySourceStatus.
+id: coverage.target.lifecycle
+version: "1.0"
+owner: carbon-inventory-lead
+status: active
+benchmark: O1
+
+objects:
+  - type: coverage.target
+    selector: target_id
+
+inputs:
+  target_id:
+    type: string
+
+scope:
+  source: authenticated_host_context
+
+objective:
+  predicate: coverage.target.settled_at_target_measured_not_claimed
+
+steps:
+  - id: declare_target
+    kind: human_task
+    capability: carbon.coverage.declare_target
+    depends_on: []
+    autonomy: human_only
+    binds_to: coverage.target
+    consent: false
+    approval_ref: coverage.target.declare_target
+    rule: CR-COV-01
+
+  - id: define_goal
+    kind: human_task
+    capability: carbon.coverage.define_goal
+    depends_on:
+      - declare_target
+    autonomy: human_only
+    binds_to: coverage.target
+    consent: false
+    approval_ref: coverage.target.define_goal
+    rule: CR-COV-01
+
+  - id: assign_tasks
+    kind: human_task
+    capability: carbon.coverage.assign_task
+    depends_on:
+      - define_goal
+    autonomy: human_only
+    separation_of_duties:
+      - campus_data_owner
+      - inventory_lead
+    binds_to: coverage.task
+    consent: false
+    approval_ref: coverage.target.assign_tasks
+    rule: CR-DQ-01
+
+  - id: enter_rows
+    kind: command
+    capability: carbon.coverage.enter_row
+    depends_on:
+      - assign_tasks
+    autonomy: act_confirm
+    binds_to: inventory_source_status
+    consent: true
+    idempotency_scope: target_id+source_id+period_id
+    unknown_outcome: escalate
+    rule: CR-INT-01
+
+  - id: calculate
+    kind: command
+    capability: carbon.calculation.run
+    depends_on:
+      - enter_rows
+    autonomy: act_confirm
+    binds_to: calculation
+    consent: true
+    idempotency_scope: target_id+period_id
+    unknown_outcome: escalate
+    rule: CR-COV-01
+
+  - id: derive_progress
+    kind: assertion
+    capability: carbon.coverage.progress_derived
+    depends_on:
+      - calculate
+    autonomy: observe
+    binds_to: coverage.target
+    consent: false
+    rule: CR-COV-01
+
+constraints:
+  precedence:
+    - from: declare_target
+      to: define_goal
+    - from: define_goal
+      to: assign_tasks
+    - from: assign_tasks
+      to: enter_rows
+    - from: enter_rows
+      to: calculate
+    - from: calculate
+      to: derive_progress
+  separation_of_duties:
+    - step: assign_tasks
+      distinct_roles: [campus_data_owner, inventory_lead]
+
+evidence:
+  - type: CoverageTarget
+    from_step: declare_target
+  - type: CoverageTask
+    from_step: assign_tasks
+  - type: InventorySourceStatus
+    from_step: enter_rows
+  - type: Calculation
+    from_step: calculate
+
+policies:
+  refuse_if:
+    - an absolute goal unit is not a CO2e mass unit (kgCO2e / tCO2e)
+    - a task is marked done without host evidence
+    - a stream below the target quality floor is counted as settled at target
+    - a formally excluded stream is counted as measured coverage
+    - the target period is locked or closed
+    - a task status flag is used as measured progress
+  ask_if:
+    - the target boundary has no declared sources
+    - the goal is absolute and no real kilogram exists on the period
+
+exceptions: []
+
+kill_switch: false
+
+tests:
+  - name: happy-path-progress-derived-measured-not-claimed
+  - name: refuse-absolute-goal-with-a-non-co2e-unit
+  - name: refuse-done-without-host-evidence
+  - name: fully-excluded-target-reads-short-not-met

@@ -1,0 +1,108 @@
+# Carbon external-assurance (P1) engagement lifecycle.
+#
+# P1 records an external verification engagement against ONE reporting period
+# with five ISO 14064-3 fields:
+#   assurer_name, engagement_type (limited | reasonable), standard
+#   (ISO 14064-3), opinion_date, statement_id.
+# Recording the fields does NOT assure the inventory: not_assured stays unmet
+# until all five are present AND the opinion date is on or after the period end.
+# P1 stays closed until that constraint holds.
+#
+# Backed by: emissions/models.py AssuranceEngagement;
+# emissions/campus_intake.py record_assurance + assurance_status;
+# emissions/intake_api.py AssuranceEngagementAPIView.
+id: assurance.engagement.lifecycle
+version: "1.0"
+owner: carbon-inventory-lead
+status: active
+benchmark: P1
+
+objects:
+  - type: assurance.engagement
+    selector: engagement_id
+
+inputs:
+  engagement_id:
+    type: string
+
+scope:
+  source: authenticated_host_context
+
+objective:
+  predicate: assurance.engagement.five_vvb_fields_recorded_not_assured
+
+steps:
+  - id: record_engagement
+    kind: human_task
+    capability: carbon.assurance.record
+    depends_on: []
+    autonomy: human_only
+    binds_to: assurance.engagement
+    consent: false
+    approval_ref: assurance.engagement.record
+    rule: CR-ASR-01
+
+  - id: check_five_fields
+    kind: assertion
+    capability: carbon.assurance.five_fields_present
+    depends_on:
+      - record_engagement
+    autonomy: observe
+    binds_to: assurance.engagement
+    consent: false
+    rule: CR-ASR-01
+
+  - id: verify_opinion_date
+    kind: assertion
+    capability: carbon.assurance.opinion_after_period_end
+    depends_on:
+      - check_five_fields
+    autonomy: observe
+    binds_to: assurance.engagement
+    consent: false
+    rule: CR-ASR-01
+
+  - id: keep_not_assured
+    kind: assertion
+    capability: carbon.assurance.not_assured_until_met
+    depends_on:
+      - verify_opinion_date
+    autonomy: observe
+    binds_to: reporting_period
+    consent: false
+    rule: CR-ASR-01
+
+constraints:
+  precedence:
+    - from: record_engagement
+      to: check_five_fields
+    - from: check_five_fields
+      to: verify_opinion_date
+    - from: verify_opinion_date
+      to: keep_not_assured
+
+evidence:
+  - type: AssuranceEngagement
+    from_step: record_engagement
+  - type: AssuranceOpinion
+    from_step: keep_not_assured
+
+policies:
+  refuse_if:
+    - engagement_type is not limited or reasonable
+    - standard is not exactly ISO 14064-3
+    - the opinion date precedes the period end
+    - not_assured is marked met with fewer than five fields
+    - a second open period exists when recording the engagement
+  ask_if:
+    - the reporting period has no boundary yet
+    - the statement id is not issued yet
+
+exceptions: []
+
+kill_switch: false
+
+tests:
+  - name: happy-path-five-fields-recorded
+  - name: missing-field-keeps-not-assured-unmet
+  - name: opinion-before-period-end-does-not-count

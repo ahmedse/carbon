@@ -1,0 +1,116 @@
+# Carbon base-year recalculation-trigger lifecycle (GHG Protocol Ch. 5).
+#
+# A base year is a fixed reference period with a recalculation policy and a
+# significance threshold. A recalculation trigger records WHY the base year may
+# need recalculating (structural_change, methodology_change, error_correction,
+# threshold_exceeded). Resolving a trigger records a measured variance and an
+# outcome; it never rewrites the base-year history in place and a base year that
+# already carries triggers cannot be deleted.
+#
+# Backed by: emissions/models.py BaseYear + RecalculationTrigger;
+# emissions/views.py BaseYearViewSet.recalculate + RecalculationTriggerViewSet
+# .resolve (+ destroy guard).
+id: recalculation.trigger.lifecycle
+version: "1.0"
+owner: carbon-inventory-lead
+status: active
+
+objects:
+  - type: recalculation.trigger
+    selector: trigger_id
+
+inputs:
+  trigger_id:
+    type: string
+
+scope:
+  source: authenticated_host_context
+
+objective:
+  predicate: recalculation.trigger.resolved_with_variance_recorded
+
+steps:
+  - id: record_trigger
+    kind: command
+    capability: carbon.recalc.record_trigger
+    depends_on: []
+    autonomy: act_confirm
+    binds_to: recalculation.trigger
+    consent: true
+    idempotency_scope: base_year_id+trigger_type+period_id
+    unknown_outcome: escalate
+    rule: CR-REST-01
+
+  - id: measure_variance
+    kind: human_task
+    capability: carbon.recalc.measure_variance
+    depends_on:
+      - record_trigger
+    autonomy: human_only
+    binds_to: base_year
+    consent: false
+    approval_ref: recalculation.trigger.measure_variance
+    rule: CR-REST-01
+
+  - id: resolve_trigger
+    kind: human_task
+    capability: carbon.recalc.resolve
+    depends_on:
+      - measure_variance
+    autonomy: human_only
+    separation_of_duties:
+      - preparer
+      - approver
+    binds_to: recalculation.trigger
+    consent: true
+    approval_ref: recalculation.trigger.resolve
+    rule: CR-REST-01
+
+  - id: base_year_not_rewritten
+    kind: assertion
+    capability: carbon.recalc.base_year_not_rewritten
+    depends_on:
+      - resolve_trigger
+    autonomy: observe
+    binds_to: base_year
+    consent: false
+    rule: CR-REST-01
+
+constraints:
+  precedence:
+    - from: record_trigger
+      to: measure_variance
+    - from: measure_variance
+      to: resolve_trigger
+    - from: resolve_trigger
+      to: base_year_not_rewritten
+  separation_of_duties:
+    - step: resolve_trigger
+      distinct_roles: [preparer, approver]
+
+evidence:
+  - type: RecalculationTrigger
+    from_step: record_trigger
+  - type: VarianceMeasurement
+    from_step: measure_variance
+  - type: BaseYear
+    from_step: base_year_not_rewritten
+
+policies:
+  refuse_if:
+    - the trigger type is not one of the four GHG Protocol types
+    - a base year with existing triggers is deleted
+    - a variance above the base-year significance threshold is dismissed with no notes
+    - the base year's period is rewritten in place
+  ask_if:
+    - the measured variance is null
+    - the recalculation policy is never (fixed base year)
+
+exceptions: []
+
+kill_switch: false
+
+tests:
+  - name: happy-path-trigger-resolved-with-variance
+  - name: refuse-delete-base-year-with-triggers
+  - name: refuse-dismiss-above-threshold-without-notes

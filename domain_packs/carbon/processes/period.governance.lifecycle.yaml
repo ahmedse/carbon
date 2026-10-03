@@ -1,0 +1,156 @@
+# Carbon reporting-period governance lifecycle.
+#
+# The reporting period is the cycle every inventory row and calculation is
+# scoped to. Its state machine is explicit:
+#   draft -> open -> locked -> submitted -> verified -> closed
+# with locked -> open, locked -> closed, and rejected -> submitted as the only
+# other legal transitions. Opening and locking are HUMAN ONLY: opening makes a
+# period a write target and locking freezes it for review. Closing is human
+# only and requires the period to have been verified first. Exactly one period
+# is open at a time (CR-PER-01); a locked or closed period is never a write
+# target and is never re-locked.
+#
+# Backed by: emissions/models.py ReportingPeriod.VALID_TRANSITIONS /
+# transition_to; emissions/views.py ReportingPeriodViewSet actions open / lock
+# / submit / verify / reject / close; PeriodLockService; VerificationService.
+id: period.governance.lifecycle
+version: "1.0"
+owner: carbon-inventory-lead
+status: active
+benchmark: O1
+
+objects:
+  - type: reporting.period
+    selector: period_id
+
+inputs:
+  period_id:
+    type: string
+
+scope:
+  source: authenticated_host_context
+
+objective:
+  predicate: reporting.period.closed_after_verified
+
+steps:
+  - id: define_boundary
+    kind: human_task
+    capability: carbon.boundary.maintain
+    depends_on: []
+    autonomy: human_only
+    binds_to: organizational_boundary
+    consent: false
+    approval_ref: period.governance.define_boundary
+    rule: CR-BND-01
+
+  - id: open_period
+    kind: human_task
+    capability: carbon.period.open
+    depends_on:
+      - define_boundary
+    autonomy: human_only
+    binds_to: reporting_period
+    consent: true
+    approval_ref: period.governance.open_period
+    rule: CR-PER-01
+
+  - id: lock_period
+    kind: human_task
+    capability: carbon.period.lock
+    depends_on:
+      - open_period
+    autonomy: human_only
+    binds_to: reporting_period
+    consent: true
+    approval_ref: period.governance.lock_period
+    rule: CR-PER-01
+
+  - id: submit_period
+    kind: command
+    capability: carbon.period.submit
+    depends_on:
+      - lock_period
+    autonomy: act_confirm
+    binds_to: reporting_period
+    consent: true
+    idempotency_scope: period_id
+    unknown_outcome: escalate
+    rule: CR-PER-01
+
+  - id: verify_period
+    kind: human_task
+    capability: carbon.period.verify
+    depends_on:
+      - submit_period
+    autonomy: human_only
+    separation_of_duties:
+      - preparer
+      - verifier
+    binds_to: reporting_period
+    consent: false
+    approval_ref: period.governance.verify_period
+    rule: CR-PER-01
+
+  - id: close_period
+    kind: human_task
+    capability: carbon.period.close
+    depends_on:
+      - verify_period
+    autonomy: human_only
+    separation_of_duties:
+      - preparer
+      - approver
+    binds_to: reporting_period
+    consent: true
+    approval_ref: period.governance.close_period
+    rule: CR-PER-01
+
+constraints:
+  precedence:
+    - from: define_boundary
+      to: open_period
+    - from: open_period
+      to: lock_period
+    - from: lock_period
+      to: submit_period
+    - from: submit_period
+      to: verify_period
+    - from: verify_period
+      to: close_period
+  separation_of_duties:
+    - step: verify_period
+      distinct_roles: [preparer, verifier]
+    - step: close_period
+      distinct_roles: [preparer, approver]
+
+evidence:
+  - type: OrganizationalBoundary
+    from_step: define_boundary
+  - type: ReportingPeriod
+    from_step: open_period
+  - type: DataTableLock
+    from_step: lock_period
+  - type: VerificationRecord
+    from_step: verify_period
+
+policies:
+  refuse_if:
+    - the transition is not in ReportingPeriod.VALID_TRANSITIONS
+    - a period is closed from open without lock, submit and verify
+    - a second reporting period is opened while one is open
+    - a locked or closed period is used as a write target
+    - the verifier is the preparer
+  ask_if:
+    - the period has required streams still missing at lock time
+    - the period is rejected and its notes are empty
+
+exceptions: []
+
+kill_switch: false
+
+tests:
+  - name: happy-path-closed-after-verified
+  - name: refuse-close-from-open
+  - name: refuse-second-open-period
+  - name: verify-requires-a-distinct-verifier

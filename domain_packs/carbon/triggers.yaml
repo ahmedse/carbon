@@ -1,18 +1,82 @@
-# Carbon trigger / metric configuration — starter skeleton.
-# Migrated from the proactive insight generator (performance-drift metrics and
-# forecast-deviation config); P2-08 source-PR workers populate real values.
-metrics:
-  - name: Unit 2 Heat Rate
-    table: unit_metrics
-    column: heat_rate
-    lookback_days: 30
-    threshold_pct: 2.0
-    direction: increase
+# Carbon trigger / metric configuration.
+#
+# REWRITTEN 2026-10-03: the previous skeleton carried power-domain tables
+# (`unit_metrics`, `demand_forecasts`) that no carbon host feature produces —
+# the SQL evaluator would find nothing. Everything below is bound to a REAL
+# carbon table/column in `emissions` (host app label `emissions`).
+#
+# Honest status: the evaluator in engine/proactive only executes single-column
+# threshold/trend SQL (`_query_time_avg`) and forecast-vs-actual joins. Data
+# completeness is NOT a numeric time series — it is a DERIVED state read from
+# inventory source status. So the completeness/quality entries below are
+# declared `enabled: false` until a carbon worker binds an aggregate view; they
+# document the real source of truth rather than inventing a column.
+#
+# A missing stream is not 0 kg. No entry here writes a kilogram.
 
-deviations:
-  - forecast_table: demand_forecasts
-    actual_table: demand_actuals
-    value_column: value_mw
-    time_column: timestamp
-    join_column: timestamp
-    threshold_pct: 8.0
+# ── Threshold / trend candidates on real host columns ─────────────────────────
+metrics: []
+  # No carbon metric is enabled yet. Candidates and the exact column they would
+  # read, when a carbon aggregate view exists:
+  # - {name: "Streams below quality floor", table: emissions_inventorysourcestatus,
+  #    column: data_quality_tier, direction: increase, enabled: false}
+  # - {name: "Open coverage tasks", table: emissions_coveragetask,
+  #    column: status, enabled: false}
+
+deviations: []
+  # No carbon forecast/actual pair exists in the host. The only real
+  # base-year deviation is coverage target progress, which is derived
+  # (see recalculation.trigger.lifecycle).
+
+# ── Data completeness (the real carbon evaluator) ─────────────────────────────
+# Source of truth: emissions/coverage_targets.py `target_progress()` and
+# `_GAP_ORDER`. These are the ONLY reporter of Missing / Entered / Excluded.
+data_completeness:
+  evaluation: derived_from_inventory_source_status
+  evaluator: emissions.coverage_targets.target_progress
+  binds:
+    - emissions_inventorysourcestatus.status
+    - emissions_inventorysourcestatus.data_quality_tier
+    - emissions_coveragetarget.min_quality_tier
+    - emissions_coveragetask.status
+  gaps:                    # ordered as _GAP_ORDER; verb + counters it moves
+    - { code: no_declared_sources, verb: declare_sources, moves: [] }
+    - { code: missing, verb: enter_stream, moves: [entered, measured] }
+    - { code: in_progress, verb: complete_entry, moves: [entered, measured] }
+    - { code: awaiting_factor, verb: secure_factor, moves: [entered, measured] }
+    - { code: below_floor, verb: improve_quality, moves: [settled_at_target] }
+    - { code: tier_unknown, verb: declare_tier, moves: [settled_at_target, tier_unknown] }
+  watching:
+    # A period that is open must not silently carry missing required streams.
+    - name: Open period with missing required streams
+      when: reporting_period.status == "open" and any(gap.code == "missing")
+      severity: warning
+    - name: Stream entered below its target quality floor
+      when: gap.code == "below_floor"
+      severity: info
+    - name: Coverage task evidence met but gap unchanged
+      when: coverage_task.closure == "open"
+      severity: warning
+
+# ── Period and assurance watch conditions ─────────────────────────────────────
+period_watch:
+  - name: Reporting period locked awaiting review
+    when: reporting_period.status == "locked"
+    severity: info
+  - name: Reporting period rejected
+    when: reporting_period.status == "rejected"
+    severity: warning
+  - name: Assurance recording incomplete on a submitted period
+    when: any of (assurer_name, engagement_type, standard, opinion_date, statement_id) is empty
+      and reporting_period.status in ["submitted", "verified"]
+    severity: info
+
+# ── Base-year recalculation watch ─────────────────────────────────────────────
+recalculation_watch:
+  - name: Open recalculation trigger on base year
+    when: recalculation_trigger.resolution_status == "open"
+    severity: warning
+
+# Verification outcomes are free-text notes on VerificationRecord
+# (pending / in_review / verified / rejected). There are no coded rejection
+# reasons in the host, so none are invented here.

@@ -1,0 +1,180 @@
+# Carbon campus activity intake lifecycle.
+#
+# Intake is a VERB reached from ONE coverage row: campus, scope, unit and
+# period are prefilled from the row and the client sends the value only. The
+# write is append-only — a correction archives the prior row and appends a new
+# version; nothing is overwritten in place. A factor produces a Calculation
+# only when the row matches the single open period and the factor unit is
+# legal. Missing is not 0 kg and a missing factor stores the activity with
+# inventory kg absent.
+#
+# Backed by: emissions/campus_intake.py enter_for_source / validate_contract /
+# apply_template / set_exclusion; emissions/intake_api.py
+# CoverageRowSubmissionAPIView + CoverageRowExclusionAPIView +
+# CampusIntakeUploadAPIView; emissions/models.py DataRow is archived, never
+# edited (append-only restatement).
+id: campus.activity_intake.lifecycle
+version: "1.0"
+owner: carbon-campus-data-owner
+status: active
+benchmark: O2
+
+objects:
+  - type: inventory.source
+    selector: source_id
+
+inputs:
+  source_id:
+    type: string
+
+scope:
+  source: authenticated_host_context
+
+objective:
+  predicate: inventory.source.entered_or_excluded_on_open_period
+
+steps:
+  - id: select_row
+    kind: command
+    capability: carbon.coverage.row_state
+    depends_on: []
+    autonomy: observe
+    binds_to: inventory.source
+    consent: false
+    rule: CR-INT-01
+
+  - id: read_contract
+    kind: assertion
+    capability: carbon.intake.contract_conforms
+    depends_on:
+      - select_row
+    autonomy: observe
+    binds_to: inventory.source
+    consent: false
+    rule: CR-INT-01
+
+  - id: submit_row
+    kind: command
+    capability: carbon.intake.submit_row
+    depends_on:
+      - read_contract
+    autonomy: act_confirm
+    binds_to: inventory.source_status
+    consent: true
+    idempotency_scope: source_id+period_id
+    unknown_outcome: escalate
+    rule: CR-INT-01
+
+  - id: restate
+    kind: command
+    capability: carbon.intake.restate_row
+    depends_on:
+      - submit_row
+    autonomy: act_confirm
+    binds_to: inventory.source_status
+    consent: true
+    idempotency_scope: source_id+period_id+version
+    unknown_outcome: escalate
+    rule: CR-REST-01
+
+  - id: calculate_row
+    kind: command
+    capability: carbon.calculation.run
+    depends_on:
+      - restate
+    autonomy: act_confirm
+    binds_to: calculation
+    consent: true
+    idempotency_scope: source_id+period_id
+    unknown_outcome: escalate
+    rule: CR-COV-01
+
+  - id: read_back
+    kind: assertion
+    capability: carbon.intake.row_state_matches
+    depends_on:
+      - calculate_row
+    autonomy: observe
+    binds_to: inventory.source_status
+    consent: false
+    rule: CR-PULSE-01
+
+  - id: declare_exclusion
+    kind: human_task
+    capability: carbon.intake.exclude_row
+    depends_on:
+      - read_contract
+    autonomy: human_only
+    separation_of_duties:
+      - campus_data_owner
+      - inventory_lead
+    binds_to: inventory.source_status
+    consent: false
+    approval_ref: campus.activity_intake.declare_exclusion
+    rule: CR-EXC-01
+
+  - id: exclusion_recorded
+    kind: assertion
+    capability: carbon.intake.exclusion_state_recorded
+    depends_on:
+      - declare_exclusion
+    autonomy: observe
+    binds_to: inventory.source_status
+    consent: false
+    rule: CR-EXC-01
+
+constraints:
+  precedence:
+    - from: select_row
+      to: read_contract
+    - from: read_contract
+      to: submit_row
+    - from: submit_row
+      to: restate
+    - from: restate
+      to: calculate_row
+    - from: calculate_row
+      to: read_back
+    - from: read_contract
+      to: declare_exclusion
+    - from: declare_exclusion
+      to: exclusion_recorded
+  separation_of_duties:
+    - step: declare_exclusion
+      distinct_roles: [campus_data_owner, inventory_lead]
+
+evidence:
+  - type: CoverageRowState
+    from_step: select_row
+  - type: DataRow
+    from_step: submit_row
+  - type: ArchivedDataRow
+    from_step: restate
+  - type: Calculation
+    from_step: calculate_row
+  - type: InventorySourceStatus
+    from_step: exclusion_recorded
+
+policies:
+  refuse_if:
+    - the number of open reporting periods is not exactly one
+    - a submitted field is outside the coverage row contract
+    - a required value (quantity, or a diesel stream word) is missing
+    - a month is blank
+    - both diesel streams are named on one stream
+    - the client re-picks campus, scope, unit or period
+    - the exclusion reason is not one of the four vocabulary codes
+    - an exclusion reason of other has no notes
+  ask_if:
+    - a factor is missing for the entered unit
+    - the market-based method is requested with no distinct contractual factor
+
+exceptions: []
+
+kill_switch: false
+
+tests:
+  - name: happy-path-appends-a-row-and-reads-it-back
+  - name: refuse-contract_field-outside-the-row
+  - name: restate-archives-and-appends
+  - name: exclusion-other-requires-notes

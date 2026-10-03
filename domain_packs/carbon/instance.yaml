@@ -55,9 +55,51 @@ persona: >
   figure unless the tool result for this turn contains that figure. If it
   does not, say the period is opening. Do not copy quantities from a
   deployment sketch. The open work is Smart Village electricity and Smart
-  Village diesel for one open period. South Valley, Abu Qir, and Alamein
+  Village diesel for one open period.   South Valley, Abu Qir, and Alamein
   stay declared or explicitly excluded. Chat does not create or change
   inventory records.
+
+# Audience-scoped domain guidance. This is the carbon-footprint expertise a
+# reader is entitled to; it names no tool, so routing stays on the catalog
+# entry. It never asserts a kilogram the current turn's payload does not hold.
+guidance_by_audience:
+  admin: >
+    You are the carbon-footprint specialist for AASTMT. Anchor every answer in
+    the GHG Protocol Corporate Standard (Scope 1 direct, Scope 2 purchased
+    energy, Scope 3 value chain) and IPCC AR6 global warming potentials. A total
+    is kg CO2e; a tonne is kg / 1000. Inventory math is activity x emission
+    factor and never subtracts an offset, credit, REC or EAC. A Scope 2 figure
+    must be labelled location-based or market-based; market-based is absent
+    until a distinct contractual factor exists — never the grid factor, and
+    Egypt has no residual mix here. Data quality follows PCAF tiers 1-5
+    (smaller is better): onboarding accepts tier 4 Estimated, tier 5 Proxy may
+    be stored but is not the academy footprint. Streams are the only reporter
+    of Missing / Entered / Excluded; a missing stream is not 0 kg and coverage
+    never reads "complete". One reporting period is open at a time and its
+    state machine is draft > open > locked > submitted > verified > closed
+    (rejected returns to submitted). Assurance is not earned by recording the
+    five verification fields; it needs a named ISO 14064-3 engagement with an
+    opinion dated on or after the period end. A disclosure export is a labelled
+    projection into ESRS E1-6, IFRS S2 and CDP C6 columns — not a filing.
+    The named campuses are Smart Village (O1: electricity scope 2 location-based
+    kWh, diesel scope 1 litre), South Valley, Abu Qir and New Alamein; Scope 3
+    O5 is GHG Protocol category 5 only.
+  hr: >
+    You are the carbon-footprint specialist for AASTMT. Explain GHG Protocol
+    Scope 1/2/3, kg CO2e versus tonnes, and that inventory math is activity x
+    emission factor with no offset subtracted. A Scope 2 number must name its
+    method (location-based or market-based); market-based is absent without a
+    distinct contractual factor. Data quality is PCAF tier 1-5 (smaller is
+    better); tier 5 Proxy is not the academy footprint. Coverage is the only
+    reporter of Missing / Entered / Excluded and a missing stream is not 0 kg.
+    One period is open at a time. Read the number from this turn's payload
+    before quoting a kilogram; otherwise say the period is opening.
+  ess: >
+    You are the carbon-footprint helper for AASTMT. Explain in plain language:
+    scopes 1/2/3, kg CO2e, that a kilogram comes from activity x emission
+    factor with no offsets, and that a Scope 2 total must say location-based or
+    market-based. Enter activity rows on the host screens; a missing row stays
+    missing, not 0 kg. Only quote a kilogram that is in this turn's payload.
 
 domain_topics:
   - data quality
@@ -236,6 +278,162 @@ api_catalog:
     requires_auth: true
     requires_confirmation: false
 
+  - name: get_onboarding_status
+    app: carbon
+    method: GET
+    path: /carbon-api/carbon/onboarding/o1/
+    description: >
+      Read the O1 onboarding checklist for the open period. Returns pass/fail
+      codes for the boundary, one open period, required Smart Village sources,
+      an active factor, and the not-assured state. It does not read a kilogram.
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: list_coverage_goals
+    app: carbon
+    method: GET
+    path: /carbon-api/carbon/coverage-goals/
+    description: >
+      List coverage goals (org unit x scope x goal percent x quality floor).
+      These are policy rows; live Missing / Entered / Excluded state is
+      reported by the stream status surface, not here.
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: list_coverage_targets
+    app: carbon
+    method: GET
+    path: /carbon-api/carbon/coverage-targets/
+    description: >
+      List data-completeness targets for the open period. Progress is derived
+      (measured, not claimed) from real streams and never reads "complete".
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: list_coverage_tasks
+    app: carbon
+    method: GET
+    path: /carbon-api/carbon/coverage-tasks/
+    description: >
+      List coverage tasks under a target. A task closes only when its host
+      evidence is met AND the declared completeness gap actually changed.
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: list_inventory_source_statuses
+    app: carbon
+    method: GET
+    path: /carbon-api/carbon/inventory-source-statuses/
+    description: >
+      List the per-period stream status. This is the surface that reports
+      Missing, Entered, In progress, Awaiting factor and Excluded. A missing
+      stream is not 0 kg.
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: list_recalculation_triggers
+    app: carbon
+    method: GET
+    path: /carbon-api/carbon/recalculation-triggers/
+    description: >
+      List base-year recalculation triggers (structural change, methodology
+      change, error correction, significance threshold) and their status.
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: list_calculation_rules
+    app: carbon
+    method: GET
+    path: /carbon-api/carbon/rules/
+    description: >
+      List calculation rules with scope, data quality tier, and the factor
+      selection mapping that keeps location-based and market-based Scope 2
+      apart.
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: list_report_configs
+    app: carbon
+    method: GET
+    path: /carbon-api/carbon/report-configs/
+    description: >
+      List reporting configurations (frameworks and included scopes) used by
+      the reporting surface.
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: get_disclosure_export
+    app: carbon
+    method: GET
+    path: /carbon-api/carbon/disclosure/
+    description: >
+      Projection of existing calculation, source, period and boundary fields
+      into ESRS E1-6, IFRS S2 and CDP C6 column names. Shape only; it is not a
+      filing and computes no new kilogram.
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: get_my_data
+    app: carbon
+    method: GET
+    path: /carbon-api/carbon/my-data/
+    description: >
+      Consolidated data-owner workspace for the open period: the source rows
+      this user may enter or review, and the current period state.
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: get_console
+    app: carbon
+    method: GET
+    path: /carbon-api/carbon/console/
+    description: >
+      Operational landing payload: open-period health, data completeness,
+      data-quality notices and recent activity.
+    requires_auth: true
+    requires_confirmation: false
+
+  - name: run_calculation
+    app: carbon
+    method: POST
+    path: /carbon-api/carbon/calculate/
+    description: >
+      Run a calculation for the named period. A host write: Agent or a host
+      screen only, after a person approves.
+    requires_auth: true
+    requires_confirmation: true
+
+  - name: submit_coverage_row
+    app: carbon
+    method: POST
+    path: /carbon-api/carbon/inventory-sources/{id}/submit/
+    description: >
+      Submit one activity row for a source, prefilled from the coverage row.
+      A host write: Agent or a host screen only, after a person approves.
+    requires_auth: true
+    requires_confirmation: true
+
+  - name: exclude_coverage_row
+    app: carbon
+    method: POST
+    path: /carbon-api/carbon/inventory-sources/{id}/exclusion/
+    description: >
+      Record an exclusion for a source with a reason. An exclusion is a record,
+      never a zero. A host write: Agent or a host screen only.
+    requires_auth: true
+    requires_confirmation: true
+
+  - name: record_assurance_engagement
+    app: carbon
+    method: POST
+    path: /carbon-api/carbon/intake/assurance/
+    description: >
+      Record the five verification fields (assurer name, engagement type,
+      standard, opinion date, statement id) for a period. Recording them does
+      not assure the inventory. A host write: Agent or a host screen only.
+    requires_auth: true
+    requires_confirmation: true
+
 navigation_routes:
   - name: carbon_onboarding
     app: carbon
@@ -298,6 +496,166 @@ navigation_routes:
     labels:
       en: [emissions, emissions report, emissions reporting]
       ar: [الانبعاثات, تقارير الانبعاثات]
+
+  - name: carbon_coverage
+    app: carbon
+    type: page
+    path: /carbon/admin/inventory-coverage
+    description: >
+      The declared stream universe for a period. This is the only surface that
+      reports Missing, Entered and Excluded for each source.
+    label: Coverage
+    labels:
+      en: [coverage, inventory coverage, streams, declared sources]
+      ar: [تغطية المخزون, التغطية]
+
+  - name: carbon_data_completeness
+    app: carbon
+    type: page
+    path: /carbon/admin/coverage-targets
+    description: >
+      Data-completeness targets per campus and scope, with a quality floor and
+      tasks. Progress is derived from real streams; it never reads complete.
+    label: Data completeness
+    labels:
+      en: [data completeness, coverage targets, completeness targets]
+      ar: [اكتمال البيانات, أهداف التغطية]
+
+  - name: carbon_campus_intake
+    app: carbon
+    type: page
+    path: /carbon/onboarding/intake
+    description: >
+      Enter activity rows for a source in the open period. A saved row records
+      activity; it does not calculate emissions.
+    label: Campus intake
+    labels:
+      en: [campus intake, intake, activity data entry, enter rows]
+      ar: [إدخال بيانات النشاط, إدخال الصفوف]
+
+  - name: carbon_emission_factors
+    app: carbon
+    type: page
+    path: /carbon/admin/factors
+    description: Manage emission factors (kg CO2e per activity unit).
+    label: Emission factors
+    labels:
+      en: [emission factors, factors, factor library]
+      ar: [عوامل الانبعاث, المعاملات]
+
+  - name: carbon_calculation_rules
+    app: carbon
+    type: page
+    path: /carbon/admin/rules
+    description: >
+      Calculation rules, including the factor selection that separates
+      location-based and market-based Scope 2.
+    label: Calculation rules
+    labels:
+      en: [calculation rules, rules]
+      ar: [قواعد الحساب]
+
+  - name: carbon_boundaries
+    app: carbon
+    type: page
+    path: /carbon/admin/boundaries
+    description: >
+      Organizational boundaries with a consolidation approach (equity share,
+      financial control, operational control).
+    label: Organizational boundaries
+    labels:
+      en: [organizational boundaries, boundaries, consolidation approach]
+      ar: [الحدود التنظيمية]
+
+  - name: carbon_base_years
+    app: carbon
+    type: page
+    path: /carbon/admin/base-years
+    description: >
+      Base years and their recalculation triggers (structural change,
+      methodology change, error correction).
+    label: Base years
+    labels:
+      en: [base years, base year, recalculation]
+      ar: [سنوات الأساس]
+
+  - name: carbon_reporting_periods
+    app: carbon
+    type: page
+    path: /carbon/reporting/periods
+    description: >
+      Reporting periods and their state: draft, open, locked, submitted,
+      verified, closed. Exactly one period is open for entry.
+    label: Reporting periods
+    labels:
+      en: [reporting periods, periods, open period, lock period]
+      ar: [فترات الإبلاغ, الفترات]
+
+  - name: carbon_my_data
+    app: carbon
+    type: page
+    path: /carbon/my-data
+    description: "The data-owner workspace: the sources this user may enter."
+    label: My Data
+    labels:
+      en: [my data, data entry, my activity]
+      ar: [بياناتي, إدخال البيانات]
+
+  - name: carbon_calculations
+    app: carbon
+    type: page
+    path: /carbon/calculations
+    description: Calculation runs and their emissions totals.
+    label: Calculations
+    labels:
+      en: [calculations, calculation runs, emissions totals]
+      ar: [الحسابات]
+
+  - name: carbon_verification
+    app: carbon
+    type: page
+    path: /carbon/verification
+    description: >
+      Verification workflow. Assurance is not earned by recording the five
+      verification fields; it needs a named engagement and an opinion date.
+    label: Verification
+    labels:
+      en: [verification, assurance, vvb, not assured]
+      ar: [التحقق]
+
+  - name: carbon_reports
+    app: carbon
+    type: page
+    path: /carbon/reporting
+    description: >
+      Reporting surface. A disclosure export is a labelled projection into
+      ESRS E1-6, IFRS S2 and CDP C6 columns, not a filing.
+    label: Reports
+    labels:
+      en: [reports, reporting, disclosure export, esrs, ifrs, cdp]
+      ar: [التقارير]
+
+  - name: carbon_analytics
+    app: carbon
+    type: page
+    path: /carbon/analytics
+    description: Analytics and cross-period comparison of emissions.
+    label: Analytics & Trends
+    labels:
+      en: [analytics, trends, comparison, yearly comparison]
+      ar: [التحليلات والاتجاهات]
+
+  - name: carbon_console
+    app: carbon
+    type: page
+    path: /carbon/console
+    description: >
+      Operational landing: open-period health, data completeness, data-quality
+      notices and recent activity.
+    label: Carbon Console
+    labels:
+      en: [console, operational landing, period health]
+      ar: [وحدة تحكم الكربون]
 
   - name: dq_rule_detail
     app: carbon

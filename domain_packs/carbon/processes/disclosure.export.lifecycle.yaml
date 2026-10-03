@@ -1,0 +1,126 @@
+# Carbon disclosure projection (P2) lifecycle.
+#
+# A disclosure export PROJECTS the existing Calculation aggregates for one
+# reporting period onto named framework columns:
+#   esrs_e1 (ESRS E1-6), ifrs_s2 (IFRS S2), cdp (CDP C6).
+# It mints no new kilogram: every figure comes from Calculation rows on that
+# same period. Scope 2 is reported location-based and, separately, market-based
+# only when a distinct contractual factor exists — otherwise market-based is
+# reported absent. Scope 3 stays closed (O5) with no figure. The payload is
+# labelled shape_only: it is NOT an ESRS, IFRS or CDP filing and does not mark
+# P2 passed.
+#
+# Backed by: emissions/disclosure.py build_disclosure + FRAMEWORKS;
+# emissions/views.py DisclosureExportAPIView; emissions/inventory_math.py
+# (location/market presence).
+id: disclosure.export.lifecycle
+version: "1.0"
+owner: carbon-inventory-lead
+status: active
+benchmark: P2
+
+objects:
+  - type: disclosure.export
+    selector: period_id
+
+inputs:
+  period_id:
+    type: string
+  framework:
+    type: string
+
+scope:
+  source: authenticated_host_context
+
+objective:
+  predicate: disclosure.projection_matches_ledger_and_labelled_shape_only
+
+steps:
+  - id: select_framework
+    kind: human_task
+    capability: carbon.disclosure.select_framework
+    depends_on: []
+    autonomy: human_only
+    binds_to: disclosure.export
+    consent: false
+    approval_ref: disclosure.export.select_framework
+    rule: CR-DIS-01
+
+  - id: build_projection
+    kind: command
+    capability: carbon.disclosure.project
+    depends_on:
+      - select_framework
+    autonomy: observe
+    binds_to: disclosure.export
+    consent: false
+    idempotency_scope: period_id+framework
+    rule: CR-DIS-01
+
+  - id: market_absent_guard
+    kind: assertion
+    capability: carbon.disclosure.market_based_absent_when_no_factor
+    depends_on:
+      - build_projection
+    autonomy: observe
+    binds_to: calculation
+    consent: false
+    rule: CR-S2-02
+
+  - id: scope3_closed
+    kind: assertion
+    capability: carbon.disclosure.scope3_not_disclosed
+    depends_on:
+      - market_absent_guard
+    autonomy: observe
+    binds_to: disclosure.export
+    consent: false
+    rule: CR-S3-01
+
+  - id: label_not_a_filing
+    kind: assertion
+    capability: carbon.disclosure.shape_only_not_a_filing
+    depends_on:
+      - scope3_closed
+    autonomy: observe
+    binds_to: disclosure.export
+    consent: false
+    rule: CR-DIS-01
+
+constraints:
+  precedence:
+    - from: select_framework
+      to: build_projection
+    - from: build_projection
+      to: market_absent_guard
+    - from: market_absent_guard
+      to: scope3_closed
+    - from: scope3_closed
+      to: label_not_a_filing
+
+evidence:
+  - type: DisclosureProjection
+    from_step: build_projection
+  - type: MarketBasedStatus
+    from_step: market_absent_guard
+
+policies:
+  refuse_if:
+    - the framework is not esrs_e1, ifrs_s2 or cdp
+    - a market-based figure is emitted without a distinct contractual factor
+    - a Scope 3 figure is emitted while O5 is closed
+    - the projection is presented as an ESRS, IFRS or CDP filing
+    - the projection mints a kilogram not present in the Calculation rows
+  ask_if:
+    - the reporting period has no calculations yet
+    - the boundary is not set for the period
+
+exceptions: []
+
+kill_switch: false
+
+tests:
+  - name: happy-path-projection-shape-only
+  - name: refuse-unknown-framework
+  - name: market-based-absent-without-distinct-factor
+  - name: scope3-figure-stays-absent

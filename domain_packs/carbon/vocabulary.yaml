@@ -1,4 +1,12 @@
 # Carbon domain vocabulary — AASTMT onboarding leaf O1 (locked 2026-09-29).
+# Extended 2026-10-03: GHG Protocol scopes, PCAF quality tiers, coverage states,
+# completeness gaps and verbs, assurance, disclosure frameworks, recalculation,
+# and data-product contracts. Every term below is backed by a shipped host
+# model, view or pack file; it adds no kilogram and no factor value.
+#
+# Terms are EN with AR alongside where the app already ships both (guide/copy.*).
+# The app keeps a small glossary of Latin domain codes inside the Arabic UI;
+# those codes stay English here too (e.g. "Campus intake", "emission factor").
 brand_name: Carbon
 tenant: AASTMT
 
@@ -13,7 +21,7 @@ campuses:
   - name: Abu Qir
     in_benchmark: O3
     o1_expectation: declared or excluded with insufficient_data
-  - name: Alamein
+  - name: New Alamein
     in_benchmark: O4
     o1_expectation: declared or excluded with insufficient_data
 
@@ -28,22 +36,179 @@ sources:
     activity_unit: litre
     stream: generators or fleet, one stream
     benchmark: O1
+  - name: Smart Village waste disposal
+    scope: 3
+    scope3_category: 5
+    activity_unit: tonne
+    benchmark: O5
+    note: GHG Protocol Scope 3 Standard 2011 category 5, waste generated in operations
 
 scopes:
   - id: 1
     label: Scope 1 Direct
+    label_ar: النطاق 1 المباشر
+    meaning: Direct emissions from owned or controlled sources
   - id: 2
     label: Scope 2 Indirect Energy
+    label_ar: النطاق 2 الطاقة غير المباشرة
+    meaning: Indirect emissions from purchased electricity, heat, steam or cooling
+    o1: measured for Smart Village electricity
   - id: 3
     label: Scope 3 Value Chain
+    label_ar: النطاق 3 سلسلة القيمة
+    meaning: All other indirect emissions in the value chain
     o1: outside
+    o5_category: 5
 
+co2e_units:
+  - { unit: kgCO2e, kilograms: 1, label: kilogram CO2 equivalent }
+  - { unit: tCO2e, kilograms: 1000, label: tonne CO2 equivalent }
+  - { unit: CO2e, label: carbon dioxide equivalent, note: GWP-weighted, AR5/AR6 }
+
+ghg_protocol:
+  - { id: corporate_standard, label: GHG Protocol Corporate Standard 2004 }
+  - { id: scope2_guidance, label: GHG Protocol Scope 2 Guidance 2015 }
+  - { id: scope3_standard, label: GHG Protocol Scope 3 Standard 2011 }
+  - { id: iso_14064_3, label: ISO 14064-3, note: VVB verification standard for P1 }
+
+consolidation_approaches:
+  - { id: equity_share, label: Equity Share }
+  - { id: financial_control, label: Financial Control }
+  - { id: operational_control, label: Operational Control, host_default: true }
+
+scope2_methods:
+  - { id: location_based, label: Location-based, default: true }
+  - { id: market_based, label: Market-based, requires: distinct contractual factor }
+  - { id: residual_mix, label: Egypt residual mix, allowed: false, note: never a contractual factor }
+
+inventory_math:
+  - { id: emissions, formula: "activity x emission factor", note: inventory_kg never subtracts credits, offsets, RECs or EACs }
+
+# PCAF data-quality tiers. A SMALLER tier is BETTER data. Tier 4 (Estimated) is
+# the onboarding minimum; tier 5 (Proxy) may be stored but is not the academy
+# footprint. Mirrors InventorySourceStatus.TIER_CHOICES.
 quality_tiers:
   - { tier: 1, label: Audited }
   - { tier: 2, label: Verified }
   - { tier: 3, label: Calculated }
   - { tier: 4, label: Estimated, onboarding_minimum: true }
   - { tier: 5, label: Proxy, may_be_stored: true, is_academy_footprint: false }
+quality_floor:
+  sentence: A measured stream counts as settled at target only when its tier is at or above the target floor (tier <= min_quality_tier).
+  below_floor: surfaced distinctly, never dropped
+  tier_unknown: not credited against a floor
+
+# Coverage states. Coverage is the ONLY surface that reports Missing / Entered /
+# Excluded for a required stream. Missing is not 0 kg.
+coverage_states:
+  - { id: missing, label: Missing, label_ar: ناقص, inventory_kg: null, note: not 0 kg }
+  - { id: in_progress, label: In progress, label_ar: قيد الإدخال, note: a raw row exists but no same-period Calculation }
+  - { id: awaiting_factor, label: Awaiting factor, label_ar: بانتظار المعامل, note: activity stored, inventory kg absent }
+  - { id: entered, label: Entered, label_ar: مُدخَل, requires: linked table populated AND a Calculation on the same period }
+  - { id: excluded, label: Excluded, label_ar: مستبعَد, note: no kilogram, reported separately }
+  - { id: declared, label: Declared, label_ar: مُعلَن, note: a source row exists without a linked table }
+  - { id: covered, label: Covered, requires: linked table populated AND a Calculation on the same period }
+
+exclusion_reasons:
+  - { id: not_material, label: Not material }
+  - { id: insufficient_data, label: Insufficient data }
+  - { id: out_of_boundary, label: Out of boundary }
+  - { id: other, label: Other, requires_notes: true }
+
+# Completeness gaps and their causal verbs (emissions/coverage_targets.py).
+completeness_gaps:
+  - { id: no_declared_sources, verb: declare_sources }
+  - { id: missing, verb: enter_stream }
+  - { id: in_progress, verb: complete_entry }
+  - { id: awaiting_factor, verb: secure_factor }
+  - { id: below_floor, verb: improve_quality }
+  - { id: tier_unknown, verb: declare_tier }
+
+coverage_task_types:
+  - { id: bind_data_product, label: Bind a Data Product contract }
+  - { id: complete_rows, label: Complete rows through a month }
+  - { id: fill_gap, label: Fill a named gap }
+  - { id: secure_factor, label: Secure a missing factor }
+  - { id: other, label: Other }
+task_closure_states:
+  - { id: awaiting_evidence, label: Awaiting evidence }
+  - { id: open, label: Open, note: evidence met but the declared gap did not change }
+  - { id: closed, label: Closed, note: evidence met and the declared gap changed }
+
+# Reporting-period state machine (ReportingPeriod.VALID_TRANSITIONS).
+period_states:
+  - { id: draft, label: Draft }
+  - { id: open, label: Open for data entry, label_ar: مفتوحة, note: the only write target }
+  - { id: locked, label: Locked for review, label_ar: مقفلة }
+  - { id: submitted, label: Submitted, label_ar: مقدَّمة }
+  - { id: verified, label: Verified, label_ar: معتمدة }
+  - { id: rejected, label: Rejected, label_ar: مرفوضة }
+  - { id: closed, label: Closed, label_ar: مغلقة }
+period_transitions:
+  - { from: draft, to: open }
+  - { from: open, to: locked }
+  - { from: locked, to: submitted }
+  - { from: locked, to: open }
+  - { from: locked, to: closed }
+  - { from: submitted, to: verified }
+  - { from: submitted, to: rejected }
+  - { from: rejected, to: submitted }
+  - { from: verified, to: closed }
+
+# External assurance (P1). Recording the five VVB fields does NOT assure.
+assurance:
+  standard: ISO 14064-3
+  engagement_types:
+    - { id: limited, label: Limited }
+    - { id: reasonable, label: Reasonable }
+  vvb_fields:
+    - assurer_name
+    - engagement_type
+    - standard
+    - opinion_date
+    - statement_id
+  not_assured:
+    met_until: all five fields present AND opinion_date on or after the period end
+    note: assurance recording never marks the inventory assured
+
+# Disclosure projection (P2). shape_only; no new kilogram.
+disclosure_frameworks:
+  - id: esrs_e1
+    label: ESRS E1-6
+    columns: [E1-6_scope_1_kg, E1-6_scope_2_location_based_kg, E1-6_scope_2_market_based_kg, E1-6_scope_3_kg]
+  - id: ifrs_s2
+    label: IFRS S2
+    columns: [S2_ghg_scope_1_kg, S2_ghg_scope_2_location_based_kg, S2_ghg_scope_2_market_based_kg, S2_ghg_scope_3_kg]
+  - id: cdp
+    label: CDP C6
+    columns: [C6.1_scope_1_kg, C6.3_scope_2_location_based_kg, C6.3_scope_2_market_based_kg, C6.5_scope_3_kg]
+disclosure_status:
+  - { id: shape_only, label: shape only, note: not an ESRS, IFRS or CDP filing; does not mark P2 passed }
+
+# Base-year recalculation (GHG Protocol Ch. 5).
+recalculation:
+  policies:
+    - { id: significant_only, label: Recalculate only for significant changes }
+    - { id: all_changes, label: Recalculate for all structural changes }
+    - { id: never, label: Fixed base year — do not recalculate }
+  trigger_types:
+    - { id: structural_change, label: Structural change }
+    - { id: methodology_change, label: Methodology change }
+    - { id: error_correction, label: Error correction }
+    - { id: threshold_exceeded, label: Significance threshold exceeded }
+  resolutions:
+    - { id: open, label: Open — requires recalculation }
+    - { id: in_progress, label: In progress }
+    - { id: recalculated, label: Recalculated }
+    - { id: dismissed, label: Dismissed }
+  note: a base year that carries triggers cannot be deleted; history is never rewritten in place
+
+# A Data Product is the CONTRACT a stream conforms to (not a new catalog flow).
+data_product_contract:
+  carries: [org unit, scope, unit, period, fields, validation]
+  evidence: core.models.Module + dataschema.models.DataTable + DataField
+  fallback: the locked benchmark required-stream spec when no DataTable exists yet
+  note: catalog-admin request/approval authoring is not built and is not claimed
 
 concepts:
   - name: emission_factors
@@ -51,11 +216,25 @@ concepts:
   - name: ghg
     terms: [GHG, GHG Protocol, greenhouse gas]
   - name: footprint
-    terms: [footprint, carbon footprint]
+    terms: [footprint, carbon footprint, carbon footprinting]
   - name: onboarding_leaf
-    terms: [O1, Smart Village electricity, Smart Village diesel, onboarding]
+    terms: [O1, O2, O3, O4, O5, Smart Village electricity, Smart Village diesel, onboarding]
+  - name: coverage
+    terms: [coverage, data completeness, coverage target, coverage task, declared universe]
+  - name: scope2
+    terms: [scope 2, location-based, market-based, contractual factor]
+  - name: assurance
+    terms: [assurance, verification, VVB, opinion, not assured]
+  - name: disclosure
+    terms: [disclosure, ESRS, IFRS S2, CDP, reporting framework]
+  - name: recalculation
+    terms: [base year, recalculation, structural change, methodology change, error correction]
 
 analysis_dimensions:
   - campus
   - scope
+  - scope3_category
   - source
+  - reporting_period
+  - quality_tier
+  - coverage_state
