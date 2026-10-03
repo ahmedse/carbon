@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Chip, IconButton, Tooltip } from '@mui/material';
+import { Button, Chip, IconButton, Stack, Tooltip } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import UploadIcon from '@mui/icons-material/Upload';
 import VisibilityRounded from '@mui/icons-material/VisibilityRounded';
@@ -18,6 +18,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../NotificationProvider';
 import { createInboundBatch, fetchInboundBatches, fetchInboundTargets } from '../../api/inbound';
 import { INBOUND_STATUS_COLOR, inboundCaps } from './inboundAccess';
+import InboundExampleTemplates from './InboundExampleTemplates';
 
 export default function InboundList({
   kind,
@@ -217,11 +218,16 @@ export default function InboundList({
         title={t('importTitle')}
         subtitle={t('importSubtitle')}
         description={t('importDescription')}
-        actions={canPrepare ? (
-          <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={() => setOpen(true)}>
-            {t('importNew')}
-          </Button>
-        ) : null}
+        actions={(
+          <Stack direction="row" spacing={1} alignItems="center">
+            <InboundExampleTemplates token={token} ns={ns} />
+            {canPrepare && (
+              <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={() => setOpen(true)}>
+                {t('importNew')}
+              </Button>
+            )}
+          </Stack>
+        )}
       />
 
       {loading ? (

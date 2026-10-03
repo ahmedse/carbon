@@ -40,6 +40,8 @@ import {
 } from '../../api/inbound';
 import { INBOUND_STATUS_COLOR, inboundCaps, setInboundCrumb } from './inboundAccess';
 import InboundStatRow from './InboundStatRow';
+import InboundRowsViewer from './InboundRowsViewer';
+import InboundExampleTemplates from './InboundExampleTemplates';
 import {
   headersMatchIdentity,
   isIdentityMapping,
@@ -215,10 +217,6 @@ export default function InboundStudio({
     load();
   }, [load]);
 
-  const requiredNames = useMemo(
-    () => fields.filter((f) => f.required).map((f) => f.name),
-    [fields],
-  );
   const fieldByName = useMemo(
     () => Object.fromEntries(fields.map((f) => [f.name, f])),
     [fields],
@@ -451,10 +449,6 @@ export default function InboundStudio({
     })),
     [batch, columns],
   );
-  const smokeSample = useMemo(
-    () => (batch?.smoke?.sample || []).slice(0, 20).map((row, i) => ({ ...row, __i: i })),
-    [batch],
-  );
   const reconcileRows = useMemo(() => {
     const preview = batch?.smoke?.reconcile_preview || batch?.smoke?.commit?.reconcile || {};
     return Object.entries(preview).map(([key, value], i) => ({
@@ -560,6 +554,7 @@ export default function InboundStudio({
                 {t('importDownloadBlankHeader')}
               </Button>
             )}
+            <InboundExampleTemplates token={token} ns={ns} />
             {canPrepare && batch.status !== 'committed' && (
               <Button size="small" variant="outlined" onClick={() => setSaveTplOpen(true)}>
                 {t('importSaveTemplate')}
@@ -625,13 +620,20 @@ export default function InboundStudio({
     const smoke = {
       key: 'smoke',
       label: t('importStepSmoke'),
+      // A committed batch has already passed smoke. Gating on 'smoked' alone
+      // made reopening a committed batch (Wizard startStep 2) a dead end:
+      // the Run-smoke button is hidden and Finish is disabled, so the only
+      // Next click showed a false "Run smoke before continuing".
       validate: () => (
-        batch.status === 'smoked'
+        ['smoked', 'committed'].includes(batch.status)
           ? { valid: true }
           : { valid: false, errors: [t('importSmokeFirst')] }
       ),
       content: (
         <Stack spacing={1.5}>
+          {batch.status === 'committed' && (
+            <Alert severity="info">{t('importCommittedReadOnly')}</Alert>
+          )}
           <InboundStatRow
             items={['insert', 'update', 'skip', 'reject'].map((key) => ({
               key,
@@ -653,26 +655,11 @@ export default function InboundStudio({
             )}
           </Stack>
           <Typography variant="caption" color="text.secondary">{t('importSmokeHint')}</Typography>
-          <FilteredDataGrid
-            embedded
-            hideSearch
-            rows={smokeSample}
-            columns={[
-              { field: 'row', headerName: t('importColRow'), width: 80 },
-              {
-                field: 'key',
-                headerName: t('importColKey'),
-                width: 140,
-                valueGetter: (v, row) => v || row.key || '—',
-              },
-              { field: 'verdict', headerName: t('importColVerdict'), width: 120 },
-              { field: 'reason', headerName: t('importColReason'), flex: 1, minWidth: 160 },
-            ]}
-            getRowId={(row) => String(row.__i)}
-            height={320}
-            emptyMessage={t('importSmokeEmpty')}
-            emptySubtext=""
-            dataGridProps={{ hideFooter: true }}
+          <InboundRowsViewer
+            token={token}
+            batchId={batch.id}
+            headers={batch.headers || []}
+            ns={ns}
           />
         </Stack>
       ),

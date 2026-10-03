@@ -14,7 +14,7 @@ from .exceptions import InboundError
 from .models import InboundBatch, InboundCartridge, InboundTemplate
 from .permissions import InboundAccess, can_define
 from .serializers import InboundBatchSerializer, InboundCartridgeSerializer, InboundTemplateSerializer
-from . import registry, services
+from . import example_templates, registry, services
 
 
 def _err(exc: InboundError):
@@ -103,6 +103,26 @@ class InboundBatchViewSet(viewsets.ModelViewSet):
         resp['Content-Disposition'] = f'attachment; filename="batch-{batch.id}-rejects.csv"'
         return resp
 
+    @action(detail=True, methods=['get'])
+    def rows(self, request, pk=None):
+        """Read-only full-row page. Re-parses the file; writes nothing."""
+        batch = self.get_object()
+        try:
+            page = int(request.query_params.get('page') or 1)
+            page_size = int(request.query_params.get('page_size') or services.DEFAULT_PAGE_SIZE)
+        except (TypeError, ValueError):
+            return Response({'detail': 'page and page_size must be integers'}, status=400)
+        if page < 1:
+            page = 1
+        if page_size < 1:
+            page_size = services.DEFAULT_PAGE_SIZE
+        page_size = min(page_size, services.MAX_PAGE_SIZE)
+        try:
+            payload = services.batch_rows(batch, page=page, page_size=page_size)
+        except InboundError as exc:
+            return _err(exc)
+        return Response(payload)
+
     @action(detail=True, methods=['post'])
     def commit(self, request, pk=None):
         batch = self.get_object()
@@ -147,6 +167,21 @@ class InboundTemplateViewSet(viewsets.ModelViewSet):
             defaults={'kind': kind, 'mapping': mapping, 'owner': request.user},
         )
         return Response(InboundTemplateSerializer(obj).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['get'], url_path='examples')
+    def examples(self, request):
+        """Index of shipped example CSVs. Real files only, never DB rows."""
+        return Response(example_templates.list_examples())
+
+    @action(detail=False, methods=['get'], url_path=r'examples/(?P<slug>[^/.]+)')
+    def example(self, request, slug=None):
+        try:
+            filename, data = example_templates.read_example(slug)
+        except InboundError as exc:
+            return _err(exc)
+        resp = HttpResponse(data, content_type='text/csv')
+        resp['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return resp
 
 
 class CartridgeAccess(IsAuthenticated):

@@ -79,6 +79,68 @@ def _all_rows(batch: InboundBatch) -> list[dict]:
     return parsed['rows']
 
 
+# Full-row viewer bounds. The endpoint re-parses the file; it never stages rows.
+DEFAULT_PAGE_SIZE = 50
+MAX_PAGE_SIZE = 200
+
+
+def _row_verdicts(batch: InboundBatch) -> dict[int, dict]:
+    """Index the persisted smoke envelope by 1-based file row.
+
+    The smoke envelope keeps a <=20 sample plus every reject, so a reject is
+    always known and a clean row that fell outside the sample carries an empty
+    verdict/reason. This mirrors the sample grid exactly — no second source.
+    """
+    smoke = batch.smoke or {}
+    index: dict[int, dict] = {}
+    for row in smoke.get('sample') or []:
+        if isinstance(row, dict) and row.get('row') is not None:
+            index[int(row['row'])] = {
+                'key': row.get('key') or '',
+                'verdict': row.get('verdict') or '',
+                'reason': row.get('reason') or '',
+            }
+    for row in smoke.get('reject_rows') or []:
+        if isinstance(row, dict) and row.get('row') is not None:
+            index[int(row['row'])] = {
+                'key': row.get('key') or '',
+                'verdict': row.get('verdict') or 'reject',
+                'reason': row.get('reason') or '',
+            }
+    return index
+
+
+def batch_rows(batch: InboundBatch, *, page: int = 1, page_size: int = DEFAULT_PAGE_SIZE) -> dict:
+    """One read-only page of the batch file's rows.
+
+    Reads from the same ``_all_rows`` re-parse path smoke and commit use, so no
+    staging table exists and nothing is written. Per-row verdict/reason come
+    from the persisted smoke envelope; a clean insert keeps ``reason == ''``.
+    """
+    rows = _all_rows(batch)
+    verdicts = _row_verdicts(batch)
+    start = (page - 1) * page_size
+    end = start + page_size
+    results = []
+    for offset, raw in enumerate(rows[start:end], start=start + 1):
+        hit = verdicts.get(offset) or {}
+        results.append({
+            'row': offset,
+            'key': hit.get('key', ''),
+            'verdict': hit.get('verdict', ''),
+            'reason': hit.get('reason', ''),
+            'values': raw,
+        })
+    return {
+        'results': results,
+        'headers': list(batch.headers or []),
+        'page': page,
+        'page_size': page_size,
+        'count': len(rows),
+        'max_page_size': MAX_PAGE_SIZE,
+    }
+
+
 def save_mapping(batch: InboundBatch, mapping: dict) -> InboundBatch:
     if batch.status == InboundBatch.STATUS_COMMITTED:
         raise InboundError('Committed batch cannot be remapped', status=409)

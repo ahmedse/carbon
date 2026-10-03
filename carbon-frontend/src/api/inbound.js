@@ -103,6 +103,27 @@ export function fetchInboundTemplates(token, { kind, target_key } = {}) {
   return apiFetch(`${ROOT}templates/${qs ? `?${qs}` : ''}`, { token });
 }
 
+export function fetchInboundRows(token, id, { page = 1, pageSize = 50 } = {}) {
+  const params = new URLSearchParams();
+  params.set('page', String(page));
+  params.set('page_size', String(pageSize));
+  return apiFetch(`${ROOT}batches/${id}/rows/?${params.toString()}`, { token });
+}
+
+export function fetchInboundTemplateExamples(token) {
+  return apiFetch(`${ROOT}templates/examples/`, { token });
+}
+
+export async function downloadInboundTemplateExample(token, slug) {
+  const res = await authFetch(`${ROOT}templates/examples/${slug}/`, { token, timeoutMs: 60000 });
+  if (!res.ok) {
+    const err = new Error(`Example template download failed (${res.status})`);
+    err.status = res.status;
+    throw err;
+  }
+  return res.blob();
+}
+
 export function saveInboundTemplate(token, { name, kind, target_key, mapping }) {
   return apiFetch(`${ROOT}templates/`, {
     method: 'POST',
