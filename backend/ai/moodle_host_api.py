@@ -193,6 +193,50 @@ class MoodleIndexView(APIView):
 
 
 @method_decorator(csrf_exempt, name="dispatch")
+class MoodleGraphView(APIView):
+    """Staff HMAC read-only knowledge-graph query (L-G G1).
+
+    Answers the frozen G1 query set (lectures-teaching / passage explain /
+    precedes / related) over the committed pack graph. Read-only: no host call,
+    no write, no store. Never reached from a Chat turn.
+    """
+
+    authentication_classes: list = []
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        secret = configured_secret(getattr(settings, "MOODLE_PULSE_HMAC_SECRET", "") or "")
+        raw = request.body or b""
+        if not verify_signature(
+            secret,
+            request.headers.get("X-Pulse-Timestamp", ""),
+            raw,
+            request.headers.get("X-Pulse-Signature", ""),
+        ):
+            return Response({"ok": False, "error": "unauthorized"}, status=401)
+        try:
+            payload = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return Response({"ok": False, "error": "bad_json"}, status=400)
+        if not isinstance(payload, dict):
+            return Response({"ok": False, "error": "bad_json"}, status=400)
+        shortname = str(payload.get("shortname") or "").strip()
+        from ai.moodle_bank import listed_shortnames
+
+        if shortname not in listed_shortnames():
+            return Response(
+                {"ok": False, "error": "off_list", "shortname": shortname, "count": 0, "results": []},
+                status=404,
+            )
+        # Lazily imported so a Chat/turn path never imports the graph tool.
+        from ai.moodle_graph import run_query
+
+        result = run_query(shortname, payload.get("query"), payload.get("value"))
+        status = 200 if result.get("ok") else 400
+        return Response(result, status=status)
+
+
+@method_decorator(csrf_exempt, name="dispatch")
 class MoodleEmbedView(APIView):
     """Moodle asks for a one-time ticket. The browser redeems it for the pane."""
 

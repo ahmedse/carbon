@@ -174,6 +174,28 @@ unmarked in production.
 Tutor sub-rungs T1/T2/T3/T5 and enterprise rungs B0–B3 are green; they are not
 the K/B/C medicine rungs above. No production medicine rung is green.
 
+### 3.1 Teaching-wave L-G G1 — DONE (offline-proven)
+
+The frozen spec's graph ladder (`TEACHING-WAVE-SPEC.md` §1.4) is **not** an
+L-P production rung. Its **G1** rung — *"a read-only staff tool answers 'which
+lectures teach X' over the graph, each result returning its passage id; not on
+a Chat turn; no golden moves"* — is **BY-CODE** and is now **DONE
+(offline-proven)**:
+
+| Item | Evidence |
+|---|---|
+| Staff tool | `backend/ai/moodle_graph.py` — read-only queries `lectures_teaching` / `explain_passage` / `precedes` / `related` over the committed graph; every row carries a real `passage_id`. |
+| Staff surface | `MoodleGraphView` in `backend/ai/moodle_host_api.py`, route `/carbon-api/ai/moodle/graph/` (`config/urls.py`) — HMAC staff POST, lazily imported, no Chat turn, no write path. |
+| Gold | `domain_packs/aast-med/gold/graph-g1.yaml` — 5 cases over the committed `graph/NMD1103.jsonl` (all four queries), each pinned to real `(node_id, passage_id)` rows; out-of-scope refusals. |
+| Tests | `backend/ai/tests/test_moodle_graph_g1.py` — **14 passed** (gold, grounding, out-of-scope, read-only/deterministic, engine-boundary, HMAC surface). |
+| Gates | `pack_contract --gate` exit 0; `pulse_gauge --gate` exit 0, no forbidden meter rose (`domain_terms_in_core=0`, `brand_literals_in_core=0`). |
+
+This is the additive, passage-grounded graph layer only. **G2 / B6 / C7 stay
+`not_passable`** (authored, human-approved ILO/assessment and real-session edges
+are BY-REAL-WORLD); no production rung changed; no existing golden moved; the
+graph remains NOT required for teaching. G0 stays CURRENT (4,925 nodes /
+23,364 edges).
+
 ---
 
 ## 4. "Code side complete" statement

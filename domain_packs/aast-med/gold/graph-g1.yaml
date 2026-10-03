@@ -1,0 +1,109 @@
+# L-G G1 gold — read-only staff graph queries over the COMMITTED aast-med graph.
+#
+# Authored for the aast-med teaching wave (TEACHING-WAVE-SPEC §1.4 G1 / §3).
+# Every case names a REAL committed graph node in
+# `domain_packs/aast-med/graph/NMD1103.jsonl` and pins the exact
+# `(node_id, passage_id)` rows the staff tool must return. `passage_id` is the
+# real edge/node provenance; a row without one is never surfaced. This is new
+# evidence: it edits no existing golden and adds no store.
+#
+# Query set (frozen): lectures_teaching / explain_passage / precedes / related.
+version: 1
+shortname: NMD1103
+graph_file: domain_packs/aast-med/graph/NMD1103.jsonl
+query_set:
+- lectures_teaching
+- explain_passage
+- precedes
+- related
+thresholds:
+  passage_id_coverage: 1.0
+  fabricated_rows: 0
+  min_cases: 5
+cases:
+- id: g1-lectures-teaching-arterial-bp
+  query: lectures_teaching
+  value: 'NMD1103:concept:arterial-blood-pressure-what'
+  expected:
+  - node_id: 'NMD1103:lecture:0:handout-clinical-skills-1-virtual-tour-in-hospital-facilities'
+    passage_id: 'NMD1103:file:1020:Vital Signs Radial Pulse and Arterial blood pressure (2).docx'
+- id: g1-lectures-teaching-healthcare-transfer
+  query: lectures_teaching
+  value: 'NMD1103:concept:healthcare-facilities-transfer'
+  expected:
+  - node_id: 'NMD1103:lecture:0:handout-clinical-skills-1-virtual-tour-in-hospital-facilities'
+    passage_id: 'NMD1103:file:1005:Virtual Tour in Hospital Facilities.pdf'
+- id: g1-explain-virtual-tour
+  query: explain_passage
+  value: 'NMD1103:file:1005:Virtual Tour in Hospital Facilities.pdf'
+  expected:
+  - node_id: 'NMD1103:file:1005:Virtual Tour in Hospital Facilities.pdf'
+    passage_id: 'NMD1103:file:1005:Virtual Tour in Hospital Facilities.pdf'
+  - node_id: 'NMD1103:activity:1005'
+    passage_id: 'NMD1103:file:1005:Virtual Tour in Hospital Facilities.pdf'
+  - node_id: 'NMD1103:concept:care-units-emergency-room'
+    passage_id: 'NMD1103:file:1005:Virtual Tour in Hospital Facilities.pdf'
+  - node_id: 'NMD1103:concept:egyptian-healthcare-system'
+    passage_id: 'NMD1103:file:1005:Virtual Tour in Hospital Facilities.pdf'
+  - node_id: 'NMD1103:concept:healthcare-facilities-transfer'
+    passage_id: 'NMD1103:file:1005:Virtual Tour in Hospital Facilities.pdf'
+  - node_id: 'NMD1103:concept:imaging-virtual-tour'
+    passage_id: 'NMD1103:file:1005:Virtual Tour in Hospital Facilities.pdf'
+  - node_id: 'NMD1103:concept:operating-room-virtual-tourhttps'
+    passage_id: 'NMD1103:file:1005:Virtual Tour in Hospital Facilities.pdf'
+  - node_id: 'NMD1103:concept:outpatient-clinics-inpatient-room'
+    passage_id: 'NMD1103:file:1005:Virtual Tour in Hospital Facilities.pdf'
+  - node_id: 'NMD1103:concept:virtual-tour'
+    passage_id: 'NMD1103:file:1005:Virtual Tour in Hospital Facilities.pdf'
+  - node_id: 'NMD1103:concept:virtual-touruhttps'
+    passage_id: 'NMD1103:file:1005:Virtual Tour in Hospital Facilities.pdf'
+- id: g1-precedes-virtual-tour
+  query: precedes
+  value: 'NMD1103:file:1005:Virtual Tour in Hospital Facilities.pdf'
+  expected:
+  - node_id: 'NMD1103:google:1006:1_4k2LQC4bfZblcbBRG-NSkepSl5defs8'
+    passage_id: 'NMD1103:google:1006:1_4k2LQC4bfZblcbBRG-NSkepSl5defs8'
+- id: g1-related-aneroid
+  query: related
+  value: 'NMD1103:concept:aneroid-sphygmomanometer-aneroid'
+  expected:
+  - node_id: 'NMD1103:concept:arterial-blood-pressure-what'
+    passage_id: 'NMD1103:file:1020:Vital Signs Radial Pulse and Arterial blood pressure (2).docx'
+  - node_id: 'NMD1103:concept:automatic-digital-sphygmomanometer-the'
+    passage_id: 'NMD1103:file:1020:Vital Signs Radial Pulse and Arterial blood pressure (2).docx'
+  - node_id: 'NMD1103:concept:automatic-digital-sphygmomanometer-these'
+    passage_id: 'NMD1103:google:1019:12qDprz-vQMsW9KdN1cj18tHwZfkV5Xrc'
+  - node_id: 'NMD1103:concept:blood-pressure-blood'
+    passage_id: 'NMD1103:file:1020:Vital Signs Radial Pulse and Arterial blood pressure (2).docx'
+  - node_id: 'NMD1103:concept:blood-pressure-equipements-stethoscope'
+    passage_id: 'NMD1103:google:1019:12qDprz-vQMsW9KdN1cj18tHwZfkV5Xrc'
+  - node_id: 'NMD1103:concept:blood-pressure-systolic-diastolic'
+    passage_id: 'NMD1103:google:1019:12qDprz-vQMsW9KdN1cj18tHwZfkV5Xrc'
+  - node_id: 'NMD1103:concept:pulse-rate'
+    passage_id: 'NMD1103:file:1020:Vital Signs Radial Pulse and Arterial blood pressure (2).docx'
+  - node_id: 'NMD1103:concept:recording-blood-pressure-what'
+    passage_id: 'NMD1103:google:1019:12qDprz-vQMsW9KdN1cj18tHwZfkV5Xrc'
+  - node_id: 'NMD1103:concept:sphygmomanometer-mercury-sphygmomanometer-are'
+    passage_id: 'NMD1103:google:1019:12qDprz-vQMsW9KdN1cj18tHwZfkV5Xrc'
+  - node_id: 'NMD1103:concept:sphygmomanometer-there'
+    passage_id: 'NMD1103:file:1020:Vital Signs Radial Pulse and Arterial blood pressure (2).docx'
+  - node_id: 'NMD1103:concept:sphygmomanometers-mercury-sphygmomanometer-mercury'
+    passage_id: 'NMD1103:file:1020:Vital Signs Radial Pulse and Arterial blood pressure (2).docx'
+  - node_id: 'NMD1103:concept:stethoscope-try'
+    passage_id: 'NMD1103:google:1019:12qDprz-vQMsW9KdN1cj18tHwZfkV5Xrc'
+  - node_id: 'NMD1103:concept:systolic-diastolic'
+    passage_id: 'NMD1103:google:1019:12qDprz-vQMsW9KdN1cj18tHwZfkV5Xrc'
+  - node_id: 'NMD1103:concept:vital-signs-radial-pulse'
+    passage_id: 'NMD1103:file:1020:Vital Signs Radial Pulse and Arterial blood pressure (2).docx'
+out_of_scope:
+  unknown_query:
+  - query: drop_table
+    value: 'NMD1103:concept:virtual-tour'
+  unresolved_node:
+  - query: lectures_teaching
+    value: 'NMD1103:concept:not-a-real-concept'
+  - query: related
+    value: 'NMD1103:concept:not-a-real-concept'
+  non_passage_explain:
+  - query: explain_passage
+    value: 'NMD1103:activity:1005'

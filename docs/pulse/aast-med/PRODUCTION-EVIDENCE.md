@@ -117,6 +117,37 @@ This checklist records required evidence and classification only.
 
 ---
 
+## 3.1 Teaching-wave L-G G1 — DONE (offline-proven), outside the L-P ladder
+
+The L-P ladder above is the **production** ladder. The frozen spec's graph
+sub-ladder (`TEACHING-WAVE-SPEC.md` §1.4) is separate: **G0** is CURRENT and
+**G1** is marked **BY-CODE** (not BY-REAL-WORLD). G1 is now **DONE
+(offline-proven)**:
+
+- **Definition (spec §1.4, verbatim).** *"A read-only staff tool answers 'which
+  lectures teach X' over the graph, each result returning its passage id; not
+  on a Chat turn; no golden moves."*
+- **Tool.** `backend/ai/moodle_graph.py` — read-only `lectures_teaching` /
+  `explain_passage` / `precedes` / `related` over the committed
+  `domain_packs/aast-med/graph/<shortname>.jsonl`; a row without a real
+  `passage_id` raises rather than surfacing; unknown query / unresolved node =
+  honest empty.
+- **Staff surface.** `MoodleGraphView` (`backend/ai/moodle_host_api.py`), route
+  `/carbon-api/ai/moodle/graph/` (`backend/config/urls.py`) — HMAC-authenticated
+  staff POST, lazily imported, never a Chat turn, no write path (ADR-0046).
+- **Gold + tests.** `domain_packs/aast-med/gold/graph-g1.yaml` (5 cases across
+  all four queries, real `(node_id, passage_id)` rows + out-of-scope refusals);
+  `backend/ai/tests/test_moodle_graph_g1.py` — **14 passed**.
+- **Gates.** `pack_contract --gate` exit 0; `pulse_gauge --gate` exit 0, no
+  forbidden meter rose.
+
+This changes **no** L-P rung: **K10 / K11 / B5 / B6 / C7 remain
+`not_pass`/`not_passable`**, **G2 stays BY-REAL-WORLD**, `student_cohorts` stays
+empty, no table/store is created, and the graph stays additive and NOT required
+for teaching. The BY-REAL-WORLD production items in §2 are unchanged.
+
+---
+
 ## 4. Doc conflicts found (recorded, not resolved)
 
 The task asked to **note** conflicts rather than pick a side. All are recorded
