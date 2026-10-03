@@ -680,7 +680,9 @@ def handoff_copy(
     if locale == "ar":
         if on_ask:
             primary = (
-                "• **الخطّة** — بدّل المفتاح إلى «خطّة». وضع السؤال لا يُنشئ مهاماً."
+                "• **الخطّة** — بدّل المفتاح إلى «خطّة»؛ سينقل الوكيل (Agent) هذه "
+                "التفاصيل ويشغّل العملية المعتمدة (التأكيد عند التشغيل). "
+                "وضع السؤال لا يُنشئ مهاماً."
             )
         else:
             primary = (
@@ -697,7 +699,9 @@ def handoff_copy(
     else:
         if on_ask:
             primary = (
-                "• **Plan** — switch the dial to Plan. Ask does not create tasks."
+                "• **Plan** — switch the dial to Plan. Agent carries these details "
+                "over and runs the governed process (consent on Run). "
+                "Ask does not create tasks."
             )
         else:
             primary = (

@@ -40,9 +40,11 @@ CONTRACT_BANKS: dict[str, dict] = {
     "IB-08": {"threads": 16, "turns": 16, "en": 8, "ar": 8, "axis": "threads"},
     "IB-10": {"threads": 11, "turns": 34, "en": None, "ar": None, "axis": None},
     "IB-11": {"threads": 8, "turns": 24, "en": 4, "ar": 4, "axis": "threads"},
+    # IB-12 is the IR5 locked paraphrase bank: 6 intents x (5 EN + 5 AR).
+    "IB-12": {"threads": 12, "turns": 60, "en": 6, "ar": 6, "axis": "threads"},
 }
 
-#: IB-01 … IB-05, IB-07, IB-08, IB-10, IB-11 are read-only; only IB-06 writes.
+#: IB-01 … IB-05, IB-07, IB-08, IB-10, IB-11, IB-12 are read-only; only IB-06 writes.
 READ_ONLY_BANKS = frozenset(CONTRACT_BANKS) - {"IB-06"}
 
 
@@ -82,6 +84,52 @@ def _write_run(root, bank_id: str, run_at: str, thread_passes: list[bool], tier:
         "run_at": run_at,
         "threads": [{"pass": ok, "turns": []} for ok in thread_passes],
     }
+    stamp = run_at.replace(":", "").replace("-", "")
+    (root / f"PV2-intention-{bank_id.replace('-', '')}-{stamp}.json").write_text(
+        json.dumps(payload), encoding="utf-8"
+    )
+
+
+def _paraphrase_run(
+    *,
+    en_total: int = 30,
+    en_pass: int = 30,
+    ar_total: int = 30,
+    ar_pass: int = 30,
+    fallthrough: int = 0,
+    ungrounded: int = 0,
+) -> dict:
+    """A synthetic live run of the IB-12 shape, with real per-turn rows."""
+
+    def _turns(total: int, passed: int, lang: str) -> list[dict]:
+        rows = []
+        for i in range(total):
+            misses: list[str] = []
+            if fallthrough and i == 0:
+                misses.append("no_fallthrough got=fallthrough")
+            if ungrounded and i == 0:
+                misses.append("numbers_grounded ['999']")
+            if i >= passed and not misses:
+                misses.append("contains entity")
+            say = f"سؤال {lang} {i}" if lang == "ar" else f"paraphrase {lang} {i}"
+            rows.append({
+                "say": say,
+                "pass": not misses,
+                "misses": misses,
+                "fell_through": bool(fallthrough and i == 0),
+            })
+        return rows
+
+    return {
+        "threads": [
+            {"id": "IB-12-en", "pass": en_pass == en_total, "turns": _turns(en_total, en_pass, "en")},
+            {"id": "IB-12-ar", "pass": ar_pass == ar_total, "turns": _turns(ar_total, ar_pass, "ar")},
+        ],
+    }
+
+
+def _write_paraphrase_run(root, run_at: str, bank_id: str = "IB-12", **kwargs) -> None:
+    payload = {"tier": "live_intention", "bank": bank_id, "run_at": run_at, **_paraphrase_run(**kwargs)}
     stamp = run_at.replace(":", "").replace("-", "")
     (root / f"PV2-intention-{bank_id.replace('-', '')}-{stamp}.json").write_text(
         json.dumps(payload), encoding="utf-8"
@@ -255,6 +303,131 @@ def test_ib11_is_three_paraphrases_per_thread_bilingual():
     assert sum(1 for s in says if not _is_ar(s)) == 4
 
 
+# ── IB-12: the IR5 locked, held-out paraphrase bank ────────────────────────
+
+
+def test_ib12_is_locked_bilingual_and_paired_five_paraphrases_per_intent():
+    """Six intents, one EN + one AR thread each, five unseen paraphrases a side."""
+    doc = load_bank_doc(BANKS["IB-12"])
+    assert doc.get("locked") is True, "the IR5 bank is held out"
+    threads = _threads("IB-12")
+    by_intent: dict[str, dict[str, dict]] = {}
+    for thread in threads:
+        side = "ar" if _is_ar(thread["turns"][0]["say"]) else "en"
+        by_intent.setdefault(thread["intent"], {})[side] = thread
+    assert set(by_intent) == {"name", "no", "title", "salary", "leave", "oos"}
+    for intent, pair in by_intent.items():
+        assert set(pair) == {"en", "ar"}, intent
+        for side, thread in pair.items():
+            assert len(thread["turns"]) == 5, (intent, side)
+    # Entity + figure grounding where a figure is expected.
+    for thread in threads:
+        for turn in thread["turns"]:
+            assert turn.get("no_fallthrough") is True, thread["id"]
+            assert turn.get("not_degraded") is True, thread["id"]
+            if thread["intent"] == "oos":
+                assert turn.get("decision_is") == "refuse", thread["id"]
+                continue
+            assert turn.get("contains"), thread["id"]
+            if thread["intent"] in {"salary", "leave", "no"}:
+                assert turn.get("numbers_grounded") is True, thread["id"]
+                assert turn.get("ground_objects"), thread["id"]
+
+
+def test_ib12_declares_the_ir5_gate_in_its_yaml():
+    doc = load_bank_doc(BANKS["IB-12"])
+    gate = doc.get("gate") or {}
+    assert gate.get("kind") == "paraphrase"
+    assert float(gate.get("accuracy")) == 0.95
+    assert float(gate.get("parity")) == 0.98
+    assert int(gate.get("fallthrough")) == 0
+    assert int(gate.get("ungrounded")) == 0
+
+
+def test_ib12_gate_is_discovered_not_hardcoded():
+    """The scorer reads the id from the YAML; tests read the same registry."""
+    gates = cdb.intention_gate_banks()
+    assert "IB-12" in gates
+    assert gates["IB-12"]["kind"] == "paraphrase"
+    # Discovery is by ``gate.kind``, not a fixed tuple.
+    assert all(g.get("kind") == "paraphrase" for g in gates.values())
+
+
+def test_ib12_is_held_out_from_the_engine():
+    """The locked bank's phrasing never appears in ``engine/**`` (ADR-0050)."""
+    engine = cdb.INTENTION_BANKS_DIR.parent / "engine"
+    blobs = [
+        p.read_text(encoding="utf-8", errors="ignore")
+        for p in engine.rglob("*")
+        if p.is_file() and p.suffix in {".py", ".yaml"}
+    ]
+    corpus = "\n".join(blobs)
+    for thread in _threads("IB-12"):
+        for turn in thread["turns"]:
+            assert turn["say"] not in corpus, turn["say"]
+
+
+def test_ib12_paraphrase_score_formula():
+    """accuracy = correct/turns; parity = 1 - |accuracy_ar - accuracy_en|."""
+    score = cdb.paraphrase_run_score(_paraphrase_run(en_pass=28, ar_pass=30))
+    assert score["turns"] == 60
+    assert score["correct"] == 58
+    assert score["accuracy"] == 0.9667
+    assert score["accuracy_en"] == 0.9333
+    assert score["accuracy_ar"] == 1.0
+    assert score["parity"] == 0.9333
+    assert score["parity_gap"] == 0.0667
+    assert score["fallthrough"] == 0
+    assert score["ungrounded"] == 0
+    # A run with no recorded turns is missing, never zero-fail.
+    assert cdb.paraphrase_run_score({"threads": []})["status"] == "missing"
+
+
+def test_ib12_threshold_wiring_accuracy_parity_fallthrough_grounding():
+    gate = cdb.intention_gate_banks()["IB-12"]
+    assert cdb.paraphrase_run_pass(cdb.paraphrase_run_score(_paraphrase_run()), gate)
+    # Accuracy clears the bar but the language gap breaks parity (2 EN misses).
+    skewed = cdb.paraphrase_run_score(_paraphrase_run(en_pass=28, ar_pass=30))
+    assert skewed["accuracy"] >= 0.95 and skewed["parity"] < 0.98
+    assert not cdb.paraphrase_run_pass(skewed, gate)
+    # Balanced misses keep parity but drop accuracy below the bar.
+    low = cdb.paraphrase_run_score(_paraphrase_run(en_pass=25, ar_pass=25))
+    assert low["accuracy"] < 0.95 and low["parity"] == 1.0
+    assert not cdb.paraphrase_run_pass(low, gate)
+    # One fallthrough or one ungrounded figure fails even at full accuracy.
+    assert not cdb.paraphrase_run_pass(
+        cdb.paraphrase_run_score(_paraphrase_run(fallthrough=1)), gate
+    )
+    assert not cdb.paraphrase_run_pass(
+        cdb.paraphrase_run_score(_paraphrase_run(ungrounded=1)), gate
+    )
+
+
+def test_ib12_honest_status_missing_partial_reached_and_reopen(tmp_path):
+    report = cdb.intention_banks(tmp_path)
+    assert report["banks"]["IB-12"]["status"] == "missing"
+    assert report["banks"]["IB-12"]["passed"] == 0
+    assert "IB-12" in report["paraphrase"]
+    assert report["paraphrase"]["IB-12"]["status"] == "missing"
+    assert report["ir5"] == "not reached"
+
+    _write_paraphrase_run(tmp_path, "2026-10-01T10:00:00+00:00")
+    assert cdb.intention_banks(tmp_path)["banks"]["IB-12"]["status"] == "partial"
+
+    _write_paraphrase_run(tmp_path, "2026-10-02T10:00:00+00:00")
+    _write_paraphrase_run(tmp_path, "2026-10-03T10:00:00+00:00")
+    reached = cdb.intention_banks(tmp_path)
+    assert reached["banks"]["IB-12"]["status"] == "reached"
+    assert reached["banks"]["IB-12"]["score"]["accuracy"] == 1.0
+    assert reached["banks"]["IB-12"]["gate"]["kind"] == "paraphrase"
+
+    # A later threshold miss reopens the bank.
+    _write_paraphrase_run(tmp_path, "2026-10-04T10:00:00+00:00", en_pass=25, ar_pass=25)
+    reopened = cdb.intention_banks(tmp_path)
+    assert reopened["banks"]["IB-12"]["status"] == "fail"
+    assert reopened["ir5"] == "not reached"
+
+
 # ── IB-06 stays missing (write bank) ───────────────────────────────────────
 
 
@@ -319,6 +492,7 @@ def test_three_consecutive_full_runs_reach_a_bank(tmp_path):
         _write_run(tmp_path, "IB-08", stamp, [True, True])
         _write_run(tmp_path, "IB-10", stamp, [True])
         _write_run(tmp_path, "IB-11", stamp, [True, True])
+        _write_paraphrase_run(tmp_path, stamp)
     report = cdb.intention_banks(tmp_path)
     for bank_id in READ_ONLY_BANKS:
         assert report["banks"][bank_id]["status"] == "reached", bank_id
@@ -332,7 +506,21 @@ def test_three_consecutive_full_runs_reach_a_bank(tmp_path):
     assert report["ir2"] == "reached"
     assert report["ir3"] == "reached"
     assert report["ir4"] == "reached"
-    assert report["ir5"] == "not reached"  # needs the locked paraphrase bank
+    # IR5 = IB-10 + IB-11 + the locked paraphrase bank (IB-12), all reached.
+    assert report["ir5"] == "reached"
+
+
+def test_ir5_is_not_reached_without_the_paraphrase_bank(tmp_path):
+    """IR5 needs the locked bank: IB-10 + IB-11 alone never reach it."""
+    for day in ("01", "02", "03"):
+        stamp = f"2026-10-{day}T10:00:00+00:00"
+        _write_run(tmp_path, "IB-10", stamp, [True])
+        _write_run(tmp_path, "IB-11", stamp, [True, True])
+    report = cdb.intention_banks(tmp_path)
+    assert report["banks"]["IB-10"]["status"] == "reached"
+    assert report["banks"]["IB-11"]["status"] == "reached"
+    assert report["banks"]["IB-12"]["status"] == "missing"
+    assert report["ir5"] == "not reached"
 
 
 def test_fewer_than_three_runs_stays_partial(tmp_path):
@@ -377,3 +565,63 @@ def test_intention_is_reported_not_merged_into_the_ask_score():
     assert "intention" in report
     assert report["n_objectives"] == 10
     assert all(row["id"] not in cdb.INTENTION_BANKS for row in report["objectives"])
+
+
+# ── IB-02 language: the copy decides, not a host proper noun ────────────────
+
+
+class _HostStub:
+    """The bits of ``Host`` the language check reads (no network)."""
+
+    def me(self) -> dict:
+        return {"department": "Coiled Tubing", "job_title": "Heavy Duty Driver"}
+
+    def resolve(self, ref: str):
+        return ""
+
+    def obj(self, ref: str):
+        return {}
+
+
+def _check_language(value: str, reply: str, meta: dict) -> list[str]:
+    from ai.eval.chat_retest import check_turn
+
+    return check_turn({"language": value}, reply, meta, _HostStub())
+
+
+def test_ib02_language_reads_the_copy_not_the_host_proper_noun():
+    """IRP-7: an Arabic table whose cell is an English host value is Arabic."""
+    meta = {"tool_digest": (
+        "call_host_api get_my_profile: employee_no=1067, "
+        "department=Coiled Tubing, job_title=Heavy Duty Driver"
+    )}
+    reply = "| الإدارة |\n| --- |\n| Coiled Tubing |"
+    assert _check_language("ar", reply, meta) == []
+
+
+def test_ib02_language_still_fails_a_genuinely_wrong_language_reply():
+    """The fix must not launder a reply that is really in the other language."""
+    meta = {"tool_digest": (
+        "call_host_api get_my_profile: department=Coiled Tubing"
+    )}
+    # An Arabic question answered in English prose (host value aside) still fails.
+    assert any(
+        m.startswith("language")
+        for m in _check_language("ar", "Your department is Coiled Tubing.", meta)
+    )
+    # No host payload at all: nothing to set aside, the English reply fails.
+    assert any(
+        m.startswith("language")
+        for m in _check_language("ar", "Your leave balance is 18 days.", {})
+    )
+
+
+def test_ib02_language_ignores_numeric_payloads_only():
+    """Numbers never carry a language; Latin words always do."""
+    meta = {"tool_digest": "call_host_api get_my_leave_balance: annual remaining=18"}
+    assert _check_language("ar", "رصيد إجازاتك السنوية 18", meta) == []
+    assert any(
+        m.startswith("language")
+        for m in _check_language("ar", "Your annual balance is 18", meta)
+    )
+

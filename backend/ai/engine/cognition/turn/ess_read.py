@@ -359,6 +359,88 @@ def preferred_self_api(text: str | None) -> str | None:
     return domains[0].preferred_api(t)
 
 
+def _profile_entry_texts(entry: dict | None, key: str) -> list[str]:
+    """Declared catalog vocabulary for a profile entry, flattened to strings.
+
+    The core carries no identity words: the pack's own ``examples`` and
+    ``field_labels`` are the vocabulary (ADR-0050). ``key`` is ``examples``
+    or ``field_labels``/``returns``.
+    """
+    out: list[str] = []
+    raw = (entry or {}).get(key)
+    if key == "examples":
+        for item in raw or []:
+            if isinstance(item, dict):
+                out.extend(v for v in item.values() if isinstance(v, str))
+            elif isinstance(item, str):
+                out.append(item)
+        return out
+    if key == "returns":
+        return [str(name).replace("_", " ") for name in raw or [] if str(name).strip()]
+    if isinstance(raw, dict):
+        for value in raw.values():
+            if isinstance(value, str):
+                out.append(value)
+            elif isinstance(value, dict):
+                out.extend(v for v in value.values() if isinstance(v, str))
+    return out
+
+
+def _fold(text: str) -> str:
+    from ai.engine.text.normalize import normalize_text
+
+    return normalize_text((text or "").strip())
+
+
+def _prior_profile_read(state) -> bool:
+    """Typed continuity: the last host read this conversation ran was the profile GET."""
+    for row in reversed(list(getattr(state, "last_results", None) or [])):
+        if not isinstance(row, dict):
+            return False
+        return str(row.get("api") or row.get("name") or "") == str(ID_GET_MY_PROFILE)
+    return False
+
+
+def resolve_profile_api(
+    text: str | None,
+    *,
+    state=None,
+    catalog: list | None = None,
+) -> str | None:
+    """Identity / self-profile ask → the declared profile GET, else ``None``.
+
+    Deterministic: the ask is matched against the existing first-person
+    detector and the pack's own catalog ``examples``; a follow-up that
+    names a declared field after a profile read continues on typed state
+    (``ConversationState.last_results``). No phrase table, no ``re.compile``.
+    """
+    from ai.engine.agent.tools import first_person_profile_ask
+    from ai.engine.cognition.turn.catalog_render import catalog_entry_named
+
+    raw = _norm(text or "")
+    if not raw:
+        return None
+    entry = catalog_entry_named(catalog, str(ID_GET_MY_PROFILE))
+    if entry is None:
+        return None
+    if first_person_profile_ask(raw):
+        return str(ID_GET_MY_PROFILE)
+    msg = _fold(raw).strip("?؟!.، ")
+    for example in _profile_entry_texts(entry, "examples"):
+        needle = _fold(example).strip("?؟!.، ")
+        # Exact (punctuation-insensitive): a longer ask that merely contains
+        # an example phrase is not over-bound to this read.
+        if len(needle) >= 2 and needle == msg:
+            return str(ID_GET_MY_PROFILE)
+    if _prior_profile_read(state):
+        names = _profile_entry_texts(entry, "returns") + _profile_entry_texts(entry, "field_labels")
+        for name in names:
+            needle = _fold(name)
+            if len(needle) >= 2 and needle in msg:
+                return str(ID_GET_MY_PROFILE)
+    return None
+
+
 def ess_self_read_topic(text: str | None) -> str | None:
     """Return domain id when exactly one domain matches; else None."""
     t = _norm(text or "")

@@ -492,14 +492,13 @@ class SoftSurfacesMixin:
         if mode == "legacy":
             return None
 
-        # Plan drafts a reviewable task. A v21 exit here answers or hands off
-        # instead, so the plan is never shown and no task is ever created.
+        # Plan drafts a reviewable task. Understanding still answers a *read* on
+        # this dial (IF-06); it never paints a second plan card, so a handoff is
+        # handed back to the drafter below (``on_plan_dial``).
         from ai.engine.agent.surface import Surface
-        if Surface.resolve(
+        on_plan_dial = Surface.resolve(
             surface, process_mode=process_mode, user_message=user_message or "",
-        ) is Surface.CHAT_PLAN:
-            _signal(ledger, "v21_understand", False, reason="plan_dial")
-            return None
+        ) is Surface.CHAT_PLAN
 
         state = getattr(state_ctx, "state", None) if state_ctx is not None else None
         # One surface: the prompt lists it, validation accepts it, the
@@ -777,6 +776,17 @@ class SoftSurfacesMixin:
             record_degradation(ledger, degraded)
         handoff_actions: list[dict] = []
         lead = lead_command(decision)
+        if (
+            on_plan_dial
+            and lead is not None
+            and lead.op == "handoff_agent"
+            and not executed
+        ):
+            # IF-06: on the Plan dial a goal belongs to the drafter, never to a
+            # second Understanding handoff card. The drafter already ran; do not
+            # paint a plan/handoff card here, and do not fall through.
+            _signal(ledger, "v21_understand", False, reason="plan_dial")
+            return None
         from ai.engine.agent.surface import Surface
 
         on_agent = Surface.resolve(surface).may_host_mutate
@@ -1085,14 +1095,21 @@ class SoftSurfacesMixin:
         instance_config: dict | None,
         t0: float,
         surface=None,
+        profile_only: bool = False,
+        catalog: list | None = None,
     ):
         """Bound ESS self-read: classify → call_host_api → 0-LLM restate.
 
         Draft never decides tool_calls. Writes stay on Chat handoff (ADR-0046).
+
+        ``profile_only`` binds only the identity / self-profile read (the
+        declared ``detail`` render); every other ESS self-read stays on the
+        Decision path.
         """
         from ai.engine.agent.reasoning import AgentResponse
         from ai.engine.agent.guardrails import build_default_pipeline
         from ai.engine.cognition.notifier import broadcast_run_event as _broadcast_run
+        from ai.engine.cognition.turn.catalog_render import catalog_entry_named
         from ai.engine.cognition.turn.ess_read import (
             answer_bound_ess_tools,
             bound_ess_self_api,
@@ -1105,15 +1122,24 @@ class SoftSurfacesMixin:
             _signal(ledger, "ess_bound_self_read", False, reason="ess_write")
             return None
 
+        _catalog = catalog if catalog is not None else (instance_config or {}).get("api_catalog")
         _prior_api = None
         _state = getattr(state_ctx, "state", None)
         if _state is not None:
             _prior_api = (getattr(_state, "intent", None) or {}).get("api")
-        api = bound_ess_self_api(
-            user_message,
-            history=conversation_history,
-            prior_api=_prior_api,
-        )
+        if profile_only:
+            # Identity / self-profile is a declared detail read, not prose.
+            # Resolve against the pack's own catalog vocabulary plus typed
+            # state, so no conversational writer can word it.
+            from ai.engine.cognition.turn.ess_read import resolve_profile_api
+
+            api = resolve_profile_api(user_message, state=_state, catalog=_catalog)
+        else:
+            api = bound_ess_self_api(
+                user_message,
+                history=conversation_history,
+                prior_api=_prior_api,
+            )
         if not api:
             _signal(ledger, "ess_bound_self_read", False)
             return None
@@ -1159,6 +1185,9 @@ class SoftSurfacesMixin:
             unread_text=not any(
                 isinstance(item, dict) and not item.get("error") for item in completed
             ),
+            # Same catalog contract the Decision path passes: a declared
+            # detail read renders its pack field_labels, one value per line.
+            catalog_entry=catalog_entry_named(_catalog, api),
         )
         if not (text or "").strip():
             _signal(ledger, "ess_bound_self_read", False, reason="no_declared_render")
@@ -1395,6 +1424,7 @@ class SoftSurfacesMixin:
             draft_was_cancelled,
             dropped_draft_text,
             hold_draft_text,
+            is_task_plan,
             stick_to_open_draft,
             unstored_draft_text,
         )
@@ -1579,6 +1609,12 @@ class SoftSurfacesMixin:
                 conversation_id=conversation_id, ledger=ledger,
                 turn_id=turn_id, instance_id=instance_id, t0=t0,
             )
+        if not is_task_plan(plan):
+            # IF-06 (Ask/Plan boundary): a single bound read is a question the
+            # Decision answers on either dial. Chat never paints a plan card for
+            # a read — the caller falls through to Understanding to answer it.
+            _signal(ledger, "plan_dial_process", False, reason="read_not_a_task")
+            return None
 
         lang = "ar" if detect_lang(brief) == "ar" else "en"
         proposal = {**proposal, "conversation_id": conversation_id or ""}

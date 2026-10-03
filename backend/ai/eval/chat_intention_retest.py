@@ -42,7 +42,12 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ai.eval.chat_deep_bench import discover_intention_banks
+from ai.eval.chat_deep_bench import (
+    discover_intention_banks,
+    intention_gate_banks,
+    paraphrase_run_pass,
+    paraphrase_run_score,
+)
 from ai.eval.chat_live_probe import BASE, USER, _req, login
 from ai.eval.chat_retest import EVIDENCE, Host, load_bank, load_bank_doc, run_thread, summarize
 
@@ -146,7 +151,14 @@ def run_bank(bank_id: str, token: str, host: Host, workers: int, started: dateti
     }
     report["total"] = len(rows)
     report["passed"] = sum(1 for r in rows if r["pass"])
-    report["pass"] = report["passed"] == report["total"]
+    gate = intention_gate_banks().get(bank_id)
+    if gate:
+        # IR5 paraphrase bank: pass is the aggregate threshold, not 100% threads.
+        report["gate"] = dict(gate)
+        report["paraphrase"] = paraphrase_run_score(report)
+        report["pass"] = paraphrase_run_pass(report["paraphrase"], gate)
+    else:
+        report["pass"] = report["passed"] == report["total"]
     return report
 
 

@@ -2,7 +2,7 @@
 # the registry — never by name in core code. Bump `version` when catalog,
 # processes, vocabulary or banks change in a way a running instance must notice.
 id: nibras
-version: 17
+version: 18
 domain: hrms
 display_name: Nibras — GOFSCO People & Payroll
 inventory: host_rbac
@@ -14,6 +14,7 @@ owns:
   processes: processes/               # governed lifecycles + RULE_21 consent dials
   assurance: assurance/               # pack-level honesty / sim scripts
   phrases: phrases.yaml                 # turn-scoped phrase overlay (core tables stay neutral)
+  greet: greet.yaml                     # pack-owned greeting door (phrases + locale copy)
   workbench: banks/tasks_workbench.yaml
   workbench_expand: banks/tasks_workbench_expand.yaml
   banks:                              # per-instance behaviour evidence (gauge columns)

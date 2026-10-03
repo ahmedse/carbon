@@ -274,7 +274,12 @@ async def write_answer(
             from ai.engine.cognition.turn.grounding import strip_ungrounded_numbers
 
             kept = strip_ungrounded_numbers(text, allowed).strip()
-            if any(ch.isdigit() for ch in kept) and any(ch.isalpha() for ch in kept):
+            # Explanatory prose is grounded once the invented figures are gone.
+            # Keep it only when it is still a substantive answer — a reply whose
+            # only content was an invented figure strips to a fragment and still
+            # fails visibly (IB-08 vs. the ungrounded-answer test).
+            words = [w for w in kept.split() if any(ch.isalpha() for ch in w)]
+            if len(kept) >= 24 and len(words) >= 4:
                 text = kept
                 usage["cause"] = ""
                 break

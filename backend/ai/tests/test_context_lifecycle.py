@@ -446,6 +446,54 @@ def test_clear_context_releases_stuck_working_status(owner):
     assert result["status"] == "pending"
 
 
+@pytest.mark.django_db
+def test_clear_context_resets_durable_state_inside_request_transaction(owner):
+    """Regression: the inline durable-state reset must not recycle the request
+    thread's transaction connection.
+
+    ``ATOMIC_REQUESTS`` wraps every request in an atomic block, so the engine
+    reset ``clear_context`` runs inline lands on that thread.  The store helper
+    used to call ``close_old_connections()`` there; Django cannot null out a
+    connection pinned to an atomic block, so it left a dead psycopg2 handle and
+    the follow-up ``conversation.save()`` raised
+    ``psycopg2.InterfaceError: connection already closed`` — the workspace
+    surfaced its generic 500 banner.  The durable-state sibling test used
+    ``transaction=True`` (no atomic block) and so never caught this.
+    """
+    from ai.engine.cognition.state_store import ConversationState
+    from ai.instance_registry import resolve_default_app_identifier
+    from ai.models import ConversationContextRecord
+
+    conversation = _make_conversation(owner, n_messages=2, summary="live")
+    conv_id = str(conversation.id)
+    ConversationContextRecord.objects.create(
+        conversation_id=conv_id,
+        instance_id=resolve_default_app_identifier(),
+        host_user_id=str(owner.pk),
+        session_json=ConversationState(
+            slots={"loan_type": "emergency"},
+        ).to_dict(),
+    )
+
+    result = CarbonIntelligence().clear_context(owner, conv_id)
+
+    # The clear completed on the atomic request path (no InterfaceError)…
+    assert result["summary"] == ""
+    assert result["context_snapshot_json"]["_clear_break"]["prior_state"]
+    # …dropped the durable ConversationState…
+    assert not ConversationContextRecord.objects.filter(
+        conversation_id=conv_id,
+    ).exists()
+    # …and kept the conversation row + message log.
+    conversation.refresh_from_db()
+    assert conversation.messages.count() == 2
+
+    # Undo restores the durable state on the same atomic path.
+    restored = CarbonIntelligence().undo_clear_context(owner, conv_id)
+    assert restored["summary"] == "live"
+    assert ConversationContextRecord.objects.filter(conversation_id=conv_id).exists()
+
+
 # ── REST surface ─────────────────────────────────────────────────────────
 @pytest.mark.django_db
 def test_checkpoint_endpoint_roundtrip(manager):

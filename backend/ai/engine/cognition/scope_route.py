@@ -4,7 +4,7 @@ from ai.engine.host_ids import (
     ID_LEAVE_REQUEST,
 )
 from ai.engine.cognition.phrase_tables import T
-from ai.engine.pack_vocab import LV, V
+from ai.engine.pack_vocab import LV, V, as_data
 LV("t_agent_discovery_scope_router_gate_briefs")
 
 
@@ -72,14 +72,18 @@ class ScopeRoute:
     plannable: bool = False
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        # Route cards carry pack-bound ids/labels. Coerce the lazy pack text
+        # to plain ``str`` here, at the JSON boundary: the dict is both
+        # persisted into ``Run.plan_json`` (a JSONField) and returned in an
+        # API response, and neither accepts a ``_LiveStr`` / ``_LiveConcat``.
+        return as_data({
             "class": self.cls,
             "message": self.message,
             "recommended": self.recommended,
             "cards": self.cards,
             "handoff_target": self.handoff_target,
             "plannable": self.plannable,
-        }
+        })
 
 
 def _leave_cards(*, personal_primary: bool) -> list[dict[str, Any]]:

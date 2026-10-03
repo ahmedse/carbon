@@ -12,7 +12,22 @@ from ai.engine.cognition.turn.runner_surfaces import SoftSurfacesMixin
 from ai.engine.cognition.turn.witnesses import TurnLedger
 
 _CFG = {
-    "api_catalog": [{"name": "get_my_summary", "method": "GET", "description": "Own summary."}],
+    "api_catalog": [
+        {"name": "get_my_summary", "method": "GET", "description": "Own summary."},
+        {
+            "name": "submit_my_loan",
+            "method": "POST",
+            "kind": "write",
+            "description": "Submit my own loan request.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "loan_type": {"type": "string"},
+                    "principal": {"type": "number"},
+                },
+            },
+        },
+    ],
     "navigation_routes": [
         {"name": "my_home", "path": "/my", "type": "app", "label": "My"},
         {"name": "team_home", "path": "/team", "type": "app", "label": "Team"},

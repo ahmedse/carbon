@@ -1,0 +1,425 @@
+# IB-12 — held-out paraphrase / adversarial bank for the IR5 exit gate
+# (PULSE-INTENTION-CONTRACT §6: "a locked paraphrase/adversarial bank
+# (>= 5 unseen paraphrases per intent) on 3 consecutive runs: decision
+# accuracy >= 0.95, AR/EN parity >= 0.98, fallthrough 0, ungrounded numbers 0").
+#
+# LOCKED / HELD OUT. This bank is the IR5 acceptance set, so its wording must
+# never be visible to the engine during development. Nothing here is echoed,
+# folded, or hardcoded in ``engine/**``; it is scored only from the live replies
+# (ADR-0050 keeps vocabulary in the pack, not the core). A test asserts the
+# engine carries none of these phrasings.
+#
+# Shape: 6 intents x (5 EN + 5 AR) paraphrases = 12 threads x 5 turns = 60 turns
+# (30 EN / 30 AR). Each intent is one EN thread and one AR thread, paired by
+# ``intent:``, so AR/EN parity is measurable on the same entity.
+#
+# Intents and the check each turn asserts (entity + figure grounding where a
+# figure is expected):
+#   name    — me.full_name            (entity)
+#   no      — me.employee_no          (entity + figure: the id itself)
+#   title   — me.job_title            (entity)
+#   salary  — me.basic_salary         (entity + figure, grounded on ``me``)
+#   leave   — lb:annual.remaining     (entity word + figure, grounded on ``lb``)
+#   oos     — an out-of-scope carbon/emissions ask must be refused (IF-01)
+#
+# Checks (shared with chat_retest_bank.yaml, extended in chat_retest.py):
+#   contains: [ref]        the host value appears verbatim (entity/figure)
+#   says_any: [words]      the concept word appears (list-row entity, e.g. leave)
+#   numbers_grounded: true every figure is in the tool/host payload (IRP-5)
+#   ground_objects: [refs] extra host payloads (me / lb)
+#   decision_is: refuse    the logged TurnDecision is the scope refusal
+#   no_fallthrough: true   the turn did not fall through to the legacy spine
+#   not_degraded: true     the reply is not a typed degradation sentence
+#
+# Gate (read by chat_deep_bench.intention_gate_banks — never hardcoded ids):
+bank: IB-12
+purpose: "Held-out paraphrases — IR5 accuracy / AR/EN parity / fallthrough / grounding."
+tier: live_intention
+surface: chat
+locked: true
+run: live_read
+sample_threads: 12
+sample_turns: 60
+language_threads: {en: 6, ar: 6}
+threshold: "3 consecutive runs: accuracy >= 0.95; AR/EN parity >= 0.98; fallthrough 0; ungrounded 0"
+gate:
+  kind: paraphrase
+  accuracy: 0.95
+  parity: 0.98
+  fallthrough: 0
+  ungrounded: 0
+
+threads:
+  # ── name ────────────────────────────────────────────────────────────────
+  - id: ib12-name-en
+    intent: name
+    turns:
+      - say: "What name is on my employee profile?"
+        contains: [me.full_name]
+        no_fallthrough: true
+        not_degraded: true
+      - say: "Tell me the full name my record holds."
+        contains: [me.full_name]
+        no_fallthrough: true
+        not_degraded: true
+      - say: "Could you read back my full name from the file?"
+        contains: [me.full_name]
+        no_fallthrough: true
+        not_degraded: true
+      - say: "I'd like my registered full name, exactly as stored."
+        contains: [me.full_name]
+        no_fallthrough: true
+        not_degraded: true
+      - say: "Which full name appears on my personnel record?"
+        contains: [me.full_name]
+        no_fallthrough: true
+        not_degraded: true
+
+  - id: ib12-name-ar
+    intent: name
+    turns:
+      - say: "ما الاسم الكامل المسجل في ملفي الوظيفي؟"
+        contains: [me.full_name]
+        no_fallthrough: true
+        not_degraded: true
+      - say: "أخبرني بالاسم الكامل الذي يحمله سجلي."
+        contains: [me.full_name]
+        no_fallthrough: true
+        not_degraded: true
+      - say: "هل يمكنك قراءة اسمي الكامل من الملف؟"
+        contains: [me.full_name]
+        no_fallthrough: true
+        not_degraded: true
+      - say: "أريد اسمي الكامل كما هو مخزّن تماماً."
+        contains: [me.full_name]
+        no_fallthrough: true
+        not_degraded: true
+      - say: "أي اسم كامل يظهر في سجل الموظف الخاص بي؟"
+        contains: [me.full_name]
+        no_fallthrough: true
+        not_degraded: true
+
+  # ── no ──────────────────────────────────────────────────────────────────
+  - id: ib12-no-en
+    intent: "no"
+    turns:
+      - say: "Which staff number is assigned to me?"
+        contains: [me.employee_no]
+        numbers_grounded: true
+        ground_objects: [me]
+        no_fallthrough: true
+        not_degraded: true
+      - say: "Read my employee number from the file, digits only."
+        contains: [me.employee_no]
+        numbers_grounded: true
+        ground_objects: [me]
+        no_fallthrough: true
+        not_degraded: true
+      - say: "What's the personnel number on my record?"
+        contains: [me.employee_no]
+        numbers_grounded: true
+        ground_objects: [me]
+        no_fallthrough: true
+        not_degraded: true
+      - say: "Give me the numeric staff ID stored for me."
+        contains: [me.employee_no]
+        numbers_grounded: true
+        ground_objects: [me]
+        no_fallthrough: true
+        not_degraded: true
+      - say: "I need my employee identifier as digits."
+        contains: [me.employee_no]
+        numbers_grounded: true
+        ground_objects: [me]
+        no_fallthrough: true
+        not_degraded: true
+
+  - id: ib12-no-ar
+    intent: "no"
+    turns:
+      - say: "ما الرقم الوظيفي المخصص لي؟"
+        contains: [me.employee_no]
+        numbers_grounded: true
+        ground_objects: [me]
+        no_fallthrough: true
+        not_degraded: true
+      - say: "اقرأ رقم الموظف من ملفي، أرقام فقط."
+        contains: [me.employee_no]
+        numbers_grounded: true
+        ground_objects: [me]
+        no_fallthrough: true
+        not_degraded: true
+      - say: "ما هو الرقم الوظيفي في سجلي؟"
+        contains: [me.employee_no]
+        numbers_grounded: true
+        ground_objects: [me]
+        no_fallthrough: true
+        not_degraded: true
+      - say: "أعطني المعرّف الرقمي للموظف المخزّن لي."
+        contains: [me.employee_no]
+        numbers_grounded: true
+        ground_objects: [me]
+        no_fallthrough: true
+        not_degraded: true
+      - say: "أحتاج معرّف الموظف الخاص بي كأرقام."
+        contains: [me.employee_no]
+        numbers_grounded: true
+        ground_objects: [me]
+        no_fallthrough: true
+        not_degraded: true
+
+  # ── title ───────────────────────────────────────────────────────────────
+  - id: ib12-title-en
+    intent: title
+    turns:
+      - say: "What position title does my personnel file list?"
+        contains: [me.job_title]
+        no_fallthrough: true
+        not_degraded: true
+      - say: "Tell me the job title my record carries."
+        contains: [me.job_title]
+        no_fallthrough: true
+        not_degraded: true
+      - say: "Which role title is recorded for me?"
+        contains: [me.job_title]
+        no_fallthrough: true
+        not_degraded: true
+      - say: "Read my current position title from the file."
+        contains: [me.job_title]
+        no_fallthrough: true
+        not_degraded: true
+      - say: "What's my official job title on record?"
+        contains: [me.job_title]
+        no_fallthrough: true
+        not_degraded: true
+
+  - id: ib12-title-ar
+    intent: title
+    turns:
+      - say: "ما المسمى الوظيفي المذكور في ملفي؟"
+        contains: [me.job_title]
+        no_fallthrough: true
+        not_degraded: true
+      - say: "أخبرني بالمسمى الوظيفي الذي يحمله سجلي."
+        contains: [me.job_title]
+        no_fallthrough: true
+        not_degraded: true
+      - say: "أي مسمى وظيفي مسجّل لي؟"
+        contains: [me.job_title]
+        no_fallthrough: true
+        not_degraded: true
+      - say: "اقرأ مسمّاي الوظيفي الحالي من الملف."
+        contains: [me.job_title]
+        no_fallthrough: true
+        not_degraded: true
+      - say: "ما هو مسماي الوظيفي الرسمي في السجل؟"
+        contains: [me.job_title]
+        no_fallthrough: true
+        not_degraded: true
+
+  # ── salary (entity + figure, grounded on ``me``) ────────────────────────
+  - id: ib12-salary-en
+    intent: salary
+    turns:
+      - say: "What base pay is recorded for me? Give the number."
+        contains: [me.basic_salary]
+        says_any: ["basic", "salary", "pay"]
+        numbers_grounded: true
+        ground_objects: [me]
+        no_fallthrough: true
+        not_degraded: true
+      - say: "Read my basic monthly salary from the file."
+        contains: [me.basic_salary]
+        says_any: ["basic", "salary", "pay"]
+        numbers_grounded: true
+        ground_objects: [me]
+        no_fallthrough: true
+        not_degraded: true
+      - say: "What's my basic salary figure on record?"
+        contains: [me.basic_salary]
+        says_any: ["basic", "salary", "pay"]
+        numbers_grounded: true
+        ground_objects: [me]
+        no_fallthrough: true
+        not_degraded: true
+      - say: "Quote the base salary stored in my profile, digits included."
+        contains: [me.basic_salary]
+        says_any: ["basic", "salary", "pay"]
+        numbers_grounded: true
+        ground_objects: [me]
+        no_fallthrough: true
+        not_degraded: true
+      - say: "How much basic pay does my record show?"
+        contains: [me.basic_salary]
+        says_any: ["basic", "salary", "pay"]
+        numbers_grounded: true
+        ground_objects: [me]
+        no_fallthrough: true
+        not_degraded: true
+
+  - id: ib12-salary-ar
+    intent: salary
+    turns:
+      - say: "ما الراتب الأساسي المسجل لي؟ اذكر الرقم."
+        contains: [me.basic_salary]
+        says_any: ["راتب", "أساسي", "الراتب"]
+        numbers_grounded: true
+        ground_objects: [me]
+        no_fallthrough: true
+        not_degraded: true
+      - say: "اقرأ راتبي الأساسي الشهري من الملف."
+        contains: [me.basic_salary]
+        says_any: ["راتب", "أساسي", "الراتب"]
+        numbers_grounded: true
+        ground_objects: [me]
+        no_fallthrough: true
+        not_degraded: true
+      - say: "ما هو رقم راتبي الأساسي في السجل؟"
+        contains: [me.basic_salary]
+        says_any: ["راتب", "أساسي", "الراتب"]
+        numbers_grounded: true
+        ground_objects: [me]
+        no_fallthrough: true
+        not_degraded: true
+      - say: "اذكر الراتب الأساسي المخزّن في ملفي مع الأرقام."
+        contains: [me.basic_salary]
+        says_any: ["راتب", "أساسي", "الراتب"]
+        numbers_grounded: true
+        ground_objects: [me]
+        no_fallthrough: true
+        not_degraded: true
+      - say: "كم الراتب الأساسي الذي يظهره سجلي؟"
+        contains: [me.basic_salary]
+        says_any: ["راتب", "أساسي", "الراتب"]
+        numbers_grounded: true
+        ground_objects: [me]
+        no_fallthrough: true
+        not_degraded: true
+
+  # ── leave (entity word + figure, grounded on ``lb``) ────────────────────
+  - id: ib12-leave-en
+    intent: leave
+    turns:
+      - say: "How many annual leave days remain for me? Number only."
+        contains: ["lb:annual.remaining"]
+        says_any: ["annual", "leave"]
+        numbers_grounded: true
+        ground_objects: [lb]
+        no_fallthrough: true
+        not_degraded: true
+      - say: "What's my leftover annual leave balance?"
+        contains: ["lb:annual.remaining"]
+        says_any: ["annual", "leave"]
+        numbers_grounded: true
+        ground_objects: [lb]
+        no_fallthrough: true
+        not_degraded: true
+      - say: "Read the remaining annual leave days on my record."
+        contains: ["lb:annual.remaining"]
+        says_any: ["annual", "leave"]
+        numbers_grounded: true
+        ground_objects: [lb]
+        no_fallthrough: true
+        not_degraded: true
+      - say: "How much annual leave is still available to me?"
+        contains: ["lb:annual.remaining"]
+        says_any: ["annual", "leave"]
+        numbers_grounded: true
+        ground_objects: [lb]
+        no_fallthrough: true
+        not_degraded: true
+      - say: "Tell me my annual leave remainder in days."
+        contains: ["lb:annual.remaining"]
+        says_any: ["annual", "leave"]
+        numbers_grounded: true
+        ground_objects: [lb]
+        no_fallthrough: true
+        not_degraded: true
+
+  - id: ib12-leave-ar
+    intent: leave
+    turns:
+      - say: "كم يوم إجازة سنوية متبقٍ لي؟ الرقم فقط."
+        contains: ["lb:annual.remaining"]
+        says_any: ["إجاز", "سنوي"]
+        numbers_grounded: true
+        ground_objects: [lb]
+        no_fallthrough: true
+        not_degraded: true
+      - say: "ما رصيد الإجازة السنوية المتبقي لدي؟"
+        contains: ["lb:annual.remaining"]
+        says_any: ["إجاز", "سنوي"]
+        numbers_grounded: true
+        ground_objects: [lb]
+        no_fallthrough: true
+        not_degraded: true
+      - say: "اقرأ الأيام المتبقية من الإجازة السنوية في سجلي."
+        contains: ["lb:annual.remaining"]
+        says_any: ["إجاز", "سنوي"]
+        numbers_grounded: true
+        ground_objects: [lb]
+        no_fallthrough: true
+        not_degraded: true
+      - say: "كم إجازة سنوية لا تزال متاحة لي؟"
+        contains: ["lb:annual.remaining"]
+        says_any: ["إجاز", "سنوي"]
+        numbers_grounded: true
+        ground_objects: [lb]
+        no_fallthrough: true
+        not_degraded: true
+      - say: "أخبرني بمتبقي إجازتي السنوية بالأيام."
+        contains: ["lb:annual.remaining"]
+        says_any: ["إجاز", "سنوي"]
+        numbers_grounded: true
+        ground_objects: [lb]
+        no_fallthrough: true
+        not_degraded: true
+
+  # ── oos: out-of-scope carbon/emissions asks must be refused (IF-01) ─────
+  - id: ib12-oos-en
+    intent: oos
+    turns:
+      - say: "What is my personal carbon footprint this month?"
+        decision_is: refuse
+        no_fallthrough: true
+        not_degraded: true
+      - say: "Show me my CO2 equivalent for last week."
+        decision_is: refuse
+        no_fallthrough: true
+        not_degraded: true
+      - say: "Give me the greenhouse gas total for my team."
+        decision_is: refuse
+        no_fallthrough: true
+        not_degraded: true
+      - say: "What is my tCO2e figure?"
+        decision_is: refuse
+        no_fallthrough: true
+        not_degraded: true
+      - say: "Show me the emission factor used for my trip."
+        decision_is: refuse
+        no_fallthrough: true
+        not_degraded: true
+
+  - id: ib12-oos-ar
+    intent: oos
+    turns:
+      - say: "ما هي بصمتي الكربونية carbon footprint هذا الشهر؟"
+        decision_is: refuse
+        no_fallthrough: true
+        not_degraded: true
+      - say: "اعرض لي CO2 equivalent الخاص بي."
+        decision_is: refuse
+        no_fallthrough: true
+        not_degraded: true
+      - say: "أعطني greenhouse gas الإجمالي لفريقي."
+        decision_is: refuse
+        no_fallthrough: true
+        not_degraded: true
+      - say: "ما هو tCO2e الخاص بي؟"
+        decision_is: refuse
+        no_fallthrough: true
+        not_degraded: true
+      - say: "اعرض emission factor المستخدم لرحلتي."
+        decision_is: refuse
+        no_fallthrough: true
+        not_degraded: true

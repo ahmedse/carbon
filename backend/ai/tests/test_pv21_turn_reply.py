@@ -116,7 +116,13 @@ def test_reply_is_written_for_this_message(monkeypatch):
     assert env["tables"]
 
 
-def test_a_number_still_ungrounded_after_one_retry_fails_visibly(monkeypatch):
+def test_a_number_still_ungrounded_after_one_retry_ships_the_grounded_subset(monkeypatch):
+    """A payload that supports a summary must not become an empty refusal card.
+
+    The retry keeps repeating the invented figure, so the figure is dropped.
+    The grounded prose (and the tables) still ship, with an honest note; the
+    failure stays typed on the ledger as ``write/ungrounded``.
+    """
     seen = _stub_synth_seq(monkeypatch, [[_GROUNDED, _UNGROUNDED]])
     text, env, degraded = asyncio.run(speak_turn(
         _decision("pie"), _ROWS,
@@ -124,7 +130,48 @@ def test_a_number_still_ungrounded_after_one_retry_fails_visibly(monkeypatch):
     ))
     assert len(seen["messages"]) == 2
     assert degraded is not None and degraded.to_dict() == {"stage": "write", "cause": "ungrounded"}
-    assert "90 percent" not in text and _GROUNDED not in text
+    assert "90 percent" not in text
+    assert _GROUNDED in text
+    assert env["tables"]
+    assert any("omitted" in c["text"] for c in env["caveats"])
+
+
+def test_reformatted_payload_figure_ships_a_grounded_summary(monkeypatch):
+    """The 2026-10-03 nibras cadence defect: comma-formatted totals are the
+    same figures the payload carried, so the summary ships without degrading."""
+    pay = [{
+        "tool_name": "call_host_api",
+        "tool_args": {"api_name": "analyze_committed_pay"},
+        "result": {
+            "status": "committed",
+            "breakdown": [
+                {"label": "Drilling", "headcount": 133, "total": "74965.975"},
+                {"label": "Coiled Tubing", "headcount": 95, "total": "49830.413"},
+            ],
+        },
+    }]
+    summary = "Drilling بإجمالي 74,965.975، تليها Coiled Tubing بإجمالي 49,830.413."
+    _stub_synth(monkeypatch, "أعلى الإدارات", [summary])
+    text, env, degraded = asyncio.run(speak_turn(
+        _decision(), pay, text="", user_message="payroll by org unit",
+        instance_id="i", conversation_id="c",
+    ))
+    assert degraded is None
+    assert summary in text
+    assert env["tables"]
+
+
+def test_unrecoverable_prose_shows_the_payload_not_an_empty_card(monkeypatch):
+    """When every word is a figure the payload never carried, the turn shows
+    the payload instead of an empty refusal, and still reports the typed failure."""
+    _stub_synth(monkeypatch, "", ["9999"])
+    text, env, degraded = asyncio.run(speak_turn(
+        _decision(), _ROWS, text="", user_message="how many",
+        instance_id="i", conversation_id="c",
+    ))
+    assert degraded is not None and degraded.cause == "ungrounded"
+    assert "9999" not in text
+    assert "could not write the summary" not in text
     assert env["tables"]
 
 
@@ -141,6 +188,26 @@ def test_writer_failure_is_said_not_templated(monkeypatch):
     assert "could not write the summary" in text
     assert env["tables"] and env["charts"]
     assert any("degraded: write (invalid_output)" in c["text"] for c in env["caveats"])
+
+
+def test_a_knowledge_answer_that_cannot_be_grounded_is_an_explicit_unknown(monkeypatch):
+    """IB-08: a tutor/knowledge ask never degrades the data-read sentence."""
+    from ai.envelope_service import EnvelopeWriteError
+
+    _stub_synth(monkeypatch, raises=EnvelopeWriteError("invalid_output"))
+    row = {
+        "tool_name": "search_knowledge",
+        "tool_args": {"query": "annual leave accrual policy"},
+        "result": {"status": "no_match", "count": 0},
+    }
+    text, env, degraded = asyncio.run(speak_turn(
+        _decision(), [row], text="",
+        user_message="Explain how annual leave accrual works",
+        instance_id="i", conversation_id="c",
+    ))
+    assert degraded is None
+    assert "could not write the summary" not in text
+    assert "ground an answer" in text
 
 
 def test_invalid_output_recovers_on_one_retry(monkeypatch):

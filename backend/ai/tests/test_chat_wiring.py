@@ -86,11 +86,21 @@ def single_pass(monkeypatch):
 
 
 @pytest.fixture
-def stub_llm():
-    """Stub the OpenAI client (no API key in dev)."""
-    with patch("ai.engine.llm.provider.get_llm_client") as mock:
-        mock.return_value = _fake_completion()
-        yield mock
+def stub_llm(monkeypatch):
+    """Stub the OpenAI client (no API key in dev).
+
+    A configured ``DEEPSEEK_API_KEY`` would make ``client_for_model`` open a
+    live client and bypass the stub, so neutralize it for the test and reset
+    the settings cache around the stub.
+    """
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "")
+    get_settings.cache_clear()
+    try:
+        with patch("ai.engine.llm.provider.get_llm_client") as mock:
+            mock.return_value = _fake_completion()
+            yield mock
+    finally:
+        get_settings.cache_clear()
 
 
 # ── Tests ────────────────────────────────────────────────────────────────
@@ -140,6 +150,7 @@ def test_dispatch_chat_is_fail_visible(django_store, single_pass, monkeypatch):
     # (unreachable) provider raise, which must NOT fabricate a result.
     monkeypatch.setenv("LLM_API_KEY", "")
     monkeypatch.setenv("LLM_BASE_URL", "")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "")
     get_settings.cache_clear()
 
     payload = {
@@ -167,3 +178,69 @@ def test_all_module_tasks_are_wired(django_store, single_pass, cfg, stub_llm):
         data = dispatch_task(task_type, {}, instance_id="carbon")
         code = (data.get("error") or {}).get("code")
         assert code != "not_wired", (task_type, data)
+
+
+# ── DEFECT 1 regression: nested submit must not deadlock ──────────────────
+
+
+def test_nested_sync_submit_into_thread_executor_does_not_deadlock():
+    """A sync read re-entering the thread-sensitive executor must not deadlock.
+
+    ``_instance_config`` runs on asgiref's single-thread executor (it is
+    entered via ``sync_to_async(..., thread_sensitive=True)``).  Its DB reads
+    used to bridge back through another ``sync_to_async(...,
+    thread_sensitive=True)`` — a nested submit onto the executor already
+    running it, which raises "Single thread executor already being used,
+    would deadlock".  ``_run_sync_inline`` runs them on the current (already
+    Django-safe) thread instead.  This reproduces the nesting directly.
+    """
+    import asyncio
+
+    from asgiref.sync import sync_to_async
+
+    from ai.engine_runtime import _run_sync_inline
+
+    ran: list[str] = []
+
+    def _read() -> str:
+        ran.append("read")
+        return "ok"
+
+    async def _outer():
+        return await sync_to_async(
+            lambda: _run_sync_inline(_read), thread_sensitive=True
+        )()
+
+    assert asyncio.run(_outer()) == "ok"
+    assert ran == ["read"]
+
+
+@pytest.mark.django_db(transaction=True)
+def test_instance_config_nested_in_executor_resolves_inventory(monkeypatch):
+    """Entering ``_instance_config`` on the executor loads a real inventory.
+
+    Before the fix the nested submit was swallowed and left the fallback
+    ``access_level == "unknown"`` manifest; the fix resolves the manifest
+    without deadlocking. The manifest builder is stubbed to a sentinel so the
+    assertion proves the read ran on the executor (not the deadlock fallback).
+    """
+    import asyncio
+
+    from asgiref.sync import sync_to_async
+
+    import ai.engine_runtime as engine_runtime
+
+    sentinel = {"access_level": "sentinel", "platform_name": "x"}
+    monkeypatch.setattr(
+        "ai.access_manifest.build_user_access_manifest",
+        lambda host_user_id: sentinel,
+    )
+
+    async def _load():
+        return await sync_to_async(engine_runtime._instance_config, thread_sensitive=True)(
+            "carbon", None
+        )
+
+    config = asyncio.run(_load())
+    assert isinstance(config, dict)
+    assert config["user_access"] == sentinel

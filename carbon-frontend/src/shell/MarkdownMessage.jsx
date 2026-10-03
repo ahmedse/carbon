@@ -1223,7 +1223,7 @@ const components = {
         fontVariantNumeric: 'tabular-nums lining-nums',
       }}
     >
-      {children}
+      <bdi>{children}</bdi>
     </TableCell>
   ),
   td: ({ children }) => (
@@ -1236,7 +1236,11 @@ const components = {
         fontVariantNumeric: 'tabular-nums lining-nums',
       }}
     >
-      {children}
+      {/* Host values (names, job titles, departments) stay exactly as the
+          record returns them — often Latin inside an Arabic table. `<bdi>`
+          isolates each cell so a value never reorders the label or the
+          neighbouring cell (i18n parity, no per-language dir hack). */}
+      <bdi>{children}</bdi>
     </TableCell>
   ),
 

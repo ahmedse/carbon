@@ -3499,7 +3499,11 @@ class PlansService:
         plan = self._decompose(
             user, enriched, conversation_id=cid, model=stored_model,
         )
-        plan_dict = self._plan_to_dict(plan)
+        from ai.engine.pack_vocab import as_data
+
+        # The plan fields can carry lazy pack text; coerce before they enter
+        # the JSONField / API payload.
+        plan_dict = as_data(self._plan_to_dict(plan))
         plan_dict["discovery_turns"] = turns
         plan_dict["brief"] = brief
         if stored_model:

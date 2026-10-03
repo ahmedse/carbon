@@ -73,6 +73,32 @@ def _run_async(coro):
         return pool.submit(asyncio.run, coro).result()
 
 
+def _run_sync_inline(fn, *args, **kwargs):
+    """Run a sync ORM callable from the sync config-loader path.
+
+    ``_instance_config`` is itself reached via
+    ``sync_to_async(..., thread_sensitive=True)`` from the async turn, so it
+    runs on asgiref's single-thread executor. Bridging its DB reads back
+    through ``sync_to_async(..., thread_sensitive=True)`` nests a second
+    submit onto the executor that is already running us and deadlocks
+    ("Single thread executor already being used, would deadlock"). There is
+    no event loop on that worker thread, so run ``fn`` inline — it already
+    owns a Django-safe thread. Only a genuine running loop (a direct async
+    caller) needs the bridge, and that bridge deliberately avoids the
+    thread-sensitive executor so it can never nest on itself.
+    """
+    import asyncio
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return fn(*args, **kwargs)
+
+    from asgiref.sync import sync_to_async
+
+    return _run_async(sync_to_async(fn, thread_sensitive=False)(*args, **kwargs))
+
+
 def _sanitize_host_page_context(instance_id: str, page_context: str) -> str:
     """Moodle snapshot text is aast-med only. Process Pulse never sees it."""
     from ai.moodle_host import sanitize_page_context
@@ -757,15 +783,13 @@ def _instance_config(
     if not provider:
         user_access: dict[str, Any] = {}
     else:
-        from asgiref.sync import sync_to_async
-
         def _resolve_user_access() -> dict:
             from ai.access_manifest import build_user_access_manifest
 
             return build_user_access_manifest(host_user_id)
 
         try:
-            user_access = _run_async(sync_to_async(_resolve_user_access, thread_sensitive=True)())
+            user_access = _run_sync_inline(_resolve_user_access)
         except Exception:  # noqa: BLE001 - inventory is best-effort; never fatal
             logger.exception("Could not resolve user access manifest; using empty inventory")
             user_access = {
@@ -824,13 +848,12 @@ def _enrich_tenant_org(tenant_org: dict | None) -> dict | None:
     """Merge live deployment-root name/code/slug into tenant_org aliases."""
     tenant: dict[str, Any] = dict(tenant_org) if isinstance(tenant_org, dict) else {}
     try:
-        from asgiref.sync import sync_to_async
         from mdm.services import get_deployment_root
 
         def _load_root():
             return get_deployment_root()
 
-        root = _run_async(sync_to_async(_load_root, thread_sensitive=True)())
+        root = _run_sync_inline(_load_root)
     except Exception:  # noqa: BLE001 - enrichment is best-effort
         logger.debug("tenant_org enrichment skipped", exc_info=True)
         return tenant or None
@@ -880,8 +903,6 @@ def _cbac_filter_api_catalog(api_catalog: list, host_user_id: str | None) -> lis
     if not api_catalog or not host_user_id:
         return api_catalog
 
-    from asgiref.sync import sync_to_async
-
     def _filter() -> list:
         from django.contrib.auth import get_user_model
 
@@ -917,7 +938,7 @@ def _cbac_filter_api_catalog(api_catalog: list, host_user_id: str | None) -> lis
         ]
 
     try:
-        return _run_async(sync_to_async(_filter, thread_sensitive=True)())
+        return _run_sync_inline(_filter)
     except Exception:  # noqa: BLE001 - never let filtering break the chat path
         logger.exception("CBAC api_catalog filter failed; leaving catalog unchanged")
         return api_catalog

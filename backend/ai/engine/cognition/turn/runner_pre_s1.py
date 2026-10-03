@@ -118,6 +118,54 @@ def _v21_chat_no_fallthrough(st, *, ledger, state, surface):
     )
 
 
+async def _greet_exit(
+    *,
+    user_message: str,
+    ledger,
+    turn_id: str,
+    instance_id: str,
+    t0: float,
+    _broadcast_run,
+):
+    """A pack-owned greeting line (granted pack ``greet.yaml``), 0-LLM.
+
+    The words and the copy are the pack's; the engine only matches the shape,
+    before Understanding, so a greeting is never model prose (ADR-0050/0051).
+    ``None`` when the pack declares no greet catalog or the message is not one.
+    """
+    from ai.engine.pack_greet import greet_reply
+
+    hit = greet_reply(user_message or "")
+    if not hit or not str(hit.get("text") or "").strip():
+        _signal(ledger, "greet", False)
+        return None
+    text = str(hit["text"])
+    total_latency = (time.monotonic() - t0) * 1000
+    ledger.final_response = text[:500]
+    ledger.total_latency_ms = total_latency
+    ledger.total_tokens = 0
+    ledger.total_llm_calls = 0
+    response = AgentResponse(
+        text=text,
+        sources_cited=[],
+        tools_used=[],
+        confidence=1.0,
+        total_tokens=0,
+        llm_calls=0,
+        model="",
+        response_type="inferred",
+    )
+    await _broadcast_run(instance_id, "run.completed", {
+        "run_id": turn_id,
+        "total_latency_ms": total_latency,
+        "total_llm_calls": 0,
+        "greet": str(hit.get("gate") or "greet"),
+    })
+    _signal(ledger, "greet", True, kind=str(hit.get("gate") or "greet"))
+    ledger.turn_decision = ledger.turn_decision or "answer"
+    return response
+
+
 async def run_pre_s1_gates(
     runner,
     st: MeteredTurnState,
@@ -308,8 +356,36 @@ async def run_pre_s1_gates(
     st.ess_bound = None
     if _legacy and not turn_route.committed and st.chat_handoff is None and (runner.executor is not None):
         st.ess_bound = await runner._try_bound_ess_self_read(user_message=st.user_message, conversation_history=conversation_history, state_ctx=state_ctx, ledger=ledger, meter=meter, turn_id=turn_id, instance_id=instance_id, conversation_id=conversation_id, host_user_id=host_user_id, instance_config=instance_config, t0=t0, surface=surface)
+    if st.ess_bound is None and (not _legacy) and (not turn_route.committed) and (st.chat_handoff is None) and (runner.executor is not None):
+        # ADR-0056: identity / self-profile is a declared detail read on v21
+        # too. Bind it before the Decision so the answer is the pack's
+        # labelled render (host values untouched, no decorative emoji)
+        # instead of conversational prose. Every other self-read stays on
+        # the Decision path (``profile_only``).
+        st.ess_bound = await runner._try_bound_ess_self_read(user_message=st.user_message, conversation_history=conversation_history, state_ctx=state_ctx, ledger=ledger, meter=meter, turn_id=turn_id, instance_id=instance_id, conversation_id=conversation_id, host_user_id=host_user_id, instance_config=instance_config, t0=t0, surface=surface, profile_only=True)
     if st.ess_bound is not None:
         stage_exit(staged, 'tool_answer', 'ess_bound_self_read', st.ess_bound[0])
+    # A greeting is pack copy, not model prose (ADR-0051). Resolve it before
+    # Understanding so the line is deterministic and 0-LLM.
+    if (
+        st.ess_bound is None
+        and (not _legacy)
+        and (not turn_route.committed)
+        and (st.chat_handoff is None)
+    ):
+        _greet_response = await _greet_exit(
+            user_message=st.user_message,
+            ledger=ledger,
+            turn_id=turn_id,
+            instance_id=instance_id,
+            t0=t0,
+            _broadcast_run=_broadcast_run,
+        )
+        if _greet_response is not None:
+            stage_soft_exit(staged, 'answer', 'greet', _greet_response)
+            _greet_committed = _commit_staged(ledger, meter, staged)
+            if _greet_committed is not None:
+                return _greet_committed
     _superseded_exit = _superseded_committed_exit(turn_route)
     if _superseded_exit:
         # V21-2 defect: a committed route whose exit is superseded cannot be

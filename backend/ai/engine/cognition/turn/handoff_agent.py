@@ -573,8 +573,9 @@ def _carryover_handoff_copy(
             have = f"جهّزت تفاصيل {topic}."
         if on_ask:
             step = (
-                "لإرسال الطلب بدّل المفتاح إلى «خطّة» — سأنقل هذه التفاصيل "
-                f"معك. أو قدّم من تطبيقاتي. وضع «{dial}» لا يُرسل ولا يغيّر السجلات. "
+                "لإرسال الطلب بدّل المفتاح إلى «خطّة» — سينقل الوكيل (Agent) هذه "
+                "التفاصيل ويشغّل العملية المعتمدة (التأكيد عند التشغيل). "
+                f"أو قدّم من تطبيقاتي. وضع «{dial}» لا يُرسل ولا يغيّر السجلات. "
                 "وضع السؤال لا يُنشئ مهاماً."
             )
         else:
@@ -589,7 +590,8 @@ def _carryover_handoff_copy(
         have = f"I have the details for your {topic}."
     if on_ask:
         step = (
-            "To submit it, switch to Plan — I'll carry these details over. "
+            "To submit it, switch to Plan — the Agent carries these details over "
+            "and runs the governed process (consent on Run). "
             f"Or open My and submit there. {dial} does not submit or change records. "
             "Ask does not create tasks."
         )

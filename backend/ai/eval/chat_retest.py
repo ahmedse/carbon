@@ -139,11 +139,23 @@ class Host:
         return value
 
     def resolve(self, ref: str) -> Any:
-        """A ref's value: ``me.x``, ``emp:<no>.x``, ``count:...``, or a quoted literal."""
+        """A ref's value: ``me.x``, ``lb:<type>.x``, ``emp:<no>.x``, ``count:...``, or a literal.
+
+        ``lb:<leave_type>.<field>`` reads one row of the leave-balance list
+        (e.g. ``lb:annual.remaining``), so a bank can assert an entity+figure
+        pair on the list payload without a per-run hardcoded figure.
+        """
         if ref.startswith("count:"):
             return self.count(ref.split(":", 1)[1])
         if ref.startswith("me."):
             return _field(self.me(), ref[3:])
+        if ref.startswith("lb:"):
+            head, _, field = ref[3:].partition(".")
+            row = next(
+                (r for r in self.leave_balance() if str(r.get("leave_type")) == head),
+                None,
+            )
+            return _field(row, field) if isinstance(row, dict) else None
         if ref.startswith("emp:"):
             head, _, field = ref[4:].partition(".")
             return _field(self.employee(head), field)
@@ -197,13 +209,6 @@ def _first_number(text: str | None) -> str | None:
     """First number in the reply, decimals kept (``174.731`` stays whole)."""
     found = _NUM.findall(text or "")
     return found[0] if found else None
-
-
-def _reply_language(text: str | None) -> str:
-    """The engine's reply-language verdict (IRP-7; same function the contract names)."""
-    from ai.engine.cognition.turn.language import detect_reply_language
-
-    return detect_reply_language(text or "")
 
 
 #: An explicit "I don't have it" is a pass signal for an absent field (IB-03/
@@ -279,6 +284,61 @@ def _tool_payloads(meta: dict) -> list:
     return payloads
 
 
+def _iter_strings(obj: Any):
+    """Every string leaf of a nested host payload."""
+    if isinstance(obj, str):
+        yield obj
+    elif isinstance(obj, dict):
+        for value in obj.values():
+            yield from _iter_strings(value)
+    elif isinstance(obj, (list, tuple)):
+        for value in obj:
+            yield from _iter_strings(value)
+
+
+def _digest_values(text: str) -> set[str]:
+    """``k=v`` values in a one-line host digest (``department=Coiled Tubing``)."""
+    out: set[str] = set()
+    for chunk in (text or "").split(","):
+        if "=" in chunk:
+            out.add(chunk.split("=", 1)[1].strip())
+    return out
+
+
+def _host_value_strings(meta: dict, host: "Host | None") -> set[str]:
+    """Host values a reply may restate verbatim — language-neutral in a reply.
+
+    A proper noun, id, enum code, or date the host returned is not evidence
+    that the *templated copy* is English: the copy around it is. IRP-2 asks the
+    reply to follow the user's language, so those values are set aside before
+    detection (never the whole reply — see the negative test).
+    """
+    values: set[str] = set()
+    for payload in _tool_payloads(meta):
+        if isinstance(payload, str):
+            values |= _digest_values(payload)
+        values.update(_iter_strings(payload))
+    if host is not None:
+        try:
+            values.update(_iter_strings(host.me()))
+        except Exception:  # noqa: BLE001 — the oracle is best-effort here
+            pass
+    return {v.strip() for v in values if len(v.strip()) >= 3}
+
+
+def _reply_language(text: str, meta: dict, host: "Host | None") -> str:
+    """The reply's language from its templated copy, per the engine detector."""
+    from ai.engine.cognition.turn.language import detect_reply_language
+
+    prose = text or ""
+    for value in _host_value_strings(meta, host):
+        if value and value in prose:
+            prose = prose.replace(value, " ")
+    if not any(ch.isalpha() for ch in prose):
+        prose = text or ""
+    return detect_reply_language(prose)
+
+
 def _plan_kind(meta: dict) -> str:
     form = meta.get("form") if isinstance(meta.get("form"), dict) else {}
     return str(form.get("kind") or "")
@@ -331,13 +391,12 @@ def check_turn(spec: dict, reply: str, meta: dict, host: Host) -> list[str]:
         if not _mostly_arabic(prose):
             misses.append("arabic")
     if spec.get("language"):
-        # IRP-7: reply language = message language, via the engine's own
-        # detector (turn/language.py: arabic_ratio >= 0.4 -> ar), not a local
-        # heuristic. Recorded per turn in the evidence.
-        from ai.engine.cognition.turn.language import detect_reply_language
-
+        # IRP-7: reply language = message language, from the templated copy
+        # (host proper nouns / ids are set aside), via the engine's own detector
+        # (turn/language.py: arabic_ratio >= 0.4 -> ar). A genuinely wrong
+        # language still fails. Recorded per turn in the evidence.
         want = str(spec["language"]).casefold()
-        got = detect_reply_language(text)
+        got = _reply_language(text, meta, host)
         if want in ("en", "ar"):
             if got != want:
                 misses.append(f"language {want} got={got}")
@@ -585,7 +644,7 @@ def run_thread(thread: dict, token: str, host: Host, *, quiet: bool = False, mod
             "fell_through": str(meter.get("v21_miss") or "") in FALLTHROUGH_REASONS,
             "plan_kind": _plan_kind(meta),
             "number": _first_number(reply),
-            "language": _reply_language(reply),
+            "language": _reply_language(reply, meta, host),
             "mode": dialect,
             "tools": [t.get("input") for t in meta.get("tool_trace") or [] if isinstance(t, dict)],
             "misses": misses,

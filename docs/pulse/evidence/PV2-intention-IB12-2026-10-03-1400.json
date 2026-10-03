@@ -1,0 +1,1299 @@
+{
+  "tier": "live_intention",
+  "bank": "IB-12",
+  "bank_file": "chat_intention_bank_ib12.yaml",
+  "bank_purpose": "Held-out paraphrases — IR5 accuracy / AR/EN parity / fallthrough / grounding.",
+  "run_at": "2026-10-03T14:00:05.697111+00:00",
+  "surface": "chat",
+  "user": "emp_1067",
+  "base": "http://127.0.0.1:8009/carbon-api",
+  "release": {
+    "tag": "",
+    "process_brand": "nibras",
+    "pack": "nibras",
+    "pack_version": "18",
+    "extra_packs": [],
+    "loaded_packs": [
+      "aast-med",
+      "carbon",
+      "eduos",
+      "nibras"
+    ],
+    "catalogs": [
+      "aast-med",
+      "carbon",
+      "eduos",
+      "nibras"
+    ],
+    "pulse_enabled": true,
+    "image_built_at": null,
+    "process_started_at": "2026-10-03T14:00:54.952353+00:00",
+    "deployed_at": null
+  },
+  "threads": [
+    {
+      "id": "ib12-name-en",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "6bbaae72-b974-4ce7-912b-93f7fb4fbfde",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "What name is on my employee profile?",
+          "reply": "| Name |\n| --- |\n| Bilagot Panta Suerte |",
+          "seconds": 2.91,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "en",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "Tell me the full name my record holds.",
+          "reply": "| Name | Employee number | Job title | Department | Manager | Active |\n| --- | --- | --- | --- | --- | --- |\n| Bilagot Panta Suerte | 1067 | Heavy Duty Driver | Coiled Tubing | Mohammad Bolto Ali | True |",
+          "seconds": 0.92,
+          "llm_calls": 0,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "1067",
+          "language": "en",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile, explanation=Bound ESS self-read: get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "Could you read back my full name from the file?",
+          "reply": "| Name | Employee number | Job title | Department | Manager | Active |\n| --- | --- | --- | --- | --- | --- |\n| Bilagot Panta Suerte | 1067 | Heavy Duty Driver | Coiled Tubing | Mohammad Bolto Ali | True |",
+          "seconds": 0.75,
+          "llm_calls": 0,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "1067",
+          "language": "en",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile, explanation=Bound ESS self-read: get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "I'd like my registered full name, exactly as stored.",
+          "reply": "| Name | Employee number | Job title | Department | Manager | Active |\n| --- | --- | --- | --- | --- | --- |\n| Bilagot Panta Suerte | 1067 | Heavy Duty Driver | Coiled Tubing | Mohammad Bolto Ali | True |",
+          "seconds": 0.44,
+          "llm_calls": 0,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "1067",
+          "language": "en",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile, explanation=Bound ESS self-read: get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "Which full name appears on my personnel record?",
+          "reply": "| Name | Employee number | Job title | Department | Manager | Active |\n| --- | --- | --- | --- | --- | --- |\n| Bilagot Panta Suerte | 1067 | Heavy Duty Driver | Coiled Tubing | Mohammad Bolto Ali | True |",
+          "seconds": 0.28,
+          "llm_calls": 0,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "1067",
+          "language": "en",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile, explanation=Bound ESS self-read: get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib12-name-ar",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "a7e65355-64e2-41dd-9e5a-147d68515002",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "ما الاسم الكامل المسجل في ملفي الوظيفي؟",
+          "reply": "| الاسم | | --- | | Bilagot Panta Suerte |",
+          "seconds": 2.94,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "ar",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "أخبرني بالاسم الكامل الذي يحمله سجلي.",
+          "reply": "| الاسم | الرقم الوظيفي | المسمى الوظيفي | الإدارة | المدير | نشط | | --- | --- | --- | --- | --- | --- | | Bilagot Panta Suerte | 1067 | Heavy Duty Driver | Coiled Tubing | Mohammad Bolto Ali | True |",
+          "seconds": 1.24,
+          "llm_calls": 0,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "1067",
+          "language": "ar",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile, explanation=Bound ESS self-read: get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "هل يمكنك قراءة اسمي الكامل من الملف؟",
+          "reply": "نعم، أستطيع قراءة الاسم الكامل من ملفك الوظيفي، وهو مسجّل كما يلي: الاسم: Bilagot Panta Suerte وهذه بقية البيانات الظاهرة في الملف نفسه: الرقم الوظيفي: 1067 المسمى الوظيفي: Heavy Duty Driver الإدارة: Coiled Tubing المدير: Mohammad Bolto Ali إن أردت تحديث أي من هذه البيانات، يمكنك تقديم الطلب عبر Agent أو My.",
+          "seconds": 5.55,
+          "llm_calls": 2,
+          "turn_decision": "answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "1067",
+          "language": "ar",
+          "mode": "ask",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "أريد اسمي الكامل كما هو مخزّن تماماً.",
+          "reply": "| الاسم | | --- | | Bilagot Panta Suerte |",
+          "seconds": 2.44,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "ar",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "أي اسم كامل يظهر في سجل الموظف الخاص بي؟",
+          "reply": "| الاسم | | --- | | Bilagot Panta Suerte |",
+          "seconds": 2.09,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "ar",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib12-no-en",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "8f96639a-d341-4dda-9508-6c039955955b",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "Which staff number is assigned to me?",
+          "reply": "| Employee number |\n| --- |\n| 1067 |",
+          "seconds": 2.93,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "1067",
+          "language": "en",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "Read my employee number from the file, digits only.",
+          "reply": "| Name | Employee number | Job title | Department | Manager | Active |\n| --- | --- | --- | --- | --- | --- |\n| Bilagot Panta Suerte | 1067 | Heavy Duty Driver | Coiled Tubing | Mohammad Bolto Ali | True |",
+          "seconds": 1.14,
+          "llm_calls": 0,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "1067",
+          "language": "en",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile, explanation=Bound ESS self-read: get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "What's the personnel number on my record?",
+          "reply": "Your personnel number on record is 1067.",
+          "seconds": 2.7,
+          "llm_calls": 1,
+          "turn_decision": "answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "1067",
+          "language": "en",
+          "mode": "ask",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "Give me the numeric staff ID stored for me.",
+          "reply": "Your numeric staff ID on record is 1067.",
+          "seconds": 2.7,
+          "llm_calls": 1,
+          "turn_decision": "answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "1067",
+          "language": "en",
+          "mode": "ask",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "I need my employee identifier as digits.",
+          "reply": "Your employee identifier on record is 1067.",
+          "seconds": 2.08,
+          "llm_calls": 1,
+          "turn_decision": "answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "1067",
+          "language": "en",
+          "mode": "ask",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib12-no-ar",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "c49d329b-1ba5-4ad7-93cc-0adf6269c5f1",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "ما الرقم الوظيفي المخصص لي؟",
+          "reply": "| الرقم الوظيفي | | --- | | 1067 |",
+          "seconds": 3.28,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "1067",
+          "language": "ar",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "اقرأ رقم الموظف من ملفي، أرقام فقط.",
+          "reply": "| الاسم | الرقم الوظيفي | المسمى الوظيفي | الإدارة | المدير | نشط | | --- | --- | --- | --- | --- | --- | | Bilagot Panta Suerte | 1067 | Heavy Duty Driver | Coiled Tubing | Mohammad Bolto Ali | True |",
+          "seconds": 1.11,
+          "llm_calls": 0,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "1067",
+          "language": "ar",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile, explanation=Bound ESS self-read: get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "ما هو الرقم الوظيفي في سجلي؟",
+          "reply": "| الاسم | الرقم الوظيفي | المسمى الوظيفي | الإدارة | المدير | نشط | | --- | --- | --- | --- | --- | --- | | Bilagot Panta Suerte | 1067 | Heavy Duty Driver | Coiled Tubing | Mohammad Bolto Ali | True |",
+          "seconds": 0.66,
+          "llm_calls": 0,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "1067",
+          "language": "ar",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile, explanation=Bound ESS self-read: get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "أعطني المعرّف الرقمي للموظف المخزّن لي.",
+          "reply": "| الرقم الوظيفي | | --- | | 1067 |",
+          "seconds": 2.49,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "1067",
+          "language": "ar",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "أحتاج معرّف الموظف الخاص بي كأرقام.",
+          "reply": "| الرقم الوظيفي | | --- | | 1067 |",
+          "seconds": 2.8,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "1067",
+          "language": "ar",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib12-title-en",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "584c0291-16c1-460f-a71c-5bedb6035ee0",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "What position title does my personnel file list?",
+          "reply": "| Job title |\n| --- |\n| Heavy Duty Driver |",
+          "seconds": 2.34,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "en",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "Tell me the job title my record carries.",
+          "reply": "| Name | Employee number | Job title | Department | Manager | Active |\n| --- | --- | --- | --- | --- | --- |\n| Bilagot Panta Suerte | 1067 | Heavy Duty Driver | Coiled Tubing | Mohammad Bolto Ali | True |",
+          "seconds": 0.4,
+          "llm_calls": 0,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "1067",
+          "language": "en",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile, explanation=Bound ESS self-read: get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "Which role title is recorded for me?",
+          "reply": "| Job title |\n| --- |\n| Heavy Duty Driver |",
+          "seconds": 2.0,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "en",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "Read my current position title from the file.",
+          "reply": "| Job title |\n| --- |\n| Heavy Duty Driver |",
+          "seconds": 2.71,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "en",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "What's my official job title on record?",
+          "reply": "| Name | Employee number | Job title | Department | Manager | Active |\n| --- | --- | --- | --- | --- | --- |\n| Bilagot Panta Suerte | 1067 | Heavy Duty Driver | Coiled Tubing | Mohammad Bolto Ali | True |",
+          "seconds": 0.37,
+          "llm_calls": 0,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "1067",
+          "language": "en",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile, explanation=Bound ESS self-read: get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib12-title-ar",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "0e596f93-baa9-41e0-bc7e-b0d93d9689d4",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "ما المسمى الوظيفي المذكور في ملفي؟",
+          "reply": "| المسمى الوظيفي | | --- | | Heavy Duty Driver |",
+          "seconds": 2.18,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "ar",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "أخبرني بالمسمى الوظيفي الذي يحمله سجلي.",
+          "reply": "| الاسم | الرقم الوظيفي | المسمى الوظيفي | الإدارة | المدير | نشط | | --- | --- | --- | --- | --- | --- | | Bilagot Panta Suerte | 1067 | Heavy Duty Driver | Coiled Tubing | Mohammad Bolto Ali | True |",
+          "seconds": 0.46,
+          "llm_calls": 0,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "1067",
+          "language": "ar",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile, explanation=Bound ESS self-read: get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "أي مسمى وظيفي مسجّل لي؟",
+          "reply": "المسمى الوظيفي المسجّل في سجلك: - المسمى الوظيفي: Heavy Duty Driver - الرقم الوظيفي: 1067 - الإدارة: Coiled Tubing - المدير: Mohammad Bolto Ali",
+          "seconds": 2.31,
+          "llm_calls": 1,
+          "turn_decision": "answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "1067",
+          "language": "ar",
+          "mode": "ask",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "اقرأ مسمّاي الوظيفي الحالي من الملف.",
+          "reply": "| المسمى الوظيفي | | --- | | Heavy Duty Driver |",
+          "seconds": 1.89,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "ar",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "ما هو مسماي الوظيفي الرسمي في السجل؟",
+          "reply": "| المسمى الوظيفي | | --- | | Heavy Duty Driver |",
+          "seconds": 2.01,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "ar",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib12-salary-en",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "b7b711f3-7570-454c-9b4d-50dc6934c426",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "What base pay is recorded for me? Give the number.",
+          "reply": "| Basic salary |\n| --- |\n| 174.731 |",
+          "seconds": 1.93,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "174.731",
+          "language": "en",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "Read my basic monthly salary from the file.",
+          "reply": "| Basic salary |\n| --- |\n| 174.731 |",
+          "seconds": 2.35,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "174.731",
+          "language": "en",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "What's my basic salary figure on record?",
+          "reply": "| Name | Employee number | Job title | Department | Manager | Active |\n| --- | --- | --- | --- | --- | --- |\n| Bilagot Panta Suerte | 1067 | Heavy Duty Driver | Coiled Tubing | Mohammad Bolto Ali | True |",
+          "seconds": 0.35,
+          "llm_calls": 0,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "1067",
+          "language": "en",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile, explanation=Bound ESS self-read: get_my_profile"
+          ],
+          "misses": [
+            "contains me.basic_salary='174.731'",
+            "says_any ['basic', 'salary', 'pay']"
+          ],
+          "pass": false
+        },
+        {
+          "say": "Quote the base salary stored in my profile, digits included.",
+          "reply": "| Basic salary |\n| --- |\n| 174.731 |",
+          "seconds": 1.99,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "174.731",
+          "language": "en",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "How much basic pay does my record show?",
+          "reply": "| Basic salary |\n| --- |\n| 174.731 |",
+          "seconds": 2.09,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "174.731",
+          "language": "en",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": false,
+      "volume": false
+    },
+    {
+      "id": "ib12-salary-ar",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "3d2de11e-8de1-46e7-a570-b70676621ed5",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "ما الراتب الأساسي المسجل لي؟ اذكر الرقم.",
+          "reply": "| الراتب الأساسي | | --- | | 174.731 |",
+          "seconds": 2.12,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "174.731",
+          "language": "ar",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "اقرأ راتبي الأساسي الشهري من الملف.",
+          "reply": "| الراتب الأساسي | | --- | | 174.731 |",
+          "seconds": 1.97,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "174.731",
+          "language": "ar",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "ما هو رقم راتبي الأساسي في السجل؟",
+          "reply": "| الراتب الأساسي | | --- | | 174.731 |",
+          "seconds": 2.03,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "174.731",
+          "language": "ar",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "اذكر الراتب الأساسي المخزّن في ملفي مع الأرقام.",
+          "reply": "| الاسم | الرقم الوظيفي | المسمى الوظيفي | الإدارة | المدير | نشط | | --- | --- | --- | --- | --- | --- | | Bilagot Panta Suerte | 1067 | Heavy Duty Driver | Coiled Tubing | Mohammad Bolto Ali | True |",
+          "seconds": 0.27,
+          "llm_calls": 0,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "1067",
+          "language": "ar",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile, explanation=Bound ESS self-read: get_my_profile"
+          ],
+          "misses": [
+            "contains me.basic_salary='174.731'",
+            "says_any ['راتب', 'أساسي', 'الراتب']"
+          ],
+          "pass": false
+        },
+        {
+          "say": "كم الراتب الأساسي الذي يظهره سجلي؟",
+          "reply": "| الاسم | الرقم الوظيفي | المسمى الوظيفي | الإدارة | المدير | نشط | | --- | --- | --- | --- | --- | --- | | Bilagot Panta Suerte | 1067 | Heavy Duty Driver | Coiled Tubing | Mohammad Bolto Ali | True |",
+          "seconds": 0.28,
+          "llm_calls": 0,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "1067",
+          "language": "ar",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile, explanation=Bound ESS self-read: get_my_profile"
+          ],
+          "misses": [
+            "contains me.basic_salary='174.731'",
+            "says_any ['راتب', 'أساسي', 'الراتب']"
+          ],
+          "pass": false
+        }
+      ],
+      "pass": false,
+      "volume": false
+    },
+    {
+      "id": "ib12-leave-en",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "5e54ae11-91e8-4a3a-953f-e81e712228a3",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "How many annual leave days remain for me? Number only.",
+          "reply": "Your leave balance - annual remaining 18 (entitled 30)\n- sick remaining 15 (entitled 15)\n- emergency remaining 4 (entitled 5)\n- unpaid remaining 90 (entitled 90)\n- maternity remaining 70 (entitled 70)\n- paternity remaining 3 (entitled 3)",
+          "seconds": 2.08,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "18",
+          "language": "en",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_leave_balance"
+          ],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "What's my leftover annual leave balance?",
+          "reply": "Your leave balance - annual remaining 18 (entitled 30)\n- sick remaining 15 (entitled 15)\n- emergency remaining 4 (entitled 5)\n- unpaid remaining 90 (entitled 90)\n- maternity remaining 70 (entitled 70)\n- paternity remaining 3 (entitled 3)",
+          "seconds": 1.94,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "18",
+          "language": "en",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_leave_balance"
+          ],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "Read the remaining annual leave days on my record.",
+          "reply": "Your leave balance - annual remaining 18 (entitled 30)\n- sick remaining 15 (entitled 15)\n- emergency remaining 4 (entitled 5)\n- unpaid remaining 90 (entitled 90)\n- maternity remaining 70 (entitled 70)\n- paternity remaining 3 (entitled 3)",
+          "seconds": 2.13,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "18",
+          "language": "en",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_leave_balance"
+          ],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "How much annual leave is still available to me?",
+          "reply": "Your leave balance - annual remaining 18 (entitled 30)\n- sick remaining 15 (entitled 15)\n- emergency remaining 4 (entitled 5)\n- unpaid remaining 90 (entitled 90)\n- maternity remaining 70 (entitled 70)\n- paternity remaining 3 (entitled 3)",
+          "seconds": 2.03,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "18",
+          "language": "en",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_leave_balance"
+          ],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "Tell me my annual leave remainder in days.",
+          "reply": "Your leave balance - annual remaining 18 (entitled 30)\n- sick remaining 15 (entitled 15)\n- emergency remaining 4 (entitled 5)\n- unpaid remaining 90 (entitled 90)\n- maternity remaining 70 (entitled 70)\n- paternity remaining 3 (entitled 3)",
+          "seconds": 47.2,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "18",
+          "language": "en",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_leave_balance"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib12-leave-ar",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "c3346f2a-e1f9-4777-a4c0-c648eb9145d7",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "كم يوم إجازة سنوية متبقٍ لي؟ الرقم فقط.",
+          "reply": "رصيد إجازاتك - annual المتبقي 18 (المستحق 30) - sick المتبقي 15 (المستحق 15) - emergency المتبقي 4 (المستحق 5) - unpaid المتبقي 90 (المستحق 90) - maternity المتبقي 70 (المستحق 70) - paternity المتبقي 3 (المستحق 3)",
+          "seconds": 2.42,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "18",
+          "language": "ar",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_leave_balance"
+          ],
+          "misses": [
+            "says_any ['إجازة', 'سنوي', 'السنوية']"
+          ],
+          "pass": false
+        },
+        {
+          "say": "ما رصيد الإجازة السنوية المتبقي لدي؟",
+          "reply": "رصيد إجازاتك - annual المتبقي 18 (المستحق 30) - sick المتبقي 15 (المستحق 15) - emergency المتبقي 4 (المستحق 5) - unpaid المتبقي 90 (المستحق 90) - maternity المتبقي 70 (المستحق 70) - paternity المتبقي 3 (المستحق 3)",
+          "seconds": 48.58,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "18",
+          "language": "ar",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_leave_balance"
+          ],
+          "misses": [
+            "says_any ['إجازة', 'سنوي', 'السنوية']"
+          ],
+          "pass": false
+        },
+        {
+          "say": "اقرأ الأيام المتبقية من الإجازة السنوية في سجلي.",
+          "reply": "رصيد إجازاتك - annual المتبقي 18 (المستحق 30) - sick المتبقي 15 (المستحق 15) - emergency المتبقي 4 (المستحق 5) - unpaid المتبقي 90 (المستحق 90) - maternity المتبقي 70 (المستحق 70) - paternity المتبقي 3 (المستحق 3)",
+          "seconds": 2.07,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "18",
+          "language": "ar",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_leave_balance"
+          ],
+          "misses": [
+            "says_any ['إجازة', 'سنوي', 'السنوية']"
+          ],
+          "pass": false
+        },
+        {
+          "say": "كم إجازة سنوية لا تزال متاحة لي؟",
+          "reply": "يمكنني مساعدتك في تجهيز طلب إجازة، لكن الدردشة لا تُرسل ولا تغيّر السجلات في النظام. لإتمام التغيير استخدم أحد المسارين: • **الخطّة** — بدّل المفتاح إلى «خطّة»؛ سينقل الوكيل (Agent) هذه التفاصيل ويشغّل العملية المعتمدة (التأكيد عند التشغيل). وضع السؤال لا يُنشئ مهاماً. • **تطبيقاتي** — افتح «فتح إجازاتي» وقدّم الطلب هناك.",
+          "seconds": 3.27,
+          "llm_calls": 2,
+          "turn_decision": "handoff_agent",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "ar",
+          "mode": "ask",
+          "tools": [],
+          "misses": [
+            "contains lb:annual.remaining=18"
+          ],
+          "pass": false
+        },
+        {
+          "say": "أخبرني بمتبقي إجازتي السنوية بالأيام.",
+          "reply": "المتبقي من إجازتك السنوية (annual): 18 يوماً، من أصل مستحق 30 يوماً.",
+          "seconds": 1.78,
+          "llm_calls": 1,
+          "turn_decision": "answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "18",
+          "language": "ar",
+          "mode": "ask",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": false,
+      "volume": false
+    },
+    {
+      "id": "ib12-oos-en",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "f4a357fc-0ade-4cb5-a97b-f33ec1e50147",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "What is my personal carbon footprint this month?",
+          "reply": "I'm the Nibras People & Payroll assistant — that topic is outside my scope. I can help with payroll runs, payslips, GOSI/WPS, leave, loans, attendance, and HR advisory. What would you like to know?",
+          "seconds": 0.67,
+          "llm_calls": 0,
+          "turn_decision": "refuse",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "en",
+          "mode": "ask",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "Show me my CO2 equivalent for last week.",
+          "reply": "I'm the Nibras People & Payroll assistant — that topic is outside my scope. I can help with payroll runs, payslips, GOSI/WPS, leave, loans, attendance, and HR advisory. What would you like to know?",
+          "seconds": 0.56,
+          "llm_calls": 0,
+          "turn_decision": "refuse",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "en",
+          "mode": "ask",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "Give me the greenhouse gas total for my team.",
+          "reply": "I'm the Nibras People & Payroll assistant — that topic is outside my scope. I can help with payroll runs, payslips, GOSI/WPS, leave, loans, attendance, and HR advisory. What would you like to know?",
+          "seconds": 0.46,
+          "llm_calls": 0,
+          "turn_decision": "refuse",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "en",
+          "mode": "ask",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "What is my tCO2e figure?",
+          "reply": "I'm the Nibras People & Payroll assistant — that topic is outside my scope. I can help with payroll runs, payslips, GOSI/WPS, leave, loans, attendance, and HR advisory. What would you like to know?",
+          "seconds": 46.31,
+          "llm_calls": 0,
+          "turn_decision": "refuse",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "en",
+          "mode": "ask",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "Show me the emission factor used for my trip.",
+          "reply": "I'm the Nibras People & Payroll assistant — that topic is outside my scope. I can help with payroll runs, payslips, GOSI/WPS, leave, loans, attendance, and HR advisory. What would you like to know?",
+          "seconds": 0.54,
+          "llm_calls": 0,
+          "turn_decision": "refuse",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "en",
+          "mode": "ask",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib12-oos-ar",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "9596f40c-0373-4462-8a78-1c289eeab813",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "ما هي بصمتي الكربونية carbon footprint هذا الشهر؟",
+          "reply": "أنا مساعد نبراس للموارد البشرية والرواتب — هذا الموضوع خارج نطاقي. يمكنني المساعدة في مسيرات الرواتب، وقسائم الراتب، والتأمينات الاجتماعية وحماية الأجور، والإجازات، والقروض، والحضور، والاستشارات الخاصة بالموارد البشرية. بماذا يمكنني مساعدتك؟",
+          "seconds": 0.45,
+          "llm_calls": 0,
+          "turn_decision": "refuse",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "ar",
+          "mode": "ask",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "اعرض لي CO2 equivalent الخاص بي.",
+          "reply": "أنا مساعد نبراس للموارد البشرية والرواتب — هذا الموضوع خارج نطاقي. يمكنني المساعدة في مسيرات الرواتب، وقسائم الراتب، والتأمينات الاجتماعية وحماية الأجور، والإجازات، والقروض، والحضور، والاستشارات الخاصة بالموارد البشرية. بماذا يمكنني مساعدتك؟",
+          "seconds": 0.61,
+          "llm_calls": 0,
+          "turn_decision": "refuse",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "ar",
+          "mode": "ask",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "أعطني greenhouse gas الإجمالي لفريقي.",
+          "reply": "أنا مساعد نبراس للموارد البشرية والرواتب — هذا الموضوع خارج نطاقي. يمكنني المساعدة في مسيرات الرواتب، وقسائم الراتب، والتأمينات الاجتماعية وحماية الأجور، والإجازات، والقروض، والحضور، والاستشارات الخاصة بالموارد البشرية. بماذا يمكنني مساعدتك؟",
+          "seconds": 46.68,
+          "llm_calls": 0,
+          "turn_decision": "refuse",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "ar",
+          "mode": "ask",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "ما هو tCO2e الخاص بي؟",
+          "reply": "أنا مساعد نبراس للموارد البشرية والرواتب — هذا الموضوع خارج نطاقي. يمكنني المساعدة في مسيرات الرواتب، وقسائم الراتب، والتأمينات الاجتماعية وحماية الأجور، والإجازات، والقروض، والحضور، والاستشارات الخاصة بالموارد البشرية. بماذا يمكنني مساعدتك؟",
+          "seconds": 0.4,
+          "llm_calls": 0,
+          "turn_decision": "refuse",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "ar",
+          "mode": "ask",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        },
+        {
+          "say": "اعرض emission factor المستخدم لرحلتي.",
+          "reply": "أنا مساعد نبراس للموارد البشرية والرواتب — هذا الموضوع خارج نطاقي. يمكنني المساعدة في مسيرات الرواتب، وقسائم الراتب، والتأمينات الاجتماعية وحماية الأجور، والإجازات، والقروض، والحضور، والاستشارات الخاصة بالموارد البشرية. بماذا يمكنني مساعدتك؟",
+          "seconds": 0.24,
+          "llm_calls": 0,
+          "turn_decision": "refuse",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "ar",
+          "mode": "ask",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    }
+  ],
+  "findings": {},
+  "objectives": {
+    "C4": true
+  },
+  "latency": {
+    "turns": 60,
+    "p50_ms": 2020,
+    "over_4s": 5,
+    "llm_calls_p50": 1.0,
+    "llm_calls_max": 2
+  },
+  "total": 12,
+  "passed": 9,
+  "gate": {
+    "kind": "paraphrase",
+    "accuracy": 0.95,
+    "parity": 0.98,
+    "fallthrough": 0,
+    "ungrounded": 0
+  },
+  "paraphrase": {
+    "status": "scored",
+    "turns": 60,
+    "correct": 53,
+    "accuracy": 0.8833,
+    "accuracy_en": 0.9667,
+    "accuracy_ar": 0.8,
+    "parity": 0.8333,
+    "parity_gap": 0.1667,
+    "fallthrough": 0,
+    "ungrounded": 0
+  },
+  "pass": false
+}

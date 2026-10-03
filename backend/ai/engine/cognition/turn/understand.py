@@ -61,7 +61,7 @@ _UNDERSTAND_RULES = (
     "A named limit, rule, or policy is call_tool when a catalog line "
     "returns that figure; otherwise answer. A read whose line says Not "
     "for that question does not fit it.\n"
-    "A report of data already on screen is continue; otherwise emit the "
+    "A report of data already on screen → emit continue; otherwise emit the "
     "CATALOG reads that fetch it (up to 3). STATE informs answer; it is "
     "not reprinted. A later read may omit a field the first list returns. "
     "When the user asks for charts, visuals, or a report, set render=chart "
@@ -80,7 +80,9 @@ _UNDERSTAND_RULES = (
 )
 
 # One-line budget so an HR-scoped catalog + rules fit under TASK_BLOCK 8k.
-_TOP_DESC_CHARS = 180
+# 165 keeps every allowed name and the rules inside the clip; the compacted
+# top-k descriptions are still longer than a routing line needs.
+_TOP_DESC_CHARS = 165
 _TOP_NOT_FOR_CHARS = 160
 _COMPACT_DESC_CHARS = 0  # name (+ write mark) only outside top-k
 

@@ -1,0 +1,551 @@
+{
+  "tier": "live_intention",
+  "bank": "IB-08",
+  "bank_file": "chat_intention_bank_ib08.yaml",
+  "bank_purpose": "Voice/register/persona-scope per surface (coworker, tutor).",
+  "run_at": "2026-10-03T13:06:12.307982+00:00",
+  "surface": "chat",
+  "user": "emp_1067",
+  "base": "http://127.0.0.1:8009/carbon-api",
+  "release": {
+    "tag": "",
+    "process_brand": "nibras",
+    "pack": "nibras",
+    "pack_version": "17",
+    "extra_packs": [],
+    "loaded_packs": [
+      "aast-med",
+      "carbon",
+      "eduos",
+      "nibras"
+    ],
+    "catalogs": [
+      "aast-med",
+      "carbon",
+      "eduos",
+      "nibras"
+    ],
+    "pulse_enabled": true,
+    "image_built_at": null,
+    "process_started_at": "2026-10-03T12:37:42.709934+00:00",
+    "deployed_at": null
+  },
+  "threads": [
+    {
+      "id": "ib08-coworker-en-1",
+      "closes": [],
+      "objectives": [],
+      "surface": "coworker",
+      "mode": "ask",
+      "conversation_id": "e5053634-9e03-418b-9cb4-bc4f9d58ec75",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "What is the job title of employee 2400?",
+          "reply": "I can only read your own records (emp_1067), so I can't look up another employee's job title. Employee profile details for other people are an HR-level read. If you need this, please ask HR, or if 2400 is one of your direct reports, I can check your direct reports list.",
+          "seconds": 3.39,
+          "llm_calls": 1,
+          "turn_decision": "answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "1067",
+          "language": "en",
+          "mode": "ask",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib08-coworker-en-2",
+      "closes": [],
+      "objectives": [],
+      "surface": "coworker",
+      "mode": "ask",
+      "conversation_id": "2d890852-3eca-4a52-9ed5-c7c80f9442ee",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "Which org unit is employee 1712 in?",
+          "reply": "I fetched the data, but I could not write the summary this time. The tables and charts below are exact.",
+          "seconds": 5.13,
+          "llm_calls": 3,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "en",
+          "mode": "ask",
+          "tools": [
+            "emp_1712"
+          ],
+          "misses": [
+            "not_degraded"
+          ],
+          "pass": false
+        }
+      ],
+      "pass": false,
+      "volume": false
+    },
+    {
+      "id": "ib08-coworker-en-3",
+      "closes": [],
+      "objectives": [],
+      "surface": "coworker",
+      "mode": "ask",
+      "conversation_id": "965420c3-4792-4455-a2e9-0101dc117cd5",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "Give me the employee number for Ali Mohamed Saad AlAjmi.",
+          "reply": "Your leave balance has no rows configured yet.",
+          "seconds": 3.01,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "en",
+          "mode": "ask",
+          "tools": [
+            "api_name=list_leave_entitlements"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib08-coworker-en-4",
+      "closes": [],
+      "objectives": [],
+      "surface": "coworker",
+      "mode": "ask",
+      "conversation_id": "6ea8c645-259e-4038-b4ab-68498ff33db2",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "Show me the leave balance of employee 1712.",
+          "reply": "Your leave balance has no rows configured yet.",
+          "seconds": 2.48,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "en",
+          "mode": "ask",
+          "tools": [
+            "api_name=list_leave_entitlements"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib08-coworker-ar-1",
+      "closes": [],
+      "objectives": [],
+      "surface": "coworker",
+      "mode": "ask",
+      "conversation_id": "7c8a7cc4-a4da-4097-af79-35fa76e55a65",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "ما هو المسمى الوظيفي للموظف 2400؟",
+          "reply": "رصيد إجازاتك لا يحتوي على صفوف مُهيّأة بعد.",
+          "seconds": 2.67,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "ar",
+          "mode": "ask",
+          "tools": [
+            "api_name=list_leave_entitlements"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib08-coworker-ar-2",
+      "closes": [],
+      "objectives": [],
+      "surface": "coworker",
+      "mode": "ask",
+      "conversation_id": "59aa7c0e-2180-4295-99d0-3fe576193284",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "في أي وحدة تنظيمية يعمل الموظف 1712؟",
+          "reply": "لم يتم العثور على الموظف emp_1712 في بيانات الكيان المتاحة أظهر البحث عن الموظف بالمعرّف `emp_1712` نتيجة سلبية، إذ أعاد النظام رسالة \"Entity 'emp_1712' not found\". بناءً على ذلك، لا تتوفر أي بيانات عن الوحدة التنظيمية لهذا الموظف ضمن النتائج المتاحة.",
+          "seconds": 4.31,
+          "llm_calls": 2,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "1712",
+          "language": "ar",
+          "mode": "ask",
+          "tools": [
+            "emp_1712"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib08-coworker-ar-3",
+      "closes": [],
+      "objectives": [],
+      "surface": "coworker",
+      "mode": "ask",
+      "conversation_id": "8d45c300-7e6c-43d5-b3de-ebb411edfe91",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "أعطني الرقم الوظيفي لعلي محمد سعد العجمي.",
+          "reply": "رصيد إجازاتك لا يحتوي على صفوف مُهيّأة بعد.",
+          "seconds": 2.08,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "ar",
+          "mode": "ask",
+          "tools": [
+            "api_name=list_leave_entitlements"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib08-coworker-ar-4",
+      "closes": [],
+      "objectives": [],
+      "surface": "coworker",
+      "mode": "ask",
+      "conversation_id": "1cdea1bf-a92d-4817-9199-d73834ddcb58",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "اعرض رصيد إجازات الموظف 1712.",
+          "reply": "رصيد إجازاتك لا يحتوي على صفوف مُهيّأة بعد.",
+          "seconds": 4.16,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "ar",
+          "mode": "ask",
+          "tools": [
+            "api_name=list_leave_entitlements"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib08-tutor-en-1",
+      "closes": [],
+      "objectives": [],
+      "surface": "tutor",
+      "mode": "ask",
+      "conversation_id": "3168ef21-6a1f-45ea-b903-ec25e1e2bf15",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "Explain how annual leave accrual works for employees.",
+          "reply": "I could not process that message just now. Please try again in a moment.",
+          "seconds": 10.93,
+          "llm_calls": 0,
+          "turn_decision": "answer",
+          "v21_miss": "ungrounded",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "en",
+          "mode": "ask",
+          "tools": [],
+          "misses": [
+            "not_degraded"
+          ],
+          "pass": false
+        }
+      ],
+      "pass": false,
+      "volume": false
+    },
+    {
+      "id": "ib08-tutor-en-2",
+      "closes": [],
+      "objectives": [],
+      "surface": "tutor",
+      "mode": "ask",
+      "conversation_id": "041a3674-e077-41b1-bab3-00cc7d348ee0",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "Walk me through how to read my payslip.",
+          "reply": "Here's how to read a Nibras payslip, section by section. **Header**\n- **Employee details** — your name, employee ID, department/org unit, and job title as recorded in HR.\n- **Pay period** — the month or period the payslip covers, plus the pay date.\n- **Currency** — the currency the amounts are stated in. **Earnings (gross pay)**\nThese are the amounts added before deductions. Typical lines:\n- **Basic salary** — your fixed base pay for the period.\n- **Allowances** — e.g. housing, transport, or other fixed allowances, each on its own line.\n- **Overtime** — pay for extra hours worked, if applicable.\n- **Bonuses / commissions / adjustments** — one-off or variable additions.\n- **Gross pay** — the total of all earnings lines. **Deductions**\nAmounts subtracted from gross pay. Typical lines:\n- **Employee social insurance / pension contribution** — your statutory share.\n- **Income tax** — tax withheld for the period.\n- **Loan or advance repayment** — an installment, if you have an active loan.\n- **Other deductions** — e.g. unpaid leave, penalties, or arrears adjustments. **Net pay**\n- **Net pay = Gross pay − Total deductions.** This is the amount actually paid to you. **Footer / notes**\n- **Employer contributions** — amounts the company pays on your behalf (e.g. employer social insurance share). These are informational and are *not* deducted from your net.\n- **Year-to-date (YTD) figures** — cumulative totals for the year so far, useful for tax and record-keeping.\n- **Payment method / reference** — bank transfer reference or similar. **A few practical tips**\n- Check that the **pay period** and **employee details** are correct first.\n- Compare **gross** and **net** — a large gap usually means tax, insurance, or a loan installment.\n- If a line is unfamiliar, match it against your contract or an earlier payslip to see whether it's recurring.\n- Keep payslips for your records; YTD lines are handy at tax time. If you'd like, I can walk through a specific line on one of your payslips — just tell me which period and which line, and I'll explain what it represents.",
+          "seconds": 28.19,
+          "llm_calls": 2,
+          "turn_decision": "answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "en",
+          "mode": "ask",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib08-tutor-en-3",
+      "closes": [],
+      "objectives": [],
+      "surface": "tutor",
+      "mode": "ask",
+      "conversation_id": "f5f1dde8-ce28-47d5-9a05-9608f5381d4b",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "What is the difference between gross pay and net pay?",
+          "reply": "**Gross pay** is your total earnings before any deductions. It's the full amount agreed for the pay period — your basic salary plus any allowances, overtime, or other additions. **Net pay** is what actually reaches you after deductions are taken out. It's gross pay minus things like: - Income tax\n- Social insurance contributions\n- Any other statutory or company deductions\n- Loan or advance installments, if applicable So the simple relationship is: **Net pay = Gross pay − Total deductions** A few practical points: - Gross pay is usually the figure quoted in an offer or contract; net pay is what shows in your bank account.\n- Two people can have the same gross pay but different net pay, because deductions depend on personal circumstances (tax band, insurance status, loans).\n- If you want to see how this applies to your own payslip — the gross figure, each deduction line, and the resulting net — you can view your payslips in the My / Agent area. I can't pull your payslip figures here, but I can explain any line you see once you have it in front of you.",
+          "seconds": 4.71,
+          "llm_calls": 2,
+          "turn_decision": "answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "en",
+          "mode": "ask",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib08-tutor-en-4",
+      "closes": [],
+      "objectives": [],
+      "surface": "tutor",
+      "mode": "ask",
+      "conversation_id": "05005fdb-7704-4458-b0be-c7ce86f176d1",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "Explain how GOSI contributions are handled for employees.",
+          "reply": "Here's how GOSI (General Organization for Social Insurance) contributions are generally handled for employees in Saudi Arabia, and how that plays out in Nibras. **The two branches** GOSI contributions cover two separate schemes, and they're calculated differently: - **Annuities (retirement/pension) branch** — this is the one most people mean by \"GOSI.\" It's a shared cost: the employee contributes a percentage of the contributory wage, and the employer contributes a larger percentage on top. The employee's share is deducted from pay; the employer's share is a company cost and is not taken from the employee.\n- **Occupational Hazards branch (work injuries)** — this is funded entirely by the employer. Nothing is deducted from the employee for this branch. **What the contribution is calculated on** Contributions are based on the *contributory wage*, which is normally the basic salary plus certain fixed allowances (typically housing), subject to a monthly ceiling. Amounts above the ceiling are not contributory. The exact percentages and the ceiling are set by GOSI regulation and are updated from time to time, so the current rates should always be confirmed against the latest GOSI schedule rather than assumed. **Saudi vs. non-Saudi employees** - **Saudi nationals** are registered in both branches — annuities and occupational hazards.\n- **Non-Saudi employees** are registered in the occupational hazards branch only; they are not part of the annuities/pension scheme. This is the single biggest difference in how contributions are handled between the two groups. **How it appears in payroll** - The employee's annuities share shows as a **deduction** on the payslip.\n- The employer's share (annuities employer portion + occupational hazards) is a company liability and does not reduce the employee's net pay.\n- Contributions are remitted to GOSI monthly by the employer, based on the registered contributory wage. **In Nibras** Nibras reflects GOSI as configured for your organisation — the employee deduction appears in your payslip, and the employer portions are handled on the company side. I can only read your own records, so I can't show organisation-wide GOSI totals or the setup for other employees; that's an HR-side view. If you'd like, I can walk through what a GOSI line looks like on a payslip, or explain how a change in basic salary or allowances affects the contributory wage. For anything that would actually change your record — a salary adjustment, registration, or correction — that has to go through **Agent** or **My**.",
+          "seconds": 7.04,
+          "llm_calls": 2,
+          "turn_decision": "answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "en",
+          "mode": "ask",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib08-tutor-ar-1",
+      "closes": [],
+      "objectives": [],
+      "surface": "tutor",
+      "mode": "ask",
+      "conversation_id": "1232686e-b31f-4cce-90b4-2415bc3f1901",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "اشرح لي كيف يتم احتساب استحقاق الإجازة السنوية للموظفين.",
+          "reply": "يمكنني مساعدتك في تجهيز طلب إجازة، لكن الدردشة لا تُرسل ولا تغيّر السجلات في النظام. لإتمام التغيير استخدم أحد المسارين: • **الخطّة** — بدّل المفتاح إلى «خطّة». وضع السؤال لا يُنشئ مهاماً. • **تطبيقاتي** — افتح «فتح إجازاتي» وقدّم الطلب هناك.",
+          "seconds": 13.08,
+          "llm_calls": 0,
+          "turn_decision": "handoff_agent",
+          "v21_miss": "ungrounded",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "ar",
+          "mode": "ask",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib08-tutor-ar-2",
+      "closes": [],
+      "objectives": [],
+      "surface": "tutor",
+      "mode": "ask",
+      "conversation_id": "9b399dab-5805-4d77-a379-1ea27e9e1f58",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "اشرح لي كيف أقرأ قسيمة راتبي خطوة بخطوة.",
+          "reply": "تعذّر عليّ فهم هذه الرسالة الآن. أعد المحاولة بعد لحظة.",
+          "seconds": 12.66,
+          "llm_calls": 0,
+          "turn_decision": "answer",
+          "v21_miss": "ungrounded",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "ar",
+          "mode": "ask",
+          "tools": [],
+          "misses": [
+            "not_degraded"
+          ],
+          "pass": false
+        }
+      ],
+      "pass": false,
+      "volume": false
+    },
+    {
+      "id": "ib08-tutor-ar-3",
+      "closes": [],
+      "objectives": [],
+      "surface": "tutor",
+      "mode": "ask",
+      "conversation_id": "311128fe-c1c1-48dd-8ce0-5bbf0379de73",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "ما الفرق بين الراتب الإجمالي وصافي الراتب؟",
+          "reply": "**الفرق بين الراتب الإجمالي وصافي الراتب** - **الراتب الإجمالي (Gross):** هو إجمالي ما تستحقه قبل أي خصم — يشمل الراتب الأساسي، والبدلات (مثل بدل السكن أو المواصلات إن وُجدت)، وأي إضافات أو مكافآت مستحقة عن فترة الراتب. - **صافي الراتب (Net):** هو المبلغ الذي يُصرف لك فعليًا بعد خصم الاستقطاعات من الإجمالي، مثل: - التأمينات الاجتماعية (حصة الموظف) - الضريبة على الدخل - أي سلف أو أقساط قائمة - غياب أو جزاءات، إن وُجدت **المعادلة ببساطة:** صافي الراتب = الراتب الإجمالي − إجمالي الاستقطاعات **ملاحظات مهمة:** - الإجمالي يظهر عادة في أعلى قسيمة الراتب، والصافي في أسفلها بعد بند الاستقطاعات. - قد يختلف الصافي من شهر لآخر حتى لو كان الإجمالي ثابتًا، بسبب تغيّر الاستقطاعات (ضريبة، سلف، غياب… إلخ). - لو أردت معرفة أرقامك الفعلية (إجمالي وصافي كل شهر وتفاصيل الاستقطاعات)، يمكنك مراجعة قسائم راتبك في **My**، أو طلب التفاصيل من **Agent**. - وأي تعديل أو استفسار رسمي على الراتب يتم عبر **Agent** أو **My**، وليس من خلالي.",
+          "seconds": 9.39,
+          "llm_calls": 3,
+          "turn_decision": "answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "ar",
+          "mode": "ask",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib08-tutor-ar-4",
+      "closes": [],
+      "objectives": [],
+      "surface": "tutor",
+      "mode": "ask",
+      "conversation_id": "6c801c28-f645-4876-8707-dc5db01d05e4",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "اشرح لي كيفية التعامل مع اشتراكات التأمينات الاجتماعية للموظفين.",
+          "reply": "تعذّر عليّ فهم هذه الرسالة الآن. أعد المحاولة بعد لحظة.",
+          "seconds": 15.22,
+          "llm_calls": 0,
+          "turn_decision": "answer",
+          "v21_miss": "ungrounded",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "ar",
+          "mode": "ask",
+          "tools": [],
+          "misses": [
+            "not_degraded"
+          ],
+          "pass": false
+        }
+      ],
+      "pass": false,
+      "volume": false
+    }
+  ],
+  "findings": {},
+  "objectives": {
+    "C4": true
+  },
+  "latency": {
+    "turns": 16,
+    "p50_ms": 4920,
+    "over_4s": 11,
+    "llm_calls_p50": 1.0,
+    "llm_calls_max": 3
+  },
+  "total": 16,
+  "passed": 12,
+  "pass": false
+}

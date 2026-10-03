@@ -196,8 +196,8 @@ function EnvelopeTable({ table, t }) {
                     borderBottom: 2,
                     borderColor: 'divider',
                   })}
-                >
-                  {cellString(col)}
+                  >
+                  <bdi>{cellString(col)}</bdi>
                 </TableCell>
               ))}
             </TableRow>
@@ -237,7 +237,7 @@ function EnvelopeTable({ table, t }) {
                           fontSize: theme.typography.body2.fontSize,
                         })}
                       >
-                        {cellNode(cell)}
+                        <bdi>{cellNode(cell)}</bdi>
                       </TableCell>
                     ))}
                   </TableRow>

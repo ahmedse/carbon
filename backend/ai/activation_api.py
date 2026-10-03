@@ -413,7 +413,13 @@ class PulseSettingsView(APIView):
         # stored under a secret-hinting key before it leaves the process.
         payload["cache"] = _redact_secrets(payload["cache"])
         payload["mcp_servers"] = _redact_secrets(payload["mcp_servers"])
-        return Response(payload)
+        # Pack vocabulary is lazy: tool descriptions are ``_LiveStr`` /
+        # ``_LiveConcat`` until read. Coerce the whole payload to plain JSON
+        # data at this boundary so the response encodes (and callers get real
+        # strings), without eagerly loading the pack.
+        from ai.engine.pack_vocab import as_data
+
+        return Response(as_data(payload))
 
 
 # ── Model catalog ─────────────────────────────────────────────────────────

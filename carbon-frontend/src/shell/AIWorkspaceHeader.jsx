@@ -31,7 +31,6 @@ import PulseLogo from './PulseLogo';
 import AIContextMenu from './AIContextMenu';
 import CheckpointPicker from './CheckpointPicker';
 import PulseProcessSwitch, { workspaceFromMode } from './PulseProcessSwitch';
-import PulseProgressButton from './PulseProgressButton';
 
 function capabilityKeys(caps) {
   if (!Array.isArray(caps)) return [];
@@ -185,7 +184,6 @@ function AIWorkspaceHeader({
             onModeChange?.(next === 'tasks' ? 'agent' : 'chat');
           }}
         />
-        <PulseProgressButton canView={Boolean(token)} />
         {canManageConsole ? (
           <>
             <Tooltip title={t('saveCheckpoint')}>

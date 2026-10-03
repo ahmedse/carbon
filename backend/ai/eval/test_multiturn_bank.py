@@ -47,7 +47,11 @@ class TestScriptsLoad:
         is unchanged. They must still be schema-valid scripts."""
         base_dir = Path(__file__).parent / "multiturn"
         scripts = {s.id: s for s in load_scripts_from_glob("scripts_v21/*.yaml", base_dir)}
-        assert set(scripts) == {"payslip-loan-followup-en-01", "leave-charts-subject-en-01"}
+        assert set(scripts) == {
+            "payslip-loan-followup-en-01",
+            "leave-charts-subject-en-01",
+            "identity-greeting-followup-ar-01",
+        }
         for s in scripts.values():
             ok, err = s.validate()
             assert ok, err
@@ -59,6 +63,13 @@ class TestScriptsLoad:
         loan_turn = next(t for t in script.turns if t.user.startswith("I noticed I have a loan"))
         assert "loan_type" in loan_turn.expect.must_not_reask_slots
         assert "handoff_agent" not in loan_turn.expect.decision_in
+        # Identity / greeting-follow-up golden: the declared profile read is
+        # the deterministic home for every identity ask.
+        identity = scripts["identity-greeting-followup-ar-01"]
+        assert "get_my_profile" in identity.stub_host
+        identity_turns = [t for t in identity.turns if t.expect and "tool_answer" in t.expect.decision_in]
+        assert len(identity_turns) >= 4
+        assert "who am I" not in {t.user for t in identity.turns}
 
     def test_each_script_has_minimum_turns(self):
         """Each script must have ≥7 turns."""
@@ -351,6 +362,34 @@ def test_v21_leave_charts_script_renders_only_the_decided_read(monkeypatch):
         if not t.passed
     ]
     assert not failures, failures
+
+
+@pytest.mark.django_db(transaction=True)
+def test_v21_identity_golden_is_deterministic(monkeypatch):
+    """ADR-0057: identity / self-profile is a declared detail read on v21.
+
+    The greeting-follow-up script must pass end to end: every identity ask
+    binds ``get_my_profile`` before Understanding (0 LLM), and the reply is
+    the pack's labelled render — host values untouched, no decorative emoji.
+    """
+    from ai.eval.multiturn.runner import run_script
+
+    monkeypatch.setenv("PULSE_UNDERSTAND", "v21")
+    base_dir = Path(__file__).parent / "multiturn"
+    script = load_scripts_from_glob("scripts_v21/16-*.yaml", base_dir)[0]
+    result = run_script(script)
+    assert not result.error, result.error
+    failures = [
+        (i, t.user_input, t.decision, t.fail_reasons)
+        for i, t in enumerate(result.turns)
+        if not t.passed
+    ]
+    assert not failures, failures
+    identity_turns = [
+        t for t in result.turns
+        if t.expect and "tool_answer" in t.expect.decision_in
+    ]
+    assert identity_turns and all(t.llm_calls == 0 for t in identity_turns)
 
 
 class TestBoundReadGoldens:

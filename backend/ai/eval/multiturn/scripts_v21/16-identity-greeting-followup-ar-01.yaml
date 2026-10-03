@@ -1,0 +1,116 @@
+id: identity-greeting-followup-ar-01
+objective_ids: [C2, C10]
+language: ar
+surface: chat
+persona: emp_1067
+# v21-tier golden (ADR-0049 §8 · ADR-0057). Source: the observed Nibras Chat
+# defect: an identity ask ("who am I") after a greeting was answered by the
+# conversational writer, which echoed English host values ("CEO Office") inline
+# in a run-on Arabic sentence and decorated them with emoji.
+#
+# Contract pinned here: on the committed v21 default an identity / self-profile
+# ask binds the declared ``detail`` read before Understanding and restates the
+# pack's ``field_labels`` — Arabic labels, host values exactly as returned
+# (English kept, never translated), no decorative emoji, no conversational LLM.
+# The greeting (and its follow-up) is the pack's ``greet.yaml`` line, resolved
+# before Understanding: also 0-LLM, also emoji-free. Every turn here except the
+# closing thanks is 0-LLM.
+#
+# Lives outside scripts/*.yaml so the G5 bank (96/96) is unchanged; run with
+#   python -m ai.eval.multiturn.runner --scripts "scripts_v21/*.yaml" --report /tmp/v21.json --verbose
+stub_host:
+  get_my_profile:
+    - full_name: Bilagot Panta Suerte
+      employee_no: "1067"
+      job_title: Heavy Duty Driver
+      org_unit: Coiled Tubing
+      manager: Mohammad Bolto Ali
+      is_active: true
+turns:
+  - user: "مساء النور"
+    stub_reply: "وعليكم السلام، مساء النور. كيف أقدر أساعدك؟"
+    stub_tool_calls:
+      - id: understand_1
+        type: function
+        function:
+          name: emit_decision
+          arguments: '{"commands":[{"op":"answer","text":"وعليكم السلام، مساء النور. كيف أقدر أساعدك؟","source":"conversation"}],"language":"ar","confidence":0.9}'
+    expect:
+      # Pack-owned greet line: 0-LLM, emoji-free (ADR-0050).
+      decision_in: [answer]
+      language: ar
+      max_llm_calls: 0
+      mentions_any: ["مساء النور"]
+      must_not_contain: ["🌙", "📊"]
+
+  - user: "ليه ما ردتش مساء النور علي؟"
+    stub_reply: "أعتذر، مساء النور عليك. تفضل، كيف أقدر أساعدك؟"
+    stub_tool_calls:
+      - id: understand_2
+        type: function
+        function:
+          name: emit_decision
+          arguments: '{"commands":[{"op":"answer","text":"أعتذر، مساء النور عليك. تفضل، كيف أقدر أساعدك؟","source":"conversation"}],"language":"ar","confidence":0.9}'
+    expect:
+      # A greeting follow-up is the pack's follow-up copy, not model prose.
+      decision_in: [answer]
+      language: ar
+      max_llm_calls: 0
+      must_not_contain: ["🌙", "📊"]
+
+  - user: "من أنا؟"
+    stub_reply: "أنت موظف لدينا."
+    expect:
+      # Identity is a declared detail read: bound, 0-LLM, labelled.
+      decision_in: [tool_answer]
+      language: mixed
+      max_llm_calls: 0
+      mentions_any: ["1067"]
+      must_not_contain: ["🌙", "📊"]
+
+  - user: "من أنا ووش مسماي الوظيفي وقسمي ومديري؟"
+    stub_reply: "بياناتك من النظام."
+    expect:
+      # Compound ask → the same one detail read renders every declared field.
+      decision_in: [tool_answer]
+      language: mixed
+      max_llm_calls: 0
+      # Host values stay exactly as returned — never translated.
+      mentions_any: ["Coiled Tubing", "Heavy Duty Driver"]
+
+  - user: "أبغى بياناتي كاملة"
+    stub_reply: "هذه بياناتك."
+    expect:
+      decision_in: [tool_answer]
+      language: mixed
+      max_llm_calls: 0
+      mentions_any: ["Bilagot"]
+
+  - user: "مين مديري؟"
+    stub_reply: "مديرك من النظام."
+    expect:
+      decision_in: [tool_answer]
+      language: mixed
+      max_llm_calls: 0
+      mentions_any: ["Mohammad"]
+
+  - user: "وش قسمي؟"
+    stub_reply: "قسمك من النظام."
+    expect:
+      decision_in: [tool_answer]
+      language: mixed
+      max_llm_calls: 0
+      mentions_any: ["Coiled Tubing"]
+
+  - user: "شكراً"
+    stub_reply: "على الرحب والسعة."
+    stub_tool_calls:
+      - id: understand_8
+        type: function
+        function:
+          name: emit_decision
+          arguments: '{"commands":[{"op":"answer","text":"على الرحب والسعة.","source":"conversation"}],"language":"ar","confidence":0.9}'
+    expect:
+      decision_in: [answer]
+      language: ar
+      max_llm_calls: 2

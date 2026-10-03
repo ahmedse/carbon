@@ -39,6 +39,11 @@ class _Runner:
 
     executor = SimpleNamespace()
 
+    async def _try_bound_ess_self_read(self, **kwargs):
+        # Pre-S1 gate added for ADR-0056 self-read binding; this stub only
+        # exercises the committed-route no-fallthrough path, so it binds none.
+        return None
+
     async def _try_v21_understand(self, **kwargs):
         raise AssertionError("Decision ran on a committed route with a superseded exit")
 

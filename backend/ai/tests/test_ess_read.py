@@ -249,6 +249,43 @@ def test_answer_bound_ess_leave_balance_restates_host():
     assert "HR" not in text and "موارد" not in text
 
 
+def test_answer_bound_ess_used_field_leads_with_used():
+    """IB-11: an ask that names ``used`` answers the used figure first, not remaining.
+
+    Paraphrases of "how many days have I used?" must stay stable, so the
+    balance restatement leads with the asked metric when the row carries it.
+    """
+    import re as _re
+
+    from ai.engine.cognition.turn.ess_read import (
+        LEAVE_BALANCE_API,
+        answer_bound_ess_tools,
+    )
+
+    tools = [
+        {
+            "tool_name": "call_host_api",
+            "tool_args": {"api_name": LEAVE_BALANCE_API},
+            "result": [
+                {"leave_type": "annual", "entitled": 30, "used": 11,
+                 "remaining": 18, "pending": 1},
+            ],
+        }
+    ]
+    used = answer_bound_ess_tools(
+        tools, api_name=LEAVE_BALANCE_API,
+        user_message="How many annual leave days have I used?",
+        fields=["used"],
+    )
+    assert _re.search(r"\d+", used).group() == "11"
+    # Without the asked field the copy keeps its default remaining lead.
+    default = answer_bound_ess_tools(
+        tools, api_name=LEAVE_BALANCE_API,
+        user_message="How many annual leave days have I used?",
+    )
+    assert _re.search(r"\d+", default).group() == "18"
+
+
 def test_answer_bound_ess_empty_balance_no_speculation():
     from ai.engine.cognition.turn.ess_read import (
         LEAVE_BALANCE_API,

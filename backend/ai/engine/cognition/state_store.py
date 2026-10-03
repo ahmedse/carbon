@@ -24,7 +24,7 @@ from ai.engine.host_ids import (
 )
 from ai.engine.cognition.phrase_tables import T
 
-from ai.engine.pack_vocab import V
+from ai.engine.pack_vocab import V, contained
 
 import json
 import logging
@@ -511,7 +511,7 @@ def _infer_open_question_slot(
     known = dict(slots or {})
     for key in (ID_LOAN_TYPE, "amount", "principal", "reason", "start_date", "end_date", "days"):
         if key not in known or known.get(key) in (None, ""):
-            if key in text_l or key.replace("_", " ") in text_l:
+            if contained(key, text_l) or contained(key.replace("_", " "), text_l):
                 return key
     if V("t_loan_2") in text_l or V("t_قرض") in (response_text or ""):
         return "loan_slot"
@@ -583,7 +583,7 @@ def update_state_from_turn(
     raw = response_text or ""
     if contains_any_phrase(raw, _EMPTY_PAYSLIP_REPLY_PHRASES) or any_needle(raw, EMPTY_PAYSLIP_AR):
         already = any(
-            ID_LIST_MY_PAYSLIPS in str(row.get("api") or row.get("digest") or "")
+            contained(ID_LIST_MY_PAYSLIPS, str(row.get("api") or row.get("digest") or ""))
             and (
                 "count=0" in str(row.get("digest") or "")
                 or "results=[]" in str(row.get("digest") or "")

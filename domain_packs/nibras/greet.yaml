@@ -1,0 +1,41 @@
+# Greeting door (ADR-0050). Phrases and copy live in the pack, never in
+# engine/. `greetings` is a whole-message greeting (every token is declared
+# here); `followups` is a greeting complaint ("why didn't you greet me back").
+# `{greeting}` in the copy is the matched pack phrase; the engine formats it.
+# No decorative emoji: the line is product copy, not the model's prose.
+version: 1
+greetings:
+  - مساء النور
+  - مساء الخير
+  - صباح النور
+  - صباح الخير
+  - السلام عليكم
+  - وعليكم السلام
+  - مرحبا
+  - أهلا
+  - أهلاً وسهلاً
+  - هلا
+  - يا هلا
+  - كيف حالك
+  - Good morning
+  - Good afternoon
+  - Good evening
+  - Good night
+  - Hello
+  - Hi
+  - Hey
+  - Hello there
+  - Greetings
+  - How are you
+followups:
+  - ليه ما ردتش
+  - ليش ما رديت
+  - ليه ما رديت
+  - why didn't you
+  - why did you not
+replies:
+  ar: "{greeting}، أهلاً بك. كيف أقدر أساعدك؟"
+  en: "{greeting}. How can I help you?"
+followup_replies:
+  ar: "أعتذر، مساء النور عليك. تفضل، كيف أقدر أساعدك؟"
+  en: "My apologies. Good evening to you — how can I help?"

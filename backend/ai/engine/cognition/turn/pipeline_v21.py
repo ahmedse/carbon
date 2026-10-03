@@ -490,6 +490,31 @@ async def narrate_envelope(
         continue
     if cause:
         failed = Degradation(stage="write", cause=cause)
+        if cause == "ungrounded":
+            # The payload supports a summary, so the turn is not refused.
+            # Ship the writer's words with the ungrounded figures dropped,
+            # plus an honest note. The failure stays typed on the ledger.
+            recovered = _grounded_fallback(headline, prose, payloads, language)
+            kept_headline, kept_prose = recovered
+            note = (
+                "تم حذف أرقام لم ترد في بيانات المصدر؛ الجداول أدناه دقيقة."
+                if language == "ar"
+                else "Figures that were not in the source data were omitted; the tables below are exact."
+            )
+            merged = {
+                **envelope,
+                "headline": kept_headline,
+                "prose": kept_prose,
+                "caveats": [
+                    *(envelope.get("caveats") or []),
+                    {"level": "warning", "text": note},
+                ],
+            }
+            return (
+                "\n\n".join(ln for ln in [kept_headline, *kept_prose] if ln),
+                merged,
+                failed,
+            )
         line = degradation_sentence(failed, language)
         degraded = {
             **envelope,
@@ -500,6 +525,37 @@ async def narrate_envelope(
         return line, degraded, failed
     merged = {**envelope, "headline": headline, "prose": prose}
     return "\n\n".join(ln for ln in [headline, *prose] if ln), merged, None
+
+
+def _grounded_fallback(
+    headline: str, prose: list[str], payloads: list[Any], language: str,
+) -> tuple[str, list[str]]:
+    """The writer's grounded subset, or a payload-safe line when nothing survives.
+
+    A figure the payload never carried is dropped; the words around it stay.
+    When every word was a figure, a deterministic line that claims no figure
+    of its own keeps the turn useful instead of an empty refusal card.
+    """
+    from ai.engine.cognition.turn.grounding import strip_ungrounded_numbers
+
+    kept_headline = strip_ungrounded_numbers(headline, payloads).strip()
+    kept_prose = [
+        kept
+        for line in prose or []
+        if (kept := strip_ungrounded_numbers(line, payloads).strip())
+    ]
+    words = sum(
+        len([w for w in part.split() if any(ch.isalpha() for ch in w)])
+        for part in [kept_headline, *kept_prose]
+    )
+    if words >= 4:
+        return kept_headline, kept_prose
+    deterministic = (
+        "أعرض أدناه البيانات الدقيقة كما وردت من النظام."
+        if language == "ar"
+        else "Here are the exact figures as returned by the system below."
+    )
+    return "", [deterministic]
 
 
 def last_view(state: Any) -> dict:
@@ -623,6 +679,16 @@ async def speak_turn(
     )
     if narrated is None:
         return spoken, envelope, None
+    if narrated[2] is not None and _knowledge_only(executed):
+        # A knowledge/tool answer (no host data) that the writer could not ground
+        # is an explicit unknown, not a data-read degradation (IB-08). A host
+        # read still fails visibly (ADR-0056).
+        unknown = (
+            "لم أتمكن من تأصيل إجابة لذلك مما لدي هنا."
+            if language == "ar"
+            else "I could not ground an answer for that from what I have here."
+        )
+        return unknown, {**envelope, "headline": "", "prose": [unknown]}, None
     from ai.engine.cognition.turn.reasoning import revision
 
     replaced = revision(spoken, narrated[0], "The summary was rewritten for this message.")
@@ -775,6 +841,21 @@ def _is_error(row: dict) -> bool:
         if isinstance(status, int) and status >= 400:
             return True
     return payload is None
+
+
+def _knowledge_only(executed: list[dict] | None) -> bool:
+    """True when every usable row is a static knowledge/tool result, not host data.
+
+    A ``search_knowledge`` answer that the writer could not ground is an honest
+    unknown; a host read is not (ADR-0056 stays for host data).
+    """
+    rows = [r for r in executed or [] if isinstance(r, dict) and not _is_error(r)]
+    if not rows:
+        return False
+    return all(
+        str(r.get("tool_name") or "") not in ("call_host_api", "")
+        for r in rows
+    )
 
 
 def rows_envelope(

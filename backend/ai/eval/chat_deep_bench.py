@@ -20,6 +20,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from ai.eval.intelligence_ladder import (
     G5_FILE,
     LIVE_A9_FILE,
@@ -42,6 +44,12 @@ INTENTION_BLOCKED_GLOB = "PV2-intention-blocked-*.json"
 INTENTION_BANK_GLOB = "chat_intention_bank_ib*.yaml"
 INTENTION_BANKS_DIR = Path(__file__).resolve().parent
 _BANK_FILE_RE = re.compile(r"^chat_intention_bank_(ib\d{2})\.yaml$")
+_ARABIC = re.compile(r"[\u0600-\u06FF]")
+
+#: Bank YAML ``gate.kind`` that scores by aggregate thresholds (the IR5
+#: paraphrase/adversarial bank) instead of all-threads-pass. The id is read
+#: from the YAML, never hardcoded here.
+_GATE_KIND_PARAPHRASE = "paraphrase"
 
 #: IB-09 is a unit bank (pytest); it has no live YAML and is reported apart.
 INTENTION_UNIT_BANKS: tuple[str, ...] = ("IB-09",)
@@ -80,6 +88,26 @@ def discover_intention_banks(directory: Path | None = None) -> dict[str, Path]:
     return banks
 
 
+def intention_gate_banks(directory: Path | None = None) -> dict[str, dict[str, Any]]:
+    """Banks scored by the YAML ``gate:`` block, keyed by bank id.
+
+    The IR5 paraphrase bank declares ``gate.kind: paraphrase`` in its YAML
+    (accuracy / parity / fallthrough / ungrounded thresholds). Reading the id
+    from the bank file means the scorer and the tests never hardcode it, and a
+    new threshold bank needs no code edit.
+    """
+    gates: dict[str, dict[str, Any]] = {}
+    for bank_id, path in discover_intention_banks(directory).items():
+        try:
+            doc = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except (OSError, ValueError):
+            continue
+        gate = doc.get("gate") if isinstance(doc, dict) else None
+        if isinstance(gate, dict) and str(gate.get("kind") or "") == _GATE_KIND_PARAPHRASE:
+            gates[bank_id] = dict(gate)
+    return gates
+
+
 #: Live/defined banks, discovered (not hardcoded).
 INTENTION_BANKS: tuple[str, ...] = tuple(discover_intention_banks())
 CLOSE_RUNS = 3
@@ -104,6 +132,91 @@ def _turn_fell_through(turn: dict[str, Any]) -> bool | None:
     if "v21_miss" in turn:
         return str(turn.get("v21_miss") or "") in FALLTHROUGH_REASONS
     return None
+
+
+def _turn_expected_lang(turn: dict[str, Any]) -> str:
+    """The language of the *asking* turn, from its own text (not the reply)."""
+    return "ar" if _ARABIC.search(str(turn.get("say") or "")) else "en"
+
+
+def _turn_ungrounded(turn: dict[str, Any]) -> int:
+    """How many figure-grounding misses this turn recorded (IRP-5)."""
+    return sum(
+        1
+        for miss in turn.get("misses") or []
+        if str(miss).startswith(("numbers_grounded", "numbers_from"))
+    )
+
+
+def paraphrase_run_score(run: dict[str, Any]) -> dict[str, Any]:
+    """IR5 score for one live run of the paraphrase bank.
+
+    * ``accuracy`` — share of turns whose declared checks pass (entity, figure,
+      refusal, no-fallthrough, not-degraded). A turn is the scored unit.
+    * ``parity`` — ``1 - |accuracy_ar - accuracy_en|`` (the difference form; the
+      contract states the ≥ 0.98 bar, this module defines the formula). The raw
+      ``parity_gap`` is reported alongside it.
+    * ``fallthrough`` — turns whose v21 marker is a fallthrough reason.
+    * ``ungrounded`` — figure-grounding misses.
+
+    A run with no recorded turns is ``missing``, never zero-fail.
+    """
+    turns = [
+        turn
+        for thread in run.get("threads") or []
+        if isinstance(thread, dict)
+        for turn in thread.get("turns") or []
+        if isinstance(turn, dict)
+    ]
+    if not turns:
+        return {
+            "status": "missing", "turns": 0, "correct": 0, "accuracy": None,
+            "accuracy_en": None, "accuracy_ar": None, "parity": None,
+            "parity_gap": None, "fallthrough": 0, "ungrounded": 0,
+        }
+
+    def _acc(rows: list[dict[str, Any]]) -> float | None:
+        if not rows:
+            return None
+        return sum(1 for t in rows if t.get("pass")) / len(rows)
+
+    en = [t for t in turns if _turn_expected_lang(t) == "en"]
+    ar = [t for t in turns if _turn_expected_lang(t) == "ar"]
+    acc_en, acc_ar = _acc(en), _acc(ar)
+    parity = None
+    gap = None
+    if acc_en is not None and acc_ar is not None:
+        gap = abs(acc_ar - acc_en)
+        parity = 1.0 - gap
+    correct = sum(1 for t in turns if t.get("pass"))
+    return {
+        "status": "scored",
+        "turns": len(turns),
+        "correct": correct,
+        "accuracy": round(correct / len(turns), 4),
+        "accuracy_en": round(acc_en, 4) if acc_en is not None else None,
+        "accuracy_ar": round(acc_ar, 4) if acc_ar is not None else None,
+        "parity": round(parity, 4) if parity is not None else None,
+        "parity_gap": round(gap, 4) if gap is not None else None,
+        "fallthrough": sum(1 for t in turns if _turn_fell_through(t) is True),
+        "ungrounded": sum(_turn_ungrounded(t) for t in turns),
+    }
+
+
+def paraphrase_run_pass(score: dict[str, Any], gate: dict[str, Any]) -> bool:
+    """Does one run clear the IR5 thresholds? A missing score never passes."""
+    if score.get("status") != "scored":
+        return False
+    accuracy = score.get("accuracy")
+    parity = score.get("parity")
+    return bool(
+        accuracy is not None
+        and accuracy >= float(gate.get("accuracy", 0.95))
+        and parity is not None
+        and parity >= float(gate.get("parity", 0.98))
+        and int(score.get("fallthrough") or 0) <= int(gate.get("fallthrough", 0))
+        and int(score.get("ungrounded") or 0) <= int(gate.get("ungrounded", 0))
+    )
 
 
 def fallthrough_count(retests: list[dict[str, Any]]) -> dict[str, Any]:
@@ -157,18 +270,35 @@ def _intention_run_pass(row: dict[str, Any]) -> bool:
     return bool(threads) and all(t.get("pass") for t in threads if isinstance(t, dict))
 
 
-def intention_bank_status(runs: list[dict[str, Any]], bank_id: str) -> dict[str, Any]:
+def intention_bank_status(
+    runs: list[dict[str, Any]],
+    bank_id: str,
+    gate: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Honest bank status: missing / partial / fail / reached over CLOSE_RUNS.
 
     A bank with no live run is ``missing``, never zero-fail. ``reached`` needs
     the last ``CLOSE_RUNS`` full runs to pass every thread.
+
+    ``gate`` selects the aggregate-threshold path (IR5 paraphrase bank): a run
+    passes when accuracy/parity/fallthrough/ungrounded clear the ``gate:``
+    block, not when every thread passes. The last run's score is attached so
+    the number is reported, never inferred.
     """
     mine = [r for r in runs if r.get("bank") == bank_id]
     if not mine:
         return {"status": "missing", "runs": 0, "passed": 0, "of": 0, "last": None}
     window = mine[-CLOSE_RUNS:]
-    passed = sum(1 for r in window if _intention_run_pass(r))
-    if not _intention_run_pass(mine[-1]):
+    if gate:
+        scores = [paraphrase_run_score(r) for r in window]
+        passed = sum(1 for s in scores if paraphrase_run_pass(s, gate))
+        last_ok = paraphrase_run_pass(scores[-1], gate)
+        last_extra = {"gate": dict(gate), "score": scores[-1]}
+    else:
+        passed = sum(1 for r in window if _intention_run_pass(r))
+        last_ok = _intention_run_pass(mine[-1])
+        last_extra = {}
+    if not last_ok:
         status = "fail"
     elif len(window) == CLOSE_RUNS and passed == CLOSE_RUNS:
         status = "reached"
@@ -180,6 +310,7 @@ def intention_bank_status(runs: list[dict[str, Any]], bank_id: str) -> dict[str,
         "passed": passed,
         "of": len(window),
         "last": mine[-1].get("_file"),
+        **last_extra,
     }
 
 
@@ -199,25 +330,30 @@ def _intention_class_status(*banks: dict[str, Any]) -> str:
     return "pending"
 
 
-def _intention_ladder(banks: dict[str, dict[str, Any]]) -> dict[str, str]:
+def _intention_ladder(
+    banks: dict[str, dict[str, Any]],
+    paraphrase_banks: tuple[str, ...] = (),
+) -> dict[str, str]:
     """``IR0``–``IR5`` each scored by its own exit gate (contract §6).
 
     Reported per level, as the contract's Phase 4 does (``IR2`` reached while
     ``IR1`` is not). Entry is cumulative on paper; the report never hides a
     lower level's miss behind a higher pass, so no level is inferred. ``IR5``
-    additionally needs a locked paraphrase bank, which is not built: missing.
+    needs ``IB-10`` + ``IB-11`` + every discovered locked paraphrase bank
+    (``gate.kind: paraphrase``) reached. The ``g6_runner`` gate is a separate
+    command and is not inferred here.
     """
     def reached(*ids: str) -> bool:
         return all((banks.get(i) or {}).get("status") == "reached" for i in ids)
 
+    ir5 = reached("IB-10", "IB-11") and bool(paraphrase_banks) and reached(*paraphrase_banks)
     return {
         "ir0": "reached",  # contract committed + unit bank green (this file)
         "ir1": "reached" if reached("IB-10") else "not reached",
         "ir2": "reached" if reached("IB-04", "IB-05") else "not reached",
         "ir3": "reached" if reached("IB-03", "IB-01") else "not reached",
         "ir4": "reached" if reached("IB-07", "IB-08") else "not reached",
-        # IR5 also needs the locked ≥5-paraphrase/adversarial bank: not built.
-        "ir5": "not reached",
+        "ir5": "reached" if ir5 else "not reached",
     }
 
 
@@ -231,7 +367,14 @@ def intention_banks(root: Path = EVIDENCE) -> dict[str, Any]:
     (RULE_36).
     """
     runs = load_intention_runs(root)
-    banks = {bank_id: intention_bank_status(runs, bank_id) for bank_id in INTENTION_BANKS}
+    gates = intention_gate_banks()
+    banks = {
+        bank_id: intention_bank_status(runs, bank_id, gates.get(bank_id))
+        for bank_id in INTENTION_BANKS
+    }
+    paraphrase = {
+        bank_id: banks[bank_id] for bank_id in gates if bank_id in banks
+    }
     unit_banks = {
         bank_id: {
             "status": "unit",
@@ -263,15 +406,18 @@ def intention_banks(root: Path = EVIDENCE) -> dict[str, Any]:
             }
     return {
         "banks": banks,
+        "paraphrase": paraphrase,
         "unit_banks": unit_banks,
         **classes,
-        **_intention_ladder(banks),
+        **_intention_ladder(banks, tuple(gates)),
         "blocked": blocked,
         "rule": (
             "A bank with no live run is missing, never zero-fail. A bank reaches "
             f"only after {CLOSE_RUNS} consecutive full live runs; a later fail "
             "reopens it. IB-06 (write) needs STACK-HOLD and stays missing here. "
-            "IB-09 is unit. Reported, not merged into Ask 10/10 (RULE_36)."
+            "IB-09 is unit. The paraphrase bank gates on accuracy/parity/"
+            "fallthrough/grounding, never all-threads-pass. Reported, not merged "
+            "into Ask 10/10 (RULE_36)."
         ),
     }
 

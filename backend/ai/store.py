@@ -452,8 +452,20 @@ def _prepare_db_thread() -> None:
     Postgres closes the idle socket, psycopg2 leaves ``closed != 0`` and the
     next cursor raises ``InterfaceError: connection already closed``. The
     workspace replaces that with the generic unreachable sentence.
+
+    Never recycle a connection that is pinned to an atomic block. Django's
+    ``BaseDatabaseWrapper.close()`` cannot reset ``connection`` while
+    ``in_atomic_block`` is set: it defers to the transaction owner, marks
+    ``closed_in_transaction`` / ``needs_rollback`` and leaves the psycopg2
+    handle dead, so the next cursor raises ``InterfaceError``. Because
+    ``ATOMIC_REQUESTS`` wraps every request in such a block, engine work that
+    runs inline on the request thread (e.g. clear-context's state reset) must
+    reuse the surrounding transaction instead of tearing its socket down.
     """
     from django.db import close_old_connections, connection
+
+    if getattr(connection, "in_atomic_block", False):
+        return
 
     close_old_connections()
     raw = connection.connection

@@ -1045,6 +1045,12 @@ t_task_tool_result_synthesis_write_the: 'TASK — Tool-result synthesis:
 
   Do not mention tools, API calls, or fetching.
 
+  Never add decorative emoji or emoji bullets. When a host value is a name, job
+  title, or department, keep it in the language the host returned and put it
+  after its label — never splice a Latin value into the middle of an Arabic
+  sentence. State the user''s own identity/record facts as labelled lines, one
+  fact per line.
+
   Do NOT include charts or diagrams unless the user explicitly asked.{hints_note}'
 t_team_track_status_in_my_leave: (/team). Track status in My Leave — Pulse does not
   approve for them.

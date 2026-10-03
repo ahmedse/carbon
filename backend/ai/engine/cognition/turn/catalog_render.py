@@ -191,7 +191,26 @@ def resolve_render_meta(api_name: str, catalog_entry: dict | None = None) -> dic
     return meta
 
 
-def _balance_row_chunk(row: dict, *, ar: bool) -> str | None:
+def _asked_balance_lead(asked: list[str] | None) -> str | None:
+    """The non-remaining balance metric the ask names (``used`` / ``entitled``).
+
+    IRP-5 / IB-11: the user may ask for a metric the balance row carries but
+    the templated copy prints second. Honoring the asked metric as the lead
+    keeps paraphrase repeats stable. Only metrics the chunk already renders are
+    honored, so no new vocabulary enters the engine (ADR-0050).
+    """
+    for name in asked or []:
+        key = str(name or "").strip().casefold()
+        if key in ("used", "used_days"):
+            return "used"
+        if key in ("entitled", "entitled_days"):
+            return "entitled"
+    return None
+
+
+def _balance_row_chunk(
+    row: dict, *, ar: bool, asked: list[str] | None = None,
+) -> str | None:
     kind = (
         _code_or_text(row.get(ID_LEAVE_TYPE))
         or _code_or_text(row.get("leave_type_label"))
@@ -205,6 +224,27 @@ def _balance_row_chunk(row: dict, *, ar: bool) -> str | None:
     used = row.get("used_days")
     if used is None:
         used = row.get("used")
+    lead = _asked_balance_lead(asked)
+    if lead == "used" and used is not None:
+        if ar:
+            chunk = f"{kind} المستخدم {used}"
+            if remaining is not None:
+                chunk += f" (المتبقي {remaining})"
+        else:
+            chunk = f"{kind} used {used}"
+            if remaining is not None:
+                chunk += f" (remaining {remaining})"
+        return chunk
+    if lead == "entitled" and entitled is not None:
+        if ar:
+            chunk = f"{kind} المستحق {entitled}"
+            if used is not None:
+                chunk += f" (المستخدم {used})"
+        else:
+            chunk = f"{kind} entitled {entitled}"
+            if used is not None:
+                chunk += f" (used {used})"
+        return chunk
     if remaining is not None:
         if ar:
             chunk = f"{kind} المتبقي {remaining}"
@@ -239,7 +279,10 @@ def _balance_who(row: dict) -> str:
     return f"{who}, {year}" if year not in (None, "") else who
 
 
-def render_balance_rows(rows: list[dict], language: str, *, empty_render: str) -> str | None:
+def render_balance_rows(
+    rows: list[dict], language: str, *, empty_render: str,
+    asked: list[str] | None = None,
+) -> str | None:
     ar = _lang_code(language) == "ar"
     # An org list (HR) carries employee_name on every row. Rendering it as
     # "Your  balance" drops the name, so the same six types repeat once
@@ -250,7 +293,7 @@ def render_balance_rows(rows: list[dict], language: str, *, empty_render: str) -
         seen: set[str] = set()
         for row in rows:
             who = _balance_who(row)
-            chunk = _balance_row_chunk(row, ar=ar)
+            chunk = _balance_row_chunk(row, ar=ar, asked=asked)
             if not chunk:
                 continue
             if who and who not in seen:
@@ -265,7 +308,7 @@ def render_balance_rows(rows: list[dict], language: str, *, empty_render: str) -
 
     parts: list[str] = []
     for row in rows:
-        chunk = _balance_row_chunk(row, ar=ar)
+        chunk = _balance_row_chunk(row, ar=ar, asked=asked)
         if chunk:
             parts.append(chunk)
     if not parts:
@@ -803,7 +846,11 @@ def render_catalog_read(
         vlabels = None
 
     if kind == "balance" or api in BALANCE_APIS:
-        return render_balance_rows(rows, language, empty_render=empty_key or ID_NO_BALANCE)
+        return render_balance_rows(
+            rows, language,
+            empty_render=empty_key or ID_NO_BALANCE,
+            asked=fields,
+        )
 
     if kind == V("t_payslip_2") or api in PAYSLIP_APIS:
         return render_history_rows(

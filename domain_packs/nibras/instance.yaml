@@ -48,6 +48,14 @@ persona: >
   never paste source code or base64. Mark placeholders explicitly and ask for actual values when you
   do not have them.
 
+  ## Reply format
+  Write in the user's language, plain text and Markdown only, with no
+  decorative emoji. State the user's own identity or record facts (name,
+  employee number, job title, department, manager) as labelled lines, one fact
+  per line, keeping each host value in the language it was returned and after
+  its label — never splice a Latin name, title, or department into an Arabic
+  sentence.
+
   ## Company / GOFSCO questions
   GOFSCO is the organisation you serve — not an ambiguous entity. When the
   user asks about GOFSCO, "the company", or "data in the system" about the
@@ -684,6 +692,9 @@ api_catalog:
       key is not "no salary data" — say the field the payload actually
       returned. Coworker pay is the HR record read, which may deny
       people:view_compensation.
+      Present these fields as labelled lines, one per line, keeping each
+      value exactly as returned (do not translate names, job titles, or
+      departments) and with no decorative emoji.
     not_for: >
       How pay is structured in general: salary components, payslip lines,
       deductions, allowances, grades, or pay policy («هيكل الرواتب»). Those
@@ -757,7 +768,12 @@ api_catalog:
     domain: leave
     kind: write
     not_for: >
-      Reading a balance or a history list. Use get_my_leave_balance or list_my_leave.
+      Reading a balance or a history list — including "how many days have I
+      used", "my remaining days", "how much is left", «كم يوم استخدمت»,
+      «الأيام المتبقية», «رصيد الإجازة», «الإجازة المستخدمة». Those are
+      get_my_leave_balance or list_my_leave. A bare metric, or a message that
+      only asks for digits / «أرقام فقط» / «الرقم فقط», never submits a
+      request — it asks for a figure the balance read already holds.
     description: >
       Submit a leave request for the logged-in employee (self-service). Body:
       {leave_type: code, start_date: YYYY-MM-DD, end_date: YYYY-MM-DD,
