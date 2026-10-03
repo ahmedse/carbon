@@ -157,11 +157,24 @@ git clean -fd -e backend/staticfiles -e backend/mediafiles -e backend/dataschema
 git checkout -f "$LATEST_TAG"
 
 if [[ -f "$FRONTEND_DIR/package.json" ]] && command -v npm &>/dev/null; then
-    log "Building frontend"
+    # Bake the aastmt brand copy into the built index.html. Vite leaves
+    # %VITE_*% literal when the var is absent, so the full VITE_PLATFORM_* /
+    # VITE_CANONICAL_URL set must be present. Values live in
+    # .env.instance.<brand> — the same source deploy/instance/auto-deploy.sh
+    # uses. Do not duplicate them here.
+    FRONTEND_BRAND="aastmt"
+    BRAND_ENV="$FRONTEND_DIR/.env.instance.${FRONTEND_BRAND}"
+    log "Building frontend (brand=$FRONTEND_BRAND)"
     cd "$FRONTEND_DIR"
-    cat > .env.production <<EOF
-VITE_API_BASE_URL=/carbon-api/
-EOF
+    {
+        printf 'VITE_BRAND=%s\n' "$FRONTEND_BRAND"
+        printf 'VITE_API_BASE_URL=/carbon-api/\n'
+        if [[ -f "$BRAND_ENV" ]]; then
+            grep -E '^(VITE_PLATFORM_NAME|VITE_PLATFORM_SHORT|VITE_PLATFORM_TITLE|VITE_PLATFORM_TAGLINE|VITE_PLATFORM_DESCRIPTION|VITE_CANONICAL_URL|VITE_PULSE_INSTANCE_ID)=' "$BRAND_ENV" || true
+        else
+            log "WARNING: $BRAND_ENV missing — index.html will keep %VITE_*% placeholders"
+        fi
+    } > .env.production
     npm ci --silent 2>/dev/null
     npm run build
     cd "$APP_DIR"
