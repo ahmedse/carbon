@@ -1,0 +1,30 @@
+# TEACH-CMD gold — the Moodle pane "educate me" teaching command.
+#
+# A bare command lists what IS teachable; a "<topic>, educate me" command
+# resolves the topic to grounded course content. Never the bare course miss,
+# never a label-only citation, never another topic's label. Read-only
+# (ADR-0046); vocabulary lives in topic_asks.yaml, not engine/**.
+version: 1
+miss: "This is not in this course."
+topics_label: "Topics I can teach from this course:"
+bare:
+  ask: "educate me"
+  shortname: MED520
+  expect_no_miss: true
+existing_topic:
+  ask: "alopecia, educate me"
+  shortname: MED520
+  expect_passage: "MED520:file:1111:alopecia.pdf"
+absent_topic:
+  ask: "zzznosuchtermqq, educate me"
+  shortname: MED520
+  expect_no_miss: true
+lecture_topic:
+  ask: "L4 Bacterial genetics, educate me"
+  shortname: NMD3101
+  expect_passage: "NMD3101:file:1530:L4 Bacterial genetics.pdf"
+  # The Tutorial 4 label must never be cited as the L4 lecture (root-cause bug).
+  forbid_substring:
+    - "5637"
+    - "Disinfection"
+    - ":label:"

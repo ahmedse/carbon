@@ -521,18 +521,43 @@ def _compact_name(name: str) -> str:
     return "".join(ch for ch in (name or "").casefold() if ch.isalnum())
 
 
+def _lecture_tokens(name: str) -> list[str]:
+    """Casefolded alphanumeric tokens split on every non-alphanumeric char."""
+    tokens: list[str] = []
+    current: list[str] = []
+    for ch in (name or "").casefold():
+        if ch.isalnum():
+            current.append(ch)
+        elif current:
+            tokens.append("".join(current))
+            current = []
+    if current:
+        tokens.append("".join(current))
+    return tokens
+
+
 def _name_has_lecture_num(name: str, num: int) -> bool:
-    compact = _compact_name(name)
-    token = f"l{num}"
-    start = 0
-    while True:
-        pos = compact.find(token, start)
-        if pos < 0:
-            return False
-        end = pos + len(token)
-        if end >= len(compact) or not compact[end].isdigit():
-            return True
-        start = pos + 1
+    """True when ``name`` carries the lecture token ``L<num>``.
+
+    Tokens are split on non-alphanumerics of the ORIGINAL (casefolded) name, so
+    both the spaced form (``L 4 Anterior triangle``, ``L 17- Carbohydrates``)
+    and the glued form (``L4 Bacterial genetics``, ``L 16-chemical bonds``)
+    resolve. A lecture token is EITHER the bare token ``l`` immediately
+    followed by an all-digit token, OR a single token shaped exactly
+    ``l<digits>``. ``tutorial 4`` (tokens ``["tutorial","4"]``, no ``l`` token)
+    and ``final4`` (not the ``l<digits>`` shape) are rejected; ``L40`` matches
+    40 and never 4 (no prefix-of-number matching).
+    """
+    tokens = _lecture_tokens(name)
+    for index, token in enumerate(tokens):
+        if token == "l":
+            if index + 1 < len(tokens) and tokens[index + 1].isdigit():
+                if int(tokens[index + 1]) == num:
+                    return True
+        elif token[:1] == "l" and token[1:].isdigit():
+            if int(token[1:]) == num:
+                return True
+    return False
 
 
 def _row_matches_lecture(row: dict[str, Any], num: int | None, section_name: str = "") -> bool:
@@ -557,9 +582,11 @@ def _prefer_lecture_rows(rows: list[dict], num: int | None) -> list[dict]:
         primary = 0
         if num is not None:
             token = f"l{num}"
-            if f"{token}-" in name.replace(" ", "") or f"{token}:" in name.replace(" ", ""):
+            flat = name.replace(" ", "")
+            has_num = _name_has_lecture_num(name, num)
+            if has_num and (f"{token}-" in flat or f"{token}:" in flat):
                 primary = 0
-            elif f"{token}&" in compact or "activity" in name:
+            elif has_num and (f"{token}&" in compact or "activity" in name):
                 primary = 2
             else:
                 primary = 1
@@ -720,6 +747,10 @@ def _lecture_about_answer(message: str, snapshot: dict[str, Any] | None) -> str:
 def lecture_answer(message: str, snapshot: dict[str, Any] | None) -> str | None:
     if not is_lecture_ask(message):
         return None
+    # An explicit teach command owns its own topic ("<topic>, educate me"):
+    # leave it to the topic/teach door instead of citing it as a lecture.
+    if _is_teach_command(message):
+        return None
     if _is_lecture_about_ask(message):
         return _lecture_about_answer(message, snapshot)
     activity = (snapshot or {}).get("activity")
@@ -796,6 +827,7 @@ def _topic_spec() -> dict[str, Any]:
         if str(prefix).strip()
     )
     short = data.get("short_query") if isinstance(data.get("short_query"), dict) else {}
+    teach = data.get("teach_command") if isinstance(data.get("teach_command"), dict) else {}
     stopwords = frozenset(
         str(word).casefold().strip()
         for word in (short.get("stopwords") or [])
@@ -806,6 +838,22 @@ def _topic_spec() -> dict[str, Any]:
         for word in (short.get("greetings") or [])
         if str(word).strip()
     )
+    teach_suffixes = tuple(
+        sorted(
+            (
+                str(suffix).casefold()
+                for suffix in (teach.get("suffixes") or [])
+                if str(suffix).strip()
+            ),
+            key=len,
+            reverse=True,
+        )
+    )
+    teach_bare = frozenset(
+        str(word).casefold().strip()
+        for word in (teach.get("bare") or [])
+        if str(word).strip()
+    )
     return {
         "prefixes": prefixes,
         "miss": str(data.get("miss") or "This is not in this course.").strip(),
@@ -814,6 +862,15 @@ def _topic_spec() -> dict[str, Any]:
         "short_max_tokens": int(short.get("max_tokens") or 0),
         "short_stopwords": stopwords,
         "short_greetings": greetings,
+        "teach_suffixes": teach_suffixes,
+        "teach_bare": teach_bare,
+        "teach_no_topic": str(
+            teach.get("no_topic") or "Which topic should I teach? Name a topic from this course."
+        ).strip(),
+        "teach_topics_label": str(
+            teach.get("topics_label") or "Topics I can teach from this course:"
+        ).strip(),
+        "teach_max_topics": int(teach.get("max_topics") or 8),
     }
 
 
@@ -848,6 +905,107 @@ def _topic_meta_blocked(topic: str) -> bool:
     return False
 
 
+def _teach_suffix_topic(message: str) -> str | None:
+    """Topic named BEFORE a trailing teach command ("<topic>, educate me").
+
+    None when no pack suffix is present, or when the remainder is empty or
+    course/page meta (so "this course, educate me" stays on the course door).
+    """
+    spec = _topic_spec()
+    text = " ".join((message or "").casefold().split())
+    if not text:
+        return None
+    for suffix in spec["teach_suffixes"]:
+        if not text.endswith(suffix):
+            continue
+        topic = text[: -len(suffix)].strip(" \t.?!:;,\"'")
+        if not topic or _topic_meta_blocked(topic):
+            return None
+        return topic
+    return None
+
+
+def _is_bare_teach_command(message: str) -> bool:
+    """True for a teaching command with no topic ("educate me", "teach me")."""
+    core = " ".join((message or "").casefold().split()).strip(" \t.?!:;,\"'")
+    return bool(core) and core in _topic_spec()["teach_bare"]
+
+
+def _is_teach_command(message: str) -> bool:
+    return _is_bare_teach_command(message) or _teach_suffix_topic(message) is not None
+
+
+def _topic_core(topic: str) -> str:
+    """Topic without a leading lecture marker ("l4 bacterial genetics").
+
+    The marker lives only on a label row in many banks; the real passages are
+    named after the substantive topic. Returns "" when nothing remains.
+    """
+    tokens = str(topic or "").casefold().split()
+    if not tokens:
+        return ""
+    if (
+        len(tokens) >= 2
+        and tokens[0] == "lecture"
+        and tokens[1].rstrip(":-").isdigit()
+    ):
+        return " ".join(tokens[2:]).strip()
+    head = tokens[0]
+    if head[:1] == "l" and head[1:2].isdigit() and head[1:].rstrip(":-").isdigit():
+        return " ".join(tokens[1:]).strip()
+    return ""
+
+
+def _teach_clarification(
+    page: dict[str, Any],
+    bank: dict[str, dict],
+    spec: dict[str, Any] | None = None,
+) -> str:
+    """Honest answer for a teach command with no (or an absent) topic.
+
+    Lists a bounded set of what IS teachable from the open course: section
+    titles, then non-label activity names. Never the bare miss, never a
+    citation with no answer. Read-only (ADR-0046).
+    """
+    bag = page if isinstance(page, dict) else {}
+    spec = spec or _topic_spec()
+    max_topics = int(spec["teach_max_topics"])
+    labels: list[str] = []
+    seen: set[str] = set()
+
+    def _add(raw: Any) -> None:
+        name = str(raw or "").strip()
+        folded = name.casefold()
+        if name and folded not in seen and len(labels) < max_topics:
+            seen.add(folded)
+            labels.append(name)
+
+    for section in bag.get("sections") or []:
+        if isinstance(section, dict):
+            _add(section.get("name"))
+    for row in bank.values():
+        if str(row.get("kind") or "") == "label":
+            continue
+        _add(row.get("name"))
+    if not labels:
+        return spec["teach_no_topic"]
+    return "\n".join(
+        [spec["teach_no_topic"], spec["teach_topics_label"], *[f"- {label}" for label in labels]]
+    )
+
+
+def _topic_clarification_or_miss(
+    message: str,
+    page: dict[str, Any],
+    bank: dict[str, dict],
+    spec: dict[str, Any],
+) -> str:
+    """An absent topic after a teach command gets the honest clarifier."""
+    if _teach_suffix_topic(message) is not None:
+        return _teach_clarification(page, bank, spec)
+    return spec["miss"]
+
+
 def _short_topic_from_text(text: str) -> str | None:
     """Bare topic from pack short_query. None for greetings / chatty turns."""
     spec = _topic_spec()
@@ -877,7 +1035,15 @@ def _short_topic_from_text(text: str) -> str | None:
 
 
 def _topic_from_message(message: str) -> str | None:
-    """Named topic after a pack prefix or short_query, else None."""
+    """Named topic after a pack prefix, a trailing teach command, or short_query."""
+    text = " ".join((message or "").casefold().split())
+    if not text:
+        return None
+    # A trailing teach command names its topic first ("<topic>, educate me").
+    # It wins over the lecture/course doors so the topic door cites it.
+    suffix_topic = _teach_suffix_topic(text)
+    if suffix_topic is not None:
+        return suffix_topic
     if (
         is_section_ask(message)
         or is_course_ask(message)
@@ -887,9 +1053,6 @@ def _topic_from_message(message: str) -> str | None:
         or _is_identity_ask(message)
         or is_greet_ask(message)
     ):
-        return None
-    text = " ".join((message or "").casefold().split())
-    if not text:
         return None
     for prefix in _topic_spec()["prefixes"]:
         if not text.startswith(prefix):
@@ -1148,23 +1311,37 @@ def topic_answer(
     snapshot: dict[str, Any] | None,
     state: dict[str, Any] | None = None,
 ) -> str | None:
-    """Cite this course’s bank for a named topic, or the course miss."""
-    topic = _topic_from_message(message)
-    if topic is None:
-        return None
+    """Cite this course’s bank for a named topic, or an honest teach ask."""
+    spec = _topic_spec()
     page = snapshot if isinstance(snapshot, dict) else {}
     course = page.get("course") if isinstance(page.get("course"), dict) else {}
     shortname = str(course.get("shortname") or "").strip()
-    spec = _topic_spec()
     miss = spec["miss"]
+    if _is_bare_teach_command(message):
+        if not shortname:
+            return miss
+        return _teach_clarification(page, _load_course_bank(shortname), spec)
+    topic = _topic_from_message(message)
+    if topic is None:
+        return None
     if not shortname:
         return miss
     bank = _load_course_bank(shortname)
     rows, origin = _topic_rows(bank, topic, page=page)
+    match_topic = topic
+    # "L4 Bacterial genetics" often title-matches only the L4 label row while
+    # the real passages are named "… Bacterial genetics". Retry on the core so
+    # the answer is grounded content, never a bare label citation.
+    if not rows or all(str(row.get("kind") or "") == "label" for row in rows):
+        core = _topic_core(topic)
+        if core:
+            core_rows, core_origin = _topic_rows(bank, core, page=page)
+            if core_rows and not all(str(row.get("kind") or "") == "label" for row in core_rows):
+                rows, origin, match_topic = core_rows, core_origin, core
     if not rows:
         fallback = _topic_index_fallback(topic, bank, page, shortname)
         if fallback is None:
-            return miss
+            return _topic_clarification_or_miss(message, page, bank, spec)
         pid, span = fallback
         row = bank.get(pid)
         if row is None:
@@ -1175,16 +1352,16 @@ def topic_answer(
 
             set_resolved_topic(state, topic=topic, shortname=shortname, passage_ids=[pid])
         return "\n".join([head, f"{pid}\n{span}"])
-    head = _topic_section_line(page, topic, rows)
+    head = _topic_section_line(page, match_topic, rows)
     primary = rows[0]
     text = str(primary.get("text") or "")
     if origin == "body":
-        pattern = _topic_word_pattern(topic)
+        pattern = _topic_word_pattern(match_topic)
         span = _bounded_body_span(text, pattern, int(spec["body_cite_span"])) if pattern else ""
     else:
         span = _short_span(text, int(spec["cite_span"]))
     if not span:
-        return miss
+        return _topic_clarification_or_miss(message, page, bank, spec)
     parts = [head, f"{primary['id']}\n{span}"]
     extras: list[str] = []
     seen = {primary.get("activity_id")}

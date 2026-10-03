@@ -27,6 +27,23 @@ prefixes:
   - "what's an "
   - "what's "
   - "what are "
+# A teaching command names a topic either after a prefix ("educate me about X")
+# or BEFORE a trailing command ("<topic>, educate me"). A bare command with no
+# topic asks which topic and lists what is teachable — never the course miss
+# and never a citation with no answer. Vocabulary stays here, never engine/.
+teach_command:
+  # Longest first so ", educate me" is not shadowed by " educate me".
+  suffixes:
+    - ", educate me"
+    - " educate me"
+    - ", teach me"
+    - " teach me"
+  bare:
+    - "educate me"
+    - "teach me"
+  no_topic: "Which topic should I teach? Name a lecture or a topic from this course."
+  topics_label: "Topics I can teach from this course:"
+  max_topics: 8
 # Bare topic query (e.g. "herpes?"). Not a disease list — vocabulary is the
 # course bank. Patterns stay in this pack; never engine/.
 # Boundary: greetings and multi-clause chat are not short topics. A message
