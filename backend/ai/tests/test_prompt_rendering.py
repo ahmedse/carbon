@@ -48,7 +48,7 @@ def test_build_chat_prompt_includes_rendering_block():
     assert "```mermaid" in prompt
     # The compact summary carries the directive; the full worked examples moved
     # to the rich-content-rendering skill references (progressive disclosure).
-    assert RENDERING_CAPABILITIES_SUMMARY in prompt
+    assert str(RENDERING_CAPABILITIES_SUMMARY) in prompt
     assert "flowchart" in prompt
 
 

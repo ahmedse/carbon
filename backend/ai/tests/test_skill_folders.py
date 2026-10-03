@@ -126,8 +126,8 @@ def test_assembled_prompt_uses_summary_not_full_block_and_no_skill_index():
             system_description="Data trust platform.",
         )
     )
-    assert RENDERING_CAPABILITIES_SUMMARY in prompt
-    assert RENDERING_CAPABILITIES not in prompt
+    assert str(RENDERING_CAPABILITIES_SUMMARY) in prompt
+    assert str(RENDERING_CAPABILITIES) not in prompt
     assert "rich-content-rendering" not in prompt
     assert "domain-guidance" not in prompt
     assert "tool-guidance" not in prompt

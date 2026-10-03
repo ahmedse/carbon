@@ -1127,13 +1127,17 @@ class SoftSurfacesMixin:
         _state = getattr(state_ctx, "state", None)
         if _state is not None:
             _prior_api = (getattr(_state, "intent", None) or {}).get("api")
+        fields: list[str] | None = None
         if profile_only:
             # Identity / self-profile is a declared detail read, not prose.
             # Resolve against the pack's own catalog vocabulary plus typed
-            # state, so no conversational writer can word it.
-            from ai.engine.cognition.turn.ess_read import resolve_profile_api
+            # state, so no conversational writer can word it. The ask's own
+            # declared fields come back with it: a bound read restates only
+            # what was asked, so the pack's sensitive pay field appears on a
+            # pay ask and stays off a plain record dump.
+            from ai.engine.cognition.turn.ess_read import resolve_profile_read
 
-            api = resolve_profile_api(user_message, state=_state, catalog=_catalog)
+            api, fields = resolve_profile_read(user_message, state=_state, catalog=_catalog)
         else:
             api = bound_ess_self_api(
                 user_message,
@@ -1186,8 +1190,11 @@ class SoftSurfacesMixin:
                 isinstance(item, dict) and not item.get("error") for item in completed
             ),
             # Same catalog contract the Decision path passes: a declared
-            # detail read renders its pack field_labels, one value per line.
+            # detail read renders its pack field_labels, one value per line —
+            # projected to the fields the ask named (``visible_fields``), so
+            # a sensitive field is shown only when it was actually asked for.
             catalog_entry=catalog_entry_named(_catalog, api),
+            fields=fields,
         )
         if not (text or "").strip():
             _signal(ledger, "ess_bound_self_read", False, reason="no_declared_render")

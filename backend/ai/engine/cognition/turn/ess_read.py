@@ -29,7 +29,7 @@ from ai.engine.host_ids import (
     ID_LOAN_HISTORY,
     ID_NO_BALANCE,
 )
-from ai.engine.pack_vocab import LV, V, copy_text, live_alt, live_pattern, present_ids, same_id
+from ai.engine.pack_vocab import LV, V, contained, copy_text, live_alt, live_pattern, present_ids, same_id
 
 import json
 import re
@@ -401,44 +401,131 @@ def _prior_profile_read(state) -> bool:
     return False
 
 
-def resolve_profile_api(
+def _profile_field_names(entry: dict | None) -> dict[str, list[str]]:
+    """Declared profile fields → the pack names/labels that name each one.
+
+    ``returns`` gives canonical field ids; ``field_labels`` gives the display
+    labels the operator words. None of these words live in the core — they are
+    the pack's own catalog vocabulary (ADR-0050), so a match here stays
+    pack-driven.
+    """
+    out: dict[str, list[str]] = {}
+    raw_returns = (entry or {}).get("returns")
+    if isinstance(raw_returns, list):
+        for name in raw_returns:
+            field = str(name or "").strip()
+            if field:
+                out.setdefault(field, []).append(field.replace("_", " "))
+    labels = (entry or {}).get("field_labels")
+    if isinstance(labels, dict):
+        for field, value in labels.items():
+            texts = value.values() if isinstance(value, dict) else [value]
+            for text in texts:
+                if isinstance(text, str) and text.strip():
+                    out.setdefault(str(field), []).append(text)
+    return out
+
+
+def _profile_fields_named(entry: dict | None, text: str | None) -> list[str]:
+    """Declared profile fields whose pack name or label the ask names.
+
+    A field named only in the pack's own vocabulary is what lets a bound
+    read answer exactly what was asked — in particular, the pack's
+    ``sensitive_fields`` (pay) appear when the ask names them, never on a
+    plain record dump (IRP-5 / A5 minimisation).
+    """
+    msg = _fold(text or "").strip("?؟!.، ")
+    if not msg:
+        return []
+    out: list[str] = []
+    for field, names in _profile_field_names(entry).items():
+        for name in names:
+            needle = _fold(name)
+            if len(needle) >= 2 and needle in msg:
+                out.append(field)
+                break
+    return out
+
+
+def resolve_profile_read(
     text: str | None,
     *,
     state=None,
     catalog: list | None = None,
-) -> str | None:
-    """Identity / self-profile ask → the declared profile GET, else ``None``.
+) -> tuple[str | None, list[str] | None]:
+    """Identity / self-profile ask → (declared profile GET, fields it names).
 
     Deterministic: the ask is matched against the existing first-person
     detector and the pack's own catalog ``examples``; a follow-up that
     names a declared field after a profile read continues on typed state
-    (``ConversationState.last_results``). No phrase table, no ``re.compile``.
+    (``ConversationState.last_results``). The named fields come back so the
+    bound read restates only them — a first-person compensation ask names
+    the entry's own ``sensitive_fields``. No phrase table, no ``re.compile``.
     """
-    from ai.engine.agent.tools import first_person_profile_ask
+    from ai.engine.agent.tools import (
+        first_person_compensation_ask,
+        first_person_profile_ask,
+        payslip_specific_ask,
+    )
     from ai.engine.cognition.turn.catalog_render import catalog_entry_named
+
+    def _match(raw: str) -> tuple[bool, list[str] | None]:
+        """(names a declared field?, fields the bound read must project).
+
+        A record dump already carries every public field; it hides only the
+        pack's ``sensitive_fields``. So the one ask that must project is one
+        that names a sensitive field — then the whole asked set is honoured.
+        A compensation ask that does not spell the declared label still names
+        the pack's own sensitive fields; a detail-line ask does not (it stays
+        on the detail read). A public field keeps the dump, so nothing a
+        compound identity ask needed is ever dropped.
+        """
+        sensitive = [
+            str(name) for name in (entry.get("sensitive_fields") or [])
+            if str(name).strip()
+        ]
+        named = _profile_fields_named(entry, raw)
+        if named:
+            return True, named if any(field in sensitive for field in named) else None
+        if (
+            sensitive
+            and first_person_compensation_ask(raw)
+            and not payslip_specific_ask(raw)
+        ):
+            return True, sensitive
+        return False, None
 
     raw = _norm(text or "")
     if not raw:
-        return None
+        return None, None
     entry = catalog_entry_named(catalog, str(ID_GET_MY_PROFILE))
     if entry is None:
-        return None
+        return None, None
     if first_person_profile_ask(raw):
-        return str(ID_GET_MY_PROFILE)
+        return str(ID_GET_MY_PROFILE), _match(raw)[1]
     msg = _fold(raw).strip("?؟!.، ")
     for example in _profile_entry_texts(entry, "examples"):
         needle = _fold(example).strip("?؟!.، ")
         # Exact (punctuation-insensitive): a longer ask that merely contains
         # an example phrase is not over-bound to this read.
         if len(needle) >= 2 and needle == msg:
-            return str(ID_GET_MY_PROFILE)
+            return str(ID_GET_MY_PROFILE), _match(raw)[1]
     if _prior_profile_read(state):
-        names = _profile_entry_texts(entry, "returns") + _profile_entry_texts(entry, "field_labels")
-        for name in names:
-            needle = _fold(name)
-            if len(needle) >= 2 and needle in msg:
-                return str(ID_GET_MY_PROFILE)
-    return None
+        named, fields = _match(raw)
+        if named:
+            return str(ID_GET_MY_PROFILE), fields
+    return None, None
+
+
+def resolve_profile_api(
+    text: str | None,
+    *,
+    state=None,
+    catalog: list | None = None,
+) -> str | None:
+    """Identity / self-profile ask → the declared profile GET, else ``None``."""
+    api, _fields = resolve_profile_read(text, state=state, catalog=catalog)
+    return api
 
 
 def ess_self_read_topic(text: str | None) -> str | None:
@@ -700,8 +787,11 @@ def _api_name(item: dict) -> str:
         LOAN_HISTORY_API,
         PAYSLIP_API,
     ):
-        if name in blob:
-            return name
+        # The canonical ids are lazy pack strings (``_LiveStr``); ``str``
+        # membership needs a plain ``str`` on the left. Resolve at this read
+        # boundary without eagerly loading the pack.
+        if contained(name, blob):
+            return str(name)
     return ""
 
 

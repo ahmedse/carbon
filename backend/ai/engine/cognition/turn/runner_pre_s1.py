@@ -366,9 +366,19 @@ async def run_pre_s1_gates(
     if st.ess_bound is not None:
         stage_exit(staged, 'tool_answer', 'ess_bound_self_read', st.ess_bound[0])
     # A greeting is pack copy, not model prose (ADR-0051). Resolve it before
-    # Understanding so the line is deterministic and 0-LLM.
+    # Understanding so the line is deterministic and 0-LLM — but only on the
+    # Chat Ask dial. Agent is not a small-talk surface (its planner spine S1
+    # owns the turn; IF-02 is a Chat contract), and the Plan dial drafts a
+    # reviewable task (IF-06), so a wording gate must not pre-empt either
+    # (IRP-2/IRP-3). A whole-message greeting answered here is a success, not
+    # a Decision miss; a non-greeting turn is untouched and its miss still
+    # reaches ``_v21_chat_no_fallthrough`` with the marker set.
+    from ai.engine.agent.surface import Surface
+
+    _greet_surface_ok = surface is Surface.CHAT_ASK
     if (
-        st.ess_bound is None
+        _greet_surface_ok
+        and st.ess_bound is None
         and (not _legacy)
         and (not turn_route.committed)
         and (st.chat_handoff is None)

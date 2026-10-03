@@ -18,7 +18,7 @@ from types import SimpleNamespace
 import yaml
 
 from ai.engine.cognition.turn.catalog_render import render_catalog_read
-from ai.engine.cognition.turn.ess_read import resolve_profile_api
+from ai.engine.cognition.turn.ess_read import resolve_profile_api, resolve_profile_read
 
 REPO = Path(__file__).resolve().parents[3]
 NIBRAS = REPO / "domain_packs" / "nibras" / "instance.yaml"
@@ -156,3 +156,80 @@ def test_resolved_identity_ask_renders_labelled_and_value_intact():
     assert "الإدارة" in out and "المسمى الوظيفي" in out
     assert "Coiled Tubing" in out and "Heavy Duty Driver" in out
     assert not _has_decorative_emoji(out)
+
+
+# ── The ask's own fields survive the bound read (IRP-5 / A5) ────────────────
+#
+# A salary ask right after a profile read used to bind to the declared detail
+# read with no field projection, so the whole-record dump hid
+# ``sensitive_fields: [basic_salary]`` and the reply carried no figure. The
+# bound read now carries the fields the ask named (pack vocabulary), so the
+# pay field is restated exactly when it was asked for — and stays hidden on a
+# plain identity dump.
+
+_PROFILE_AFTER_READ = SimpleNamespace(last_results=[{"api": _PROFILE_API}])
+
+
+def test_salary_followup_names_the_pack_sensitive_field():
+    cat = _nibras_config().get("api_catalog")
+    for ask in (
+        "What's my basic salary figure on record?",
+        "اذكر الراتب الأساسي المخزّن في ملفي مع الأرقام.",
+        "كم الراتب الأساسي الذي يظهره سجلي؟",
+    ):
+        api, fields = resolve_profile_read(ask, state=_PROFILE_AFTER_READ, catalog=cat)
+        assert api == _PROFILE_API, ask
+        assert fields == ["basic_salary"], ask
+
+
+def test_declared_pay_field_is_projected_so_the_figure_survives():
+    cfg = _nibras_config()
+    entry = _profile_entry(cfg)
+    profile = {
+        "full_name": "Bilagot Panta Suerte",
+        "employee_no": "1067",
+        "job_title": "Heavy Duty Driver",
+        "org_unit": {"id": 2, "name": "Coiled Tubing"},
+        "manager": {"id": 9, "name": "Mohammad Bolto Ali"},
+        "is_active": True,
+        "basic_salary": "174.731",
+    }
+    row = {
+        "tool_name": "call_host_api",
+        "tool_args": {"api_name": _PROFILE_API},
+        "result": {"status_code": 200, "data": profile},
+    }
+    for ask, lang, header in (
+        ("What's my basic salary figure on record?", "en", "Basic salary"),
+        ("اذكر الراتب الأساسي المخزّن في ملفي مع الأرقام.", "ar", "الراتب الأساسي"),
+    ):
+        _api, fields = resolve_profile_read(
+            ask, state=_PROFILE_AFTER_READ, catalog=cfg.get("api_catalog"),
+        )
+        out = render_catalog_read(
+            row, _PROFILE_API, lang, catalog_entry=entry, fields=fields,
+        ) or ""
+        assert "174.731" in out, ask
+        assert header in out, ask
+    # A plain identity ask never restates the sensitive pay field.
+    _api, fields = resolve_profile_read("who am i", catalog=cfg.get("api_catalog"))
+    assert not fields or "basic_salary" not in fields
+    dump = render_catalog_read(row, _PROFILE_API, "en", catalog_entry=entry, fields=fields) or ""
+    assert "174.731" not in dump
+
+
+def test_compensation_example_names_the_pack_sensitive_field():
+    cat = _nibras_config().get("api_catalog")
+    api, fields = resolve_profile_read("my salary", catalog=cat)
+    assert api == _PROFILE_API
+    assert fields == ["basic_salary"]
+
+
+def test_public_field_followup_keeps_the_declared_dump():
+    # A named public field still continues on the profile read, but projects
+    # nothing: the dump already carries every public field, so a compound
+    # identity ask never loses a fact it relied on.
+    cat = _nibras_config().get("api_catalog")
+    api, fields = resolve_profile_read("من الإدارة؟", state=_PROFILE_AFTER_READ, catalog=cat)
+    assert api == _PROFILE_API
+    assert fields is None

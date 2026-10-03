@@ -1,0 +1,36 @@
+{
+  "tier": "intention_blocked",
+  "run_at": "2026-10-03T15:16:05.464745+00:00",
+  "surface": "chat",
+  "user": "emp_1067",
+  "base": "http://127.0.0.1:8009/carbon-api",
+  "banks": [
+    "IB-12"
+  ],
+  "release": {
+    "tag": "",
+    "process_brand": "aastmt",
+    "pack": "carbon",
+    "pack_version": "5",
+    "extra_packs": [
+      "aast-med"
+    ],
+    "loaded_packs": [
+      "aast-med",
+      "carbon",
+      "eduos",
+      "nibras"
+    ],
+    "catalogs": [
+      "aast-med",
+      "carbon",
+      "eduos",
+      "nibras"
+    ],
+    "pulse_enabled": true,
+    "image_built_at": null,
+    "process_started_at": "2026-10-03T14:36:21.491296+00:00",
+    "deployed_at": null
+  },
+  "reason": "release.pack='carbon', required 'nibras'. Refusing to score intention banks off the wrong pack; the bank stays missing until a nibras cell is up. Not switching the brand."
+}

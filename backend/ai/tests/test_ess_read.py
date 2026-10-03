@@ -405,3 +405,17 @@ def test_v21_fresh_read_is_not_chosen_by_topic_regex(monkeypatch: pytest.MonkeyP
     assert bound_ess_self_api(
         "مع التفاصيل", prior_api=LEAVE_BALANCE_API,
     ) == LEAVE_BALANCE_API
+
+
+def test_api_name_scans_the_lazy_tool_blob_without_typeerror():
+    """``_api_name`` reads pack ids against a text blob as plain ``str``.
+
+    The canonical ids are lazy pack strings (``_LiveStr``); ``str`` membership
+    rejects them on the left, so the scan must resolve them at this boundary.
+    """
+    from ai.engine.cognition.turn.ess_read import _api_name
+
+    assert _api_name({"tool_name": "call_host_api", "result": {}}) == ""
+    hit = _api_name({"tool_name": "call_host_api list_my_loans", "result": {}})
+    assert isinstance(hit, str)
+    assert hit == str(LOAN_HISTORY_API)

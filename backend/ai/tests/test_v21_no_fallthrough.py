@@ -33,6 +33,10 @@ from ai.engine.cognition.turn.witnesses import TurnLedger
 from ai.engine.pack_vocab import bind_pack
 
 
+#: A genuine understand miss on Chat Ask: no pack greeting owns it.
+_MISS = "explain the quarterly review process"
+
+
 # ── (a) + (b): a Decision miss never reaches the legacy spine ────────────────
 
 class _MissRunner(TurnPipelineRunner):
@@ -106,12 +110,12 @@ def _quiet_broadcast(monkeypatch):
     monkeypatch.setattr(process_brief, "try_process_briefing", lambda *a, **k: None)
 
 
-def _run_turn(process_mode: str = "ask"):
+def _run_turn(process_mode: str = "ask", user_message: str = _MISS):
     runner = _MissRunner(executor=object())
     return asyncio.run(runner._run_metered(
         instance_id="nibras",
         conversation_id="c-v21nofall",
-        user_message="hello there",
+        user_message=user_message,
         host_user_id="emp_1067",
         process_mode=process_mode,
         meter=None,
@@ -133,10 +137,21 @@ def test_v21_chat_miss_never_reaches_the_legacy_spine(monkeypatch):
 
 
 def test_v21_chat_miss_emits_the_fallthrough_marker(monkeypatch):
-    """(b): the marker a live IB-10 run reads is on the ledger."""
+    """(b): the marker a live IB-10 run reads is on the ledger.
+
+    The pack owns a greet line (``domain_packs/nibras/greet.yaml``), but this
+    turn is not a greeting: a genuine Decision miss is still named on the
+    ledger and answered by the typed degradation, never the spine.
+    """
     monkeypatch.setenv("PULSE_UNDERSTAND", "v21")
     _quiet_broadcast(monkeypatch)
     _spy_stages(monkeypatch)
+
+    from ai.engine.pack_greet import greet_reply
+
+    with bind_pack("nibras"):
+        assert greet_reply("hello there") is not None, "the pack owns a greet line"
+        assert greet_reply(_MISS) is None, "the miss turn is not a greeting"
 
     response, ledger = _run_turn(process_mode="ask")
 
@@ -147,6 +162,24 @@ def test_v21_chat_miss_emits_the_fallthrough_marker(monkeypatch):
     assert _v21_miss(ledger) == "fallthrough"
     assert _v21_miss(ledger) in ("fallthrough", "unrepairable", "committed_route_skipped")
     assert response is not None
+
+
+def test_a_greeting_answer_is_not_a_fallthrough(monkeypatch):
+    """A whole-message Chat Ask greeting is a 0-LLM answer, not a miss."""
+    monkeypatch.setenv("PULSE_UNDERSTAND", "v21")
+    _quiet_broadcast(monkeypatch)
+    calls = _spy_stages(monkeypatch)
+
+    response, ledger = _run_turn(process_mode="ask", user_message="hello there")
+
+    assert calls == [], "a greeting fell through to the legacy spine"
+    assert response is not None and response.text, "the greet door must answer"
+    assert ledger.fell_through is False
+    assert ledger.fallthrough_reason == ""
+    assert any(
+        isinstance(s, dict) and s.get("gate") == "greet" and s.get("fired")
+        for s in (ledger.decision_signals or [])
+    ), "the greet door must own the turn"
 
 
 def test_agent_surface_keeps_the_spine(monkeypatch):
