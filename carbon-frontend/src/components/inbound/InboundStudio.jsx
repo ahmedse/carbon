@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Alert,
@@ -23,6 +23,8 @@ import { CsvDropzone, SearchSelect } from '../Form';
 import FormField from '../Form/FormField';
 import SystemDialog from '../SystemDialog';
 import ConfirmDialog from '../ConfirmDialog';
+import OperationProgress from '../OperationProgress';
+import { useOperationProgress } from '../../hooks/useOperationProgress';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../NotificationProvider';
@@ -31,6 +33,8 @@ import {
   commitInboundBatch,
   downloadInboundRejects,
   fetchInboundBatch,
+  fetchInboundCommitRun,
+  fetchInboundCommitRuns,
   fetchInboundTargets,
   fetchInboundTemplates,
   saveInboundMapping,
@@ -58,6 +62,22 @@ const ENCODINGS = [
 
 function toList(data) {
   return Array.isArray(data) ? data : data?.results || [];
+}
+
+// Commit-run status → theme chip color. Status is ALWAYS shown as a chip PLUS a
+// text label (RULE 5: never color alone).
+const RUN_STATUS_COLOR = {
+  queued: 'default',
+  running: 'info',
+  done: 'success',
+  failed: 'error',
+  canceled: 'default',
+};
+
+// Compact HH:MM:SS from an ISO timestamp. Falls back to '' for anything else.
+function shortTime(value) {
+  const match = String(value || '').match(/T(\d{2}:\d{2}:\d{2})/);
+  return match ? match[1] : '';
 }
 
 /**
@@ -134,6 +154,14 @@ export default function InboundStudio({
   const [busy, setBusy] = useState(false);
   const [allowPartial, setAllowPartial] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  // ID2 commit progress: one durable run (queued → running → done|failed) shown
+  // in a single SystemDialog. `commitLog` accumulates the batched progress lines.
+  const [progressOpen, setProgressOpen] = useState(false);
+  const [commitRun, setCommitRun] = useState(null);
+  const [commitLog, setCommitLog] = useState([]);
+  const [commitError, setCommitError] = useState(null);
+  const commitInFlightRef = useRef(false);
+  const runIdRef = useRef(null);
   const [walkField, setWalkField] = useState(null);
   const [walkOptions, setWalkOptions] = useState([]);
   const [walkDraft, setWalkDraft] = useState({});
@@ -243,6 +271,64 @@ export default function InboundStudio({
   useEffect(() => {
     load();
   }, [load]);
+
+  // Keep the active run id in a ref so the shared SSE callback (registered once)
+  // can filter frames without re-subscribing.
+  useEffect(() => {
+    runIdRef.current = commitRun?.id ?? null;
+  }, [commitRun?.id]);
+
+  // Live progress over the EXISTING shared SSE stream. While a commit is in
+  // flight, `commitInFlightRef` lets us adopt the run id from the first import
+  // frame (the client cannot know the id until the synchronous POST returns).
+  const { connected } = useOperationProgress((frame) => {
+    if (!frame || frame.op_type !== 'import') return;
+    const knownId = runIdRef.current;
+    const matches = knownId != null && String(frame.op_id) === String(knownId);
+    if (!matches && !commitInFlightRef.current) return;
+    if (knownId == null) runIdRef.current = frame.op_id;
+    const entry = {
+      t: frame.created_at || new Date().toISOString(),
+      message: frame.message || '',
+      percent: frame.percent,
+    };
+    setCommitLog((prev) => [...prev, entry]);
+    setCommitRun((prev) => ({
+      ...(prev || {}),
+      id: frame.op_id,
+      status: frame.status,
+      progress: frame.percent ?? prev?.progress ?? 0,
+      message: frame.message || prev?.message,
+    }));
+  });
+
+  const commitRunActive = progressOpen
+    && (!commitRun || ['queued', 'running'].includes(commitRun.status));
+
+  // Disconnected fallback: no SSE, so recover the durable run record on a slow
+  // interval until it is terminal. No poll while the stream is connected.
+  useEffect(() => {
+    if (connected || !commitRunActive) return undefined;
+    const timer = setInterval(async () => {
+      try {
+        let run = null;
+        if (runIdRef.current != null) {
+          run = await fetchInboundCommitRun(token, id, runIdRef.current);
+        } else {
+          const listed = toList(await fetchInboundCommitRuns(token, id));
+          run = listed[0] || null;
+        }
+        if (!run) return;
+        runIdRef.current = run.id;
+        setCommitRun(run);
+        if (Array.isArray(run.log)) setCommitLog(run.log);
+        if (run.status === 'failed') setCommitError(run.error || t('importCommitFailed'));
+      } catch {
+        // Transient — the next tick retries; SSE stays the primary path.
+      }
+    }, 2000);
+    return () => clearInterval(timer);
+  }, [connected, commitRunActive, token, id, t]);
 
   const fieldByName = useMemo(
     () => Object.fromEntries(fields.map((f) => [f.name, f])),
@@ -397,20 +483,50 @@ export default function InboundStudio({
     }
   };
 
-  const onCommit = async () => {
+  const onCommit = useCallback(async () => {
+    // Close the confirm BEFORE the request so only ONE dialog is ever open;
+    // then open the single progress surface keyed to this run.
+    setConfirmOpen(false);
+    setCommitError(null);
+    setCommitLog([]);
+    runIdRef.current = null;
+    commitInFlightRef.current = true;
+    setCommitRun({ status: 'queued', progress: 0 });
+    setProgressOpen(true);
     setBusy(true);
     try {
-      const next = await commitInboundBatch(token, id, allowPartial);
-      setBatch(next);
-      setConfirmOpen(false);
-      notify({ message: t('importCommitted'), type: 'success' });
-      navigate(listPath);
+      const res = await commitInboundBatch(token, id, allowPartial);
+      const run = res?.commit_run || null;
+      if (run) {
+        runIdRef.current = run.id;
+        setCommitRun(run);
+        setCommitLog(Array.isArray(run.log) ? run.log : []);
+        if (run.status === 'failed') setCommitError(run.error || t('importCommitFailed'));
+      }
+      setBatch(res);
     } catch (err) {
-      notifyFromError(err, t('importCommitFailed'));
+      // The failed run persists server-side; recover it from the error payload
+      // so a Retry can safely re-post the same commit (replay-return is safe).
+      const failedRun = err?.data?.commit_run || null;
+      if (failedRun) {
+        runIdRef.current = failedRun.id;
+        setCommitRun(failedRun);
+        setCommitLog(Array.isArray(failedRun.log) ? failedRun.log : []);
+      } else {
+        setCommitRun((prev) => ({ ...(prev || {}), status: 'failed' }));
+      }
+      setCommitError(err?.message || t('importCommitFailed'));
     } finally {
+      commitInFlightRef.current = false;
       setBusy(false);
     }
-  };
+  }, [token, id, allowPartial, t]);
+
+  const handleProgressClose = useCallback(() => {
+    const status = commitRun?.status;
+    if (commitInFlightRef.current || status === 'queued' || status === 'running') return;
+    setProgressOpen(false);
+  }, [commitRun?.status]);
 
   const onDownloadRejects = async () => {
     try {
@@ -795,6 +911,35 @@ export default function InboundStudio({
   const disableFinish = batch.status === 'committed'
     || (canCommit && (sodBlocked || (rejects > 0 && !allowPartial)));
 
+  const runStatus = commitRun?.status || 'queued';
+  const runStatusLabel = runStatus === 'running'
+    ? t('importCommitRunning')
+    : runStatus === 'done'
+      ? t('importCommitDone')
+      : runStatus === 'failed'
+        ? t('importCommitError')
+        : t('importCommitQueued');
+  const runTerminal = ['done', 'failed', 'canceled'].includes(runStatus);
+  const progressActions = (
+    <Stack direction="row" spacing={1}>
+      {runStatus === 'failed' && (
+        <Button variant="contained" disabled={busy} onClick={onCommit}>
+          {t('importCommitRetry')}
+        </Button>
+      )}
+      {runTerminal && (
+        <Button variant="outlined" onClick={() => navigate(listPath)}>
+          {t('importCommitOpenBatch')}
+        </Button>
+      )}
+      {runTerminal && (
+        <Button color="inherit" onClick={handleProgressClose}>
+          {t('importCommitClose')}
+        </Button>
+      )}
+    </Stack>
+  );
+
   return (
     <PageContainer>
       <PageHeader
@@ -897,6 +1042,86 @@ export default function InboundStudio({
             onChange={(e) => setTplName(e.target.value)}
           />
         </FormField>
+      </SystemDialog>
+      <SystemDialog
+        open={progressOpen}
+        title={t('importCommitProgressTitle')}
+        onClose={handleProgressClose}
+        onCancel={handleProgressClose}
+        showCancel={false}
+        cancelLabel={tCommon('close')}
+        actions={progressActions}
+      >
+        <Stack spacing={1.5}>
+          <Stack direction="row" spacing={1} alignItems="center" useFlexGap flexWrap="wrap">
+            <Chip size="small" label={runStatusLabel} color={RUN_STATUS_COLOR[runStatus] || 'default'} />
+            <Typography variant="caption" color="text.secondary">
+              {t('importCommitAsUser', { user: username || '—' })}
+            </Typography>
+          </Stack>
+          <Typography variant="caption" color="text.secondary">
+            {t('importCommitSodLine', {
+              preparer: commitRun?.prepared_by_username || batch.prepared_by_username || '—',
+              committer: commitRun?.committed_by_username || username || '—',
+            })}
+          </Typography>
+          <OperationProgress
+            status={commitRun?.status}
+            message={commitError || commitRun?.message}
+            percent={commitRun?.progress}
+          />
+          {runStatus === 'done' && (
+            <Stack direction="row" spacing={2} useFlexGap flexWrap="wrap">
+              <Box>
+                <Typography variant="caption" color="text.secondary">{t('importColCount')}</Typography>
+                <Typography variant="mono">{commitRun?.written ?? 0}</Typography>
+              </Box>
+              {Object.entries(commitRun?.reconcile || {}).map(([key, value]) => (
+                <Box key={key}>
+                  <Typography variant="caption" color="text.secondary">{key}</Typography>
+                  <Typography variant="mono">{String(value)}</Typography>
+                </Box>
+              ))}
+            </Stack>
+          )}
+          {commitLog.length > 0 && (
+            <Box>
+              <Typography variant="subtitle2">{t('importCommitLogTitle')}</Typography>
+              <Box
+                data-testid="commit-log"
+                sx={{
+                  maxHeight: 220,
+                  overflow: 'auto',
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  borderRadius: 1,
+                  p: 1,
+                }}
+              >
+                {commitLog.map((entry, index) => (
+                  <Stack
+                    key={`${entry.t}-${index}`}
+                    direction="row"
+                    spacing={1}
+                    alignItems="baseline"
+                  >
+                    <Typography variant="mono" sx={{ color: 'text.disabled', flexShrink: 0 }}>
+                      {shortTime(entry.t)}
+                    </Typography>
+                    <Typography variant="caption" sx={{ minWidth: 0, flex: 1 }}>
+                      {entry.message}
+                    </Typography>
+                    {entry.percent != null && (
+                      <Typography variant="mono" sx={{ color: 'text.secondary' }}>
+                        {entry.percent}%
+                      </Typography>
+                    )}
+                  </Stack>
+                ))}
+              </Box>
+            </Box>
+          )}
+        </Stack>
       </SystemDialog>
     </PageContainer>
   );

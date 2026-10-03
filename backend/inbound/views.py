@@ -3,6 +3,7 @@ import io
 
 from django.db.models import Count, Q
 from django.http import HttpResponse
+from django.shortcuts import get_object_or_404
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, MultiPartParser
@@ -13,7 +14,12 @@ from .definitions import validate_fields, validate_key
 from .exceptions import InboundError
 from .models import InboundBatch, InboundCartridge, InboundTemplate
 from .permissions import InboundAccess, can_define, can_manage_template, can_see_all
-from .serializers import InboundBatchSerializer, InboundCartridgeSerializer, InboundTemplateSerializer
+from .serializers import (
+    InboundBatchSerializer,
+    InboundCartridgeSerializer,
+    InboundCommitRunSerializer,
+    InboundTemplateSerializer,
+)
 from . import example_templates, registry, services
 
 # A cell beginning with one of these can be read as a spreadsheet formula.
@@ -159,13 +165,51 @@ class InboundBatchViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def commit(self, request, pk=None):
+        """Commit a smoked batch and return the durable commit-run record.
+
+        The inline (synchronous) path runs the host write in this request; the
+        response keeps the batch fields (``status == 'committed'``) and adds
+        ``commit_run`` with the final counts. A repeated post is an idempotent
+        replay: it returns the prior run and writes nothing.
+        """
         batch = self.get_object()
         allow_partial = bool(request.data.get('allow_partial'))
         try:
-            batch = services.run_commit(batch, request.user, allow_partial=allow_partial)
+            batch, run = services.start_commit_run(
+                batch, request.user, allow_partial=allow_partial,
+            )
+        except services.CommitRunError as exc:
+            payload = {
+                'detail': exc.message,
+                'commit_run': InboundCommitRunSerializer(exc.run).data,
+            }
+            return Response(payload, status=exc.status)
         except InboundError as exc:
             return _err(exc)
-        return Response(InboundBatchSerializer(batch).data)
+        data = InboundBatchSerializer(batch).data
+        data['commit_run'] = InboundCommitRunSerializer(run).data
+        return Response(data)
+
+    @action(detail=True, methods=['get'], url_path='commit-runs')
+    def commit_runs(self, request, pk=None):
+        """List this batch's commit runs, newest first (read-only recovery)."""
+        batch = self.get_object()
+        qs = batch.commit_runs.select_related(
+            'requested_by', 'batch__prepared_by', 'batch__committed_by',
+        )
+        return Response(InboundCommitRunSerializer(qs, many=True).data)
+
+    @action(detail=True, methods=['get'], url_path=r'commit-runs/(?P<run_id>[^/.]+)')
+    def commit_run(self, request, pk=None, run_id=None):
+        """Read one commit run (status, progress, log, written, reconcile, SoD)."""
+        batch = self.get_object()
+        run = get_object_or_404(
+            batch.commit_runs.select_related(
+                'requested_by', 'batch__prepared_by', 'batch__committed_by',
+            ),
+            pk=run_id,
+        )
+        return Response(InboundCommitRunSerializer(run).data)
 
 
 class InboundTemplateViewSet(viewsets.ModelViewSet):

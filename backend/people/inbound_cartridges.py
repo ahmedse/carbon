@@ -210,10 +210,14 @@ def employee_snapshot_smoke(rows, **_kwargs):
     )
 
 
-def employee_snapshot_commit(rows, *, batch, user, smoke, **_kwargs):
+def employee_snapshot_commit(rows, *, batch, user, smoke, progress=None, **_kwargs):
     written = 0
     pending_managers = []
-    for row in rows:
+    for index, row in enumerate(rows, start=1):
+        # Per-row beat for the durable commit run; the service batches the
+        # persistence/publish (~50 rows or ~1s), so this is cheap.
+        if progress:
+            progress(index, written)
         no = (row.get('employee_no') or '').strip()
         org = _org(row.get('org_unit'))
         salary = _dec(row.get('basic_salary'))
@@ -316,9 +320,11 @@ def leave_balance_smoke(rows, **_kwargs):
     )
 
 
-def leave_balance_commit(rows, *, batch, user, smoke, **_kwargs):
+def leave_balance_commit(rows, *, batch, user, smoke, progress=None, **_kwargs):
     written = 0
-    for row in rows:
+    for index, row in enumerate(rows, start=1):
+        if progress:
+            progress(index, written)
         emp = Employee.objects.filter(employee_no=(row.get('employee_no') or '').strip()).first()
         ltype = _ref('leave_type', row.get('leave_type'))
         if emp is None or ltype is None or not str(row.get('year') or '').isdigit():
@@ -412,11 +418,13 @@ def leave_history_smoke(rows, **_kwargs):
     )
 
 
-def leave_history_commit(rows, *, batch, user, smoke, **_kwargs):
+def leave_history_commit(rows, *, batch, user, smoke, progress=None, **_kwargs):
     """Conversion history. Must not increment LeaveEntitlement.used_days."""
     written = 0
     days_sum = Decimal('0')
-    for row in rows:
+    for index, row in enumerate(rows, start=1):
+        if progress:
+            progress(index, written)
         emp = Employee.objects.filter(employee_no=(row.get('employee_no') or '').strip()).first()
         ltype = _ref('leave_type', row.get('leave_type'))
         days = _dec(row.get('days'))

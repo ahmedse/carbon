@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import InboundBatch, InboundCartridge, InboundTemplate
+from .models import InboundBatch, InboundCartridge, InboundCommitRun, InboundTemplate
 
 
 class InboundBatchSerializer(serializers.ModelSerializer):
@@ -36,6 +36,39 @@ class InboundBatchSerializer(serializers.ModelSerializer):
     def get_reject_count(self, obj):
         smoke = obj.smoke or {}
         return smoke.get('reject')
+
+
+class InboundCommitRunSerializer(serializers.ModelSerializer):
+    """Durable commit-run record for the People Import progress surface.
+
+    Includes the run's own fields plus the SoD identities (who prepared the
+    batch and who committed it), so the client can render "Committing as …"
+    and "Prepared by … · committed by …" from one payload.
+    """
+
+    requested_by_username = serializers.CharField(
+        source='requested_by.username', read_only=True, default=None,
+    )
+    prepared_by_username = serializers.SerializerMethodField()
+    committed_by_username = serializers.SerializerMethodField()
+    target_key = serializers.CharField(source='batch.target_key', read_only=True)
+
+    class Meta:
+        model = InboundCommitRun
+        fields = [
+            'id', 'batch', 'target_key', 'status', 'progress', 'log',
+            'written', 'reconcile', 'error',
+            'requested_by', 'requested_by_username',
+            'prepared_by_username', 'committed_by_username',
+            'started_at', 'finished_at', 'created_at', 'updated_at',
+        ]
+        read_only_fields = fields
+
+    def get_prepared_by_username(self, obj):
+        return getattr(obj.batch.prepared_by, 'username', None)
+
+    def get_committed_by_username(self, obj):
+        return getattr(obj.batch.committed_by, 'username', None)
 
 
 class InboundCartridgeSerializer(serializers.ModelSerializer):

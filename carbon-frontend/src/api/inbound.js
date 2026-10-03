@@ -96,6 +96,14 @@ export function commitInboundBatch(token, id, allow_partial = false) {
   });
 }
 
+export function fetchInboundCommitRuns(token, id) {
+  return apiFetch(`${ROOT}batches/${id}/commit-runs/`, { token });
+}
+
+export function fetchInboundCommitRun(token, id, runId) {
+  return apiFetch(`${ROOT}batches/${id}/commit-runs/${runId}/`, { token });
+}
+
 export async function downloadInboundRejects(token, id) {
   const res = await authFetch(`${ROOT}batches/${id}/rejects/`, { token, timeoutMs: 60000 });
   if (!res.ok) throw new Error(`Rejects download failed (${res.status})`);
