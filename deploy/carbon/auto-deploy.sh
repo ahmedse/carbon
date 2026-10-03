@@ -25,6 +25,102 @@ DEPLOYED_TAG_FILE="$APP_DIR/.deployed-tag"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 
+# Packs the carbon cell may load, and the packs it must never see.
+CARBON_RUNTIME_PACKS=(carbon aast-med _platform)
+CARBON_FORBIDDEN_PACKS=(nibras eduos medos tectona)
+
+# Carbon boots domain_packs/carbon (+ aast-med + _platform). A foreign pack
+# must never be mounted, so the cell cannot fall back to another brand.
+# Mirrors prepare_nibras_runtime in deploy/instance/auto-deploy.sh without
+# touching that shared (nibras-production) script.
+prepare_carbon_runtime() {
+    local src_root="$APP_DIR/domain_packs"
+    local dest="$APP_DIR/.runtime-packs"
+    local name pack_id
+
+    if [[ ! -f "$src_root/carbon/pack.yaml" ]]; then
+        log "ERROR: $src_root/carbon/pack.yaml missing — refusing to start"
+        exit 1
+    fi
+    pack_id=$(awk '/^id:[[:space:]]*/ { print $2; exit }' "$src_root/carbon/pack.yaml")
+    if [[ "$pack_id" != "carbon" ]]; then
+        log "ERROR: resolved pack id is '${pack_id:-missing}', refusing to start"
+        exit 1
+    fi
+
+    rm -rf "$dest"
+    mkdir -p "$dest"
+    for name in "${CARBON_RUNTIME_PACKS[@]}"; do
+        if [[ ! -d "$src_root/$name" ]]; then
+            log "ERROR: required pack dir $src_root/$name missing — refusing to start"
+            exit 1
+        fi
+        cp -a "$src_root/$name" "$dest/$name"
+    done
+    for name in "${CARBON_FORBIDDEN_PACKS[@]}"; do
+        if [[ -e "$dest/$name" ]]; then
+            log "ERROR: runtime pack dir contains forbidden pack $name"
+            exit 1
+        fi
+    done
+    if [[ ! -f "$dest/carbon/pack.yaml" ]]; then
+        log "ERROR: carbon pack did not land in $dest"
+        exit 1
+    fi
+
+    export DOMAIN_PACKS_MOUNT="$dest"
+    local built_at
+    built_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+    export CARBON_RELEASE_TAG="$LATEST_TAG"
+    export CARBON_IMAGE_BUILT_AT="$built_at"
+    export CARBON_DEPLOYED_AT="$built_at"
+    log "Carbon runtime packs: $dest (carbon + aast-med + _platform)"
+}
+
+# After the container is healthy, prove the running cell loaded no foreign
+# pack. A failed gate aborts before .deployed-tag is stamped.
+assert_carbon_pack_gate() {
+    local body
+    body=$(curl -sf -H 'X-Forwarded-Proto: https' \
+        "http://127.0.0.1:${BACKEND_PORT}/carbon-api/health/") || {
+        log "ERROR: carbon health document unavailable for the pack gate"
+        exit 1
+    }
+    HEALTH_JSON="$body" python3 - <<'PY'
+import json, os, sys
+data = json.loads(os.environ["HEALTH_JSON"])
+rel = data.get("release") or {}
+brand = rel.get("process_brand")
+pack = rel.get("pack")
+loaded = list(rel.get("loaded_packs") or [])
+catalogs = list(rel.get("catalogs") or [])
+extra = list(rel.get("extra_packs") or [])
+allowed = {"carbon", "aast-med", "_platform"}
+forbidden = {"nibras", "eduos", "medos", "tectona"}
+seen = set(loaded) | set(catalogs) | set(extra)
+problems = []
+if brand != "aastmt":
+    problems.append(f"process_brand={brand!r}")
+if pack != "carbon":
+    problems.append(f"pack={pack!r}")
+if extra != ["aast-med"]:
+    problems.append(f"extra_packs={extra!r}")
+unknown = sorted(seen - allowed)
+if unknown:
+    problems.append(f"unexpected packs loaded: {unknown}")
+hit = sorted(seen & forbidden)
+if hit:
+    problems.append(f"forbidden packs loaded: {hit}")
+if not rel.get("tag"):
+    problems.append("release tag is empty")
+if not rel.get("pulse_enabled"):
+    problems.append("pulse_enabled is not true")
+if problems:
+    sys.exit("carbon pack gate failed: " + "; ".join(problems))
+print("carbon pack gate ok", rel.get("tag"), pack, rel.get("pack_version"))
+PY
+}
+
 if [[ -f "$DEPLOY_LOCK" ]]; then
     log "Deploy already in progress (lock: $DEPLOY_LOCK), skipping."
     exit 0
@@ -81,6 +177,9 @@ chown -R 1000:1000 \
     "$APP_DIR/backend/mediafiles" \
     "$APP_DIR/backend/dataschema_uploads" 2>/dev/null || true
 
+log "Preparing isolated runtime packs"
+prepare_carbon_runtime
+
 log "Building & starting backend"
 export IMAGE_TAG="$LATEST_TAG"
 if [[ -f "$ENV_FILE" ]]; then
@@ -93,7 +192,8 @@ fi
 
 log "Waiting for healthy backend"
 for i in $(seq 1 30); do
-    if curl -sf "http://127.0.0.1:${BACKEND_PORT}/carbon-api/health/" > /dev/null 2>&1; then
+    if curl -sf -H 'X-Forwarded-Proto: https' \
+        "http://127.0.0.1:${BACKEND_PORT}/carbon-api/health/" > /dev/null 2>&1; then
         log "Backend healthy!"
         break
     fi
@@ -102,6 +202,9 @@ for i in $(seq 1 30); do
     fi
     sleep 2
 done
+
+log "Verifying pack isolation"
+assert_carbon_pack_gate
 
 log "Activating apps (ADR-0015)"
 if [[ -f "$ENV_FILE" ]]; then set -a; source "$ENV_FILE"; set +a; fi

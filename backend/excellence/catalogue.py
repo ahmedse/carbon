@@ -276,16 +276,51 @@ def _load_tier_dir(cat: Catalogue, tier_dir: Path, *, tier_id_hint: str) -> None
             _ingest(cat, tdata, tier=tier_id, track=track_id, where=_where(path))
 
 
+# Sentinel: load every checked-out sibling pack's assurance tier. Repo/CI
+# tooling (the gauge) asks for this; the tenant API stays scoped.
+ALL_PACKS = "*"
+
+
+def authorized_domain_packs() -> frozenset[str]:
+    """Process pack + its authorized extras. Never every checked-out sibling.
+
+    The active deployment is defined by ``DJANGO_BRAND`` — a carbon cell is
+    authorized for ``carbon`` and its extra pack ``aast-med`` only. Sibling
+    packs (nibras, eduos, …) share the checkout but are another tenant's
+    ladder and must not load into this process.
+    """
+    from ai.instance_registry import resolve_instance_id
+    from ai.platform_bind import extra_packs_for_brand
+
+    return frozenset({resolve_instance_id(), *extra_packs_for_brand()})
+
+
 def load_catalogue(
     assurance_root: Path = ASSURANCE_ROOT,
     domain_packs_root: Path = DOMAIN_PACKS_ROOT,
+    packs: Iterable[str] | str | None = None,
 ) -> Catalogue:
+    """Load the ladder catalogue for the active deployment.
+
+    ``packs=None`` (default) scopes the ``domain_packs/*`` tiers to the process
+    pack + its authorized extras. Pass :data:`ALL_PACKS` to load every sibling
+    tier (repo/CI tooling only), or an explicit iterable of pack ids (tests).
+    """
     cat = Catalogue()
     if assurance_root.is_dir():
         for tier_dir in sorted(p for p in assurance_root.iterdir() if p.is_dir()):
             _load_tier_dir(cat, tier_dir, tier_id_hint=tier_dir.name)
     if domain_packs_root.is_dir():
+        allowed: frozenset[str] | None
+        if packs is None:
+            allowed = authorized_domain_packs()
+        elif packs == ALL_PACKS:
+            allowed = None
+        else:
+            allowed = frozenset(packs)
         for pack_dir in sorted(p for p in domain_packs_root.iterdir() if p.is_dir()):
+            if allowed is not None and pack_dir.name not in allowed:
+                continue
             _load_tier_dir(cat, pack_dir / "assurance", tier_id_hint=pack_dir.name)
     if PLATFORM_TIER not in cat.tiers:
         cat.problems.append("no platform tier: assurance/platform/ladder.yaml is required")

@@ -22,6 +22,12 @@ services:
     restart: unless-stopped
     env_file:
       - ${ENV_FILE:-../../backend/.env.carbon}
+    # Release identity for /carbon-api/health/ (deployer exports these).
+    # environment: wins over env_file:, so the running deploy stamps its tag.
+    environment:
+      CARBON_RELEASE_TAG: "${CARBON_RELEASE_TAG:-}"
+      CARBON_IMAGE_BUILT_AT: "${CARBON_IMAGE_BUILT_AT:-}"
+      CARBON_DEPLOYED_AT: "${CARBON_DEPLOYED_AT:-}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -31,7 +37,11 @@ services:
       - evidence:/app/mediafiles/evidence
       - exports:/app/mediafiles/exports
       - imports:/app/mediafiles/imports
-      - ../../domain_packs:/domain_packs:ro
+      # The carbon deployer builds a runtime jail (.runtime-packs: carbon +
+      # aast-med + _platform) and points DOMAIN_PACKS_MOUNT at it, so an
+      # unauthenticated sibling pack can never be loaded. Falls back to the
+      # repo dir only for local/compose-up without the deployer.
+      - ${DOMAIN_PACKS_MOUNT:-../../domain_packs}:/domain_packs:ro
       - ../../assurance:/assurance:ro
     ports:
       - "${BACKEND_PORT:-8002}:8000"

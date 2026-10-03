@@ -5,7 +5,13 @@ from pathlib import Path
 
 import pytest
 
-from excellence.catalogue import PLATFORM_TIER, Catalogue, load_catalogue
+from excellence.catalogue import (
+    ALL_PACKS,
+    PLATFORM_TIER,
+    Catalogue,
+    authorized_domain_packs,
+    load_catalogue,
+)
 
 
 @pytest.fixture(scope="module")
@@ -20,10 +26,21 @@ def test_committed_manifests_have_no_problems(cat: Catalogue) -> None:
 def test_platform_and_pulse_tiers_load(cat: Catalogue) -> None:
     assert PLATFORM_TIER in cat.tiers
     assert "pulse" in cat.tiers
-    assert "nibras" in cat.tiers
     assert "datatrust" in cat.tiers
     assert "carbon" in cat.tiers
     assert {"chat", "agent", "memory", "packs", "ops"} <= {t for (tier, t) in cat.tracks if tier == "pulse"}
+
+
+def test_default_scope_excludes_sibling_pack_tiers(cat: Catalogue) -> None:
+    """The active cell (aastmt → carbon + aast-med) must not load nibras."""
+    assert authorized_domain_packs() == {"carbon", "aast-med"}
+    assert "nibras" not in cat.tiers
+    assert "eduos" not in cat.tiers
+
+
+def test_all_packs_loads_sibling_tiers() -> None:
+    cat = load_catalogue(packs=ALL_PACKS)
+    assert "nibras" in cat.tiers
     assert {"people", "my", "team", "payroll", "correspondence"} <= {t for (tier, t) in cat.tracks if tier == "nibras"}
 
 

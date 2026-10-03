@@ -25,7 +25,7 @@ from typing import Any
 
 import yaml
 
-from .catalogue import LEVEL_NAMES, REPO_ROOT, Catalogue, load_catalogue
+from .catalogue import ALL_PACKS, LEVEL_NAMES, REPO_ROOT, Catalogue, load_catalogue
 from .collectors import EventDraft, run_collectors
 from .evaluator import SubjectReport, evaluate, regressions
 
@@ -153,7 +153,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--json", action="store_true")
     args = p.parse_args(argv)
 
-    cat = load_catalogue()
+    # The gauge is a repo/CI tool that reports every tier, including sibling
+    # packs whose ladder is not authorized for the running tenant. The tenant
+    # API (excellence.api) uses the scoped default instead.
+    cat = load_catalogue(packs=ALL_PACKS)
     head = head_commit()
     subjects = cat.subjects_in(args.tier, args.track)
     changed_list: list[str] = []
