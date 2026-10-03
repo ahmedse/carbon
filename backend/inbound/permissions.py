@@ -32,6 +32,30 @@ def can_see(user) -> bool:
     return can_prepare(user) or can_commit(user)
 
 
+def can_see_all(user) -> bool:
+    """Full import visibility: superuser, staff, global admin, or commit-capable.
+
+    The two-person rule requires a committer to see a batch prepared by someone
+    else, so commit is a full-visibility role. A prepare-only user is scoped to
+    the batches they own (``prepared_by`` / ``committed_by``).
+    """
+    if not user or not user.is_authenticated:
+        return False
+    if getattr(user, 'is_staff', False):
+        return True
+    return can_commit(user)
+
+
+def can_manage_template(user, template) -> bool:
+    """A template is editable by its owner; shared/official (ownerless) rows and
+    other users' rows only by staff/admin. Never by a peer preparer."""
+    if not user or not user.is_authenticated:
+        return False
+    if getattr(user, 'is_staff', False) or _admin(user):
+        return True
+    return template is not None and template.owner_id is not None and template.owner_id == user.id
+
+
 def can_define(user) -> bool:
     if _admin(user):
         return True

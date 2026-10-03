@@ -1,11 +1,13 @@
+import csv
 import io
 
 import pytest
 from django.conf import settings
+from django.core.files.base import ContentFile
 from rest_framework.test import APIClient
 
 from inbound import registry, services
-from inbound.models import InboundBatch
+from inbound.models import InboundBatch, InboundTemplate
 from inbound.parse import parse_csv
 
 
@@ -312,3 +314,262 @@ def test_template_examples_index_and_download(preparer, get_token_for_user, fake
 
     missing = client.get(f'{PREFIX}/templates/examples/not-a-template/')
     assert missing.status_code == 404
+
+
+@pytest.mark.django_db
+def test_batches_list_q_and_status_filters(preparer, get_token_for_user, fake_cartridge):
+    """Defect 1: the list sends q + active filters to the API, not the client."""
+    client = APIClient()
+    client.credentials(HTTP_AUTHORIZATION=f'Bearer {get_token_for_user(preparer)}')
+
+    res = client.post(f'{PREFIX}/batches/', {'kind': 'typed_object', 'target_key': 'test.widget'}, format='json')
+    b_mapped = res.data['id']
+    client.post(f'{PREFIX}/batches/{b_mapped}/file/', {'file': _csv('code\nA\n', name='alpha.csv')}, format='multipart')
+    client.put(f'{PREFIX}/batches/{b_mapped}/mapping/', {'columns': {'code': 'code'}}, format='json')
+
+    res = client.post(f'{PREFIX}/batches/', {'kind': 'typed_object', 'target_key': 'test.widget'}, format='json')
+    b_draft = res.data['id']
+    client.post(f'{PREFIX}/batches/{b_draft}/file/', {'file': _csv('code\nB\n', name='beta.csv')}, format='multipart')
+
+    def ids(query):
+        r = client.get(f'{PREFIX}/batches/?kind=typed_object{query}')
+        assert r.status_code == 200
+        data = r.data if isinstance(r.data, list) else r.data['results']
+        return {row['id'] for row in data}
+
+    assert ids('&q=alpha') == {b_mapped}
+    assert ids('&status=draft') == {b_draft}
+    assert ids('&status=mapped') == {b_mapped}
+    assert ids('&q=beta&status=draft') == {b_draft}
+
+
+@pytest.mark.django_db
+def test_batch_scoping_owner_vs_peer_vs_admin(
+    preparer, committer, create_user, create_scoped_role, get_token_for_user, fake_cartridge,
+):
+    """Defect 2: a prepare-only peer must not read or mutate another user's batch."""
+    owner = APIClient()
+    owner.credentials(HTTP_AUTHORIZATION=f'Bearer {get_token_for_user(preparer)}')
+    created = owner.post(f'{PREFIX}/batches/', {'kind': 'typed_object', 'target_key': 'test.widget'}, format='json')
+    bid = created.data['id']
+    owner.post(f'{PREFIX}/batches/{bid}/file/', {'file': _csv('code\nA\n')}, format='multipart')
+
+    peer_user = create_user('peer')
+    create_scoped_role(peer_user, 'people_data_owners_group')
+    peer = APIClient()
+    peer.credentials(HTTP_AUTHORIZATION=f'Bearer {get_token_for_user(peer_user)}')
+
+    # Detail, mutate (smoke), rejects export and rows are all out of scope.
+    assert peer.get(f'{PREFIX}/batches/{bid}/').status_code == 404
+    assert peer.post(f'{PREFIX}/batches/{bid}/smoke/', {}, format='json').status_code == 404
+    assert peer.get(f'{PREFIX}/batches/{bid}/rejects/').status_code == 404
+    assert peer.get(f'{PREFIX}/batches/{bid}/rows/').status_code == 404
+
+    # The peer's list never includes the owner's batch — no invisible rows.
+    listed = peer.get(f'{PREFIX}/batches/?kind=typed_object')
+    peer_ids = {row['id'] for row in (listed.data if isinstance(listed.data, list) else listed.data['results'])}
+    assert bid not in peer_ids
+
+    # The owner sees their own batch.
+    own = owner.get(f'{PREFIX}/batches/?kind=typed_object')
+    own_ids = {row['id'] for row in (own.data if isinstance(own.data, list) else own.data['results'])}
+    assert bid in own_ids
+
+    # A committer keeps full visibility (two-person rule).
+    cmt = APIClient()
+    cmt.credentials(HTTP_AUTHORIZATION=f'Bearer {get_token_for_user(committer)}')
+    assert cmt.get(f'{PREFIX}/batches/{bid}/').status_code == 200
+
+    # Staff/admin keep full visibility.
+    admin = create_user('boss', is_staff=True, is_superuser=True)
+    adm = APIClient()
+    adm.credentials(HTTP_AUTHORIZATION=f'Bearer {get_token_for_user(admin)}')
+    assert adm.get(f'{PREFIX}/batches/{bid}/').status_code == 200
+
+
+@pytest.mark.django_db
+def test_template_scoping_and_overwrite_guard(
+    preparer, create_user, create_scoped_role, get_token_for_user, fake_cartridge,
+):
+    """Defects 2 + 5: templates are owner-scoped and cannot be silently overwritten."""
+    payload = {
+        'name': 'Shared widget',
+        'kind': 'typed_object',
+        'target_key': 'test.widget',
+        'mapping': {'columns': {'code': 'code'}},
+    }
+    owner = APIClient()
+    owner.credentials(HTTP_AUTHORIZATION=f'Bearer {get_token_for_user(preparer)}')
+    created = owner.post(f'{PREFIX}/templates/', payload, format='json')
+    assert created.status_code == 201
+    tpl_id = created.data['id']
+    assert created.data['owner_username'] == 'prep'
+
+    peer_user = create_user('peer_tpl')
+    create_scoped_role(peer_user, 'people_data_owners_group')
+    peer = APIClient()
+    peer.credentials(HTTP_AUTHORIZATION=f'Bearer {get_token_for_user(peer_user)}')
+
+    # The peer cannot see the owner's personal template, but shared/official is visible.
+    InboundTemplate.objects.create(
+        name='Official widget', kind='typed_object', target_key='test.widget', mapping={}, owner=None,
+    )
+    listed = peer.get(f'{PREFIX}/templates/?target_key=test.widget')
+    names = {row['name'] for row in (listed.data if isinstance(listed.data, list) else listed.data['results'])}
+    assert 'Shared widget' not in names
+    assert 'Official widget' in names
+
+    # Overwriting another user's template by name is refused.
+    res = peer.post(f'{PREFIX}/templates/', payload, format='json')
+    assert res.status_code == 403
+    # Overwriting an official/shared (ownerless) row is refused too.
+    res = peer.post(f'{PREFIX}/templates/', {**payload, 'name': 'Official widget'}, format='json')
+    assert res.status_code == 403
+    # A new name is fine.
+    res = peer.post(f'{PREFIX}/templates/', {**payload, 'name': 'Peer own'}, format='json')
+    assert res.status_code == 201
+
+    # The owner may overwrite their own template in place (same id, same owner).
+    res = owner.post(
+        f'{PREFIX}/templates/',
+        {**payload, 'mapping': {'columns': {'code': 'code', 'name': 'code'}}},
+        format='json',
+    )
+    assert res.status_code == 201
+    assert res.data['id'] == tpl_id
+    assert res.data['owner_username'] == 'prep'
+
+    # The create-only official seed row is untouched.
+    official = InboundTemplate.objects.get(name='Official widget')
+    assert official.owner_id is None
+
+
+@pytest.mark.django_db
+def test_smoke_refuses_cross_kind(
+    preparer, create_user, create_scoped_role, get_token_for_user, fake_cartridge,
+):
+    """Defect 3: a product steward must not smoke a typed People batch."""
+    owner = APIClient()
+    owner.credentials(HTTP_AUTHORIZATION=f'Bearer {get_token_for_user(preparer)}')
+    created = owner.post(f'{PREFIX}/batches/', {'kind': 'typed_object', 'target_key': 'test.widget'}, format='json')
+    bid = created.data['id']
+    owner.post(f'{PREFIX}/batches/{bid}/file/', {'file': _csv('code\nA\n')}, format='multipart')
+    owner.put(f'{PREFIX}/batches/{bid}/mapping/', {'columns': {'code': 'code'}}, format='json')
+
+    steward_user = create_user('prod_steward')
+    create_scoped_role(steward_user, 'datahub_lead')
+    steward = APIClient()
+    steward.credentials(HTTP_AUTHORIZATION=f'Bearer {get_token_for_user(steward_user)}')
+    # Full visibility (commit path) so the batch is reachable…
+    assert steward.get(f'{PREFIX}/batches/{bid}/').status_code == 200
+    # …but the destination kind gate refuses the smoke.
+    res = steward.post(f'{PREFIX}/batches/{bid}/smoke/', {}, format='json')
+    assert res.status_code == 403
+
+
+@pytest.mark.django_db
+def test_rows_missing_file_is_400_not_500(preparer, get_token_for_user, fake_cartridge):
+    """Defect 4: a file missing from disk is a clean 4xx, never a 500."""
+    client = APIClient()
+    client.credentials(HTTP_AUTHORIZATION=f'Bearer {get_token_for_user(preparer)}')
+    created = client.post(f'{PREFIX}/batches/', {'kind': 'typed_object', 'target_key': 'test.widget'}, format='json')
+    bid = created.data['id']
+    batch = InboundBatch.objects.get(id=bid)
+    batch.file.name = 'inbound/2026/01/this-file-was-deleted.csv'
+    batch.save(update_fields=['file'])
+
+    res = client.get(f'{PREFIX}/batches/{bid}/rows/')
+    assert res.status_code == 400
+    assert 'missing' in res.data['detail'].lower()
+
+
+@pytest.mark.django_db
+def test_upload_size_cap(monkeypatch, preparer, get_token_for_user, fake_cartridge):
+    """Defect 6: an oversized upload is rejected before it is parsed/stored."""
+    monkeypatch.setattr(services, 'MAX_UPLOAD_BYTES', 16)
+    client = APIClient()
+    client.credentials(HTTP_AUTHORIZATION=f'Bearer {get_token_for_user(preparer)}')
+    created = client.post(f'{PREFIX}/batches/', {'kind': 'typed_object', 'target_key': 'test.widget'}, format='json')
+    bid = created.data['id']
+
+    too_big = _csv('code\n' + ('A' * 64) + '\n')
+    res = client.post(f'{PREFIX}/batches/{bid}/file/', {'file': too_big}, format='multipart')
+    assert res.status_code == 413
+
+    # The batch still accepts a within-limit file afterwards.
+    res = client.post(f'{PREFIX}/batches/{bid}/file/', {'file': _csv('code\nA\n')}, format='multipart')
+    assert res.status_code == 200
+    assert InboundBatch.objects.get(id=bid).headers == ['code']
+
+
+@pytest.mark.django_db
+def test_commit_is_atomic_on_failure(tmp_path, settings, preparer, committer):
+    """Defect 7: a mid-loop host failure rolls back the partial host write."""
+    settings.MEDIA_ROOT = str(tmp_path)
+
+    def smoke(rows, **_k):
+        return {'insert': len(rows), 'update': 0, 'skip': 0, 'reject': 0, 'sample': [], 'reject_rows': []}
+
+    def commit(rows, **_k):
+        InboundTemplate.objects.create(
+            name='txn-canary', kind='typed_object', target_key='test.txn', mapping={},
+        )
+        raise RuntimeError('host commit failed mid-loop')
+
+    registry.register(
+        kind='typed_object',
+        key='test.txn',
+        label='Txn',
+        fields=[{'name': 'code', 'label': 'Code', 'required': True}],
+        smoke=smoke,
+        commit=commit,
+    )
+    try:
+        batch = InboundBatch.objects.create(
+            kind='typed_object', target_key='test.txn', prepared_by=preparer,
+            status=InboundBatch.STATUS_SMOKED,
+        )
+        batch.file.save('txn.csv', ContentFile(b'code\nA\n'), save=True)
+        batch.mapping = {'columns': {'code': 'code'}, 'crosswalks': {}}
+        batch.smoke = {'insert': 1, 'update': 0, 'skip': 0, 'reject': 0, 'sample': [], 'reject_rows': []}
+        batch.save()
+
+        with pytest.raises(RuntimeError):
+            services.run_commit(batch, committer)
+
+        # The canary insert is rolled back and the batch is not marked committed.
+        assert not InboundTemplate.objects.filter(name='txn-canary').exists()
+        batch.refresh_from_db()
+        assert batch.status == InboundBatch.STATUS_SMOKED
+    finally:
+        registry._REGISTRY.pop('test.txn', None)
+
+
+@pytest.mark.django_db
+def test_rejects_csv_neutralizes_formula_cells(preparer, get_token_for_user, fake_cartridge):
+    """Defect 8: a reject cell cannot open as a formula in Excel."""
+    client = APIClient()
+    client.credentials(HTTP_AUTHORIZATION=f'Bearer {get_token_for_user(preparer)}')
+    created = client.post(f'{PREFIX}/batches/', {'kind': 'typed_object', 'target_key': 'test.widget'}, format='json')
+    bid = created.data['id']
+    batch = InboundBatch.objects.get(id=bid)
+    batch.smoke = {
+        'reject': 2,
+        'reject_rows': [
+            {'row': 1, 'key': '=HYPERLINK("http://evil")', 'reason': '+SUM(1)', 'verdict': 'reject'},
+            {'row': 2, 'key': '@cmd', 'reason': '\t=1+1', 'verdict': 'reject'},
+        ],
+    }
+    batch.save(update_fields=['smoke'])
+
+    res = client.get(f'{PREFIX}/batches/{bid}/rejects/')
+    assert res.status_code == 200
+    rows = list(csv.reader(io.StringIO(res.content.decode('utf-8'))))
+    assert len(rows) == 3
+    for row in rows[1:]:
+        for cell in row:
+            assert not cell.startswith(('=', '+', '-', '@', '\t', '\r'))
+    all_cells = [cell for row in rows[1:] for cell in row]
+    assert any(cell.startswith("'=") for cell in all_cells)
+    assert any(cell.startswith("'+") for cell in all_cells)
+    assert any(cell.startswith("'@") for cell in all_cells)

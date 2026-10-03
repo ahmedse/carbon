@@ -27,9 +27,16 @@ export function fetchInboundTargets(token, kind = 'typed_object') {
   return apiFetch(`${ROOT}batches/targets/${qs}`, { token });
 }
 
-export function fetchInboundBatches(token, kind = 'typed_object') {
-  const qs = kind ? `?kind=${encodeURIComponent(kind)}` : '';
-  return apiFetch(`${ROOT}batches/${qs}`, { token });
+export function fetchInboundBatches(token, params = {}) {
+  const p = new URLSearchParams();
+  if (params.kind) p.set('kind', params.kind);
+  if (params.q) p.set('q', params.q);
+  if (params.status) p.set('status', params.status);
+  if (params.target_key) p.set('target_key', params.target_key);
+  if (params.page) p.set('page', String(params.page));
+  if (params.page_size) p.set('page_size', String(params.page_size));
+  const qs = p.toString();
+  return apiFetch(`${ROOT}batches/${qs ? `?${qs}` : ''}`, { token });
 }
 
 export function fetchInboundBatch(token, id) {

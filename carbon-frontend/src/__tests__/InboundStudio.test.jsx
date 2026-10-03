@@ -180,3 +180,51 @@ describe('People Import studio — committed batch', () => {
     expect(await screen.findByText('Run smoke before continuing')).toBeInTheDocument();
   });
 });
+
+describe('People Import studio — a view open must not write (Defect 11)', () => {
+  const DRAFT_NO_MAPPING = {
+    ...COMMITTED_BATCH,
+    id: 9,
+    status: 'draft',
+    mapping: {},
+    smoke: {},
+    prepared_by_username: 'emp_2378',
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fetchInboundTargets.mockResolvedValue([
+      { key: 'people.employee_snapshot', label: 'Employee snapshot', fields: FIELDS },
+    ]);
+    mocks.fetchInboundTemplates.mockResolvedValue([]);
+    mocks.fetchInboundRows.mockResolvedValue({
+      results: [], headers: COMMITTED_BATCH.headers, page: 1, page_size: 50, count: 0,
+    });
+    mocks.fetchInboundTemplateExamples.mockResolvedValue([]);
+    mocks.saveInboundMapping.mockResolvedValue(COMMITTED_BATCH);
+    mocks.fetchReferenceSets.mockResolvedValue([]);
+  });
+
+  it('does not PUT a mapping when a non-owner opens an un-mapped draft', async () => {
+    // Auth user is emp_2400; the batch was prepared by emp_2378.
+    mocks.fetchInboundBatch.mockResolvedValue(DRAFT_NO_MAPPING);
+    renderStudio();
+
+    // Templates fetch is the last step of load(); if no PUT happened by then,
+    // opening the batch wrote nothing.
+    await waitFor(() => expect(mocks.fetchInboundTemplates).toHaveBeenCalled());
+    expect(mocks.saveInboundMapping).not.toHaveBeenCalled();
+  });
+
+  it('persists the suggested mapping only for the preparer who owns the batch', async () => {
+    mocks.fetchInboundBatch.mockResolvedValue({
+      ...DRAFT_NO_MAPPING, id: 10, prepared_by_username: 'emp_2400',
+    });
+    renderStudio();
+
+    await waitFor(() => expect(mocks.saveInboundMapping).toHaveBeenCalledTimes(1));
+    expect(mocks.saveInboundMapping).toHaveBeenCalledWith('t', 10, expect.objectContaining({
+      columns: expect.objectContaining({ employee_no: 'employee_no' }),
+    }));
+  });
+});

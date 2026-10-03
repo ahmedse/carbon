@@ -37,6 +37,10 @@ export default function InboundList({
   const [targets, setTargets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(25);
+  const [debouncedQ, setDebouncedQ] = useState('');
   const [open, setOpen] = useState(false);
   const [targetKey, setTargetKey] = useState('');
   const [creating, setCreating] = useState(false);
@@ -46,16 +50,32 @@ export default function InboundList({
 
   const { canPrepare, canSee } = inboundCaps(userCapabilities, isGlobalAdminFlag);
 
+  useEffect(() => {
+    const handle = setTimeout(() => setDebouncedQ(searchValue.trim()), 300);
+    return () => clearTimeout(handle);
+  }, [searchValue]);
+
   const load = useCallback(async () => {
     if (!token || !canSee) return;
     setLoading(true);
     setError(null);
     try {
+      // RULE 14: the list can grow past one page, so q + active filters + page
+      // go to the API. No client-side filtering of a single page.
       const [batchRes, targetRes] = await Promise.all([
-        fetchInboundBatches(token, kind),
+        fetchInboundBatches(token, {
+          kind,
+          q: debouncedQ,
+          status: gridFilters.status,
+          target_key: gridFilters.target_key,
+          page: page + 1,
+          page_size: pageSize,
+        }),
         fetchInboundTargets(token, kind),
       ]);
-      setRows(Array.isArray(batchRes) ? batchRes : batchRes.results || []);
+      const list = Array.isArray(batchRes) ? batchRes : batchRes?.results || [];
+      setRows(list);
+      setTotal(Number.isFinite(batchRes?.count) ? batchRes.count : list.length);
       setTargets(Array.isArray(targetRes) ? targetRes : targetRes.results || []);
     } catch (err) {
       if (err?.status === 403) {
@@ -67,7 +87,7 @@ export default function InboundList({
     } finally {
       setLoading(false);
     }
-  }, [token, canSee, kind, notifyFromError, t]);
+  }, [token, canSee, kind, debouncedQ, gridFilters, page, pageSize, notifyFromError, t]);
 
   useEffect(() => {
     load();
@@ -91,19 +111,7 @@ export default function InboundList({
     },
   ], [t, tCommon, targets]);
 
-  const filteredRows = useMemo(() => {
-    const q = searchValue.trim().toLowerCase();
-    return rows.filter((row) => {
-      if (gridFilters.status && row.status !== gridFilters.status) return false;
-      if (gridFilters.target_key && row.target_key !== gridFilters.target_key) return false;
-      if (!q) return true;
-      const hay = [
-        row.target_label, row.target_key, row.original_filename,
-        row.status, row.prepared_by_username,
-      ].join(' ').toLowerCase();
-      return hay.includes(q);
-    });
-  }, [rows, searchValue, gridFilters]);
+  const filteredRows = rows;
 
   const columns = useMemo(() => [
     {
@@ -243,14 +251,18 @@ export default function InboundList({
           columns={columns}
           getRowId={(row) => row.id}
           searchValue={searchValue}
-          onSearchChange={setSearchValue}
+          onSearchChange={(value) => { setSearchValue(value); setPage(0); }}
           searchPlaceholder={t('importSearch')}
           filterDefs={filterDefs}
           filterValues={gridFilters}
-          onFilterChange={(key, value) => setGridFilters((prev) => ({ ...prev, [key]: value }))}
+          onFilterChange={(key, value) => {
+            setGridFilters((prev) => ({ ...prev, [key]: value }));
+            setPage(0);
+          }}
           onClearFilters={() => {
             setSearchValue('');
             setGridFilters({ status: '', target_key: '' });
+            setPage(0);
           }}
           emptyMessage={hasFilters
             ? t('importNoResults')
@@ -258,8 +270,16 @@ export default function InboundList({
           emptySubtext={hasFilters
             ? t('importNoResultsDesc')
             : (canPrepare ? t('importEmptyDesc') : t('importEmptyCommitDesc'))}
-          pageSize={25}
+          pageSize={pageSize}
+          paginationMode="server"
+          rowCount={total}
+          paginationModel={{ page, pageSize }}
+          onPaginationModelChange={(model) => {
+            setPage(model.pageSize === pageSize ? model.page : 0);
+            setPageSize(model.pageSize);
+          }}
           height={560}
+          dataGridProps={{ density: 'compact' }}
           onRowClick={(params) => {
             const id = params.row.id;
             setSelectedId((prev) => (prev === id ? null : id));

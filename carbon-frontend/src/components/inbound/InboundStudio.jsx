@@ -119,6 +119,9 @@ export default function InboundStudio({
   const navigate = useNavigate();
   const { token, user, isGlobalAdminFlag, userCapabilities } = useAuth();
   const { notify, notifyFromError } = useNotification();
+  // Primitive identity for the load callback: the auth `user` object is not
+  // referentially stable across renders.
+  const username = user?.username || '';
 
   const [batch, setBatch] = useState(null);
   const [fields, setFields] = useState([]);
@@ -168,8 +171,14 @@ export default function InboundStudio({
       const walks = row.mapping?.crosswalks || {};
       setCrosswalks(walks);
       setInboundCrumb(row.id, row.original_filename);
+      // A pure view open must not write. Only the preparer who owns the batch
+      // gets the suggested mapping persisted on open, and only for a draft.
+      const isPreparer = isGlobalAdminFlag === true
+        || Boolean(username && row.prepared_by_username === username);
       if (
-        row.status !== 'committed'
+        canPrepare
+        && isPreparer
+        && row.status !== 'committed'
         && !Object.values(existing).some(Boolean)
         && Object.values(cols).some(Boolean)
       ) {
@@ -197,7 +206,7 @@ export default function InboundStudio({
         baseCrosswalks: walks,
         targetKey: row.target_key,
         batchId: row.id,
-        canPrepare,
+        canPrepare: canPrepare && isPreparer,
         committed: row.status === 'committed',
         setColumns,
         setCrosswalks,
@@ -211,7 +220,7 @@ export default function InboundStudio({
     } finally {
       setLoading(false);
     }
-  }, [token, id, kind, aliases, t, notifyFromError, canPrepare]);
+  }, [token, id, kind, aliases, t, notifyFromError, canPrepare, username, isGlobalAdminFlag]);
 
   useEffect(() => {
     load();

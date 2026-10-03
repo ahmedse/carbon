@@ -1,20 +1,31 @@
 import csv
 import io
 
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.http import HttpResponse
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from .definitions import validate_fields, validate_key
 from .exceptions import InboundError
 from .models import InboundBatch, InboundCartridge, InboundTemplate
-from .permissions import InboundAccess, can_define
+from .permissions import InboundAccess, can_define, can_manage_template, can_see_all
 from .serializers import InboundBatchSerializer, InboundCartridgeSerializer, InboundTemplateSerializer
 from . import example_templates, registry, services
+
+# A cell beginning with one of these can be read as a spreadsheet formula.
+# Reject CSV export is opened in Excel, so neutralize the leading character.
+_FORMULA_LEADS = ('=', '+', '-', '@', '\t', '\r')
+
+
+def _csv_safe_cell(value) -> str:
+    text = '' if value is None else str(value)
+    if text and text[0] in _FORMULA_LEADS:
+        return "'" + text
+    return text
 
 
 def _err(exc: InboundError):
@@ -28,9 +39,28 @@ class InboundBatchViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = InboundBatch.objects.select_related('prepared_by', 'committed_by')
+        # Least privilege: a prepare-only user reads only their own batches.
+        # Superuser/staff/admin and commit-capable users keep full visibility
+        # (a committer must see a batch prepared by someone else).
+        if not can_see_all(self.request.user):
+            qs = qs.filter(Q(prepared_by=self.request.user) | Q(committed_by=self.request.user))
         kind = self.request.query_params.get('kind')
         if kind:
             qs = qs.filter(kind=kind)
+        status_filter = self.request.query_params.get('status')
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+        target_key = self.request.query_params.get('target_key')
+        if target_key:
+            qs = qs.filter(target_key=target_key)
+        q = (self.request.query_params.get('q') or '').strip()
+        if q:
+            qs = qs.filter(
+                Q(target_key__icontains=q)
+                | Q(original_filename__icontains=q)
+                | Q(prepared_by__username__icontains=q)
+                | Q(status__icontains=q)
+            )
         return qs
 
     def create(self, request, *args, **kwargs):
@@ -96,9 +126,11 @@ class InboundBatchViewSet(viewsets.ModelViewSet):
         rows = (batch.smoke or {}).get('reject_rows') or []
         buf = io.StringIO()
         if rows:
-            writer = csv.DictWriter(buf, fieldnames=list(rows[0].keys()))
+            fieldnames = list(rows[0].keys())
+            writer = csv.DictWriter(buf, fieldnames=fieldnames)
             writer.writeheader()
-            writer.writerows(rows)
+            for row in rows:
+                writer.writerow({key: _csv_safe_cell(row.get(key)) for key in fieldnames})
         resp = HttpResponse(buf.getvalue(), content_type='text/csv')
         resp['Content-Disposition'] = f'attachment; filename="batch-{batch.id}-rejects.csv"'
         return resp
@@ -140,7 +172,11 @@ class InboundTemplateViewSet(viewsets.ModelViewSet):
     http_method_names = ['get', 'post', 'head', 'options']
 
     def get_queryset(self):
-        qs = InboundTemplate.objects.all()
+        qs = InboundTemplate.objects.select_related('owner')
+        # Least privilege: shared/official rows (owner null) plus the caller's
+        # own templates. Full visibility (superuser/staff/admin/commit) sees all.
+        if not can_see_all(self.request.user):
+            qs = qs.filter(Q(owner=self.request.user) | Q(owner__isnull=True))
         target = self.request.query_params.get('target_key')
         kind = self.request.query_params.get('kind')
         if target:
@@ -162,9 +198,21 @@ class InboundTemplateViewSet(viewsets.ModelViewSet):
             registry.get(target_key)
         except KeyError:
             return Response({'detail': f'Unknown target {target_key}'}, status=400)
+        # The (name, target_key) key is unique, so reusing it is an overwrite.
+        # Only the owner (or staff/admin) may overwrite; the create-only seeded
+        # official rows (owner null) and other users' rows are protected.
+        existing = InboundTemplate.objects.filter(name=name, target_key=target_key).first()
+        if existing is not None and not can_manage_template(request.user, existing):
+            return Response(
+                {'detail': 'This template belongs to another user. Save under a new name.'},
+                status=403,
+            )
+        # Preserve ownership on overwrite so a shared/official row (owner null)
+        # stays shared and an admin edit does not reassign it.
+        owner = existing.owner if existing is not None else request.user
         obj, _ = InboundTemplate.objects.update_or_create(
             name=name, target_key=target_key,
-            defaults={'kind': kind, 'mapping': mapping, 'owner': request.user},
+            defaults={'kind': kind, 'mapping': mapping, 'owner': owner},
         )
         return Response(InboundTemplateSerializer(obj).data, status=status.HTTP_201_CREATED)
 

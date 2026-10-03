@@ -214,3 +214,8 @@ backups/
 
 # Playwright / local test run artifacts
 test-results/
+
+# Inbound smoke series evidence is written at runtime by
+# `manage.py write_inbound_smoke_series`. INBOUND-OBS-05 fails the probe when
+# this file is git-tracked, so it must never be committed.
+docs/migration/evidence/inbound-smoke-series.json

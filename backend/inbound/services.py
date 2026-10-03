@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from django.core.files.base import ContentFile
+from django.db import transaction
 from django.utils import timezone
 
 from .exceptions import InboundError
@@ -8,6 +9,10 @@ from .models import InboundBatch
 from .parse import parse_csv, sha256_bytes
 from .permissions import can_use_kind
 from . import registry
+
+# Bounded upload: the whole CSV is decoded in memory, so cap the bytes we read
+# and reject anything larger before parsing. 25 MB is far beyond a People CSV.
+MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 
 
 def _cartridge(batch: InboundBatch) -> dict:
@@ -50,7 +55,13 @@ def create_batch(*, kind: str, target_key: str, user) -> InboundBatch:
 def attach_file(batch: InboundBatch, uploaded, encoding: str | None = None) -> InboundBatch:
     if batch.status == InboundBatch.STATUS_COMMITTED:
         raise InboundError('Committed batch cannot take a new file', status=409)
-    raw = uploaded.read()
+    # Read at most the cap + 1 byte so a huge upload cannot exhaust memory.
+    raw = uploaded.read(MAX_UPLOAD_BYTES + 1)
+    if len(raw) > MAX_UPLOAD_BYTES:
+        raise InboundError(
+            f'File is larger than the {MAX_UPLOAD_BYTES // (1024 * 1024)} MB limit',
+            status=413,
+        )
     parsed = parse_csv(raw, encoding=encoding or None)
     name = getattr(uploaded, 'name', 'upload.csv') or 'upload.csv'
     batch.file.save(name, ContentFile(raw), save=False)
@@ -70,11 +81,16 @@ def attach_file(batch: InboundBatch, uploaded, encoding: str | None = None) -> I
 def _all_rows(batch: InboundBatch) -> list[dict]:
     if not batch.file:
         raise InboundError('No file on this batch', status=400)
-    batch.file.open('rb')
     try:
-        raw = batch.file.read()
-    finally:
-        batch.file.close()
+        batch.file.open('rb')
+        try:
+            raw = batch.file.read()
+        finally:
+            batch.file.close()
+    except FileNotFoundError as exc:
+        raise InboundError('The stored file for this batch is missing on the server', status=400) from exc
+    except OSError as exc:
+        raise InboundError('The stored file for this batch could not be read', status=400) from exc
     parsed = parse_csv(raw, encoding=batch.encoding or None, delimiter=batch.delimiter or None)
     return parsed['rows']
 
@@ -184,6 +200,10 @@ def project_rows(batch: InboundBatch, rows: list[dict]) -> list[dict]:
 
 
 def run_smoke(batch: InboundBatch, user) -> InboundBatch:
+    # Same destination-kind gate as create_batch/run_commit: a product steward
+    # must not smoke a typed People batch (and vice versa).
+    if not can_use_kind(user, batch.kind):
+        raise InboundError('Not allowed for this destination kind', status=403)
     if batch.status == InboundBatch.STATUS_COMMITTED:
         raise InboundError('Already committed', status=409)
     if batch.status not in (InboundBatch.STATUS_MAPPED, InboundBatch.STATUS_SMOKED, InboundBatch.STATUS_FAILED):
@@ -209,12 +229,15 @@ def run_commit(batch: InboundBatch, user, *, allow_partial=False) -> InboundBatc
         raise InboundError('Rejects remain; set allow_partial to commit the rest', status=400)
     cartridge = _cartridge(batch)
     rows = project_rows(batch, _all_rows(batch))
-    result = cartridge['commit'](rows, batch=batch, user=user, smoke=batch.smoke)
-    batch.status = InboundBatch.STATUS_COMMITTED
-    batch.committed_by = user
-    batch.committed_at = timezone.now()
-    smoke = dict(batch.smoke or {})
-    smoke['commit'] = result or {}
-    batch.smoke = smoke
-    batch.save()
+    # A mid-loop failure in the host commit must not leave partial host state,
+    # so the host write and the envelope update share one transaction.
+    with transaction.atomic():
+        result = cartridge['commit'](rows, batch=batch, user=user, smoke=batch.smoke)
+        batch.status = InboundBatch.STATUS_COMMITTED
+        batch.committed_by = user
+        batch.committed_at = timezone.now()
+        smoke = dict(batch.smoke or {})
+        smoke['commit'] = result or {}
+        batch.smoke = smoke
+        batch.save()
     return batch

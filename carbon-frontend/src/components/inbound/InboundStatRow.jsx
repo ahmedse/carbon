@@ -18,12 +18,12 @@ export default function InboundStatRow({ items = [] }) {
             minWidth: 88,
           }}
         >
-          <Typography sx={{ fontSize: '0.6875rem', color: 'text.secondary' }}>
+          <Typography variant="caption" color="text.secondary">
             {item.label}
           </Typography>
           <Typography
+            variant="subtitle1"
             sx={{
-              fontSize: '1rem',
               fontWeight: 600,
               fontFamily: 'ui-monospace, monospace',
               color: item.tone === 'error' ? 'error.main' : 'text.primary',
