@@ -1185,17 +1185,22 @@ def _check_topic_guard(instance_config: dict, message: str) -> str | None:
     for pat in patterns:
         try:
             if re.search(pat, msg):
-                from ai.engine.cognition.turn.language import detect_reply_language
-
-                lang = detect_reply_language(msg)
-                if lang == "ar":
-                    ar = (guard.get("refusal_ar") or "").strip()
-                    if ar:
-                        return ar
-                return (guard.get("refusal") or "").strip() or (
-                    "That topic is outside my scope. How can I help you with "
-                    "People & Payroll instead?"
+                # IRP-9: scope is declared, not guessed. A message naming a
+                # declared in-scope term is never scope-refused — the pack's
+                # own predicate decides (it already excludes jailbreak /
+                # secret / bypass wording, so a safety refusal still fires).
+                from ai.engine.cognition.turn.runner_util import (
+                    _is_declared_in_scope,
+                    _refusal_text,
                 )
+
+                if _is_declared_in_scope(msg, instance_config):
+                    return None
+                # IRP-7: the guard's copy follows the message language. The
+                # typed helper owns the pack line and the AR/EN default, so an
+                # Arabic message can never fall through to the English pack
+                # paragraph when the pack has no Arabic refusal row.
+                return _refusal_text(instance_config, msg)
         except re.error:
             logger.warning("instance_registry: invalid topic_guard pattern %r", pat)
     return None

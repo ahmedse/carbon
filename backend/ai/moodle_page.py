@@ -1112,6 +1112,37 @@ def _topic_section_line(page: dict[str, Any], topic: str, rows: list[dict]) -> s
     return f"Activities: {activities}."
 
 
+def _topic_index_fallback(
+    topic: str,
+    bank: dict[str, dict],
+    page: dict[str, Any] | None,
+    shortname: str,
+) -> tuple[str, str] | None:
+    """Recall-only keyword-index cite for a title/whole-file miss.
+
+    Scoped to the open activity and unique-passage rule (see
+    ``ai.moodle_bank.cite_topic_index``). Returns ``None`` so the door keeps its
+    exact miss whenever the index is absent or the hit is not unique.
+    """
+    bag = page if isinstance(page, dict) else {}
+    activity = bag.get("activity") if isinstance(bag.get("activity"), dict) else {}
+    cmid = activity.get("cmid")
+    if cmid in (None, ""):
+        return None
+    from ai.moodle_bank import cite_topic_index, listed_world
+
+    try:
+        return cite_topic_index(
+            topic,
+            bank,
+            course=shortname,
+            activity_id=int(cmid),
+            world=listed_world(shortname),
+        )
+    except (TypeError, ValueError):
+        return None
+
+
 def topic_answer(
     message: str,
     snapshot: dict[str, Any] | None,
@@ -1131,7 +1162,19 @@ def topic_answer(
     bank = _load_course_bank(shortname)
     rows, origin = _topic_rows(bank, topic, page=page)
     if not rows:
-        return miss
+        fallback = _topic_index_fallback(topic, bank, page, shortname)
+        if fallback is None:
+            return miss
+        pid, span = fallback
+        row = bank.get(pid)
+        if row is None:
+            return miss
+        head = _topic_section_line(page, topic, [row])
+        if isinstance(state, dict):
+            from ai.moodle_ask_state import set_resolved_topic
+
+            set_resolved_topic(state, topic=topic, shortname=shortname, passage_ids=[pid])
+        return "\n".join([head, f"{pid}\n{span}"])
     head = _topic_section_line(page, topic, rows)
     primary = rows[0]
     text = str(primary.get("text") or "")
@@ -1673,3 +1716,19 @@ def staff_answer(
     if kind == "ilo":
         return _staff_ilo_answer(shortname, topic, spec)
     return _staff_draft_answer(shortname, topic, spec)
+
+
+def teach_answer(
+    message: str,
+    snapshot: dict[str, Any] | None,
+    state: dict[str, Any] | None = None,
+) -> str | None:
+    """L-T T1 — grounded multi-passage lesson draft (see ``ai.moodle_teach``).
+
+    A read-only proposal: every emitted sentence is a verbatim span of the
+    passage it cites, and the draft claims no Moodle write (ADR-0046). Kept
+    here as a thin delegator so ``door_answer`` needs no new import shape.
+    """
+    from ai.moodle_teach import teach_answer as _teach_answer
+
+    return _teach_answer(message, snapshot, state=state)

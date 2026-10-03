@@ -1,6 +1,6 @@
 import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 import StationRail from '../StationRail';
@@ -10,6 +10,15 @@ import LessonReader from '../LessonReader';
 import LessonStepTimeline from '../LessonStepTimeline';
 import MixedText from '../MixedText';
 import { deriveJourney } from '../journeyStages';
+
+// The reader's mission fetches the lesson detail on its own. Mock it so tests
+// never touch the network; each mission test sets the detail it needs.
+const guideApi = vi.hoisted(() => ({ fetchGuide: vi.fn(), fetchGuideLesson: vi.fn(), postGuideEvent: vi.fn() }));
+vi.mock('../../../api/guide', () => ({
+  fetchGuide: (...args) => guideApi.fetchGuide(...args),
+  fetchGuideLesson: (...args) => guideApi.fetchGuideLesson(...args),
+  postGuideEvent: (...args) => guideApi.postGuideEvent(...args),
+}));
 
 const lesson = (id, state, extra = {}) => ({
   id,
@@ -68,6 +77,12 @@ const LISTING = {
 const model = deriveJourney(LISTING, 'D');
 const stationByN = (n) => model.stages.find((station) => station.n === n);
 
+beforeEach(() => {
+  guideApi.fetchGuide.mockReset();
+  guideApi.fetchGuideLesson.mockReset();
+  guideApi.postGuideEvent.mockReset();
+});
+
 describe('StationRail', () => {
   const renderRail = (props = {}) => render(
     <MemoryRouter>
@@ -75,16 +90,19 @@ describe('StationRail', () => {
     </MemoryRouter>,
   );
 
-  it('renders a compact tile per station with a completion count and no gate labels', () => {
+  it('renders a compact numbered pip per station and no gate labels', () => {
     renderRail();
     expect(screen.getAllByRole('tab')).toHaveLength(3);
-    const pending = screen.getByTestId('journey-station-3');
-    expect(pending).toHaveTextContent('Data products');
-    expect(pending).toHaveTextContent('0 of 0 done');
+    // The camp you are on is the only one that spends a title on the trail.
+    const active = screen.getByTestId('journey-station-3');
+    expect(active).toHaveTextContent('Data products');
+    expect(active).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId('journey-station-1')).not.toHaveTextContent('Data products');
+    expect(screen.getByTestId('journey-station-2')).toHaveTextContent('2');
     expect(screen.queryByText(/available/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^locked$/i)).not.toBeInTheDocument();
     // No pack-id pills in the rail.
-    expect(within(pending).queryByText('D1')).not.toBeInTheDocument();
+    expect(within(active).queryByText('D1')).not.toBeInTheDocument();
   });
 
   it('keeps every station clickable, including a pending one', () => {
@@ -116,8 +134,9 @@ describe('StationDetail', () => {
         />
       </MemoryRouter>,
     );
-    expect(screen.getByText('Coverage targets')).toBeInTheDocument();
-    expect(screen.getByText(/Cover or exclude with a reason/)).toBeInTheDocument();
+    // The camp title and its "what" live in the hero above; the panel owns the
+    // checkable part.
+    expect(screen.queryByText('Coverage targets')).not.toBeInTheDocument();
     expect(screen.getByText('What good looks like:')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Go there' }));
     expect(onNavigate).toHaveBeenCalledWith('/carbon/my-data');
@@ -274,6 +293,27 @@ describe('LessonStepTimeline', () => {
     fireEvent.click(buttons[0]);
     expect(onGo).toHaveBeenCalledWith('/carbon/my-data');
   });
+
+  it('gives every node its own hue and marks the active step', () => {
+    render(
+      <LessonStepTimeline
+        steps={[
+          { title: 'One', do: 'do one', route: '/a' },
+          { title: 'Two', do: 'do two', route: '/b' },
+          { title: 'Three', do: 'do three', route: '/c' },
+        ]}
+        glossary={[]}
+        onGo={() => {}}
+        activeIndex={1}
+        onSelectStep={() => {}}
+      />,
+    );
+    expect(screen.getByTestId('lesson-step-0')).toHaveAttribute('data-tone', 'primary');
+    expect(screen.getByTestId('lesson-step-1')).toHaveAttribute('data-tone', 'info');
+    expect(screen.getByTestId('lesson-step-2')).toHaveAttribute('data-tone', 'secondary');
+    expect(screen.getByTestId('lesson-step-1')).toHaveAttribute('data-active', 'true');
+    expect(screen.getByTestId('lesson-step-0')).toHaveAttribute('data-active', 'false');
+  });
 });
 
 describe('MixedText', () => {
@@ -287,5 +327,109 @@ describe('MixedText', () => {
   it('leaves a sentence with no allowlisted term untouched', () => {
     render(<MixedText text="نص عربي فقط." glossary={['emission factor']} />);
     expect(screen.getByText('نص عربي فقط.')).toBeInTheDocument();
+  });
+});
+
+describe('LessonReader mission — the pack loop reaches the page', () => {
+  const STATION = { n: 2, title: 'Coverage targets' };
+  const DETAIL = {
+    state: 'started',
+    host_required: false,
+    question: { kind: 'static', options: 3, params: {} },
+    copy: {
+      title: 'Enter one activity row',
+      know: 'A row is one activity, written in the unit the factor expects.',
+      do: 'Add and save the row.',
+      dont: 'Do not round to look tidy.',
+      question: 'Which page lists the data you own for this period?',
+      options: ['Data Entry', 'Chairman Overview', 'Emission Factors'],
+      explain: 'Data Entry is scoped to your org units.',
+    },
+  };
+
+  const renderMission = (props = {}) => render(
+    <MemoryRouter>
+      <LessonReader
+        station={STATION}
+        lesson={LISTING.lessons[1]}
+        glossary={[]}
+        onGo={() => {}}
+        onBackToStation={() => {}}
+        prevLesson={null}
+        nextLesson={null}
+        onNavigateLesson={() => {}}
+        onStationSummary={() => {}}
+        appId="carbon"
+        {...props}
+      />
+    </MemoryRouter>,
+  );
+
+  it('shows the briefing, hazard and field check from the pack, not just waypoints', async () => {
+    guideApi.fetchGuideLesson.mockResolvedValue(DETAIL);
+    renderMission();
+    expect(await screen.findByTestId('lesson-mission-briefing'))
+      .toHaveTextContent('A row is one activity');
+    expect(screen.getByTestId('lesson-mission-hazard'))
+      .toHaveTextContent('Do not round to look tidy.');
+    expect(screen.getByTestId('lesson-mission-check'))
+      .toHaveTextContent('Which page lists the data you own for this period?');
+    expect(guideApi.fetchGuideLesson).toHaveBeenCalledWith('carbon', 'D2', expect.any(Object));
+  });
+
+  it('grades the answer on the server and shows the field note once done', async () => {
+    guideApi.fetchGuideLesson
+      .mockResolvedValueOnce(DETAIL)
+      .mockResolvedValueOnce({ ...DETAIL, state: 'done' });
+    guideApi.postGuideEvent.mockResolvedValue({ correct: true, state: 'done', waiting: null });
+    renderMission();
+    await screen.findByTestId('lesson-mission-check');
+    fireEvent.click(screen.getByTestId('lesson-mission-option-1'));
+    fireEvent.click(screen.getByTestId('lesson-mission-submit'));
+    expect(await screen.findByTestId('lesson-mission-note'))
+      .toHaveTextContent('Data Entry is scoped to your org units.');
+    expect(guideApi.postGuideEvent).toHaveBeenCalledWith(
+      'carbon', 'D2', { event: 'answered', choice: 1 }, null,
+    );
+  });
+
+  it('explains a wrong answer instead of failing the learner', async () => {
+    guideApi.fetchGuideLesson.mockResolvedValue(DETAIL);
+    guideApi.postGuideEvent.mockResolvedValue({ correct: false, state: 'started', waiting: null });
+    renderMission();
+    await screen.findByTestId('lesson-mission-check');
+    fireEvent.click(screen.getByTestId('lesson-mission-option-0'));
+    fireEvent.click(screen.getByTestId('lesson-mission-submit'));
+    expect(await screen.findByTestId('lesson-mission-wrong')).toHaveTextContent('Not quite.');
+  });
+
+  it('keeps the choices live after a correct answer so the learner can answer again', async () => {
+    guideApi.fetchGuideLesson
+      .mockResolvedValueOnce(DETAIL)
+      .mockResolvedValueOnce({ ...DETAIL, state: 'done' });
+    guideApi.postGuideEvent.mockResolvedValue({ correct: true, state: 'done', waiting: null });
+    renderMission();
+    await screen.findByTestId('lesson-mission-check');
+    fireEvent.click(screen.getByTestId('lesson-mission-option-1'));
+    fireEvent.click(screen.getByTestId('lesson-mission-submit'));
+    await screen.findByTestId('lesson-mission-note');
+
+    const inputs = [0, 1, 2].map(
+      (i) => screen.getByTestId(`lesson-mission-option-${i}`).querySelector('input'),
+    );
+    inputs.forEach((input) => expect(input).not.toBeDisabled());
+
+    fireEvent.click(screen.getByTestId('lesson-mission-option-2'));
+    const again = screen.getByTestId('lesson-mission-submit');
+    expect(again).toHaveTextContent('Answer again');
+    expect(again).not.toBeDisabled();
+  });
+
+  it('renders no mission card when the detail cannot be loaded, keeping waypoints readable', async () => {
+    guideApi.fetchGuideLesson.mockRejectedValue(new Error('offline'));
+    renderMission();
+    expect(screen.getByTestId('lesson-steps')).toBeInTheDocument();
+    await waitFor(() => expect(guideApi.fetchGuideLesson).toHaveBeenCalled());
+    expect(screen.queryByTestId('lesson-mission')).not.toBeInTheDocument();
   });
 });

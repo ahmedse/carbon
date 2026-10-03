@@ -26,10 +26,16 @@ from ai.engine_runtime import (
 
 class DqRetrieverTests(TestCase):
     def setUp(self):
+        # ADR-0028 single active root; the in-scope and out-of-scope orgs are
+        # siblings under it, so scoping to one genuinely excludes the other.
+        self.root_org = OrgUnit.objects.create(
+            name='Retriever Root', slug='retriever-root', code='RETR', org_type='company')
         self.org = OrgUnit.objects.create(
-            name='Retriever Org', slug='retriever-org', code='RET', org_type='division')
+            name='Retriever Org', slug='retriever-org', code='RET', org_type='division',
+            parent=self.root_org)
         self.other_org = OrgUnit.objects.create(
-            name='Other Org', slug='other-org', code='OTH', org_type='division')
+            name='Other Org', slug='other-org', code='OTH', org_type='division',
+            parent=self.root_org)
         self.module = Module.objects.create(name='Retriever Module', org_unit=self.org)
         self.other_module = Module.objects.create(
             name='Other Module', org_unit=self.other_org)

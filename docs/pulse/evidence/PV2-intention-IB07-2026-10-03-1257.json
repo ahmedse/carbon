@@ -1,0 +1,551 @@
+{
+  "tier": "live_intention",
+  "bank": "IB-07",
+  "bank_file": "chat_intention_bank_ib07.yaml",
+  "bank_purpose": "Ask/Plan boundary — a read never gets a plan card; a goal gets one plan/handoff.",
+  "run_at": "2026-10-03T12:57:25.322788+00:00",
+  "surface": "chat",
+  "user": "emp_1067",
+  "base": "http://127.0.0.1:8009/carbon-api",
+  "release": {
+    "tag": "",
+    "process_brand": "nibras",
+    "pack": "nibras",
+    "pack_version": "17",
+    "extra_packs": [],
+    "loaded_packs": [
+      "aast-med",
+      "carbon",
+      "eduos",
+      "nibras"
+    ],
+    "catalogs": [
+      "aast-med",
+      "carbon",
+      "eduos",
+      "nibras"
+    ],
+    "pulse_enabled": true,
+    "image_built_at": null,
+    "process_started_at": "2026-10-03T12:37:42.709934+00:00",
+    "deployed_at": null
+  },
+  "threads": [
+    {
+      "id": "ib07-read-en[ask]",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "f96f9bef-3d64-4c8b-95cb-fe448f12511c",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "What is my annual leave balance?",
+          "reply": "Your leave balance - annual remaining 18 (entitled 30)\n- sick remaining 15 (entitled 15)\n- emergency remaining 4 (entitled 5)\n- unpaid remaining 90 (entitled 90)\n- maternity remaining 70 (entitled 70)\n- paternity remaining 3 (entitled 3)",
+          "seconds": 2.83,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "18",
+          "language": "en",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_leave_balance"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib07-read-en[plan]",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "plan",
+      "conversation_id": "9e1389ba-2172-465f-bf7e-e095ffc30ec1",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "What is my annual leave balance?",
+          "reply": "I couldn't reach the AI service — try again in a moment.",
+          "seconds": 3.21,
+          "llm_calls": null,
+          "turn_decision": null,
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "en",
+          "mode": "plan",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib07-read-en-2[ask]",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "2ea48029-8dd9-451a-b53a-3a7556d6688c",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "What job title does my record show?",
+          "reply": "| Job title |\n| --- |\n| Heavy Duty Driver |",
+          "seconds": 2.68,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "en",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib07-read-en-2[plan]",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "plan",
+      "conversation_id": "e22d7ced-a35e-4fe1-b37f-03569f4011f3",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "What job title does my record show?",
+          "reply": "Here is a draft for you to review. No task exists until you choose Create task — or tell me what to change.",
+          "seconds": 3.81,
+          "llm_calls": 0,
+          "turn_decision": "clarify",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "plan_proposal",
+          "number": null,
+          "language": "en",
+          "mode": "plan",
+          "tools": [],
+          "misses": [
+            "no_plan_card got=plan_proposal"
+          ],
+          "pass": false
+        }
+      ],
+      "pass": false,
+      "volume": false
+    },
+    {
+      "id": "ib07-read-ar[ask]",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "5976db54-18f0-4c08-9b84-41d635f511f8",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "ما هو رصيد إجازاتي السنوية؟",
+          "reply": "رصيد إجازاتك - annual المتبقي 18 (المستحق 30) - sick المتبقي 15 (المستحق 15) - emergency المتبقي 4 (المستحق 5) - unpaid المتبقي 90 (المستحق 90) - maternity المتبقي 70 (المستحق 70) - paternity المتبقي 3 (المستحق 3)",
+          "seconds": 3.16,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "18",
+          "language": "ar",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_leave_balance"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib07-read-ar[plan]",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "plan",
+      "conversation_id": "e93707ce-a68f-4a3d-b121-561fb7dce1be",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "ما هو رصيد إجازاتي السنوية؟",
+          "reply": "هذه مسودة للمراجعة. لن تُنشأ أي مهمة حتى تختار «إنشاء المهمة» — أو أخبرني بما تريد تغييره.",
+          "seconds": 4.13,
+          "llm_calls": 0,
+          "turn_decision": "clarify",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "plan_proposal",
+          "number": null,
+          "language": "ar",
+          "mode": "plan",
+          "tools": [],
+          "misses": [
+            "no_plan_card got=plan_proposal"
+          ],
+          "pass": false
+        }
+      ],
+      "pass": false,
+      "volume": false
+    },
+    {
+      "id": "ib07-read-ar-2[ask]",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "4bd0a635-5f8c-4c09-8859-2667c2f14c23",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "ما هو مسماي الوظيفي في السجل؟",
+          "reply": "| المسمى الوظيفي | | --- | | Heavy Duty Driver |",
+          "seconds": 2.16,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "ar",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib07-read-ar-2[plan]",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "plan",
+      "conversation_id": "d9e516f3-3f71-44fd-9879-53abff911138",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "ما هو مسماي الوظيفي في السجل؟",
+          "reply": "هذه مسودة للمراجعة. لن تُنشأ أي مهمة حتى تختار «إنشاء المهمة» — أو أخبرني بما تريد تغييره.",
+          "seconds": 3.03,
+          "llm_calls": 0,
+          "turn_decision": "clarify",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "plan_proposal",
+          "number": null,
+          "language": "ar",
+          "mode": "plan",
+          "tools": [],
+          "misses": [
+            "no_plan_card got=plan_proposal"
+          ],
+          "pass": false
+        }
+      ],
+      "pass": false,
+      "volume": false
+    },
+    {
+      "id": "ib07-goal-en[ask]",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "39e14ee2-9578-4800-beeb-9be3cfe29be1",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "Apply for 3 days of annual leave next week.",
+          "reply": "I have: Leave type: annual; Days: 3.\n\nTo submit it, switch to Plan — I'll carry these details over. Or open My and submit there. Chat does not submit or change records. Ask does not create tasks.",
+          "seconds": 24.02,
+          "llm_calls": 1,
+          "turn_decision": "handoff_agent",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "3",
+          "language": "en",
+          "mode": "ask",
+          "tools": [
+            "api_name=submit_my_leave"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib07-goal-en[plan]",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "plan",
+      "conversation_id": "769fc4fc-5832-4a00-92c5-a5f913f344f1",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "Apply for 3 days of annual leave next week.",
+          "reply": "Here is a draft for you to review. No task exists until you choose Create task — or tell me what to change.",
+          "seconds": 4.21,
+          "llm_calls": 0,
+          "turn_decision": "clarify",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "plan_proposal",
+          "number": null,
+          "language": "en",
+          "mode": "plan",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib07-goal-en-2[ask]",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "20ab61cb-e5fe-4317-9f04-161dc6798cf7",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "Submit a salary advance request for me of 100.",
+          "reply": "I have: Loan type: salary; Principal: 100; amount: 100.\n\nTo submit it, switch to Plan — I'll carry these details over. Or open My and submit there. Chat does not submit or change records. Ask does not create tasks.",
+          "seconds": 23.99,
+          "llm_calls": 1,
+          "turn_decision": "handoff_agent",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "100",
+          "language": "en",
+          "mode": "ask",
+          "tools": [
+            "api_name=submit_my_loan"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib07-goal-en-2[plan]",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "plan",
+      "conversation_id": "774c4527-24fa-4bcb-a5c0-ed1666bdd88e",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "Submit a salary advance request for me of 100.",
+          "reply": "Here is a draft for you to review. No task exists until you choose Create task — or tell me what to change.",
+          "seconds": 27.0,
+          "llm_calls": 0,
+          "turn_decision": "clarify",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "plan_proposal",
+          "number": null,
+          "language": "en",
+          "mode": "plan",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib07-goal-ar[ask]",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "955db9eb-f423-43ac-a929-5f4af9233300",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "قدّم طلب إجازة سنوية 3 أيام الأسبوع القادم.",
+          "reply": "لدي: نوع الإجازة: annual؛ الأيام: 3. لإرسال الطلب بدّل المفتاح إلى «خطّة» — سأنقل هذه التفاصيل معك. أو قدّم من تطبيقاتي. وضع «الدردشة» لا يُرسل ولا يغيّر السجلات. وضع السؤال لا يُنشئ مهاماً.",
+          "seconds": 2.01,
+          "llm_calls": 1,
+          "turn_decision": "handoff_agent",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "3",
+          "language": "ar",
+          "mode": "ask",
+          "tools": [
+            "api_name=submit_my_leave"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib07-goal-ar[plan]",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "plan",
+      "conversation_id": "6c0d296e-6709-436d-8987-e325cf95a1db",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "قدّم طلب إجازة سنوية 3 أيام الأسبوع القادم.",
+          "reply": "هذه مسودة للمراجعة. لن تُنشأ أي مهمة حتى تختار «إنشاء المهمة» — أو أخبرني بما تريد تغييره.",
+          "seconds": 4.35,
+          "llm_calls": 0,
+          "turn_decision": "clarify",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "plan_proposal",
+          "number": null,
+          "language": "ar",
+          "mode": "plan",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib07-goal-ar-2[ask]",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "75d9effa-0bfa-4704-bfa1-3ba0621dccfd",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "أريد التقدم بطلب سلفة راتب بمبلغ 100.",
+          "reply": "لدي: نوع القرض: salary؛ المبلغ: 100؛ amount: 100. لإرسال الطلب بدّل المفتاح إلى «خطّة» — سأنقل هذه التفاصيل معك. أو قدّم من تطبيقاتي. وضع «الدردشة» لا يُرسل ولا يغيّر السجلات. وضع السؤال لا يُنشئ مهاماً.",
+          "seconds": 1.99,
+          "llm_calls": 1,
+          "turn_decision": "handoff_agent",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "100",
+          "language": "ar",
+          "mode": "ask",
+          "tools": [
+            "api_name=submit_my_loan"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib07-goal-ar-2[plan]",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "plan",
+      "conversation_id": "fea7a02c-70ef-45aa-9b78-d7ad6008558c",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "أريد التقدم بطلب سلفة راتب بمبلغ 100.",
+          "reply": "هذه مسودة للمراجعة. لن تُنشأ أي مهمة حتى تختار «إنشاء المهمة» — أو أخبرني بما تريد تغييره.",
+          "seconds": 6.48,
+          "llm_calls": 0,
+          "turn_decision": "clarify",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "plan_proposal",
+          "number": null,
+          "language": "ar",
+          "mode": "plan",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    }
+  ],
+  "findings": {},
+  "objectives": {
+    "C4": false
+  },
+  "latency": {
+    "turns": 16,
+    "p50_ms": 3510,
+    "over_4s": 7,
+    "llm_calls_p50": 1,
+    "llm_calls_max": 1
+  },
+  "total": 16,
+  "passed": 13,
+  "pass": false
+}

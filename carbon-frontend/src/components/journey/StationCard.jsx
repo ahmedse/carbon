@@ -1,25 +1,30 @@
 import React, { forwardRef } from 'react';
 import PropTypes from 'prop-types';
-import { Box, CircularProgress, Typography } from '@mui/material';
-import TaskAltIcon from '@mui/icons-material/TaskAlt';
+import { Box, Typography } from '@mui/material';
+import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
 import { useTranslation } from 'react-i18next';
 
 import { FONT } from '../../theme/themeTokens';
-import { stationProgress } from './journeyProgress';
 import useReducedMotion from './useReducedMotion';
+import { stageArt } from './journeyArt';
 
 /**
- * One journey station: a compact, always-clickable enterprise tile.
+ * One camp on the trail: a clearly labelled, always-clickable chip.
  *
- * It shows the station title, a completion ring and an "n of m" count, plus a
- * subtle sense of place — "Here" on the current station and a check on a station
- * that is genuinely done. It never shows an available/locked label and never
- * shows a pack id pill: there is no lock state in the product.
+ * Every camp shows its name — the trail is the map and it should read without a
+ * hover. The camp you are on is filled with its own colour and its own icon; a
+ * camp the app proved is a green check; a camp with no work owed is dashed. The
+ * marker testids and `data-marker` states are unchanged. Never a lock.
  */
 const StationCard = forwardRef(function StationCard({ station, active, onSelect }, ref) {
   const { t } = useTranslation('journey');
   const reduced = useReducedMotion();
-  const { done, total, pct } = stationProgress(station);
+  const { Icon, color } = stageArt(station);
+
+  const marker = station.pending
+    ? 'interlude'
+    : (station.done ? 'done' : (active ? 'current' : 'open'));
+  const filled = marker === 'done' || marker === 'current';
 
   return (
     <Box
@@ -29,6 +34,7 @@ const StationCard = forwardRef(function StationCard({ station, active, onSelect 
       aria-controls={`journey-station-panel-${station.n}`}
       aria-selected={active}
       aria-current={station.state === 'current' ? 'step' : undefined}
+      aria-label={t('trail.camp', { n: station.n })}
       tabIndex={active ? 0 : -1}
       data-testid={`journey-station-${station.n}`}
       data-state={station.state}
@@ -41,57 +47,76 @@ const StationCard = forwardRef(function StationCard({ station, active, onSelect 
         }
       }}
       sx={{
-        flex: '0 0 auto',
-        width: { xs: 148, md: 152 },
+        flex: '0 1 auto',
         minWidth: 0,
+        maxWidth: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 0.75,
         cursor: 'pointer',
-        textAlign: 'start',
         border: '1px solid',
-        borderColor: active ? 'primary.main' : 'divider',
-        bgcolor: active ? 'action.selected' : 'background.paper',
-        borderRadius: 1,
-        p: 1,
+        borderStyle: marker === 'interlude' ? 'dashed' : 'solid',
+        borderColor: filled ? `${color}.main` : 'divider',
+        bgcolor: filled ? `${color}.main` : 'background.paper',
+        color: filled ? `${color}.contrastText` : 'text.primary',
+        borderRadius: 999,
+        py: 0.375,
+        pl: 0.5,
+        pr: 1,
         outline: 'none',
         transition: reduced ? 'none' : 'border-color 160ms ease, background-color 160ms ease',
-        '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 1 },
+        '&:hover': {
+          bgcolor: filled ? `${color}.dark` : 'action.hover',
+        },
+        '&:focus-visible': { outline: '2px solid', outlineColor: `${color}.main`, outlineOffset: 2 },
       }}
     >
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-        <CircularProgress
-          variant="determinate"
-          value={pct}
-          size={18}
-          thickness={5}
-          color={station.done ? 'success' : 'primary'}
-          aria-hidden="true"
-        />
-        <Typography sx={{ ...FONT.caption, color: 'text.secondary' }}>
-          {t('rail.progress', { done, total })}
-        </Typography>
-        {station.done && (
-          <TaskAltIcon
-            data-testid={`journey-station-done-${station.n}`}
-            sx={{ fontSize: 14, color: 'success.main', marginInlineStart: 'auto' }}
-            aria-hidden="true"
-          />
-        )}
-      </Box>
-      <Typography
+      <Box
+        data-testid={`journey-station-marker-${station.n}`}
+        data-marker={marker}
+        aria-hidden="true"
         sx={{
-          ...FONT.cardTitle,
-          mt: 0.5,
-          display: '-webkit-box',
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: 'vertical',
-          overflow: 'hidden',
+          width: 20,
+          height: 20,
+          borderRadius: '50%',
+          flexShrink: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          bgcolor: filled ? 'rgba(255,255,255,0.22)' : 'action.hover',
+          color: filled ? `${color}.contrastText` : 'text.secondary',
         }}
       >
+        {marker === 'done' ? (
+          <CheckRoundedIcon
+            data-testid={`journey-station-done-${station.n}`}
+            sx={{ fontSize: 15 }}
+          />
+        ) : marker === 'current' ? (
+          <Icon sx={{ fontSize: 14 }} />
+        ) : (
+          <Typography sx={{ ...FONT.caption, fontWeight: 700, lineHeight: 1 }}>
+            {station.n}
+          </Typography>
+        )}
+      </Box>
+
+      <Typography noWrap sx={{ ...FONT.chip, fontWeight: 600 }}>
         {station.title}
       </Typography>
-      {station.state === 'current' && (
+
+      {active && (
         <Typography
           data-testid={`journey-station-here-${station.n}`}
-          sx={{ ...FONT.caption, color: 'primary.main', mt: 0.25 }}
+          component="span"
+          sx={{
+            ...FONT.caption,
+            fontWeight: 700,
+            borderRadius: 999,
+            px: 0.625,
+            py: 0.0625,
+            bgcolor: 'rgba(255,255,255,0.24)',
+          }}
         >
           {t('rail.here')}
         </Typography>
@@ -106,10 +131,8 @@ StationCard.propTypes = {
     title: PropTypes.string.isRequired,
     state: PropTypes.string.isRequired,
     done: PropTypes.bool,
-    outcomesTotal: PropTypes.number.isRequired,
-    outcomesProven: PropTypes.number.isRequired,
-    lessonsTotal: PropTypes.number.isRequired,
-    lessonsDone: PropTypes.number.isRequired,
+    pending: PropTypes.bool,
+    key: PropTypes.string,
   }).isRequired,
   active: PropTypes.bool.isRequired,
   onSelect: PropTypes.func.isRequired,

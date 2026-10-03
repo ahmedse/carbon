@@ -127,8 +127,11 @@ def test_longest_name_wins(make_scoped_user):
 
 @pytest.mark.django_db
 def test_no_cross_scope_leak(make_scoped_user):
-    org_a = _make_org("North Campus", "north-campus")
-    org_b = _make_org("South Campus", "south-campus")
+    # ADR-0028 single active root; the two campuses are siblings, so a role on
+    # org_a must not reach org_b's entities.
+    root = _make_org("Root Campus", "root-campus")
+    org_a = _make_org("North Campus", "north-campus", parent=root)
+    org_b = _make_org("South Campus", "south-campus", parent=root)
     mod_a = _make_module("Electricity", org_a)
     mod_b = _make_module("Water", org_b)
     table_a = _make_table("electricity_usage", mod_a)

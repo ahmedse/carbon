@@ -25,12 +25,27 @@
     "owner": "Your part: enter this period's activity rows for your own sources, from real meter or invoice readings.",
     "observer": "Your part: read the period status and the quality tiers, and know what each figure means.",
     "scene": "Scene {{n}} of {{total}}",
+    "camp": "Camp {{n}} of {{total}}",
+    "voice": "In their voice",
     "mission": "Your mission",
     "startLesson": "Start this lesson",
     "aboutMinutes": "About {{minutes}} min",
     "noMission": "This station has no lesson for your path yet. Read what it covers above.",
     "roleTitle": "Which seat are you in?",
     "roleBody": "This sets your path and the story you see. You can change it any time."
+  },
+  "drama": {
+    "title": "Camp {{n}} drama",
+    "progress": "Beat {{n}} of {{total}}",
+    "cast": "{{name}} says",
+    "check": "Check my move",
+    "right": "That is the honest move.",
+    "wrong": "Not the honest move. Read the line again and choose differently.",
+    "explain": "Why it matters",
+    "next": "Next beat",
+    "done": "Drama cleared",
+    "doneBody": "You read the camp right. Now do the real thing in the mission below — the app is the one that finishes it.",
+    "failed": "Could not send your answer. Try again."
   },
   "celebrate": {
     "title": "{{station}} is done",
@@ -47,6 +62,20 @@
     "reveal": "Show the reasoning",
     "reasoning": "The reasoning",
     "unchanged": "Review only — your progress is unchanged."
+  },
+  "mission": {
+    "briefing": "Briefing",
+    "hazard": "Hazard",
+    "check": "Field check",
+    "submit": "Check my answer",
+    "answerAgain": "Answer again",
+    "wrong": "Not quite. Read the briefing, then try again.",
+    "waitingRow": "No saved row yet. Do the real step, then check again.",
+    "waitingHost": "Your answer is right. This finishes when the app shows the real action.",
+    "checkRow": "Check for the real action",
+    "checkAgain": "Check again",
+    "done": "Mission complete.",
+    "fieldNote": "Field note"
   },
   "stationDone": {
     "title": "You closed the loop on",
@@ -73,6 +102,14 @@
     "progress": "{{done}} of {{total}} done",
     "here": "Here"
   },
+  "trail": {
+    "label": "The trail",
+    "camp": "Camp {{n}}",
+    "done": "done",
+    "current": "you are here",
+    "open": "open",
+    "interlude": "no work owed"
+  },
   "completion": {
     "done": "Done",
     "inProgress": "In progress",
@@ -81,7 +118,24 @@
   "sections": {
     "outcomesTitle": "Outcomes you can check",
     "outcomes": "What good looks like",
-    "lessons": "Lessons"
+    "lessons": "Lessons",
+    "missions": "Lessons on this camp ({{n}})",
+    "hazards": "Field hazards ({{n}})"
+  },
+  "hazards": {
+    "title": "Field hazards",
+    "body": "Every mission's trap, kept in view."
+  },
+  "notebook": {
+    "title": "Field notebook",
+    "subtitle": "{{briefings}} briefings · {{hazards}} hazards collected",
+    "emptyTitle": "Nothing collected yet",
+    "emptyBody": "Open a mission on the trail and its briefing and hazard land here.",
+    "sealed": "Sealed",
+    "sealedBody": "Open this mission to collect its note.",
+    "collected": "Collected",
+    "briefing": "Briefing",
+    "hazard": "Hazard"
   },
   "step": {
     "goTo": "Go to {{page}}",
@@ -91,7 +145,9 @@
   "lesson": {
     "noSteps": "This lesson is checked in the app. Open it to see the live state.",
     "none": "No lesson is owed on this station for your path.",
-    "stepCount": "Steps: {{steps}}"
+    "stepCount": "Steps: {{steps}}",
+    "nextUp": "Next up",
+    "open": "Open lesson"
   },
   "reader": {
     "title": "Lesson",

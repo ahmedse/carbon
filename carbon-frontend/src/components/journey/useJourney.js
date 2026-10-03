@@ -87,6 +87,7 @@ export default function useJourney(appId, track) {
     activeLessonId,
     reload,
     send: guide.send,
+    sendScenario: guide.sendScenario,
     effectiveTrack,
   };
 }

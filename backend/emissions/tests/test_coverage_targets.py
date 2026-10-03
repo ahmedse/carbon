@@ -30,7 +30,12 @@ from emissions.models import (
     InventorySourceStatus,
     ReportingPeriod,
 )
-from emissions.coverage_targets import source_state, target_progress, task_evidence
+from emissions.coverage_targets import (
+    source_state,
+    target_progress,
+    task_closure,
+    task_evidence,
+)
 from emissions.views import eligible_owner_queryset
 from mdm.models import OrgUnit
 
@@ -161,6 +166,7 @@ class CoverageTargetProgressTests(TestCase):
         self.assertEqual(progress['state'], 'met')
 
     def test_excluded_counts_as_settled_not_entered(self):
+        """A fully-excluded target must NOT read as measured coverage."""
         source = InventorySource.objects.create(
             org_unit=self.org, scope=2, source_name='Contractual PPA'
         )
@@ -171,7 +177,17 @@ class CoverageTargetProgressTests(TestCase):
         progress = target_progress(self.target)
         self.assertEqual(progress['counts']['excluded'], 1)
         self.assertEqual(progress['counts']['entered'], 0)
-        self.assertEqual(progress['measured_pct'], '100.00')
+        self.assertEqual(progress['counts']['measured'], 0)
+        self.assertEqual(progress['counts']['settled'], 1)
+        # Measured (settled WITH kg) is 0; exclusions and raw settled stay separate.
+        self.assertEqual(progress['measured_pct'], '0.00')
+        self.assertEqual(progress['excluded_pct'], '100.00')
+        self.assertEqual(progress['settled_pct'], '100.00')
+        self.assertEqual(progress['settled_at_target_pct'], '0.00')
+        # 100% target, but exclusions alone can never make it met.
+        self.assertEqual(progress['state'], 'short')
+        self.assertFalse(progress['coverage_complete'])
+        self.assertEqual(progress['claim'], 'measured_not_claimed')
 
     def test_absolute_goal_reports_kg_only_from_real_calculations(self):
         target = CoverageTarget.objects.create(
@@ -182,6 +198,161 @@ class CoverageTargetProgressTests(TestCase):
         progress = target_progress(target)
         self.assertIsNone(progress['measured_kg'])
         self.assertEqual(progress['state'], 'empty')
+        # A free-text activity unit is not a CO2e mass unit: surface it, do not
+        # compare kilograms to it.
+        codes = {finding['code'] for finding in progress['findings']}
+        self.assertIn('goal_unit_not_co2e', codes)
+
+    def _covered_source(self, name, *, tier=None, scope=2, kwh=100, factor_code='GRID-T'):
+        source = InventorySource.objects.create(
+            org_unit=self.org, scope=scope, source_name=name,
+        )
+        status = InventorySourceStatus.objects.create(
+            source=source, reporting_period=self.period, status='covered',
+            data_quality_tier=tier,
+        )
+        status.linked_tables.add(self.table)
+        factor = _factor(code=factor_code)
+        row = DataRow.objects.create(data_table=self.table, values={'kwh': kwh})
+        Calculation.create_from_data_row(
+            data_row=row, emission_factor=factor, activity_value=kwh,
+            activity_unit='kWh', reporting_year=2026, reporting_period=self.period,
+        )
+        return source, status
+
+    def test_below_floor_stream_does_not_satisfy_the_floor(self):
+        target = CoverageTarget.objects.create(
+            reporting_period=self.period, org_unit=self.org, scope='2',
+            name='Tier-2 floor KPI', goal_kind='percent',
+            goal_value=Decimal('100.00'), min_quality_tier=2,
+        )
+        _, status = self._covered_source('Grid import T4', tier=4)
+        progress = target_progress(target)
+        self.assertEqual(progress['counts']['measured'], 1)
+        self.assertEqual(progress['counts']['settled_at_target'], 0)
+        self.assertEqual(progress['counts']['below_floor'], 1)
+        self.assertEqual(progress['measured_pct'], '100.00')
+        self.assertEqual(progress['settled_at_target_pct'], '0.00')
+        self.assertEqual(progress['state'], 'short')
+        stream = progress['streams'][0]
+        self.assertEqual(stream['quality_tier'], 4)
+        self.assertFalse(stream['meets_quality_floor'])
+        self.assertTrue(stream['below_floor'])
+        self.assertFalse(stream['counts_toward_target'])
+
+        # Upgrading the stream to the floor settles it at target.
+        status.data_quality_tier = 2
+        status.save(update_fields=['data_quality_tier'])
+        progress = target_progress(target)
+        self.assertEqual(progress['counts']['settled_at_target'], 1)
+        self.assertEqual(progress['counts']['below_floor'], 0)
+        self.assertEqual(progress['state'], 'met')
+
+    def test_measured_stream_with_no_tier_is_not_credited_against_a_floor(self):
+        target = CoverageTarget.objects.create(
+            reporting_period=self.period, org_unit=self.org, scope='2',
+            name='Tier-2 floor, no tier set', goal_kind='percent',
+            goal_value=Decimal('100.00'), min_quality_tier=2,
+        )
+        self._covered_source('Untiered grid', tier=None)
+        progress = target_progress(target)
+        self.assertEqual(progress['counts']['measured'], 1)
+        self.assertEqual(progress['counts']['tier_unknown'], 1)
+        self.assertEqual(progress['counts']['settled_at_target'], 0)
+        self.assertEqual(progress['state'], 'short')
+
+    def test_target_rolls_up_descendant_unit_streams(self):
+        """A whole-boundary target includes streams declared on child units."""
+        child = OrgUnit.objects.create(
+            name='Depot', slug='tgt-depot', org_type='department', parent=self.org,
+        )
+        target = CoverageTarget.objects.create(
+            reporting_period=self.period, org_unit=self.org, scope='2',
+            name='Boundary rollup KPI', goal_kind='percent',
+            goal_value=Decimal('100.00'),
+        )
+        InventorySource.objects.create(
+            org_unit=child, scope=2, source_name='Depot electricity',
+        )
+        InventorySource.objects.create(
+            org_unit=self.org, scope=2, source_name='HQ electricity',
+        )
+        progress = target_progress(target)
+        self.assertEqual(progress['counts']['required'], 2)
+        self.assertEqual(
+            {row['org_unit_id'] for row in progress['streams']},
+            {self.org.id, child.id},
+        )
+
+    def test_narrower_unit_target_does_not_see_the_parent_stream(self):
+        unit = OrgUnit.objects.create(
+            name='Sub', slug='tgt-sub', org_type='department', parent=self.org,
+        )
+        target = CoverageTarget.objects.create(
+            reporting_period=self.period, org_unit=unit, scope='2',
+            name='Sub KPI', goal_kind='percent', goal_value=Decimal('100.00'),
+        )
+        InventorySource.objects.create(
+            org_unit=self.org, scope=2, source_name='Parent electricity',
+        )
+        InventorySource.objects.create(
+            org_unit=unit, scope=2, source_name='Sub electricity',
+        )
+        progress = target_progress(target)
+        self.assertEqual(progress['counts']['required'], 1)
+        self.assertEqual(progress['streams'][0]['source_name'], 'Sub electricity')
+
+    def test_zero_source_boundary_reports_explicit_finding(self):
+        target = CoverageTarget.objects.create(
+            reporting_period=self.period, org_unit=self.org, scope='1',
+            name='No sources KPI', goal_kind='percent', goal_value=Decimal('50.00'),
+        )
+        progress = target_progress(target)
+        self.assertEqual(progress['counts']['required'], 0)
+        self.assertEqual(progress['state'], 'empty')
+        codes = {finding['code'] for finding in progress['findings']}
+        self.assertIn('no_declared_sources', codes)
+
+    def test_raw_row_without_calculation_is_in_progress_not_entered(self):
+        """`entered` is the locked 'covered' definition; a raw row is not it."""
+        source = InventorySource.objects.create(
+            org_unit=self.org, scope=2, source_name='Smart Village electricity',
+        )
+        DataRow.objects.create(data_table=self.table, values={
+            'source_name': 'Smart Village electricity',
+            'period_start': '2026-01-01',
+            'period_end': '2026-12-31',
+            'kwh': 100,
+        })
+        state = source_state(source, self.period)
+        self.assertEqual(state['status'], 'in_progress')
+        self.assertIsNone(state['inventory_kg'])
+        progress = target_progress(self.target)
+        self.assertEqual(progress['counts']['in_progress'], 1)
+        self.assertEqual(progress['counts']['entered'], 0)
+        self.assertEqual(progress['counts']['measured'], 0)
+        self.assertEqual(progress['measured_pct'], '0.00')
+
+    def test_absolute_co2e_goal_reports_value_in_goal_unit(self):
+        target = CoverageTarget.objects.create(
+            reporting_period=self.period, org_unit=self.org, scope='2',
+            name='Absolute tCO2e KPI', goal_kind='absolute',
+            goal_value=Decimal('0.5000'), goal_unit='tCO2e',
+        )
+        self._covered_source('Grid tCO2e')
+        progress = target_progress(target)
+        self.assertEqual(progress['metric'], 'absolute_emissions')
+        self.assertEqual(progress['goal_concept'], 'emissions_value')
+        self.assertEqual(progress['measured_unit'], 'tCO2e')
+        self.assertIsNotNone(progress['measured_value'])
+        self.assertIsNotNone(progress['measured_kg'])
+        # 100 kWh x 0.4584 kg/kWh = 45.84 kg = 0.04584 t < 0.5 t.
+        self.assertEqual(
+            Decimal(progress['measured_value']),
+            Decimal(progress['measured_kg']) / Decimal('1000'),
+        )
+        self.assertLess(Decimal(progress['measured_value']), Decimal('0.5'))
+        self.assertEqual(progress['state'], 'short')
 
 
 class CoverageTargetAPITests(TestCase):
@@ -283,6 +454,29 @@ class CoverageTargetAPITests(TestCase):
         )
         self.assertEqual(resp.status_code, 400, resp.data)
         self.assertEqual(resp.data['details']['goal_unit'], ['absolute_needs_unit'])
+
+    def test_absolute_goal_rejects_a_non_co2e_unit(self):
+        resp = self.client.post(
+            reverse('carbon:coverage-target-list'),
+            self._payload(goal_kind='absolute', goal_value='5000.0000', goal_unit='kWh'),
+            format='json',
+        )
+        self.assertEqual(resp.status_code, 400, resp.data)
+        self.assertEqual(resp.data['details']['goal_unit'], ['absolute_unit_not_co2e'])
+
+    def test_absolute_goal_accepts_a_co2e_mass_unit(self):
+        for unit in ('kgCO2e', 'tCO2e'):
+            resp = self.client.post(
+                reverse('carbon:coverage-target-list'),
+                self._payload(
+                    goal_kind='absolute', goal_value='5000.0000',
+                    goal_unit=unit, name=f'Absolute {unit}',
+                ),
+                format='json',
+            )
+            self.assertEqual(resp.status_code, 201, resp.data)
+            self.assertEqual(resp.data['progress']['metric'], 'absolute_emissions')
+            self.assertEqual(resp.data['progress']['goal_concept'], 'emissions_value')
 
     def test_non_admin_write_is_forbidden(self):
         pleb = User.objects.create_user(username='tgt_pleb', password='pass')
@@ -747,3 +941,133 @@ class CoverageTaskScopeTests(TestCase):
         evidence = task_evidence(task)
         self.assertFalse(evidence['met'])
         self.assertIn('data_table_unbound', evidence['codes'])
+
+
+class CoverageTaskCausalityTests(TestCase):
+    """D6 · a task moves the measured counts only through the real row it produces.
+
+    ``test_task_completion_moves_the_measured_counts`` asserts BOTH halves:
+    (a) a done status without the real data moves no measured count and does not
+    read closed; (b) when the real row/Calculation the verb produces lands, the
+    counts move and the task reads closed.
+    """
+
+    def setUp(self):
+        self.org = OrgUnit.objects.create(name='Smart Village', slug='causal-sv')
+        self.period = ReportingPeriod.objects.create(
+            name='Calendar year 2026', start_date=date(2026, 1, 1),
+            end_date=date(2026, 12, 31), status='open', period_type='annual',
+        )
+        self.module = Module.objects.create(name='SV causal', scope=2, org_unit=self.org)
+        self.table = DataTable.objects.create(
+            name='sv_causal_t', title='SV causal', module=self.module,
+        )
+        DataField.objects.create(data_table=self.table, name='kwh', label='kWh', type='number')
+        self.source = InventorySource.objects.create(
+            org_unit=self.org, scope=2, source_name='Smart Village electricity',
+        )
+        self.target = CoverageTarget.objects.create(
+            reporting_period=self.period, org_unit=self.org, scope='2',
+            name='Scope 2 causal KPI', goal_kind='percent', goal_value=Decimal('100.00'),
+        )
+        self.task = CoverageTask.objects.create(
+            target=self.target, task_type='fill_gap', title='Fill the SV gap',
+            stream_source=self.source,
+        )
+        self.user = User.objects.create_superuser(username='lead_causal', password='AdminPa_132')
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+
+    def test_task_completion_moves_the_measured_counts(self):
+        before = target_progress(self.target)
+        self.assertEqual(before['counts']['measured'], 0)
+        self.assertEqual(before['counts']['entered'], 0)
+
+        # (a) A status flip to done WITHOUT the real data changes NOTHING.
+        #     The API itself refuses the transition (evidence gate) ...
+        refused = self.client.patch(
+            reverse('carbon:coverage-task-detail', args=[self.task.id]),
+            {'status': 'done'}, format='json',
+        )
+        self.assertEqual(refused.status_code, 400, refused.data)
+        self.assertIn('task_evidence', str(refused.data))
+
+        # ... and even a forced ORM status flip moves no measured count.
+        self.task.status = 'done'
+        self.task.save(update_fields=['status'])
+        after_flip = target_progress(self.target)
+        self.assertEqual(after_flip['counts']['measured'], before['counts']['measured'])
+        self.assertEqual(after_flip['counts']['entered'], before['counts']['entered'])
+        closure = task_closure(self.task)
+        self.assertNotEqual(closure['state'], 'closed')
+        self.assertFalse(closure['evidence_met'])
+        self.assertEqual([a['code'] for a in after_flip['next_actions']], ['missing'])
+
+        # (b) The REAL data the task represents is entered: the counts move and
+        #     the task's evidence flips met / it reads closed.
+        status = InventorySourceStatus.objects.create(
+            source=self.source, reporting_period=self.period, status='covered',
+        )
+        status.linked_tables.add(self.table)
+        factor = _factor()
+        row = DataRow.objects.create(data_table=self.table, values={'kwh': 100})
+        Calculation.create_from_data_row(
+            data_row=row, emission_factor=factor, activity_value=100,
+            activity_unit='kWh', reporting_year=2026, reporting_period=self.period,
+        )
+        after_data = target_progress(self.target)
+        self.assertGreater(after_data['counts']['measured'], before['counts']['measured'])
+        self.assertEqual(after_data['counts']['entered'], 1)
+        self.assertEqual(after_data['counts']['measured'], 1)
+        self.assertEqual(after_data['measured_pct'], '100.00')
+
+        self.task.refresh_from_db()
+        self.assertTrue(task_evidence(self.task)['met'])
+        closure = task_closure(self.task)
+        self.assertEqual(closure['state'], 'closed')
+        self.assertTrue(closure['gap_changed'])
+        self.assertEqual(closure['gap'], 'missing')
+        # The live gap is gone from the next actions.
+        self.assertNotIn('missing', [a['code'] for a in after_data['next_actions']])
+
+    def test_bound_table_without_a_stream_is_open_not_closed(self):
+        """Evidence met is not closure: an unattributed bind moves no gap."""
+        task = CoverageTask.objects.create(
+            target=self.target, task_type='bind_data_product', title='Bind only',
+            data_table=self.table,
+        )
+        self.assertTrue(task_evidence(task)['met'])
+        closure = task_closure(task)
+        self.assertEqual(closure['state'], 'open')
+        self.assertFalse(closure['gap_changed'])
+
+    def test_next_actions_name_the_real_gap_and_its_prefilled_stream(self):
+        progress = target_progress(self.target)
+        self.assertEqual([a['code'] for a in progress['next_actions']], ['missing'])
+        action = progress['next_actions'][0]
+        self.assertEqual(action['count'], 1)
+        self.assertEqual(action['verb'], 'enter_stream')
+        self.assertEqual(action['moves'], ['entered', 'measured'])
+        self.assertEqual(action['streams'][0]['inventory_source_id'], self.source.id)
+        self.assertEqual(action['streams'][0]['source_name'], 'Smart Village electricity')
+
+    def test_empty_universe_requests_declared_sources(self):
+        empty = CoverageTarget.objects.create(
+            reporting_period=self.period, org_unit=self.org, scope='1',
+            name='No sources', goal_kind='percent', goal_value=Decimal('50.00'),
+        )
+        progress = target_progress(empty)
+        self.assertEqual(
+            [a['code'] for a in progress['next_actions']], ['no_declared_sources'],
+        )
+        self.assertEqual(progress['next_actions'][0]['count'], 0)
+
+    def test_payload_exposes_task_closes_and_next_actions(self):
+        resp = self.client.get(
+            reverse('carbon:coverage-target-detail', args=[self.target.id]),
+        )
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertIn('next_actions', resp.data['progress'])
+        self.assertEqual(resp.data['progress']['next_actions'][0]['code'], 'missing')
+        self.assertEqual(resp.data['tasks'][0]['closes']['state'], 'awaiting_evidence')
+        self.assertEqual(resp.data['tasks'][0]['closes']['gap'], 'missing')

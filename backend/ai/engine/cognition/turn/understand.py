@@ -369,6 +369,7 @@ async def understand_turn(
     arg_violations: Callable[[str, dict], list[str]] | None = None,
     field_gaps: Callable[[str, list[str]], tuple[list[str], list[str]]] | None = None,
     list_fields: Callable[[str], set[str]] | None = None,
+    declared_in_scope: bool = False,
     repair: bool = True,
     on_malformed: Malformed | None = None,
 ) -> Decision | None:
@@ -390,6 +391,7 @@ async def understand_turn(
         "arg_violations": arg_violations,
         "field_gaps": field_gaps,
         "list_fields": list_fields,
+        "declared_in_scope": declared_in_scope,
     }
     result = await _emit(complete, messages)
     parsed, cause, head = read_decision(result)
@@ -433,6 +435,17 @@ async def understand_turn(
         )
         if repaired is not None:
             validated = repaired
+    if (
+        not validated.commands
+        and any(r.code == "declared_in_scope" for r in validated.rejections)
+    ):
+        # IRP-9 twice-failed: the message names a declared in-scope term and
+        # the model refused twice with cause=scope (or absent, which reads as
+        # scope). A cause=safety refusal is never dropped above, so it never
+        # enters this branch. The scope card must not ship and no answer is
+        # fabricated; the turn fails visibly (ADR-0053) instead of falling
+        # through to the legacy spine.
+        return None
     # The model's choice stands; the catalog steers it through descriptions,
     # never by overriding the Decision afterwards (ADR-0056).
     return validated

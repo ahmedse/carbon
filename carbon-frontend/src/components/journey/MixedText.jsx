@@ -14,10 +14,12 @@ import { splitMixed } from './mixedTextParts';
  * Arabic around it. Nothing is translated here; the pack already chose the
  * wording. This component only isolates the allowlisted terms.
  */
-export default function MixedText({ text, glossary, component = 'span', sx }) {
+export default function MixedText({
+  text, glossary, component = 'span', sx, testId,
+}) {
   const parts = useMemo(() => splitMixed(text, glossary), [text, glossary]);
   return (
-    <Box component={component} sx={sx}>
+    <Box component={component} sx={sx} data-testid={testId}>
       {parts.map((part, index) => (
         part.term
           ? <bdi key={`${index}-${part.text}`} dir="ltr">{part.text}</bdi>
@@ -32,6 +34,7 @@ MixedText.propTypes = {
   glossary: PropTypes.arrayOf(PropTypes.string),
   component: PropTypes.elementType,
   sx: PropTypes.oneOfType([PropTypes.object, PropTypes.array, PropTypes.func]),
+  testId: PropTypes.string,
 };
 
 MixedText.defaultProps = {
@@ -39,4 +42,5 @@ MixedText.defaultProps = {
   glossary: [],
   component: 'span',
   sx: undefined,
+  testId: undefined,
 };

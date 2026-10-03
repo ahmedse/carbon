@@ -1,36 +1,52 @@
 // src/pages/carbon/InventoryCoveragePage.jsx
-// Inventory Coverage admin — declared-universe completeness for GHG accounting (ADR-0020)
-// Canonical shell: StandardDataGrid + SystemDialog + ConfirmDialog (see EmissionFactorsPage / GWPReferencePage)
-// All colours via theme.palette, zero hardcoded hex
+// Inventory coverage admin — the SOLE surface that reports Missing / Entered /
+// Excluded for the declared universe (ADR-0020). This is the streams reporter;
+// it is NOT a completeness claim and NOT a second state store.
+//
+// Toolkit only, ADR-0018 EN+AR parity, RULE 13 SearchSelect for governed /
+// data-driven enums, RULE 14 grid search, shared Layer-2 primitives
+// (StatusChip / ProgressBar / NumericText / StatCard) instead of page-local
+// forks. No page-local fontSize / hex.
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   Box,
   Button,
   Card,
   CardContent,
-  Chip,
-  TextField,
-  MenuItem,
-  Typography,
-  Stack,
-  IconButton,
-  Switch,
   FormControlLabel,
-  Tabs,
+  IconButton,
+  MenuItem,
+  Stack,
+  Switch,
   Tab,
-  LinearProgress,
-  Alert,
+  Tabs,
+  TextField,
+  Typography,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import PageContainer from '../../components/layout/PageContainer';
+import PageHeader from '../../components/Page/PageHeader';
 import EmptyState from '../../components/Page/EmptyState';
 import LoadingSkeleton from '../../components/Page/LoadingSkeleton';
 import WorkflowCard from '../../components/Cards/WorkflowCard';
+import StatCard from '../../components/Cards/StatCard';
+import StatusChip from '../../components/StatusChip';
+import ProgressBar from '../../components/ProgressBar';
+import LtrText from '../../components/LtrText';
+import NumericText from '../../components/NumericText';
+import StandardDataGrid from '../../components/StandardDataGrid';
+import FilteredDataGrid from '../../components/FilteredDataGrid';
+import ConfirmDialog from '../../components/ConfirmDialog';
+import SystemDialog from '../../components/SystemDialog';
 import { SearchSelect } from '../../components/Form';
 import { Scope2MethodChip } from './Scope2Labels';
+import { TierChip } from './coverageTargetsShared';
+import { formatDisplayDate } from '../../utils/dateUtils';
+import { formatPercent } from '../../utils/formatNumber';
 
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
@@ -39,11 +55,6 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import FactCheckIcon from '@mui/icons-material/FactCheck';
 import { useAuth } from '../../auth/AuthContext';
 import { useNotification } from '../../components/NotificationProvider';
-import StandardDataGrid from '../../components/StandardDataGrid';
-import FilteredDataGrid from '../../components/FilteredDataGrid';
-import ConfirmDialog from '../../components/ConfirmDialog';
-import SystemDialog from '../../components/SystemDialog';
-import PageHeader from '../../components/Page/PageHeader';
 import {
   fetchReportingPeriods,
   fetchInventorySources,
@@ -65,190 +76,25 @@ import {
   setCoverageRowExclusion,
 } from '../../api/emissions-extended';
 
-// ── ScopeChip ──────────────────────────────────────────────────────────
+// Scope labels are Latin domain terms that stay English inside an RTL sentence
+// (ADR-0018) — isolated with the shared bdi primitive, not a page-local fork.
+const SCOPE_MAP = {
+  '1': { label: <LtrText>Scope 1</LtrText>, color: 'success' },
+  '2': { label: <LtrText>Scope 2</LtrText>, color: 'warning' },
+  '3': { label: <LtrText>Scope 3</LtrText>, color: 'primary' },
+  '1+2': { label: <LtrText>Scope 1+2</LtrText>, color: 'info' },
+  '1+2+3': { label: <LtrText>Scope 1+2+3</LtrText>, color: 'primary' },
+};
 
-function ScopeChip({ value }) {
-  const key = String(value ?? '');
-  const cfg = {
-    '1':      { label: 'Scope 1',     color: 'success' },
-    '2':      { label: 'Scope 2',     color: 'warning' },
-    '3':      { label: 'Scope 3',     color: 'primary' },
-    '1+2':    { label: 'Scope 1+2',   color: 'info' },
-    '1+2+3':  { label: 'Scope 1+2+3', color: 'primary' },
-  };
-  const meta = cfg[key] || { label: value ?? '—', color: 'default' };
-  return (
-    <Chip
-      label={meta.label}
-      size="small"
-      color={meta.color === 'default' ? undefined : meta.color}
-    />
-  );
-}
-
-// ── TierChip ───────────────────────────────────────────────────────────
-
-function TierChip({ value }) {
-  if (value == null) {
-    return (
-      <Typography component="span" variant="body2" color="text.secondary">—</Typography>
-    );
-  }
-  const cfg = {
-    1: { label: 'T1 Audited',   color: 'success' },
-    2: { label: 'T2 Verified',  color: 'info' },
-    3: { label: 'T3 Calculated', color: 'primary' },
-    4: { label: 'T4 Estimated', color: 'warning' },
-    5: { label: 'T5 Proxy',     color: 'error' },
-  };
-  const meta = cfg[value] || { label: String(value), color: 'default' };
-  return (
-    <Chip
-      label={meta.label}
-      size="small"
-      color={meta.color === 'default' ? undefined : meta.color}
-    />
-  );
-}
-
-// ── StatusChip (source status / goal status / action status) ───────────
-
-function StatusChip({ value }) {
-  const cfg = {
-    declared:    { label: 'Declared',    color: 'info' },
-    covered:     { label: 'Covered',     color: 'success' },
-    excluded:    { label: 'Excluded',    color: 'warning' },
-    draft:       { label: 'Draft',       color: 'warning' },
-    active:      { label: 'Active',      color: 'success' },
-    archived:    { label: 'Archived',    color: 'default' },
-    open:        { label: 'Open',        color: 'info' },
-    in_progress: { label: 'In Progress', color: 'primary' },
-    done:        { label: 'Done',        color: 'success' },
-    blocked:     { label: 'Blocked',     color: 'error' },
-  };
-  const meta = cfg[value] || { label: value, color: 'default' };
-  return (
-    <Chip
-      label={meta.label}
-      size="small"
-      color={meta.color === 'default' ? undefined : meta.color}
-      variant="filled"
-    />
-  );
-}
-
-// ── ExclusionChip ──────────────────────────────────────────────────────
-
-function ExclusionChip({ value }) {
-  if (!value) {
-    return (
-      <Typography component="span" variant="body2" color="text.secondary">—</Typography>
-    );
-  }
-  const cfg = {
-    not_material:      { label: 'Not Material',      color: 'default' },
-    insufficient_data: { label: 'Insufficient Data', color: 'warning' },
-    out_of_boundary:   { label: 'Outside Boundary',  color: 'info' },
-    other:             { label: 'Other',             color: 'secondary' },
-  };
-  const meta = cfg[value] || { label: value, color: 'default' };
-  return (
-    <Chip
-      label={meta.label}
-      size="small"
-      color={meta.color === 'default' ? undefined : meta.color}
-    />
-  );
-}
-
-// ── CompletenessChip ───────────────────────────────────────────────────
-
-function CompletenessChip({ value }) {
-  const cfg = {
-    absolute:            { label: 'Absolute',            color: 'primary' },
-    materiality_bounded: { label: 'Materiality-Bounded', color: 'secondary' },
-  };
-  const meta = cfg[value] || { label: value ?? '—', color: 'default' };
-  return (
-    <Chip
-      label={meta.label}
-      size="small"
-      color={meta.color === 'default' ? undefined : meta.color}
-    />
-  );
-}
-
-// ── ActionTypeChip ─────────────────────────────────────────────────────
-
-function ActionTypeChip({ value }) {
-  const cfg = {
-    collect_data:        { label: 'Collect Data',        color: 'info' },
-    improve_quality:     { label: 'Improve Quality',     color: 'primary' },
-    obtain_verification: { label: 'Obtain Verification', color: 'success' },
-    formalize_exclusion: { label: 'Formalize Exclusion', color: 'warning' },
-  };
-  const meta = cfg[value] || { label: value, color: 'default' };
-  return (
-    <Chip
-      label={meta.label}
-      size="small"
-      color={meta.color === 'default' ? undefined : meta.color}
-    />
-  );
-}
-
-// ── ActiveChip ─────────────────────────────────────────────────────────
-
-function ActiveChip({ value }) {
-  return (
-    <Chip
-      label={value ? 'Active' : 'Inactive'}
-      size="small"
-      color={value ? 'success' : 'default'}
-      variant="filled"
-    />
-  );
-}
-
-// ── StatCard ───────────────────────────────────────────────────────────
-
-function StatCard({ label, value, sub }) {
-  return (
-    <Card sx={{ flex: 1, minWidth: 150 }}>
-      <CardContent>
-        <Typography variant="overline" color="text.secondary">{label}</Typography>
-        <Typography variant="h3" color="text.primary">{value}</Typography>
-        {sub && <Typography variant="caption" color="text.secondary">{sub}</Typography>}
-      </CardContent>
-    </Card>
-  );
-}
-
-// ── CoverageBar ────────────────────────────────────────────────────────
-
-function CoverageBar({ value }) {
+// Coverage pct tone — the threshold policy stays with the caller; the shared
+// ProgressBar only renders.
+function coverageTone(value) {
   const pct = Number(value) || 0;
-  let color = 'error';
-  if (pct >= 100) color = 'success';
-  else if (pct >= 60) color = 'info';
-  else if (pct >= 30) color = 'warning';
-
-  return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 140 }}>
-      <LinearProgress
-        variant="determinate"
-        value={Math.min(pct, 100)}
-        color={color}
-        sx={{ flex: 1, height: 0.75, borderRadius: 1 }}
-      />
-      <Typography variant="caption" sx={{ minWidth: 40, textAlign: "right" }}>
-        {pct.toFixed(1)}%
-      </Typography>
-    </Box>
-  );
+  if (pct >= 100) return 'success';
+  if (pct >= 60) return 'info';
+  if (pct >= 30) return 'warning';
+  return 'error';
 }
-
-// ── Coverage reason label ──────────────────────────────────────────────
 
 const REASON_KEY = {
   not_material: 'coverage.exclusionNotMaterial',
@@ -268,9 +114,17 @@ function reasonLabel(t, reason) {
   return key ? t(key) : String(reason);
 }
 
+function sourceOptions(t, sources) {
+  return (sources || []).map((s) => ({
+    value: String(s.id),
+    label: s.source_name || t('inventoryCoverage.sourceFallback', { id: s.id }),
+  }));
+}
+
 // ── SourceDialog ───────────────────────────────────────────────────────
 
 function SourceDialog({ open, source, onSave, onClose }) {
+  const { t } = useTranslation('emissions');
   const [form, setForm] = useState({
     org_unit: '',
     scope: '1',
@@ -303,13 +157,13 @@ function SourceDialog({ open, source, onSave, onClose }) {
   return (
     <SystemDialog
       open={open}
-      title={source ? 'Edit Source' : 'New Source'}
+      title={source ? t('inventoryCoverage.sourceEditTitle') : t('inventoryCoverage.sourceNewTitle')}
       onClose={onClose}
       onCancel={onClose}
-      cancelLabel="Cancel"
+      cancelLabel={t('common:cancel')}
       actions={
         <Button variant="contained" size="small" onClick={() => onSave(form)}>
-          {source ? 'Update' : 'Create'}
+          {source ? t('update') : t('create')}
         </Button>
       }
       width={540}
@@ -322,16 +176,16 @@ function SourceDialog({ open, source, onSave, onClose }) {
       <Box px={2} py={1}>
         <Stack spacing={2}>
           <TextField
-            label="Org Unit"
+            label={t('inventoryCoverage.orgUnit')}
             name="org_unit"
             value={form.org_unit}
             onChange={handleChange}
             fullWidth
             size="small"
-            placeholder="Org unit ID"
+            placeholder={t('inventoryCoverage.orgUnitPlaceholder')}
           />
           <TextField
-            label="Scope"
+            label={t('intake.scope')}
             select
             name="scope"
             value={form.scope}
@@ -346,7 +200,7 @@ function SourceDialog({ open, source, onSave, onClose }) {
           </TextField>
           {form.scope === '3' && (
             <TextField
-              label="Scope 3 Category"
+              label={t('inventoryCoverage.scope3Category')}
               name="scope3_category"
               type="number"
               value={form.scope3_category}
@@ -354,11 +208,11 @@ function SourceDialog({ open, source, onSave, onClose }) {
               fullWidth
               size="small"
               inputProps={{ min: 1, max: 15 }}
-              helperText="Category 1–15"
+              helperText={t('inventoryCoverage.scope3CategoryHint')}
             />
           )}
           <TextField
-            label="Source Name"
+            label={t('inventoryCoverage.sourceName')}
             name="source_name"
             value={form.source_name}
             onChange={handleChange}
@@ -367,7 +221,7 @@ function SourceDialog({ open, source, onSave, onClose }) {
             size="small"
           />
           <TextField
-            label="Description"
+            label={t('inventoryCoverage.description')}
             name="description"
             value={form.description}
             onChange={handleChange}
@@ -383,7 +237,7 @@ function SourceDialog({ open, source, onSave, onClose }) {
                 onChange={(e) => setForm((p) => ({ ...p, is_active: e.target.checked }))}
               />
             }
-            label="Active"
+            label={t('inventoryCoverage.active')}
           />
         </Stack>
       </Box>
@@ -394,6 +248,7 @@ function SourceDialog({ open, source, onSave, onClose }) {
 // ── GoalDialog ─────────────────────────────────────────────────────────
 
 function GoalDialog({ open, goal, onSave, onClose }) {
+  const { t } = useTranslation('emissions');
   const [form, setForm] = useState({
     org_unit: '',
     name: '',
@@ -431,17 +286,25 @@ function GoalDialog({ open, goal, onSave, onClose }) {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
   };
+  const handleSelect = (name) => (option) => {
+    setForm((prev) => ({ ...prev, [name]: option?.value ?? '' }));
+  };
+
+  const tierOptions = [
+    { value: '', label: t('inventoryCoverage.qualityTierNone') },
+    ...[1, 2, 3, 4, 5].map((n) => ({ value: String(n), label: t(`inventoryCoverage.tier${n}`) })),
+  ];
 
   return (
     <SystemDialog
       open={open}
-      title={goal ? 'Edit Goal' : 'New Goal'}
+      title={goal ? t('inventoryCoverage.goalEditTitle') : t('inventoryCoverage.goalNewTitle')}
       onClose={onClose}
       onCancel={onClose}
-      cancelLabel="Cancel"
+      cancelLabel={t('common:cancel')}
       actions={
         <Button variant="contained" size="small" onClick={() => onSave(form)}>
-          {goal ? 'Update' : 'Create'}
+          {goal ? t('update') : t('create')}
         </Button>
       }
       width={540}
@@ -453,9 +316,9 @@ function GoalDialog({ open, goal, onSave, onClose }) {
     >
       <Box px={2} py={1}>
         <Stack spacing={2}>
-          <TextField label="Org Unit" name="org_unit" value={form.org_unit} onChange={handleChange} fullWidth size="small" placeholder="Org unit ID" />
-          <TextField label="Name" name="name" value={form.name} onChange={handleChange} fullWidth required size="small" />
-          <TextField label="Scope" select name="scope" value={form.scope} onChange={handleChange} fullWidth size="small">
+          <TextField label={t('inventoryCoverage.orgUnit')} name="org_unit" value={form.org_unit} onChange={handleChange} fullWidth size="small" placeholder={t('inventoryCoverage.orgUnitPlaceholder')} />
+          <TextField label={t('inventoryCoverage.goalName')} name="name" value={form.name} onChange={handleChange} fullWidth required size="small" />
+          <TextField label={t('intake.scope')} select name="scope" value={form.scope} onChange={handleChange} fullWidth size="small">
             <MenuItem value="1">Scope 1</MenuItem>
             <MenuItem value="2">Scope 2</MenuItem>
             <MenuItem value="3">Scope 3</MenuItem>
@@ -463,7 +326,7 @@ function GoalDialog({ open, goal, onSave, onClose }) {
             <MenuItem value="1+2+3">Scope 1+2+3</MenuItem>
           </TextField>
           <TextField
-            label="Target Coverage (%)"
+            label={t('inventoryCoverage.targetCoveragePct')}
             name="target_coverage_pct"
             type="number"
             value={form.target_coverage_pct}
@@ -472,28 +335,25 @@ function GoalDialog({ open, goal, onSave, onClose }) {
             size="small"
             inputProps={{ min: 0, max: 100, step: 0.01 }}
           />
+          <SearchSelect
+            label={t('inventoryCoverage.minQualityTier')}
+            options={tierOptions}
+            value={form.min_quality_tier === null || form.min_quality_tier === undefined ? '' : String(form.min_quality_tier)}
+            onChange={handleSelect('min_quality_tier')}
+            clearable={false}
+          />
+          <SearchSelect
+            label={t('inventoryCoverage.completenessDefinition')}
+            options={[
+              { value: 'absolute', label: t('inventoryCoverage.completenessAbsolute') },
+              { value: 'materiality_bounded', label: t('inventoryCoverage.completenessMateriality') },
+            ]}
+            value={form.completeness_definition}
+            onChange={handleSelect('completeness_definition')}
+            clearable={false}
+          />
           <TextField
-            label="Min Quality Tier"
-            select
-            name="min_quality_tier"
-            value={form.min_quality_tier}
-            onChange={handleChange}
-            fullWidth
-            size="small"
-          >
-            <MenuItem value=""><em>None</em></MenuItem>
-            <MenuItem value="1">Tier 1 — Audited</MenuItem>
-            <MenuItem value="2">Tier 2 — Verified</MenuItem>
-            <MenuItem value="3">Tier 3 — Calculated</MenuItem>
-            <MenuItem value="4">Tier 4 — Estimated</MenuItem>
-            <MenuItem value="5">Tier 5 — Proxy</MenuItem>
-          </TextField>
-          <TextField label="Completeness Definition" select name="completeness_definition" value={form.completeness_definition} onChange={handleChange} fullWidth size="small">
-            <MenuItem value="absolute">Absolute</MenuItem>
-            <MenuItem value="materiality_bounded">Materiality-Bounded</MenuItem>
-          </TextField>
-          <TextField
-            label="Target Year"
+            label={t('inventoryCoverage.targetYear')}
             name="target_year"
             type="number"
             value={form.target_year}
@@ -503,12 +363,18 @@ function GoalDialog({ open, goal, onSave, onClose }) {
             size="small"
             inputProps={{ min: 2020, max: 2100 }}
           />
-          <TextField label="SBTi Target" name="sbti_target" value={form.sbti_target} onChange={handleChange} fullWidth size="small" placeholder="SBTi target ID" />
-          <TextField label="Status" select name="status" value={form.status} onChange={handleChange} fullWidth size="small">
-            <MenuItem value="draft">Draft</MenuItem>
-            <MenuItem value="active">Active</MenuItem>
-            <MenuItem value="archived">Archived</MenuItem>
-          </TextField>
+          <TextField label={t('inventoryCoverage.sbtiTarget')} name="sbti_target" value={form.sbti_target} onChange={handleChange} fullWidth size="small" placeholder={t('inventoryCoverage.sbtiTargetPlaceholder')} />
+          <SearchSelect
+            label={t('coverageTargets.colStatus')}
+            options={[
+              { value: 'draft', label: t('coverageTargets.statusDraft') },
+              { value: 'active', label: t('coverageTargets.statusActive') },
+              { value: 'archived', label: t('coverageTargets.statusArchived') },
+            ]}
+            value={form.status}
+            onChange={handleSelect('status')}
+            clearable={false}
+          />
         </Stack>
       </Box>
     </SystemDialog>
@@ -517,7 +383,8 @@ function GoalDialog({ open, goal, onSave, onClose }) {
 
 // ── ActionDialog ───────────────────────────────────────────────────────
 
-function ActionDialog({ open, action, sources, onSave, onClose }) {
+function ActionDialog({ open, action, sources, sourcesLoading, sourcesError, onSave, onClose }) {
+  const { t } = useTranslation('emissions');
   const [form, setForm] = useState({
     source: '',
     action_type: 'collect_data',
@@ -530,7 +397,7 @@ function ActionDialog({ open, action, sources, onSave, onClose }) {
   useEffect(() => {
     if (action) {
       setForm({
-        source: action.source ?? '',
+        source: action.source != null ? String(action.source) : '',
         action_type: action.action_type || 'collect_data',
         status: action.status || 'open',
         due_date: action.due_date ?? '',
@@ -546,17 +413,20 @@ function ActionDialog({ open, action, sources, onSave, onClose }) {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
   };
+  const handleSelect = (name) => (option) => {
+    setForm((prev) => ({ ...prev, [name]: option?.value ?? '' }));
+  };
 
   return (
     <SystemDialog
       open={open}
-      title={action ? 'Edit Action' : 'New Action'}
+      title={action ? t('inventoryCoverage.actionEditTitle') : t('inventoryCoverage.actionNewTitle')}
       onClose={onClose}
       onCancel={onClose}
-      cancelLabel="Cancel"
+      cancelLabel={t('common:cancel')}
       actions={
         <Button variant="contained" size="small" onClick={() => onSave(form)}>
-          {action ? 'Update' : 'Create'}
+          {action ? t('update') : t('create')}
         </Button>
       }
       width={540}
@@ -568,25 +438,43 @@ function ActionDialog({ open, action, sources, onSave, onClose }) {
     >
       <Box px={2} py={1}>
         <Stack spacing={2}>
-          <TextField label="Source" select name="source" value={form.source} onChange={handleChange} fullWidth required size="small">
-            {(sources || []).map((s) => (
-              <MenuItem key={s.id} value={s.id}>{s.source_name || `Source ${s.id}`}</MenuItem>
-            ))}
-          </TextField>
-          <TextField label="Action Type" select name="action_type" value={form.action_type} onChange={handleChange} fullWidth size="small">
-            <MenuItem value="collect_data">Collect Data</MenuItem>
-            <MenuItem value="improve_quality">Improve Data Quality</MenuItem>
-            <MenuItem value="obtain_verification">Obtain Verification</MenuItem>
-            <MenuItem value="formalize_exclusion">Formalize Exclusion</MenuItem>
-          </TextField>
-          <TextField label="Status" select name="status" value={form.status} onChange={handleChange} fullWidth size="small">
-            <MenuItem value="open">Open</MenuItem>
-            <MenuItem value="in_progress">In Progress</MenuItem>
-            <MenuItem value="done">Done</MenuItem>
-            <MenuItem value="blocked">Blocked</MenuItem>
-          </TextField>
+          <SearchSelect
+            label={t('inventoryCoverage.source')}
+            options={sourceOptions(t, sources)}
+            value={form.source}
+            onChange={handleSelect('source')}
+            loading={sourcesLoading}
+            error={sourcesError || undefined}
+            noOptionsText={t('inventoryCoverage.noSources')}
+            clearable={false}
+            required
+          />
+          <SearchSelect
+            label={t('inventoryCoverage.actionType')}
+            options={[
+              { value: 'collect_data', label: t('inventoryCoverage.actionTypeCollect') },
+              { value: 'improve_quality', label: t('inventoryCoverage.actionTypeImprove') },
+              { value: 'obtain_verification', label: t('inventoryCoverage.actionTypeVerification') },
+              { value: 'formalize_exclusion', label: t('inventoryCoverage.actionTypeExclusion') },
+            ]}
+            value={form.action_type}
+            onChange={handleSelect('action_type')}
+            clearable={false}
+          />
+          <SearchSelect
+            label={t('coverageTargets.colStatus')}
+            options={[
+              { value: 'open', label: t('coverageTargets.taskOpen') },
+              { value: 'in_progress', label: t('coverageTargets.taskInProgress') },
+              { value: 'done', label: t('coverageTargets.taskDone') },
+              { value: 'blocked', label: t('coverageTargets.taskBlocked') },
+            ]}
+            value={form.status}
+            onChange={handleSelect('status')}
+            clearable={false}
+          />
           <TextField
-            label="Due Date"
+            label={t('inventoryCoverage.dueDate')}
             name="due_date"
             type="date"
             value={form.due_date}
@@ -595,8 +483,8 @@ function ActionDialog({ open, action, sources, onSave, onClose }) {
             size="small"
             InputLabelProps={{ shrink: true }}
           />
-          <TextField label="Owner" name="owner" value={form.owner} onChange={handleChange} fullWidth size="small" placeholder="User ID" />
-          <TextField label="Notes" name="notes" value={form.notes} onChange={handleChange} fullWidth multiline rows={3} size="small" />
+          <TextField label={t('inventoryCoverage.owner')} name="owner" value={form.owner} onChange={handleChange} fullWidth size="small" placeholder={t('inventoryCoverage.ownerPlaceholder')} />
+          <TextField label={t('inventoryCoverage.notes')} name="notes" value={form.notes} onChange={handleChange} fullWidth multiline rows={3} size="small" />
         </Stack>
       </Box>
     </SystemDialog>
@@ -630,10 +518,10 @@ function ExclusionDialog({ open, row, onSave, onClose }) {
   };
 
   const reasonOptions = [
-    ['not_material', t('coverage.exclusionNotMaterial')],
-    ['insufficient_data', t('coverage.exclusionInsufficient')],
-    ['out_of_boundary', t('coverage.exclusionOutOfBoundary')],
-    ['other', t('coverage.exclusionOther')],
+    { value: 'not_material', label: t('coverage.exclusionNotMaterial') },
+    { value: 'insufficient_data', label: t('coverage.exclusionInsufficient') },
+    { value: 'out_of_boundary', label: t('coverage.exclusionOutOfBoundary') },
+    { value: 'other', label: t('coverage.exclusionOther') },
   ];
 
   return (
@@ -665,19 +553,14 @@ function ExclusionDialog({ open, row, onSave, onClose }) {
           </Typography>
           {excluding ? (
             <>
-              <TextField
+              <SearchSelect
                 label={t('coverage.exclusionReason')}
-                select
+                options={reasonOptions}
                 value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                fullWidth
+                onChange={(option) => setReason(option?.value ?? 'insufficient_data')}
+                clearable={false}
                 required
-                size="small"
-              >
-                {reasonOptions.map(([value, label]) => (
-                  <MenuItem key={value} value={value}>{label}</MenuItem>
-                ))}
-              </TextField>
+              />
               <TextField
                 label={t('coverage.exclusionNotesField')}
                 value={notes}
@@ -704,8 +587,8 @@ function ExclusionDialog({ open, row, onSave, onClose }) {
 // ── Main Component ─────────────────────────────────────────────────────
 
 export default function InventoryCoveragePage() {
-  useDocumentTitle('Inventory Coverage');
   const { t } = useTranslation('emissions');
+  useDocumentTitle(t('inventoryCoverage.pageTitle'));
   const navigate = useNavigate();
   const { user, token, availablePerspectives } = useAuth();
   const { notify, notifyFromError } = useNotification();
@@ -724,7 +607,12 @@ export default function InventoryCoveragePage() {
   const [reconciliation, setReconciliation] = useState(null);
 
   const [loading, setLoading] = useState(true);
+  const [sourcesError, setSourcesError] = useState('');
   const [tab, setTab] = useState(0);
+
+  // RULE 14: every growable record list is searchable.
+  const [streamSearch, setStreamSearch] = useState({});
+  const [goalSearch, setGoalSearch] = useState('');
 
   const [sourceOpen, setSourceOpen] = useState(false);
   const [goalOpen, setGoalOpen] = useState(false);
@@ -751,6 +639,7 @@ export default function InventoryCoveragePage() {
       setSources(Array.isArray(sData) ? sData : sData?.results || []);
       setGoals(Array.isArray(gData) ? gData : gData?.results || []);
       setActions(Array.isArray(aData) ? aData : aData?.results || []);
+      setSourcesError('');
       try {
         const [intake, recon] = await Promise.all([
           fetchCampusIntake(token),
@@ -770,11 +659,12 @@ export default function InventoryCoveragePage() {
         setStreamError(err?.message || t('intake.loadFailed'));
       }
     } catch (err) {
-      notifyFromError(err, 'Failed to load inventory coverage data');
+      notifyFromError(err, t('inventoryCoverage.loadFailedToast'));
       setPeriods([]);
       setSources([]);
       setGoals([]);
       setActions([]);
+      setSourcesError(err?.message || t('inventoryCoverage.loadFailedToast'));
     } finally {
       setLoading(false);
     }
@@ -788,7 +678,7 @@ export default function InventoryCoveragePage() {
   useEffect(() => {
     if (periods.length > 0 && !selectedPeriod) {
       const open = periods.find((row) => row.status === 'open');
-      setSelectedPeriod((open || periods[0]).id);
+      setSelectedPeriod(String((open || periods[0]).id));
     }
   }, [periods, selectedPeriod]);
 
@@ -802,9 +692,9 @@ export default function InventoryCoveragePage() {
       setStatuses(Array.isArray(statusData) ? statusData : statusData?.results || []);
       setCoverage(covData);
     } catch (err) {
-      notifyFromError(err, 'Failed to load coverage');
+      notifyFromError(err, t('inventoryCoverage.loadCoverageFailedToast'));
     }
-  }, [token, notifyFromError]);
+  }, [token, notifyFromError, t]);
 
   useEffect(() => {
     loadPeriodScoped(selectedPeriod);
@@ -822,16 +712,16 @@ export default function InventoryCoveragePage() {
     try {
       if (currentSource) {
         await updateInventorySource(currentSource.id, payload, token);
-        notify({ message: 'Inventory source updated', type: 'success' });
+        notify({ message: t('inventoryCoverage.sourceUpdated'), type: 'success' });
       } else {
         await createInventorySource(payload, token);
-        notify({ message: 'Inventory source created', type: 'success' });
+        notify({ message: t('inventoryCoverage.sourceCreated'), type: 'success' });
       }
       setSourceOpen(false);
       setCurrentSource(null);
       await loadAll();
     } catch (err) {
-      notifyFromError(err, 'Failed to save source');
+      notifyFromError(err, t('inventoryCoverage.saveSourceFailed'));
     }
   };
 
@@ -847,16 +737,16 @@ export default function InventoryCoveragePage() {
     try {
       if (currentGoal) {
         await updateCoverageGoal(currentGoal.id, payload, token);
-        notify({ message: 'Coverage goal updated', type: 'success' });
+        notify({ message: t('inventoryCoverage.goalUpdated'), type: 'success' });
       } else {
         await createCoverageGoal(payload, token);
-        notify({ message: 'Coverage goal created', type: 'success' });
+        notify({ message: t('inventoryCoverage.goalCreated'), type: 'success' });
       }
       setGoalOpen(false);
       setCurrentGoal(null);
       await loadAll();
     } catch (err) {
-      notifyFromError(err, 'Failed to save goal');
+      notifyFromError(err, t('inventoryCoverage.saveGoalFailed'));
     }
   };
 
@@ -870,16 +760,16 @@ export default function InventoryCoveragePage() {
     try {
       if (currentAction) {
         await updateCoverageAction(currentAction.id, payload, token);
-        notify({ message: 'Coverage action updated', type: 'success' });
+        notify({ message: t('inventoryCoverage.actionUpdated'), type: 'success' });
       } else {
         await createCoverageAction(payload, token);
-        notify({ message: 'Coverage action created', type: 'success' });
+        notify({ message: t('inventoryCoverage.actionCreated'), type: 'success' });
       }
       setActionOpen(false);
       setCurrentAction(null);
       await loadAll();
     } catch (err) {
-      notifyFromError(err, 'Failed to save action');
+      notifyFromError(err, t('inventoryCoverage.saveActionFailed'));
     }
   };
 
@@ -890,12 +780,12 @@ export default function InventoryCoveragePage() {
       if (kind === 'source') await deleteInventorySource(id, token);
       else if (kind === 'goal') await deleteCoverageGoal(id, token);
       else if (kind === 'action') await deleteCoverageAction(id, token);
-      notify({ message: 'Record deleted', type: 'success' });
+      notify({ message: t('inventoryCoverage.recordDeleted'), type: 'success' });
       setDeleteConfirm(null);
       await loadAll();
       if (kind === 'source') await loadPeriodScoped(selectedPeriod);
     } catch (err) {
-      notifyFromError(err, 'Failed to delete record');
+      notifyFromError(err, t('inventoryCoverage.deleteFailed'));
     }
   };
 
@@ -915,23 +805,88 @@ export default function InventoryCoveragePage() {
     }
   };
 
-  const fmtDate = (d) => {
-    if (!d) return '—';
-    try { return new Date(d).toLocaleDateString(); } catch { return '—'; }
-  };
+  // ── Enum label maps (labels resolved here; the shared chip stays generic) ──
+
+  const statusMap = useMemo(() => ({
+    declared: { label: t('inventoryCoverage.statusDeclared'), color: 'info' },
+    covered: { label: t('inventoryCoverage.statusCovered'), color: 'success' },
+    excluded: { label: t('inventoryCoverage.statusExcluded'), color: 'warning' },
+    draft: { label: t('coverageTargets.statusDraft'), color: 'warning' },
+    active: { label: t('coverageTargets.statusActive'), color: 'success' },
+    archived: { label: t('coverageTargets.statusArchived') },
+    open: { label: t('coverageTargets.taskOpen'), color: 'info' },
+    in_progress: { label: t('coverageTargets.taskInProgress'), color: 'primary' },
+    done: { label: t('coverageTargets.taskDone'), color: 'success' },
+    blocked: { label: t('coverageTargets.taskBlocked'), color: 'error' },
+  }), [t]);
+
+  const exclusionMap = useMemo(() => ({
+    not_material: { label: t('coverage.exclusionNotMaterial') },
+    insufficient_data: { label: t('coverage.exclusionInsufficient'), color: 'warning' },
+    out_of_boundary: { label: t('coverage.exclusionOutOfBoundary'), color: 'info' },
+    other: { label: t('coverage.exclusionOther'), color: 'secondary' },
+  }), [t]);
+
+  const completenessMap = useMemo(() => ({
+    absolute: { label: t('inventoryCoverage.completenessAbsolute'), color: 'primary' },
+    materiality_bounded: { label: t('inventoryCoverage.completenessMateriality'), color: 'secondary' },
+  }), [t]);
+
+  const actionTypeMap = useMemo(() => ({
+    collect_data: { label: t('inventoryCoverage.actionTypeCollect'), color: 'info' },
+    improve_quality: { label: t('inventoryCoverage.actionTypeImprove'), color: 'primary' },
+    obtain_verification: { label: t('inventoryCoverage.actionTypeVerification'), color: 'success' },
+    formalize_exclusion: { label: t('inventoryCoverage.actionTypeExclusion'), color: 'warning' },
+  }), [t]);
+
+  const activeMap = useMemo(() => ({
+    true: { label: t('inventoryCoverage.activeYes'), color: 'success' },
+    false: { label: t('inventoryCoverage.activeNo') },
+  }), [t]);
 
   // ── Columns ──────────────────────────────────────────────────────────
 
+  const idColumn = (headerName) => ({
+    field: 'id',
+    headerName,
+    width: 70,
+    align: 'right',
+    headerAlign: 'right',
+    renderCell: (params) => <NumericText align="right">{params.value ?? '—'}</NumericText>,
+  });
+
+  const actionButtons = (onEdit, onDelete, editLabel, deleteLabel) => ({
+    field: 'actions',
+    headerName: t('inventoryCoverage.colActions'),
+    width: 100,
+    sortable: false,
+    renderCell: (params) => (
+      <Box sx={{ display: 'flex', gap: 0.5 }}>
+        <IconButton size="small" aria-label={editLabel} onClick={onEdit(params.row)}>
+          <EditIcon fontSize="small" />
+        </IconButton>
+        <IconButton
+          size="small"
+          aria-label={deleteLabel}
+          onClick={onDelete(params.row)}
+          sx={{ color: 'error.main' }}
+        >
+          <DeleteIcon fontSize="small" />
+        </IconButton>
+      </Box>
+    ),
+  });
+
   const sourceColumns = [
-    { field: 'id', headerName: 'ID', width: 70 },
+    idColumn(t('inventoryCoverage.colId')),
     {
       field: 'org_unit',
-      headerName: 'Org Unit',
+      headerName: t('inventoryCoverage.colOrgUnit'),
       flex: 1,
       minWidth: 120,
       valueGetter: (value, row) => row.org_unit_name || row.org_unit || '—',
     },
-    { field: 'scope', headerName: 'Scope', width: 110, renderCell: (params) => <ScopeChip value={params.value} /> },
+    { field: 'scope', headerName: t('inventoryCoverage.colScope'), width: 110, renderCell: (params) => <StatusChip value={String(params.value)} map={SCOPE_MAP} /> },
     {
       field: 'scope2_method',
       headerName: t('scope2MethodCol'),
@@ -944,194 +899,172 @@ export default function InventoryCoveragePage() {
     },
     {
       field: 'scope3_category',
-      headerName: 'Scope 3 Cat',
+      headerName: t('inventoryCoverage.colScope3Cat'),
       width: 110,
-      align: 'center',
-      headerAlign: 'center',
-      valueFormatter: (value) => value ?? '—',
+      align: 'right',
+      headerAlign: 'right',
+      renderCell: (params) => <NumericText align="right">{params.value ?? '—'}</NumericText>,
     },
-    { field: 'source_name', headerName: 'Source Name', flex: 1, minWidth: 160 },
+    { field: 'source_name', headerName: t('inventoryCoverage.colSourceName'), flex: 1, minWidth: 160 },
     {
       field: 'description',
-      headerName: 'Description',
+      headerName: t('inventoryCoverage.colDescription'),
       flex: 1,
       minWidth: 200,
       valueFormatter: (value) => value || '—',
     },
     {
       field: 'is_active',
-      headerName: 'Active',
+      headerName: t('inventoryCoverage.colActive'),
       width: 100,
-      renderCell: (params) => <ActiveChip value={params.value} />,
+      renderCell: (params) => <StatusChip value={String(params.value)} map={activeMap} />,
     },
     ...(isAdmin
-      ? [
-          {
-            field: 'actions',
-            headerName: 'Actions',
-            width: 100,
-            sortable: false,
-            renderCell: (params) => (
-              <Box sx={{ display: 'flex', gap: 0.5 }}>
-                <IconButton size="small" onClick={() => { setCurrentSource(params.row); setSourceOpen(true); }}>
-                  <EditIcon fontSize="small" />
-                </IconButton>
-                <IconButton
-                  size="small"
-                  onClick={() => setDeleteConfirm({ kind: 'source', id: params.row.id })}
-                  sx={{ color: 'error.main' }}
-                >
-                  <DeleteIcon fontSize="small" />
-                </IconButton>
-              </Box>
-            ),
-          },
-        ]
+      ? [actionButtons(
+          (row) => () => { setCurrentSource(row); setSourceOpen(true); },
+          (row) => () => setDeleteConfirm({ kind: 'source', id: row.id }),
+          t('inventoryCoverage.editSourceAria'),
+          t('inventoryCoverage.deleteSourceAria'),
+        )]
       : []),
   ];
 
   const statusColumns = [
-    { field: 'id', headerName: 'ID', width: 70 },
+    idColumn(t('inventoryCoverage.colId')),
     {
       field: 'source_name',
-      headerName: 'Source',
+      headerName: t('inventoryCoverage.colSource'),
       flex: 1,
       minWidth: 140,
       valueGetter: (value, row) => row.source_name || row.source || '—',
     },
     {
       field: 'reporting_period_name',
-      headerName: 'Period',
+      headerName: t('inventoryCoverage.colPeriod'),
       flex: 1,
       minWidth: 140,
       valueGetter: (value, row) => row.reporting_period_name || row.reporting_period || '—',
     },
-    { field: 'status', headerName: 'Status', width: 120, renderCell: (params) => <StatusChip value={params.value} /> },
-    { field: 'data_quality_tier', headerName: 'Tier', width: 120, renderCell: (params) => <TierChip value={params.value} /> },
-    { field: 'exclusion_reason', headerName: 'Exclusion', width: 150, renderCell: (params) => <ExclusionChip value={params.value} /> },
+    { field: 'status', headerName: t('inventoryCoverage.colStatus'), width: 120, renderCell: (params) => <StatusChip value={params.value} map={statusMap} /> },
+    { field: 'data_quality_tier', headerName: t('inventoryCoverage.colTier'), width: 120, renderCell: (params) => <TierChip value={params.value} /> },
+    { field: 'exclusion_reason', headerName: t('inventoryCoverage.colExclusion'), width: 150, renderCell: (params) => <StatusChip value={params.value} map={exclusionMap} fallbackLabel="—" /> },
     {
       field: 'linked_tables',
-      headerName: 'Linked Tables',
+      headerName: t('inventoryCoverage.colLinkedTables'),
       width: 120,
-      align: 'center',
-      headerAlign: 'center',
-      valueFormatter: (value) => (Array.isArray(value) ? value.length : '—'),
+      align: 'right',
+      headerAlign: 'right',
+      renderCell: (params) => (
+        <NumericText align="right">{Array.isArray(params.value) ? params.value.length : '—'}</NumericText>
+      ),
     },
-    { field: 'notes', headerName: 'Notes', flex: 1, minWidth: 180, valueFormatter: (value) => value || '—' },
+    { field: 'notes', headerName: t('inventoryCoverage.colNotes'), flex: 1, minWidth: 180, valueFormatter: (value) => value || '—' },
   ];
 
   const goalColumns = [
-    { field: 'id', headerName: 'ID', width: 70 },
+    idColumn(t('inventoryCoverage.colId')),
     {
       field: 'org_unit',
-      headerName: 'Org Unit',
+      headerName: t('inventoryCoverage.colOrgUnit'),
       flex: 1,
       minWidth: 120,
       valueGetter: (value, row) => row.org_unit_name || row.org_unit || '—',
     },
-    { field: 'name', headerName: 'Name', flex: 1, minWidth: 150 },
-    { field: 'scope', headerName: 'Scope', width: 110, renderCell: (params) => <ScopeChip value={params.value} /> },
+    { field: 'name', headerName: t('inventoryCoverage.colGoalName'), flex: 1, minWidth: 150 },
+    { field: 'scope', headerName: t('inventoryCoverage.colScope'), width: 110, renderCell: (params) => <StatusChip value={String(params.value)} map={SCOPE_MAP} /> },
     {
       field: 'target_coverage_pct',
-      headerName: 'Target %',
-      width: 100,
+      headerName: t('inventoryCoverage.colTargetPct'),
+      width: 110,
       align: 'right',
       headerAlign: 'right',
-      valueGetter: (value, row) => (row.target_coverage_pct != null ? `${row.target_coverage_pct}%` : '—'),
+      renderCell: (params) => (
+        <NumericText align="right">
+          {params.value == null ? '—' : formatPercent(params.value, { maximumFractionDigits: 1 })}
+        </NumericText>
+      ),
     },
-    { field: 'min_quality_tier', headerName: 'Min Tier', width: 110, renderCell: (params) => <TierChip value={params.value} /> },
-    { field: 'completeness_definition', headerName: 'Completeness', width: 180, renderCell: (params) => <CompletenessChip value={params.value} /> },
+    { field: 'min_quality_tier', headerName: t('inventoryCoverage.colMinTier'), width: 110, renderCell: (params) => <TierChip value={params.value} /> },
+    { field: 'completeness_definition', headerName: t('inventoryCoverage.colCompleteness'), width: 180, renderCell: (params) => <StatusChip value={params.value} map={completenessMap} /> },
     {
       field: 'target_year',
-      headerName: 'Target Year',
+      headerName: t('inventoryCoverage.colTargetYear'),
       width: 110,
-      align: 'center',
-      headerAlign: 'center',
-      valueFormatter: (value) => value ?? '—',
+      align: 'right',
+      headerAlign: 'right',
+      renderCell: (params) => <NumericText align="right">{params.value ?? '—'}</NumericText>,
     },
-    { field: 'sbti_target', headerName: 'SBTi', width: 90, valueFormatter: (value) => value ?? '—' },
-    { field: 'status', headerName: 'Status', width: 120, renderCell: (params) => <StatusChip value={params.value} /> },
+    { field: 'sbti_target', headerName: t('inventoryCoverage.colSbti'), width: 90, valueFormatter: (value) => value ?? '—' },
+    { field: 'status', headerName: t('inventoryCoverage.colStatus'), width: 120, renderCell: (params) => <StatusChip value={params.value} map={statusMap} /> },
     ...(isAdmin
-      ? [
-          {
-            field: 'actions',
-            headerName: 'Actions',
-            width: 100,
-            sortable: false,
-            renderCell: (params) => (
-              <Box sx={{ display: 'flex', gap: 0.5 }}>
-                <IconButton size="small" onClick={() => { setCurrentGoal(params.row); setGoalOpen(true); }}>
-                  <EditIcon fontSize="small" />
-                </IconButton>
-                <IconButton
-                  size="small"
-                  onClick={() => setDeleteConfirm({ kind: 'goal', id: params.row.id })}
-                  sx={{ color: 'error.main' }}
-                >
-                  <DeleteIcon fontSize="small" />
-                </IconButton>
-              </Box>
-            ),
-          },
-        ]
+      ? [actionButtons(
+          (row) => () => { setCurrentGoal(row); setGoalOpen(true); },
+          (row) => () => setDeleteConfirm({ kind: 'goal', id: row.id }),
+          t('inventoryCoverage.editGoalAria'),
+          t('inventoryCoverage.deleteGoalAria'),
+        )]
       : []),
   ];
 
   const actionColumns = [
-    { field: 'id', headerName: 'ID', width: 70 },
+    idColumn(t('inventoryCoverage.colId')),
     {
       field: 'source',
-      headerName: 'Source',
+      headerName: t('inventoryCoverage.colSource'),
       flex: 1,
       minWidth: 140,
       valueGetter: (value, row) => row.source_name || row.source || '—',
     },
-    { field: 'action_type', headerName: 'Action Type', width: 170, renderCell: (params) => <ActionTypeChip value={params.value} /> },
-    { field: 'status', headerName: 'Status', width: 120, renderCell: (params) => <StatusChip value={params.value} /> },
-    { field: 'due_date', headerName: 'Due Date', width: 120, valueFormatter: (value) => fmtDate(value) },
+    { field: 'action_type', headerName: t('inventoryCoverage.colActionType'), width: 170, renderCell: (params) => <StatusChip value={params.value} map={actionTypeMap} /> },
+    { field: 'status', headerName: t('inventoryCoverage.colStatus'), width: 120, renderCell: (params) => <StatusChip value={params.value} map={statusMap} /> },
+    { field: 'due_date', headerName: t('inventoryCoverage.colDueDate'), width: 120, valueFormatter: (value) => (value ? (formatDisplayDate(value) || '—') : '—') },
     {
       field: 'owner',
-      headerName: 'Owner',
+      headerName: t('inventoryCoverage.colOwner'),
       width: 120,
       valueGetter: (value, row) => row.owner_username || row.owner || '—',
     },
-    { field: 'notes', headerName: 'Notes', flex: 1, minWidth: 180, valueFormatter: (value) => value || '—' },
+    { field: 'notes', headerName: t('inventoryCoverage.colNotes'), flex: 1, minWidth: 180, valueFormatter: (value) => value || '—' },
     ...(isAdmin
-      ? [
-          {
-            field: 'actions',
-            headerName: 'Actions',
-            width: 100,
-            sortable: false,
-            renderCell: (params) => (
-              <Box sx={{ display: 'flex', gap: 0.5 }}>
-                <IconButton size="small" onClick={() => { setCurrentAction(params.row); setActionOpen(true); }}>
-                  <EditIcon fontSize="small" />
-                </IconButton>
-                <IconButton
-                  size="small"
-                  onClick={() => setDeleteConfirm({ kind: 'action', id: params.row.id })}
-                  sx={{ color: 'error.main' }}
-                >
-                  <DeleteIcon fontSize="small" />
-                </IconButton>
-              </Box>
-            ),
-          },
-        ]
+      ? [actionButtons(
+          (row) => () => { setCurrentAction(row); setActionOpen(true); },
+          (row) => () => setDeleteConfirm({ kind: 'action', id: row.id }),
+          t('inventoryCoverage.editActionAria'),
+          t('inventoryCoverage.deleteActionAria'),
+        )]
       : []),
   ];
+
+  // ── Derived rows (search filters, never a second reporter) ───────────
+
+  const filterStreamRows = (board) => {
+    const q = (streamSearch[board.id] || '').trim().toLowerCase();
+    const rows = board.streams || [];
+    if (!q) return rows;
+    return rows.filter((row) => [row.campus, row.source_name, row.scope, reasonLabel(t, row.reason)]
+      .filter((value) => value != null && value !== '')
+      .some((value) => String(value).toLowerCase().includes(q)));
+  };
+
+  const filteredGoals = useMemo(() => {
+    const rows = reconciliation?.goals || [];
+    const q = goalSearch.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((row) => [row.name, row.org_unit_name, row.scope]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(q)));
+  }, [reconciliation, goalSearch]);
 
   // ── Render ───────────────────────────────────────────────────────────
 
   return (
     <PageContainer>
       <PageHeader
-        title="Inventory Coverage"
-        description="Declared-universe completeness for GHG accounting. Declare the emission sources you are accountable for, track per-period coverage status and PCAF data-quality tiers, maintain an exclusions register, and set coverage goals (ADR-0020)."
+        title={t('inventoryCoverage.pageTitle')}
+        description={t('inventoryCoverage.pageDescription')}
         actions={
           <Stack direction="row" spacing={1}>
-            <IconButton onClick={loadAll} size="small" aria-label="Refresh coverage">
+            <IconButton onClick={loadAll} size="small" aria-label={t('inventoryCoverage.refreshAria')}>
               <RefreshIcon />
             </IconButton>
           </Stack>
@@ -1217,7 +1150,10 @@ export default function InventoryCoveragePage() {
             <FilteredDataGrid
               embedded
               title={board.name || t('intake.streamsTitle')}
-              rows={board.streams}
+              rows={filterStreamRows(board)}
+              searchValue={streamSearch[board.id] || ''}
+              onSearchChange={(value) => setStreamSearch((prev) => ({ ...prev, [board.id]: value }))}
+              searchPlaceholder={t('inventoryCoverage.streamsSearch')}
               columns={[
                 { field: 'campus', headerName: t('intake.campus'), flex: 1 },
                 { field: 'source_name', headerName: t('intake.source'), flex: 1.2 },
@@ -1246,7 +1182,13 @@ export default function InventoryCoveragePage() {
                   field: 'inventory_kg',
                   headerName: t('intake.inventoryKg'),
                   width: 140,
-                  valueGetter: (value) => (value == null || value === '' ? t('intake.kgAbsent') : String(value)),
+                  align: 'right',
+                  headerAlign: 'right',
+                  renderCell: (params) => (
+                    <NumericText align="right">
+                      {params.value == null || params.value === '' ? t('intake.kgAbsent') : params.value}
+                    </NumericText>
+                  ),
                 },
                 {
                   field: 'submit',
@@ -1291,7 +1233,6 @@ export default function InventoryCoveragePage() {
                     ]
                   : []),
               ]}
-              hideSearch
               loading={loading}
             />
           )}
@@ -1299,23 +1240,19 @@ export default function InventoryCoveragePage() {
       ))}
 
       {/* Reporting period selector */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-        <TextField
-          label="Reporting Period"
-          select
-          value={selectedPeriod ?? ''}
-          onChange={(e) => setSelectedPeriod(e.target.value)}
-          size="small"
-          sx={{ minWidth: 260 }}
-        >
-          {periods.length === 0 ? (
-            <MenuItem value="">No periods available</MenuItem>
-          ) : (
-            periods.map((p) => (
-              <MenuItem key={p.id} value={p.id}>{p.name || `Period ${p.id}`}</MenuItem>
-            ))
-          )}
-        </TextField>
+      <Box sx={{ maxWidth: 420, mb: 2 }}>
+        <SearchSelect
+          label={t('inventoryCoverage.reportingPeriod')}
+          options={periods.map((p) => ({
+            value: String(p.id),
+            label: p.name || t('inventoryCoverage.periodFallback', { id: p.id }),
+          }))}
+          value={selectedPeriod}
+          onChange={(option) => setSelectedPeriod(option?.value ? String(option.value) : '')}
+          loading={loading && periods.length === 0}
+          noOptionsText={t('inventoryCoverage.noPeriods')}
+          clearable={false}
+        />
       </Box>
 
       {/* Coverage summary header */}
@@ -1323,14 +1260,18 @@ export default function InventoryCoveragePage() {
         <Card sx={{ flex: 1, minWidth: 180 }}>
           <CardContent>
             <Typography variant="overline" color="text.secondary">{t('intake.percentLabel')}</Typography>
-            <CoverageBar value={coverage?.pct} />
+            <ProgressBar
+              value={coverage?.pct}
+              tone={coverageTone(coverage?.pct)}
+              label={formatPercent(coverage?.pct, { maximumFractionDigits: 1 })}
+            />
           </CardContent>
         </Card>
-        <StatCard label="Covered / Total" value={`${coverage?.covered ?? '—'} / ${coverage?.total ?? '—'}`} />
-        <StatCard label="Gaps" value={coverage?.gaps_count ?? '—'} />
-        <StatCard label="Avg Quality Tier" value={coverage?.avg_quality_tier ?? '—'} />
-        <StatCard label="Completeness" value={coverage?.completeness_definition ?? '—'} />
-        <StatCard label="Material Exclusions" value={coverage?.material_exclusions_count ?? '—'} />
+        <StatCard title={t('inventoryCoverage.statCoveredTotal')} value={`${coverage?.covered ?? '—'} / ${coverage?.total ?? '—'}`} />
+        <StatCard title={t('inventoryCoverage.statGaps')} value={coverage?.gaps_count ?? '—'} />
+        <StatCard title={t('inventoryCoverage.statAvgTier')} value={coverage?.avg_quality_tier ?? '—'} />
+        <StatCard title={t('inventoryCoverage.statCompleteness')} value={coverage?.completeness_definition ?? '—'} />
+        <StatCard title={t('inventoryCoverage.statMaterialExclusions')} value={coverage?.material_exclusions_count ?? '—'} />
       </Box>
 
       {/* ── Reconciliation (read-only counts). Coverage is the only reporter. ── */}
@@ -1341,10 +1282,10 @@ export default function InventoryCoveragePage() {
       {reconciliation ? (
         <>
           <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }}>
-            <StatCard label={t('coverage.required')} value={reconciliation.counts?.required ?? '—'} />
-            <StatCard label={t('coverage.entered')} value={reconciliation.counts?.entered ?? '—'} />
-            <StatCard label={t('coverage.excluded')} value={reconciliation.counts?.excluded ?? '—'} />
-            <StatCard label={t('coverage.missing')} value={reconciliation.counts?.missing ?? '—'} />
+            <StatCard title={t('coverage.required')} value={reconciliation.counts?.required ?? '—'} />
+            <StatCard title={t('coverage.entered')} value={reconciliation.counts?.entered ?? '—'} />
+            <StatCard title={t('coverage.excluded')} value={reconciliation.counts?.excluded ?? '—'} />
+            <StatCard title={t('coverage.missing')} value={reconciliation.counts?.missing ?? '—'} />
           </Box>
           {(reconciliation.goals || []).length === 0 ? (
             <EmptyState title={t('coverage.noGoals')} description={t('coverage.noGoalsHint')} />
@@ -1352,24 +1293,32 @@ export default function InventoryCoveragePage() {
             <FilteredDataGrid
               embedded
               title={t('coverage.goalsTitle')}
-              rows={reconciliation.goals || []}
+              rows={filteredGoals}
               getRowId={(row) => row.goal_id}
+              searchValue={goalSearch}
+              onSearchChange={setGoalSearch}
+              searchPlaceholder={t('inventoryCoverage.goalsSearch')}
               columns={[
                 { field: 'name', headerName: t('coverage.goalName'), flex: 1 },
                 { field: 'scope', headerName: t('intake.scope'), width: 90 },
                 { field: 'org_unit_name', headerName: t('coverage.orgUnit'), flex: 1 },
-                { field: 'required', headerName: t('coverage.required'), width: 100 },
-                { field: 'entered', headerName: t('coverage.entered'), width: 100 },
-                { field: 'excluded', headerName: t('coverage.excluded'), width: 100 },
-                { field: 'missing', headerName: t('coverage.missing'), width: 100 },
+                { field: 'required', headerName: t('coverage.required'), width: 100, align: 'right', headerAlign: 'right', renderCell: (params) => <NumericText align="right">{params.value ?? '—'}</NumericText> },
+                { field: 'entered', headerName: t('coverage.entered'), width: 100, align: 'right', headerAlign: 'right', renderCell: (params) => <NumericText align="right">{params.value ?? '—'}</NumericText> },
+                { field: 'excluded', headerName: t('coverage.excluded'), width: 100, align: 'right', headerAlign: 'right', renderCell: (params) => <NumericText align="right">{params.value ?? '—'}</NumericText> },
+                { field: 'missing', headerName: t('coverage.missing'), width: 100, align: 'right', headerAlign: 'right', renderCell: (params) => <NumericText align="right">{params.value ?? '—'}</NumericText> },
                 {
                   field: 'target_coverage_pct',
                   headerName: t('coverage.declaredTarget'),
                   width: 140,
-                  valueGetter: (value) => (value == null ? '—' : `${value}%`),
+                  align: 'right',
+                  headerAlign: 'right',
+                  renderCell: (params) => (
+                    <NumericText align="right">
+                      {params.value == null ? '—' : formatPercent(params.value, { maximumFractionDigits: 1 })}
+                    </NumericText>
+                  ),
                 },
               ]}
-              hideSearch
             />
           )}
         </>
@@ -1381,10 +1330,10 @@ export default function InventoryCoveragePage() {
 
       {/* Section tabs */}
       <Tabs value={tab} onChange={(e, v) => setTab(v)} sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}>
-        <Tab label="Sources" />
-        <Tab label="Statuses" />
-        <Tab label="Goals" />
-        <Tab label="Actions" />
+        <Tab label={t('inventoryCoverage.tabSources')} />
+        <Tab label={t('inventoryCoverage.tabStatuses')} />
+        <Tab label={t('inventoryCoverage.tabGoals')} />
+        <Tab label={t('inventoryCoverage.tabActions')} />
       </Tabs>
 
       {/* ── Sources ── */}
@@ -1393,7 +1342,7 @@ export default function InventoryCoveragePage() {
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
             {isAdmin && (
               <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={() => { setCurrentSource(null); setSourceOpen(true); }}>
-                New Source
+                {t('inventoryCoverage.newSource')}
               </Button>
             )}
           </Box>
@@ -1412,7 +1361,7 @@ export default function InventoryCoveragePage() {
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
             {isAdmin && (
               <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={() => { setCurrentGoal(null); setGoalOpen(true); }}>
-                New Goal
+                {t('inventoryCoverage.newGoal')}
               </Button>
             )}
           </Box>
@@ -1426,7 +1375,7 @@ export default function InventoryCoveragePage() {
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
             {isAdmin && (
               <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={() => { setCurrentAction(null); setActionOpen(true); }}>
-                New Action
+                {t('inventoryCoverage.newAction')}
               </Button>
             )}
           </Box>
@@ -1451,6 +1400,8 @@ export default function InventoryCoveragePage() {
         open={actionOpen}
         action={currentAction}
         sources={sources}
+        sourcesLoading={loading}
+        sourcesError={sourcesError}
         onSave={handleSaveAction}
         onClose={() => setActionOpen(false)}
       />
@@ -1464,9 +1415,9 @@ export default function InventoryCoveragePage() {
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog
         open={!!deleteConfirm}
-        title="Delete Record?"
-        message="This action cannot be undone."
-        confirmLabel="Delete"
+        title={t('inventoryCoverage.deleteTitle')}
+        message={t('inventoryCoverage.deleteMessage')}
+        confirmLabel={t('delete')}
         destructive
         onConfirm={handleDelete}
         onCancel={() => setDeleteConfirm(null)}

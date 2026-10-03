@@ -15,6 +15,15 @@ vi.mock('../OnboardingPage', () => ({
   default: () => <div data-testid="readiness-view">O1 readiness checklist</div>,
 }));
 
+// The reader fetches the lesson detail (briefing / hazard / check). This suite
+// covers routing, so resolve nothing and keep the waypoint reader.
+const guideApi = vi.hoisted(() => ({ fetchGuide: vi.fn(), fetchGuideLesson: vi.fn(), postGuideEvent: vi.fn() }));
+vi.mock('../../../api/guide', () => ({
+  fetchGuide: (...args) => guideApi.fetchGuide(...args),
+  fetchGuideLesson: (...args) => guideApi.fetchGuideLesson(...args),
+  postGuideEvent: (...args) => guideApi.postGuideEvent(...args),
+}));
+
 const lesson = (id, state, extra = {}) => ({
   id,
   track: 'D',
@@ -84,6 +93,8 @@ beforeEach(() => {
     reload: vi.fn(),
     effectiveTrack: 'D',
   };
+  guideApi.fetchGuideLesson.mockResolvedValue(null);
+  guideApi.postGuideEvent.mockResolvedValue({});
 });
 
 describe('Journey route', () => {
@@ -91,7 +102,7 @@ describe('Journey route', () => {
     renderJourney();
     expect(screen.getByRole('heading', { name: 'Journey' })).toBeInTheDocument();
     expect(screen.getByRole('tablist', { name: 'Journey stations' })).toBeInTheDocument();
-    expect(screen.getByTestId('journey-intro')).toHaveTextContent(/always open/);
+    expect(screen.getByTestId('journey-scenario-card')).toBeInTheDocument();
     expect(screen.queryByTestId('readiness-view')).not.toBeInTheDocument();
   });
 

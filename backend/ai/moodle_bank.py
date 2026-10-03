@@ -14,6 +14,8 @@ import yaml
 MISS = "This is not in this lecture."
 _C3_KINDS = ("page", "label", "book")
 _PACK = Path(__file__).resolve().parents[2] / "domain_packs" / "aast-med" / "bank"
+#: Committed keyword-index rows per course (recall-only; see content_engine/index).
+_INDEX = _PACK.parent / "index"
 _ROOT = _PACK / "course-meat-13"
 _KEYS = _PACK / "course-keys-13"
 _EXT = _PACK / "course-ext-13"
@@ -270,6 +272,195 @@ def cite_open_activity(
         return MISS
     row, span = found[0]
     return f"{row['id']}\n{span}"
+
+
+def cite_topic_index(
+    topic: str,
+    bank: dict[str, dict],
+    *,
+    course: str,
+    activity_id: int,
+    world: str,
+    index_root: Path | None = None,
+    limit: int = 160,
+    k: int | None = None,
+    allow_window: bool = True,
+) -> tuple[str, str] | None:
+    """Recall-only keyword-index fallback for a title/whole-file miss (L-R R1).
+
+    The deterministic door in ``cite_open_activity`` misses when no whole-file
+    passage holds a unique substring. This consults the committed keyword index
+    (``domain_packs/aast-med/index/<course>.jsonl``) over bounded chunk windows,
+    but only for **recall**: it returns ``(passage_id, span)`` when
+
+    * exactly one passage in the open activity has the unique top score, and
+    * the span is a verbatim slice of that passage's stored text.
+
+    Anything else is ``None``, so the caller keeps the exact miss. No engine
+    module is touched and no phrase table is added.
+    """
+    if not topic or activity_id is None:
+        return None
+    try:
+        activity = int(activity_id)
+    except (TypeError, ValueError):
+        return None
+    try:
+        from ai.content_engine.index import DEFAULT_K, load_index, retrieve
+    except Exception:  # noqa: BLE001 — the door keeps its miss if the index is absent
+        return None
+    root = Path(index_root) if index_root is not None else _INDEX
+    path = root / f"{course}.jsonl"
+    if not path.is_file():
+        return None
+    try:
+        index = load_index(str(path))
+    except (OSError, ValueError):
+        return None
+    results = retrieve(index, topic, k=int(k or DEFAULT_K))
+    by_id = index.chunks_by_id
+    best_by_passage: dict[str, dict] = {}
+    for result in results:
+        chunk = by_id.get(str(result.get("chunk_id") or "")) or {}
+        pid = str(chunk.get("source_ref") or "")
+        row = bank.get(pid)
+        if row is None or row.get("world") != world:
+            continue
+        if int(row.get("activity_id") or 0) != activity:
+            continue
+        if not str(row.get("text") or "").strip():
+            continue
+        previous = best_by_passage.get(pid)
+        if previous is None or int(result.get("score") or 0) > int(previous.get("score") or 0):
+            best_by_passage[pid] = result
+    if not best_by_passage:
+        return cite_topic_index_windowed(
+            topic, bank, course=course, activity_id=activity, world=world,
+            index_root=index_root, limit=limit,
+        ) if allow_window else None
+    top = max(int(result.get("score") or 0) for result in best_by_passage.values())
+    winners = [pid for pid, result in best_by_passage.items() if int(result.get("score") or 0) == top]
+    if len(winners) != 1:
+        # R1 has no unique whole-word winner; the R2 overlap-window pass below
+        # may still resolve it deterministically (or return None -> exact miss).
+        return cite_topic_index_windowed(
+            topic, bank, course=course, activity_id=activity, world=world,
+            index_root=index_root, limit=limit,
+        ) if allow_window else None
+    pid = winners[0]
+    text = str(bank[pid].get("text") or "")
+    span = _index_window(best_by_passage[pid], limit)
+    if not span or span not in text:
+        return cite_topic_index_windowed(
+            topic, bank, course=course, activity_id=activity, world=world,
+            index_root=index_root, limit=limit,
+        ) if allow_window else None
+    return pid, span
+
+
+def cite_topic_index_windowed(
+    topic: str,
+    bank: dict[str, dict],
+    *,
+    course: str,
+    activity_id: int,
+    world: str,
+    index_root: Path | None = None,
+    limit: int = 160,
+) -> tuple[str, str] | None:
+    """Hybrid recall for a title/whole-file miss (L-R R2).
+
+    Deterministic extension of :func:`cite_topic_index`. It scores every
+    committed chunk whose ``source_ref`` resolves to a passage in the open
+    activity, then adds the score of that chunk's ``prev_id`` / ``next_id``
+    neighbour **only when the neighbour belongs to the same passage** — the
+    0.15-ratio overlap windows the chunker already stores. The single passage
+    with the unique top *combined* score wins, so a query whose terms fall in
+    adjacent windows of one passage is resolved even when no single chunk is a
+    unique top whole-word hit.
+
+    Invariants are unchanged: the emitted span is a verbatim slice of the
+    selected passage's stored text, only a unique winner is returned, and
+    anything ambiguous or absent is ``None`` so the caller keeps the exact
+    miss sentence. No engine module, phrase table, or network call is added.
+    """
+    if not topic or activity_id is None:
+        return None
+    try:
+        activity = int(activity_id)
+    except (TypeError, ValueError):
+        return None
+    try:
+        from ai.content_engine.index import load_index, retrieve
+    except Exception:  # noqa: BLE001 — the door keeps its miss if the index is absent
+        return None
+    root = Path(index_root) if index_root is not None else _INDEX
+    path = root / f"{course}.jsonl"
+    if not path.is_file():
+        return None
+    try:
+        index = load_index(str(path))
+    except (OSError, ValueError):
+        return None
+
+    # No top-k ceiling: score every chunk the query hits. ``retrieve`` keeps
+    # whole-word bounded spans, so nothing partial or fabricated is scored.
+    results = retrieve(index, topic, k=max(1, len(index.chunks)))
+    if not results:
+        return None
+    result_by_chunk = {str(r.get("chunk_id") or ""): r for r in results}
+    by_id = index.chunks_by_id
+
+    def _in_scope(pid: str) -> bool:
+        row = bank.get(pid)
+        if row is None or row.get("world") != world:
+            return False
+        if int(row.get("activity_id") or 0) != activity:
+            return False
+        return bool(str(row.get("text") or "").strip())
+
+    best: dict[str, tuple[int, dict]] = {}  # passage id -> (combined score, best chunk result)
+    for chunk_id, result in result_by_chunk.items():
+        chunk = by_id.get(chunk_id)
+        if chunk is None:
+            continue
+        pid = str(chunk.get("source_ref") or "")
+        if not _in_scope(pid):
+            continue
+        combined = int(result.get("score") or 0)
+        for neighbour_key in ("prev_id", "next_id"):
+            neighbour = by_id.get(str(chunk.get(neighbour_key) or ""))
+            if neighbour is None or str(neighbour.get("source_ref") or "") != pid:
+                continue
+            neighbour_id = str(neighbour.get("chunk_id") or "")
+            combined += int((result_by_chunk.get(neighbour_id) or {}).get("score") or 0)
+        current = best.get(pid)
+        if current is None or combined > current[0]:
+            best[pid] = (combined, result)
+    if not best:
+        return None
+    top = max(score for score, _ in best.values())
+    winners = [pid for pid, (score, _) in best.items() if score == top]
+    if len(winners) != 1:
+        return None
+    pid = winners[0]
+    text = str(bank[pid].get("text") or "")
+    span = _index_window(best[pid][1], limit)
+    if not span or span not in text:
+        return None
+    return pid, span
+
+
+def _index_window(result: dict, limit: int) -> str:
+    """A bounded, exact slice of a chunk around its first matched token."""
+    chunk_text = str(result.get("text") or "")
+    spans = result.get("spans") or []
+    if not chunk_text or not spans:
+        return ""
+    first = min(spans, key=lambda span: int(span.get("char_start") or 0))
+    start = max(0, int(first.get("char_start") or 0) - 40)
+    end = min(len(chunk_text), start + max(1, int(limit)))
+    return chunk_text[start:end].strip()
 
 
 def cite_for_turn(bank: dict[str, dict], *, course: str, activity_id: int, world: str) -> str:

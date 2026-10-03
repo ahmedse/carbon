@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import CoverageTargetsPage from '../CoverageTargetsPage';
 
 vi.mock('../../../hooks/useDocumentTitle', () => ({ default: () => {} }));
@@ -64,10 +64,31 @@ const targetFixture = {
   status: 'active',
   notes: '',
   progress: {
-    counts: { required: 9, entered: 3, excluded: 1, awaiting_factor: 1, missing: 4 },
+    counts: {
+      required: 9,
+      entered: 3,
+      excluded: 1,
+      awaiting_factor: 1,
+      missing: 4,
+      measured: 3,
+      settled: 4,
+      settled_at_target: 2,
+      below_floor: 0,
+      tier_unknown: 0,
+    },
     measured_pct: '44.44',
+    excluded_pct: '11.11',
+    settled_pct: '44.44',
+    settled_at_target_pct: '22.22',
     measured_kg: null,
+    measured_kg_at_target: null,
+    measured_value: null,
+    measured_unit: null,
+    metric: 'coverage_percent',
+    goal_concept: 'coverage_kpi',
+    goal_kind: 'percent',
     state: 'short',
+    findings: [],
     basis: 'streams_with_a_real_row_on_the_target_period',
     claim: 'measured_not_claimed',
     coverage_complete: false,
@@ -92,6 +113,20 @@ function renderPage() {
   return render(
     <MemoryRouter>
       <CoverageTargetsPage />
+    </MemoryRouter>,
+  );
+}
+
+// Route-aware render so a test can prove row click does NOT navigate while the
+// explicit Open target action DOES (RULE 14 / M1).
+function renderWithRoutes() {
+  return render(
+    <MemoryRouter initialEntries={['/carbon/admin/coverage-targets']}>
+      <Routes>
+        <Route path="/carbon/admin/coverage-targets" element={<CoverageTargetsPage />} />
+        <Route path="/carbon/admin/coverage-targets/:targetId" element={<div>target-detail</div>} />
+        <Route path="/carbon/onboarding/intake" element={<div>intake-page</div>} />
+      </Routes>
     </MemoryRouter>,
   );
 }
@@ -134,14 +169,114 @@ describe('CoverageTargetsPage — cycle, grid, honesty', () => {
     expect(fetchCoverageTargets).not.toHaveBeenCalled();
   });
 
-  it('renders the target grid with the measured ratio labelled not-claimed', async () => {
+  it('renders ONE compact progress signal per row — measured figure + one status, breakdown in the tooltip', async () => {
+    const user = userEvent.setup();
     renderPage();
-    expect(await screen.findByText('South Valley')).toBeInTheDocument();
-    expect(screen.getByText('South Valley 1+2')).toBeInTheDocument();
-    expect(screen.getByText('Measured, not claimed')).toBeInTheDocument();
-    expect(screen.getByText(/streams settled/)).toBeInTheDocument();
+    const name = await screen.findByText('South Valley 1+2');
+    const row = name.closest('.MuiDataGrid-row');
+
+    // A single measured figure and a single status chip in the cell …
+    expect(within(row).getByText('44.44%')).toBeInTheDocument();
+    expect(within(row).getByText('Short of goal')).toBeInTheDocument();
+    // … and NONE of the old chip pile-up or per-row CTAs. The only action in the
+    // row is the deliberate `Open target`.
+    expect(within(row).queryByText('Measured (with kg)')).not.toBeInTheDocument();
+    expect(within(row).queryByText('Excluded share')).not.toBeInTheDocument();
+    expect(within(row).queryByText('Measured, not claimed')).not.toBeInTheDocument();
+    expect(within(row).getByRole('button', { name: 'Open target' })).toBeInTheDocument();
+
+    // The breakdown (excluded share + the honesty marker) is behind ONE tooltip.
+    await user.hover(within(row).getByText('44.44%'));
+    const tip = await screen.findByRole('tooltip');
+    expect(within(tip).getByText(/Measured \(with kg\)/)).toBeInTheDocument();
+    expect(within(tip).getByText(/Excluded share/)).toBeInTheDocument();
+    expect(within(tip).getByText('11.11%')).toBeInTheDocument();
+    expect(within(tip).getByText('Measured, not claimed')).toBeInTheDocument();
+
+    // Numbers go through the shared formatter — the raw 4-decimal API string
+    // ("80.0000") must never reach the screen.
+    expect(screen.getByText('80%')).toBeInTheDocument();
+    expect(screen.queryByText('80.0000%')).not.toBeInTheDocument();
     // The open period is editable, so no read-only history banner.
     expect(screen.queryByText(/This cycle is/)).not.toBeInTheDocument();
+  });
+
+  it('shows a fully-excluded target as measured 0% / excluded 100% and NOT met', async () => {
+    const user = userEvent.setup();
+    fetchCoverageTargetBoard.mockResolvedValue({
+      ...boardFixture,
+      targets: [
+        {
+          ...targetFixture,
+          id: 7,
+          name: 'Fully excluded',
+          progress: {
+            ...targetFixture.progress,
+            counts: {
+              required: 4,
+              measured: 0,
+              settled: 4,
+              settled_at_target: 0,
+              below_floor: 0,
+              tier_unknown: 0,
+              excluded: 4,
+              awaiting_factor: 0,
+              missing: 0,
+            },
+            measured_pct: '0.00',
+            excluded_pct: '100.00',
+            settled_pct: '100.00',
+            settled_at_target_pct: '0.00',
+            state: 'short',
+          },
+        },
+      ],
+    });
+    renderPage();
+    const name = await screen.findByText('Fully excluded');
+    const row = name.closest('.MuiDataGrid-row');
+    expect(within(row).getByText('0%')).toBeInTheDocument();
+    expect(within(row).getByText('Short of goal')).toBeInTheDocument();
+    expect(screen.queryByText('Goal met (measured)')).not.toBeInTheDocument();
+    // 100% excluded is a separate figure in the tooltip, never inline as measured.
+    expect(screen.queryByText('100%')).not.toBeInTheDocument();
+    await user.hover(within(row).getByText('0%'));
+    const tip = await screen.findByRole('tooltip');
+    expect(within(tip).getByText('100%')).toBeInTheDocument();
+    // Non-negotiable: exclusions never read as measured coverage.
+    expect(screen.queryByText(/100% measured/)).not.toBeInTheDocument();
+  });
+
+  it('surfaces below-floor and tier-unknown counts distinctly (not as settled-at-target)', async () => {
+    const user = userEvent.setup();
+    fetchCoverageTargetBoard.mockResolvedValue({
+      ...boardFixture,
+      targets: [
+        {
+          ...targetFixture,
+          id: 8,
+          name: 'Floor gap',
+          progress: {
+            ...targetFixture.progress,
+            counts: {
+              ...targetFixture.progress.counts,
+              measured: 5,
+              below_floor: 2,
+              tier_unknown: 1,
+            },
+          },
+        },
+      ],
+    });
+    renderPage();
+    const name = await screen.findByText('Floor gap');
+    const row = name.closest('.MuiDataGrid-row');
+    // The quality-floor detail lives in the compact cell's tooltip, not inline.
+    expect(screen.queryByText('2 below the quality floor')).not.toBeInTheDocument();
+    await user.hover(within(row).getByText('44.44%'));
+    const tip = await screen.findByRole('tooltip');
+    expect(within(tip).getByText('2 below the quality floor')).toBeInTheDocument();
+    expect(within(tip).getByText('1 tier unknown')).toBeInTheDocument();
   });
 
   it('makes no read-only claim while the board is still loading', async () => {
@@ -154,7 +289,7 @@ describe('CoverageTargetsPage — cycle, grid, honesty', () => {
     // sentence with a blank cycle name.
     await waitFor(() => expect(document.querySelector('.MuiSkeleton-root')).toBeTruthy());
     expect(screen.queryByText(/This cycle is/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/No coverage targets yet/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/No data completeness targets yet/)).not.toBeInTheDocument();
 
     pending.resolve(boardFixture);
     await screen.findByText('South Valley 1+2');
@@ -172,7 +307,7 @@ describe('CoverageTargetsPage — cycle, grid, honesty', () => {
     expect(within(alert).getByRole('button', { name: /Retry/i })).toBeInTheDocument();
     // A failed load must not masquerade as closed history or an empty board.
     expect(screen.queryByText(/This cycle is/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/No coverage targets yet/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/No data completeness targets yet/)).not.toBeInTheDocument();
   });
 
   it('is not a second Missing / Entered / Excluded reporter', async () => {
@@ -330,12 +465,55 @@ describe('CoverageTargetsPage — cycle, grid, honesty', () => {
     expect(screen.getByRole('button', { name: /Retry/i })).toBeInTheDocument();
   });
 
-  it('renders domain terms isolated for an RTL (Arabic) surface', async () => {
+  it('renders the localized scope word with only the Latin code bdi-isolated (M4)', async () => {
     document.documentElement.setAttribute('dir', 'rtl');
     renderPage();
-    const scope = await screen.findByText('Scope 1+2');
-    expect(scope.tagName.toLowerCase()).toBe('bdi');
-    expect(scope).toHaveAttribute('dir', 'ltr');
+    const row = (await screen.findByText('South Valley 1+2')).closest('.MuiDataGrid-row');
+    // The translatable word stays in the sentence; only the GHG code is isolated.
+    expect(within(row).getByText('Scope')).toBeInTheDocument();
+    const code = within(row).getByText('1+2');
+    expect(code.tagName.toLowerCase()).toBe('bdi');
+    expect(code).toHaveAttribute('dir', 'ltr');
+  });
+
+  it('keeps per-row next-action CTAs OUT of the grid — they live on the detail page', async () => {
+    fetchCoverageTargetBoard.mockResolvedValue({
+      ...boardFixture,
+      targets: [
+        {
+          ...targetFixture,
+          id: 11,
+          name: 'Gap with action',
+          progress: {
+            ...targetFixture.progress,
+            next_actions: [
+              {
+                code: 'missing',
+                count: 1,
+                verb: 'enter_stream',
+                moves: ['entered', 'measured'],
+                streams: [
+                  {
+                    inventory_source_id: 42,
+                    source_name: 'Smart Village electricity',
+                    org_unit_id: 3,
+                    scope: 2,
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      ],
+    });
+    renderWithRoutes();
+    await screen.findByText('Gap with action');
+    // No per-row action buttons and no gap chip in a data cell.
+    expect(screen.queryByRole('button', { name: /Open Smart Village electricity/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Open coverage streams/ })).not.toBeInTheDocument();
+    expect(screen.queryByText('Missing entry · 1')).not.toBeInTheDocument();
+    // The deliberate row action is still the only action in the row.
+    expect(screen.getByRole('button', { name: 'Open target' })).toBeInTheDocument();
   });
 
   it('feeds the Owner picker only from the eligibility lookup (no client list)', async () => {
@@ -448,6 +626,146 @@ describe('CoverageTargetsPage — cycle, grid, honesty', () => {
     } finally {
       window.matchMedia = originalMatchMedia;
     }
+  });
+
+  it('presents Data completeness in ONE line, with the honesty note behind an info affordance', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    expect(await screen.findByText('Data completeness')).toBeInTheDocument();
+    // A single short line of context — not the old two-sentence paragraph.
+    expect(screen.getByText(/Measured fill-rate and quality/i)).toBeInTheDocument();
+    // The NOT-GHG clarification is NOT stacked inline in the header …
+    expect(screen.queryByText(/NOT the GHG completeness assertion/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Coverage streams remain the only reporter of Missing \/ Entered \/ Excluded/i),
+    ).not.toBeInTheDocument();
+    // … it lives in a compact info affordance.
+    await user.hover(screen.getByRole('button', { name: /About data completeness/i }));
+    const tip = await screen.findByRole('tooltip');
+    expect(within(tip).getByText(/NOT the GHG completeness assertion/i)).toBeInTheDocument();
+    expect(
+      within(tip).getByText(/Coverage streams remain the only reporter of Missing \/ Entered \/ Excluded/i),
+    ).toBeInTheDocument();
+  });
+
+  it('highlights a row on click without navigating; the explicit Open target action navigates (RULE 14)', async () => {
+    const user = userEvent.setup();
+    renderWithRoutes();
+    await screen.findByText('South Valley 1+2');
+
+    // Clicking the row (a data cell) must only highlight — never route away.
+    await user.click(screen.getByText('South Valley 1+2'));
+    expect(screen.queryByText('target-detail')).not.toBeInTheDocument();
+
+    // The deliberate Open target action is what navigates.
+    await user.click(screen.getByRole('button', { name: 'Open target' }));
+    expect(await screen.findByText('target-detail')).toBeInTheDocument();
+  });
+
+  it('exposes grid search plus scope/status filters (no hideSearch)', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText('South Valley 1+2');
+
+    expect(screen.getByPlaceholderText(/Search by target, campus, org unit or owner/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Filters/i }));
+    expect(await screen.findByLabelText('Scope')).toBeInTheDocument();
+    expect(screen.getByLabelText('Status')).toBeInTheDocument();
+  });
+
+  it('labels an absolute goal as an emissions value target and renders the measured value in the goal unit', async () => {
+    fetchCoverageTargetBoard.mockResolvedValue({
+      ...boardFixture,
+      targets: [
+        {
+          ...targetFixture,
+          id: 6,
+          name: 'Campus CO2e',
+          goal_kind: 'absolute',
+          goal_value: '500000.0000',
+          goal_unit: 'kgCO2e',
+          progress: {
+            ...targetFixture.progress,
+            metric: 'absolute_emissions',
+            goal_concept: 'emissions_value',
+            goal_kind: 'absolute',
+            measured_value: '1250.5000',
+            measured_unit: 'tCO2e',
+            state: 'short',
+          },
+        },
+      ],
+    });
+    renderPage();
+    const name = await screen.findByText('Campus CO2e');
+    const row = name.closest('.MuiDataGrid-row');
+    expect(within(row).getByText('Emissions value target')).toBeInTheDocument();
+    // Value rendered in the GOAL's unit, not a conflation.
+    expect(within(row).getByText('1,250.5 tCO2e')).toBeInTheDocument();
+  });
+
+  it('renders an absent measured value as an em dash, never as 0', async () => {
+    fetchCoverageTargetBoard.mockResolvedValue({
+      ...boardFixture,
+      targets: [
+        {
+          ...targetFixture,
+          id: 9,
+          name: 'No value yet',
+          goal_kind: 'absolute',
+          goal_value: '100.0000',
+          goal_unit: 'tCO2e',
+          progress: {
+            ...targetFixture.progress,
+            metric: 'absolute_emissions',
+            goal_concept: 'emissions_value',
+            goal_kind: 'absolute',
+            measured_kg: null,
+            measured_value: null,
+            measured_unit: null,
+            state: 'short',
+          },
+        },
+      ],
+    });
+    renderPage();
+    const name = await screen.findByText('No value yet');
+    const row = name.closest('.MuiDataGrid-row');
+    // Absent, not zero.
+    expect(within(row).getByText('—')).toBeInTheDocument();
+    expect(within(row).queryByText('0 tCO2e')).not.toBeInTheDocument();
+  });
+
+  it('renders no_declared_sources as an explicit headlined finding, not a blank or "no active streams"', async () => {
+    fetchCoverageTargetBoard.mockResolvedValue({
+      ...boardFixture,
+      targets: [
+        {
+          ...targetFixture,
+          id: 10,
+          name: 'Empty boundary',
+          progress: {
+            ...targetFixture.progress,
+            counts: {
+              required: 0, measured: 0, settled: 0, settled_at_target: 0,
+              below_floor: 0, tier_unknown: 0, excluded: 0, awaiting_factor: 0, missing: 0,
+            },
+            measured_pct: null,
+            excluded_pct: null,
+            settled_pct: null,
+            settled_at_target_pct: null,
+            state: 'empty',
+            findings: [{ code: 'no_declared_sources', detail: 'No declared sources.' }],
+          },
+        },
+      ],
+    });
+    renderPage();
+    expect(await screen.findByText('Empty boundary')).toBeInTheDocument();
+    expect(screen.getByText('No declared sources')).toBeInTheDocument();
+    // The generic empty line must not be the finding's stand-in.
+    expect(screen.queryByText(/No active streams in this target's scope yet/)).not.toBeInTheDocument();
   });
 });
 

@@ -36,9 +36,12 @@ class ReportConfigAPITest(TestCase):
         admins_group = Group.objects.get(name='admins_group')
         ScopedRole.objects.create(user=self.user1, group=admins_group, is_active=True)
         
-        # OrgUnit
+        # OrgUnit — ADR-0028 single deployment root; scoped units hang under it.
+        self.root_org_unit = OrgUnit.objects.create(
+            name='Root OrgUnit', code='ROOT', slug='root-orgunit'
+        )
         self.org_unit = OrgUnit.objects.create(
-            name='Test OrgUnit', code='TEST'
+            name='Test OrgUnit', code='TEST', parent=self.root_org_unit
         )
         
         # Reporting Period
@@ -185,8 +188,12 @@ class ReportConfigAPITest(TestCase):
     
     def test_org_unit_filter(self):
         """Test that org_unit filter scopes results."""
-        # Create second org unit
-        ou2 = OrgUnit.objects.create(name='Second OrgUnit', code='OU2', slug='ou2')
+        # Second org unit as a SIBLING of self.org_unit under the same single
+        # root, so it is genuinely out of scope (not a descendant) and the
+        # config's org_unit filter must exclude its calculation.
+        ou2 = OrgUnit.objects.create(
+            name='Second OrgUnit', code='OU2', slug='ou2', parent=self.root_org_unit
+        )
         module2 = Module.objects.create(name='Module 2', org_unit=ou2, scope=1)
         calc2 = Calculation.objects.create(
             data_row=self.report_row,

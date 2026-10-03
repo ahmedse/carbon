@@ -35,26 +35,69 @@ _WRITE_RETRY_INSTRUCTIONS = {
 }
 
 
+def _speaks_language(text: str, lang: str) -> bool:
+    """True when ``text`` is already in ``lang``.
+
+    A line with no letters of its own (a bare figure, punctuation) carries no
+    language and passes for either.
+    """
+    from ai.engine.cognition.turn.language import detect_reply_language
+
+    body = (text or "").strip()
+    if not body or not any(ch.isalpha() for ch in body):
+        return True
+    return detect_reply_language(body) == lang
+
+
+def _copy_language(user_message: str, decision_language: str) -> str:
+    """IRP-7: copy follows the message, not the pack default.
+
+    Only a message with no letters of its own (a bare figure) defers to the
+    language the Decision named.
+    """
+    from ai.engine.cognition.turn.language import detect_reply_language
+
+    text = (user_message or "").strip()
+    if text and any(ch.isalpha() for ch in text):
+        return detect_reply_language(text)
+    return decision_language if decision_language in {"ar", "en"} else "en"
+
+
 def _reply_for(
-    cmd: Command, decision: Decision, *, surface: str | None = None,
+    cmd: Command,
+    decision: Decision,
+    *,
+    surface: str | None = None,
+    user_message: str = "",
+    instance_config: dict | None = None,
 ) -> str | None:
     from ai.engine.agent.surface import Surface
 
     cmd_op = cmd.op
-    lang = decision.language
+    # IRP-7: the copy follows the message. The Decision names a language, but
+    # the message is authoritative when it has letters of its own.
+    lang = _copy_language(user_message, decision.language)
     # Unset surface is Ask. A caller that already resolved the dial passes it
     # so this copy cannot tell someone to switch to the seat they are in.
     current = Surface.resolve(surface)
     if cmd_op == "clarify":
-        if cmd.question:
-            return cmd.question
+        question = (cmd.question or "").strip()
+        if question and _speaks_language(question, lang):
+            return question
         return "أي واحد تقصد؟" if lang == "ar" else "Which one do you mean?"
     if cmd_op in {"refuse", "reject"}:
-        if cmd.reason:
-            return cmd.reason
+        reason = (cmd.reason or "").strip()
+        if reason and _speaks_language(reason, lang):
+            return reason
         if cmd_op == "reject":
             return "حسناً." if lang == "ar" else "Okay."
-        return "ما أقدر أساعد في هذا." if lang == "ar" else "I can't help with that."
+        if not reason:
+            return "ما أقدر أساعد في هذا." if lang == "ar" else "I can't help with that."
+        # A model paragraph in the other language is not shipped as the guard's
+        # own refusal. The declared refusal speaks instead (IRP-7).
+        from ai.engine.cognition.turn.runner_util import _refusal_text
+
+        return _refusal_text(instance_config, user_message)
     if cmd_op == "handoff_agent":
         if cmd.process_id == PLAN_PROCESS_ID:
             # Plan drafts the plan. Agent runs an approved one. Either seat
@@ -224,6 +267,7 @@ async def act_on_decision(
     executed: list[dict] | None = None,
     surface: str | None = None,
     catalog: list | None = None,
+    instance_config: dict | None = None,
 ) -> str | None:
     """Reply text, or None to fall through to the legacy turn.
 
@@ -238,7 +282,10 @@ async def act_on_decision(
     if lead is None:
         return None
     if not lead.reads_host():
-        return _reply_for(lead, decision, surface=surface)
+        return _reply_for(
+            lead, decision, surface=surface,
+            user_message=user_message, instance_config=instance_config,
+        )
     if execute_tool is None:
         return None
     texts: list[str] = []

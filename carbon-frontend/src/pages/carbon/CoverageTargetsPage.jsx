@@ -12,10 +12,12 @@
 // ADR-0037 (no page-local fontSize / hex), ADR-0018 EN+AR parity.
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Box, Button, Chip, Stack, Typography } from '@mui/material';
+import { Alert, Box, Button, Chip, IconButton, Stack, Tooltip, Typography } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import FlagIcon from '@mui/icons-material/Flag';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 
@@ -25,6 +27,7 @@ import PageHeader from '../../components/Page/PageHeader';
 import EmptyState from '../../components/Page/EmptyState';
 import LoadingSkeleton from '../../components/Page/LoadingSkeleton';
 import FilteredDataGrid from '../../components/FilteredDataGrid';
+import NumericText from '../../components/NumericText';
 import { SearchSelect } from '../../components/Form';
 import SystemDialog from '../../components/SystemDialog';
 import { useAuth } from '../../auth/AuthContext';
@@ -35,13 +38,16 @@ import {
   createCoverageTarget,
 } from '../../api/emissions-extended';
 import {
-  Ltr,
+  CompactProgressCell,
+  ScopeLabel,
   TargetForm,
   TargetStatusChip,
   TierChip,
   emptyTargetForm,
   formToTargetPayload,
   formatDate,
+  goalLabel,
+  isEmissionsValueTarget,
   scopeLabel,
 } from './coverageTargetsShared';
 
@@ -52,8 +58,8 @@ const PERIOD_STATUS_KEYS = {
 };
 
 export default function CoverageTargetsPage() {
-  useDocumentTitle('Coverage targets');
   const { t } = useTranslation('emissions');
+  useDocumentTitle(t('coverageTargets.pageTitle'));
   const navigate = useNavigate();
   const { token, user, availablePerspectives } = useAuth();
   const { notify, notifyFromError } = useNotification();
@@ -64,6 +70,10 @@ export default function CoverageTargetsPage() {
   const [targets, setTargets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  // RULE 14 grid behaviour: search + relevant filters, row click = highlight only.
+  const [search, setSearch] = useState('');
+  const [filters, setFilters] = useState({ scope: '', status: '' });
+  const [highlightId, setHighlightId] = useState(null);
   // True only once the board payload has actually resolved. The read-only
   // history banner must never appear before that (loading or failed load).
   const [boardLoaded, setBoardLoaded] = useState(false);
@@ -186,6 +196,49 @@ export default function CoverageTargetsPage() {
     }
   };
 
+  // RULE 14: search across the fields a person would type, plus the two
+  // relevant filters (scope, status) — not one filter per column.
+  const scopeFilterOptions = useMemo(() => {
+    const seen = new Map();
+    targets.forEach((row) => {
+      if (row.scope == null || row.scope === '') return;
+      const value = String(row.scope);
+      if (!seen.has(value)) seen.set(value, { value, label: scopeLabel(t, row) });
+    });
+    return [...seen.values()];
+  }, [targets, t]);
+
+  const filterDefs = useMemo(() => [
+    {
+      key: 'scope',
+      label: t('coverageTargets.colScope'),
+      options: scopeFilterOptions,
+      emptyLabel: t('coverageTargets.allScopes'),
+    },
+    {
+      key: 'status',
+      label: t('coverageTargets.colStatus'),
+      options: [
+        { value: 'draft', label: t('coverageTargets.statusDraft') },
+        { value: 'active', label: t('coverageTargets.statusActive') },
+        { value: 'archived', label: t('coverageTargets.statusArchived') },
+      ],
+      emptyLabel: t('coverageTargets.allStatuses'),
+    },
+  ], [t, scopeFilterOptions]);
+
+  const filteredTargets = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return targets.filter((row) => {
+      if (filters.scope && String(row.scope) !== String(filters.scope)) return false;
+      if (filters.status && String(row.status) !== String(filters.status)) return false;
+      if (!q) return true;
+      return [row.name, row.campus_name, row.org_unit_name, row.owner_name]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(q));
+    });
+  }, [targets, search, filters]);
+
   const columns = useMemo(() => [
     {
       field: 'name',
@@ -211,26 +264,25 @@ export default function CoverageTargetsPage() {
       field: 'scope',
       headerName: t('coverageTargets.colScope'),
       width: 170,
-      valueGetter: (_value, row) => scopeLabel(row),
-      renderCell: (params) => <Ltr>{params.value}</Ltr>,
+      valueGetter: (_value, row) => scopeLabel(t, row),
+      renderCell: (params) => <ScopeLabel target={params.row} t={t} />,
     },
     {
       field: 'goal_value',
       headerName: t('coverageTargets.colGoal'),
-      width: 150,
-      renderCell: (params) => {
-        const row = params.row;
-        if (row.goal_kind === 'absolute') {
-          return (
-            <span>
-              {row.goal_value}
-              {' '}
-              <Ltr>{row.goal_unit || ''}</Ltr>
-            </span>
-          );
-        }
-        return <span>{`${row.goal_value}%`}</span>;
-      },
+      width: 170,
+      align: 'right',
+      headerAlign: 'right',
+      renderCell: (params) => (
+        <Stack sx={{ alignItems: 'flex-end', minWidth: 0, width: '100%' }} spacing={0.25}>
+          <NumericText>{goalLabel(params.row)}</NumericText>
+          {isEmissionsValueTarget(params.row.progress || { goal_kind: params.row.goal_kind }) && (
+            <Typography variant="caption" color="text.secondary" noWrap>
+              {t('coverageTargets.emissionsValueTarget')}
+            </Typography>
+          )}
+        </Stack>
+      ),
     },
     {
       field: 'min_quality_tier',
@@ -259,35 +311,57 @@ export default function CoverageTargetsPage() {
     {
       field: 'progress',
       headerName: t('coverageTargets.colProgress'),
-      flex: 1.2,
-      minWidth: 220,
+      // A fixed, comfortable width — the cell never gets squeezed at normal
+      // widths. The full breakdown lives in the cell Tooltip / the detail page.
+      width: 220,
       sortable: false,
-      renderCell: (params) => {
-        const progress = params.row.progress || {};
-        const counts = progress.counts || {};
-        if (progress.state === 'empty' || !counts.required) {
-          return (
-            <Typography variant="body2" color="text.secondary">
-              {t('coverageTargets.emptyProgress')}
-            </Typography>
-          );
-        }
-        const settled = (counts.entered || 0) + (counts.excluded || 0);
-        return (
-          <Stack spacing={0.25}>
-            <Typography variant="body2">
-              {t('coverageTargets.measuredRatio', {
-                settled,
-                required: counts.required || 0,
-                pct: progress.measured_pct ?? '—',
-              })}
-            </Typography>
-            <Chip size="small" variant="outlined" label={t('coverageTargets.measuredNotClaimed')} />
-          </Stack>
-        );
-      },
+      align: 'right',
+      headerAlign: 'right',
+      renderCell: (params) => <CompactProgressCell progress={params.row.progress} t={t} />,
     },
-  ], [t]);
+    {
+      // Row click only highlights (RULE 14); opening is this explicit action.
+      field: 'actions',
+      headerName: t('coverageTargets.colActions'),
+      width: 96,
+      sortable: false,
+      filterable: false,
+      align: 'right',
+      headerAlign: 'right',
+      renderCell: (params) => (
+        <Tooltip title={t('coverageTargets.openTarget')} arrow>
+          <IconButton
+            size="small"
+            aria-label={t('coverageTargets.openTarget')}
+            onClick={(event) => {
+              event.stopPropagation();
+              navigate(`/carbon/admin/coverage-targets/${params.row.id}`);
+            }}
+          >
+            <VisibilityOutlinedIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      ),
+    },
+  ], [t, navigate]);
+
+  // One tidy control node: the reporting-cycle selector. It sits with the grid
+  // search/filters when the board renders, and stands alone for loading / empty
+  // / error states so the cycle is always switchable.
+  const cycleControl = (
+    <SearchSelect
+      label={t('coverageTargets.cycle')}
+      options={cycleOptions}
+      value={selectedPeriod}
+      onChange={(option) => {
+        const next = option?.value ? String(option.value) : '';
+        setSelectedPeriod(next);
+        if (next) loadTargets(next);
+      }}
+      loading={loading && periods.length === 0}
+      clearable={false}
+    />
+  );
 
   return (
     <PageContainer>
@@ -295,6 +369,13 @@ export default function CoverageTargetsPage() {
         icon={FlagIcon}
         title={t('coverageTargets.pageTitle')}
         description={t('coverageTargets.pageDescription')}
+        info={(
+          <Tooltip title={t('coverageTargets.pageInfo')} arrow>
+            <IconButton size="small" aria-label={t('coverageTargets.pageInfoAria')}>
+              <InfoOutlinedIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        )}
         actions={(
           <Stack direction="row" spacing={1}>
             <Button
@@ -319,22 +400,6 @@ export default function CoverageTargetsPage() {
         </Box>
       )}
 
-      <Box sx={{ maxWidth: 480, my: 1 }}>
-        <SearchSelect
-          label={t('coverageTargets.cycle')}
-          options={cycleOptions}
-          value={selectedPeriod}
-          onChange={(option) => {
-            const next = option?.value ? String(option.value) : '';
-            setSelectedPeriod(next);
-            if (next) loadTargets(next);
-          }}
-          helperText={t('coverageTargets.cycleHint')}
-          loading={loading && periods.length === 0}
-          clearable={false}
-        />
-      </Box>
-
       {error && (
         <Alert
           severity="error"
@@ -350,22 +415,41 @@ export default function CoverageTargetsPage() {
       )}
 
       {loading ? (
-        <LoadingSkeleton variant="table" />
-      ) : error ? null : targets.length === 0 ? (
-        <EmptyState
-          icon={<FlagIcon />}
-          title={t('coverageTargets.noTargets')}
-          description={t('coverageTargets.noTargetsHint')}
-          actionLabel={!readOnly && isAdmin ? t('coverageTargets.addTarget') : undefined}
-          onAction={openCreate}
-        />
+        <>
+          <Box sx={{ maxWidth: 480, my: 1 }}>{cycleControl}</Box>
+          <LoadingSkeleton variant="table" />
+        </>
+      ) : error ? (
+        <Box sx={{ maxWidth: 480, my: 1 }}>{cycleControl}</Box>
+      ) : targets.length === 0 ? (
+        <>
+          <Box sx={{ maxWidth: 480, my: 1 }}>{cycleControl}</Box>
+          <EmptyState
+            icon={<FlagIcon />}
+            title={t('coverageTargets.noTargets')}
+            description={t('coverageTargets.noTargetsHint')}
+            actionLabel={!readOnly && isAdmin ? t('coverageTargets.addTarget') : undefined}
+            onAction={openCreate}
+          />
+        </>
       ) : (
         <FilteredDataGrid
           embedded
-          hideSearch
-          rows={targets}
+          toolbarExtra={<Box sx={{ flex: '0 1 320px', minWidth: 240 }}>{cycleControl}</Box>}
+          rows={filteredTargets}
           columns={columns}
-          onRowClick={(params) => navigate(`/carbon/admin/coverage-targets/${params.row.id}`)}
+          searchValue={search}
+          onSearchChange={setSearch}
+          searchPlaceholder={t('coverageTargets.searchPlaceholder')}
+          filterDefs={filterDefs}
+          filterValues={filters}
+          onFilterChange={(key, value) => setFilters((prev) => ({ ...prev, [key]: value }))}
+          onClearFilters={() => {
+            setSearch('');
+            setFilters({ scope: '', status: '' });
+          }}
+          highlightRow={(row) => String(row.id) === String(highlightId)}
+          onRowClick={(params) => setHighlightId(params.row.id)}
         />
       )}
 

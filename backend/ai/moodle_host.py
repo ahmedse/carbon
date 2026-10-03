@@ -302,6 +302,7 @@ def door_answer(
         reference_answer,
         section_answer,
         staff_answer,
+        teach_answer,
         topic_answer,
     )
 
@@ -314,12 +315,13 @@ def door_answer(
         fact_answer,
         lecture_answer,
         section_answer,
+        teach_answer,
         quiz_answer,
         explain_answer,
         topic_answer,
         reference_answer,
     ):
-        if answer_for in (topic_answer, reference_answer, identity_answer, explain_answer):
+        if answer_for in (topic_answer, reference_answer, identity_answer, explain_answer, teach_answer):
             answer = answer_for(message, snapshot, state=bag)
         else:
             answer = answer_for(message, snapshot)

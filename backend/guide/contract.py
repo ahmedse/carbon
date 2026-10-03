@@ -31,6 +31,46 @@ def pack_ids() -> list[str]:
     return sorted(p.name for p in packs.PACKS_ROOT.iterdir() if (p / "guide" / "guide.yaml").is_file())
 
 
+def _scenario_problems(stage: dict, copies: dict[str, dict], where: str) -> list[str]:
+    """Validate one stage's camp drama: beats, ids, choices and both languages."""
+    problems: list[str] = []
+    beats = (stage.get("scenario") or {}).get("beats") or []
+    if len(beats) > engine.SCENARIO_MAX_BEATS:
+        problems.append(f"{where}: a scenario has at most {engine.SCENARIO_MAX_BEATS} beats")
+    seen_ids: set = set()
+    for index, beat in enumerate(beats):
+        at = f"{where}.scenario[{index}]"
+        bid = beat.get("id")
+        if not bid or bid in seen_ids:
+            problems.append(f"{at}: beat id must be unique and present")
+        seen_ids.add(bid)
+        correct = beat.get("correct")
+        if isinstance(correct, bool) or not isinstance(correct, int) or correct < 0:
+            problems.append(f"{at}: correct must be a non-negative integer")
+        for lang, copy in copies.items():
+            stage_copy = (copy.get("stages") or {}).get(stage.get("key")) or {}
+            beat_copy = next(
+                (
+                    row
+                    for row in ((stage_copy.get("scenario") or {}).get("beats") or [])
+                    if isinstance(row, dict) and row.get("id") == bid
+                ),
+                None,
+            )
+            if not beat_copy:
+                problems.append(f"{at}: {lang} copy is missing the beat")
+                continue
+            for field in ("cast", "line", "question", "explain"):
+                if not str(beat_copy.get(field) or "").strip():
+                    problems.append(f"{at}: {lang} copy is missing {field}")
+            choices = beat_copy.get("choices") or []
+            if len(choices) < 2:
+                problems.append(f"{at}: {lang} copy needs at least two choices")
+            elif not isinstance(correct, bool) and isinstance(correct, int) and not 0 <= correct < len(choices):
+                problems.append(f"{at}: correct is out of range for the {lang} choices")
+    return problems
+
+
 def _journey_problems(pack_id: str, loaded: dict, copies: dict[str, dict]) -> list[str]:
     """Validate the engine-read journey blocks: stages, competencies, steps.
 
@@ -65,6 +105,7 @@ def _journey_problems(pack_id: str, loaded: dict, copies: dict[str, dict]) -> li
                 problems.append(f"{where}: unknown competency {comp_key}")
         if row.get("pending") and members:
             problems.append(f"{where}: a pending stage lists lessons")
+        problems += _scenario_problems(row, copies, where)
 
     seen_c: set = set()
     for row in competencies:

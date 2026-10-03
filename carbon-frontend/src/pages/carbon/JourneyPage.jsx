@@ -24,11 +24,9 @@ import EmptyState from '../../components/Page/EmptyState';
 import useJourney from '../../components/journey/useJourney';
 import { findLessonContext, onboardingViewFromSearch, pickStation } from '../../components/journey/journeyStages';
 import RoleSwitch from '../../components/journey/RoleSwitch';
-import StationRail from '../../components/journey/StationRail';
+import JourneyTrail from '../../components/journey/JourneyTrail';
 import StationDetail from '../../components/journey/StationDetail';
 import LessonReader from '../../components/journey/LessonReader';
-import MixedText from '../../components/journey/MixedText';
-import JourneyArc from '../../components/journey/JourneyArc';
 import JourneyScenario from '../../components/journey/JourneyScenario';
 import JourneyCelebration from '../../components/journey/JourneyCelebration';
 import useJourneyRole from '../../components/journey/useJourneyRole';
@@ -79,7 +77,7 @@ export function JourneyStationSurface({ appId }) {
   const [track, setTrack] = useJourneyRole(userKey, appId);
 
   const {
-    phase, journey: model, period, closed, reload, effectiveTrack, data,
+    phase, journey: model, period, closed, reload, effectiveTrack, sendScenario,
   } = useJourney(appId, track);
 
   // The SAME persisted view the drawer Journey tab reads and writes.
@@ -154,11 +152,12 @@ export function JourneyStationSurface({ appId }) {
             <EmptyState title={t('empty.noRole.title')} description={t('empty.noRole.body')} />
           ) : (
             <>
-              <JourneyArc
-                journey={model}
-                listing={data}
-                role={model.path}
-                onGo={(route) => navigate(route)}
+              {/* The trail is the map: every camp, clearly named, at the very
+                  top, so the whole job reads before any detail. */}
+              <JourneyTrail
+                stations={model.stages}
+                selectedN={selectedStation?.n ?? null}
+                onSelect={onSelectStation}
               />
 
               <JourneyCelebration journey={model} userKey={userKey} appId={appId} />
@@ -172,20 +171,6 @@ export function JourneyStationSurface({ appId }) {
                 onRoleChange={setTrack}
               />
 
-              {model.intro && (
-                <Box data-testid="journey-intro" sx={{ mb: 2 }}>
-                  <Typography sx={{ ...FONT.sectionTitle, mb: 0.5 }} color="text.secondary">
-                    {t('whatThisJourneyIs')}
-                  </Typography>
-                  <MixedText
-                    text={model.intro}
-                    glossary={model.glossary}
-                    component="p"
-                    sx={{ ...FONT.body2, color: 'text.secondary', m: 0 }}
-                  />
-                </Box>
-              )}
-
               {complete && (
                 <Alert
                   severity="success"
@@ -196,17 +181,12 @@ export function JourneyStationSurface({ appId }) {
                 </Alert>
               )}
 
-              <StationRail
-                stations={model.stages}
-                selectedN={selectedStation?.n ?? null}
-                onSelect={onSelectStation}
-              />
-
               <StationDetail
                 station={selectedStation}
                 glossary={model.glossary}
                 appId={appId}
                 recallLesson={review}
+                onScenarioAnswer={sendScenario}
                 onOpenLesson={(id) => navigate(`/journey/${appId}/${id}`)}
                 onNavigate={(route) => navigate(route)}
               />
@@ -285,6 +265,8 @@ export function JourneyReaderSurface({ appId, lessonId }) {
           nextLesson={context.next}
           onNavigateLesson={(id) => navigate(`/journey/${appId}/${id}`)}
           onStationSummary={() => toStation(context.station)}
+          appId={appId}
+          onChanged={reload}
         />
       )}
     </PageContainer>

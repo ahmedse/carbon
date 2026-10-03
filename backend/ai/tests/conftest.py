@@ -39,9 +39,11 @@ def make_user(username: str, *, superuser: bool = False, staff: bool = False) ->
     return user
 
 
-def make_org(name: str) -> OrgUnit:
+def make_org(name: str, *, parent: OrgUnit | None = None) -> OrgUnit:
     """Create an org unit (slug auto-derived from name)."""
-    return OrgUnit.objects.create(name=name, slug=name.lower().replace(" ", "-"))
+    return OrgUnit.objects.create(
+        name=name, slug=name.lower().replace(" ", "-"), parent=parent
+    )
 
 
 def make_module(name: str, org: OrgUnit, scope: int = 2) -> Module:
@@ -210,9 +212,11 @@ def seeded_factors():
 
 @pytest.fixture
 def org_a_and_b():
-    """Two orgs, each with one module + one calculation (differing footprints)."""
-    org_a = make_org("Org Alpha")
-    org_b = make_org("Org Beta")
+    """Two sibling orgs under one ADR-0028 root, each with one module + one
+    calculation (differing footprints). Siblings keep each org's scope disjoint."""
+    root = make_org("Org Root")
+    org_a = make_org("Org Alpha", parent=root)
+    org_b = make_org("Org Beta", parent=root)
     f_a = make_factor(code="FACTOR_A", value="0.4584")
     f_b = make_factor(code="FACTOR_B", value="1.0")
     calc_a = make_calculation(org=org_a, module_name="Elec Alpha", factor=f_a, kwh="1000")

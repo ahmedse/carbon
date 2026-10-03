@@ -21,7 +21,7 @@ function Sparkline({ data = [], color }) {
   );
 }
 
-function StatCard({ title, value, unit, icon, color, sparkline, trend, trendLabel, loading, onClick, tooltip }) {
+function StatCard({ title, value, unit, subtitle, icon, color, sparkline, trend, trendLabel, loading, onClick, tooltip }) {
   const theme = useTheme();
   const paletteColor = theme.palette[color]?.main || theme.palette.primary.main;
 
@@ -74,6 +74,11 @@ function StatCard({ title, value, unit, icon, color, sparkline, trend, trendLabe
           </Typography>
         )}
       </Typography>
+      {subtitle && (
+        <Typography sx={{ fontSize: '0.6875rem', color: 'text.secondary', mt: 0.25 }}>
+          {subtitle}
+        </Typography>
+      )}
       {sparkline && sparkline.length > 1 && (
         <Box sx={{ mt: 1 }}>
           <Sparkline data={sparkline} color={paletteColor} />
@@ -102,6 +107,7 @@ StatCard.propTypes = {
   title: PropTypes.string.isRequired,
   value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
   unit: PropTypes.string,
+  subtitle: PropTypes.node,
   icon: PropTypes.element,
   color: PropTypes.string,
   sparkline: PropTypes.arrayOf(PropTypes.number),
@@ -114,6 +120,7 @@ StatCard.propTypes = {
 
 StatCard.defaultProps = {
   unit: '',
+  subtitle: null,
   icon: null,
   color: 'primary',
   sparkline: [],

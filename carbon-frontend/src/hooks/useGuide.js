@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '../auth/AuthContext';
-import { fetchGuide, postGuideEvent } from '../api/guide';
+import { fetchGuide, postGuideEvent, postGuideScenario } from '../api/guide';
 
 /** Guide listing for one app. `send` posts an event and refreshes the listing. */
 export default function useGuide(appId) {
@@ -36,5 +36,11 @@ export default function useGuide(appId) {
     return out;
   }, [appId, token, load]);
 
-  return { phase, data, error, reload: load, send, lang, token };
+  const sendScenario = useCallback(async (stageKey, body) => {
+    const out = await postGuideScenario(appId, stageKey, body, token);
+    await load();
+    return out;
+  }, [appId, token, load]);
+
+  return { phase, data, error, reload: load, send, sendScenario, lang, token };
 }

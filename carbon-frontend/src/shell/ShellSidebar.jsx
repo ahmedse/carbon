@@ -178,9 +178,11 @@ const CARBON_ITEM_ICONS = {
   'Base Years':               HistoryIcon,
   'Coverage':                 TrackChangesIcon,
   'Coverage targets':         FlagIcon,
+  'Data completeness':        FlagIcon,
   'Inventory Coverage':       TrackChangesIcon,
   'Inventory onboarding':     AssignmentTurnedInIcon,
   'Journey':                  AssignmentTurnedInIcon,
+  'Journey guides':           MenuBookIcon,
   'Campus intake':            FactCheckIcon,
 };
 

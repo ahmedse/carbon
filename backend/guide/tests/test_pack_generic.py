@@ -53,7 +53,7 @@ FAKE_COPY_EN = textwrap.dedent(
     """
     journey: {title: "Fake journey", intro: "A pack with no domain words."}
     stages:
-      begin: {title: "Begin", what: "The first station."}
+      begin: {title: "Begin", what: "The first station.", voice: "One route, one record."}
     competencies:
       first_step: {title: "Take the first step", good: "One route, one do line."}
     lessons:
@@ -74,7 +74,7 @@ FAKE_COPY_AR = textwrap.dedent(
     """
     journey: {title: "رحلة تجريبية", intro: "رحلة بلا كلمات نطاق."}
     stages:
-      begin: {title: "البداية", what: "أول محطة."}
+      begin: {title: "البداية", what: "أول محطة.", voice: "مسار واحد وسجل واحد."}
     competencies:
       first_step: {title: "اتخذ الخطوة الأولى", good: "مسار واحد وسطر واحد."}
     lessons:
@@ -125,6 +125,7 @@ class FakePackJourneyTests(SimpleTestCase):
         self.assertEqual(payload["glossary"], ["flux capacitor"])
         self.assertEqual([row["key"] for row in payload["stages"]], ["begin"])
         self.assertEqual(payload["stages"][0]["title"], "Begin")
+        self.assertEqual(payload["stages"][0]["voice"], "One route, one record.")
         self.assertEqual(payload["competencies"][0]["title"], "Take the first step")
 
     def test_fake_lesson_steps_render_from_copy(self):
@@ -134,6 +135,14 @@ class FakePackJourneyTests(SimpleTestCase):
         self.assertEqual(rows[0]["steps"], [
             {"title": "Open the page", "do": "Open /fake/one.", "route": "/fake/one", "target": "fake.one"},
         ])
+        # The listing carries display-only learning copy for the trail's hazard
+        # cards and field notebook. It is never a figure and never a factor.
+        self.assertEqual(rows[0]["know"], "Know text.")
+        self.assertEqual(rows[0]["dont"], "Dont text.")
+
+    def test_arabic_stage_voice_is_localized(self):
+        ar = views._journey_payload("fake", "ar")
+        self.assertEqual(ar["stages"][0]["voice"], "مسار واحد وسجل واحد.")
 
     def test_arabic_copy_is_mixed_and_keys_match(self):
         ar = views._journey_payload("fake", "ar")

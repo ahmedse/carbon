@@ -134,3 +134,10 @@ class TurnLedger:
     state_size: int = 0
     # PV2-5B/5C — snapshot for Chat chip / Agent inherit panel.
     active_plans: list | None = None
+    # ADR-0056 / IRP-8 (V21-1) — a v21 Chat turn the Decision did not finish.
+    # ``fallthrough_reason`` is the miss the Decision recorded
+    # (``fallthrough`` / ``unrepairable`` / ``committed_route_skipped``); the
+    # turn is answered by the typed degradation, never the legacy spine. Named
+    # on the ledger so a live run (IB-10) can count it without re-deriving it.
+    fell_through: bool = False
+    fallthrough_reason: str = ""

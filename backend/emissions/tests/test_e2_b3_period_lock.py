@@ -123,6 +123,7 @@ class PeriodTransitionActionsTests(TestCase):
         self.field = DataField.objects.create(
             data_table=self.table, name='kwh', label='kWh', type='number', required=True,
         )
+        DataRow.objects.create(data_table=self.table, values={'kwh': 100})
         self.factor = EmissionFactor.objects.create(
             code='TRANS_GRID', name='Trans Grid', category='electricity', scope=2,
             factor_value=Decimal('0.5'), activity_unit='kWh',

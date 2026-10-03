@@ -1,0 +1,75 @@
+# L-T T1 — grounded multi-passage lesson DRAFT vocabulary (TEACHING-WAVE-SPEC §1.1/§1.6).
+#
+# A staff lesson ask names a topic. The draft builder reuses the course bank and
+# emits ONLY exact sentence-bounded slices of the passages it cites (the B3
+# grounding/faithfulness pass). A candidate with no verbatim span is dropped,
+# never printed. The draft is a read-only proposal: the staff member applies it
+# in the existing Extra tab. Chat never writes (ADR-0046). Vocabulary stays in
+# this pack, never in engine/**.
+version: 1
+miss: This is not in this course.
+# Longest prefix first. None collide with explain/topic ("teach me …" owned
+# there), staff draft ("draft a … note"), or lecture doors.
+prefixes:
+  - "draft a lesson about "
+  - "draft a lesson on "
+  - "build a lesson about "
+  - "build a lesson on "
+  - "create a lesson about "
+  - "create a lesson on "
+  - "make a lesson about "
+  - "prepare a lesson about "
+  - "teach a lesson about "
+  - "teach a lesson on "
+  - "lesson draft about "
+  - "lesson draft on "
+# The draft is labelled a draft and claims no Moodle write (R11).
+label: "Draft lesson (proposal only — apply it in the Extra tab):"
+grounding_note: "Facts are verbatim spans from the cited passages. No new facts."
+no_write: "No write was made. Paste and save it in the Extra tab."
+# At most this many passages in one draft, and at most this many spans each.
+max_passages: 3
+per_passage: 2
+# Sentence-bounded span cap; 450 > every graded sentence so a span is a whole
+# sentence, never a re-cut fragment.
+span: 450
+min_span: 40
+# Terms too common to focus a lesson. Kept here, never in engine/**.
+stopwords:
+  - the
+  - and
+  - for
+  - with
+  - from
+  - that
+  - this
+  - these
+  - those
+  - into
+  - about
+  - over
+  - under
+  - between
+  - within
+  - using
+  - their
+  - there
+  - when
+  - where
+  - which
+  - while
+  - have
+  - has
+  - can
+  - will
+  - shall
+  - must
+  - not
+  - are
+  - was
+  - were
+  - its
+  - his
+  - her
+  - our
+  - your

@@ -198,13 +198,17 @@ class TurnRouter:
             if last_results is not None
             else getattr(state, "last_results", None)
         )
+        # ADR-0056 / V21-2: on v21 the typed report-clarify exit is superseded
+        # (``may_stage("typed_router") is False``). A committed route skips the
+        # Decision, so this wording gate must not commit a broad-report Ask on
+        # v21 — the Decision owns the broad report. Legacy keeps the clarify.
         hit = (
             try_report_clarify(
                 text,
                 history=history,
                 last_results=report_results,
             )
-            if mode is ProcessMode.ASK
+            if mode is ProcessMode.ASK and understand_mode() != "v21"
             else None
         )
         if hit is not None:

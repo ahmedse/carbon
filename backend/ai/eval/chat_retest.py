@@ -23,6 +23,7 @@ from typing import Any
 
 import yaml
 
+from ai.eval.chat_deep_bench import FALLTHROUGH_REASONS
 from ai.eval.chat_live_probe import USER, _req, assistant_text, host_leave_count, login
 
 BANK = Path(__file__).resolve().parent / "chat_retest_bank.yaml"
@@ -35,9 +36,14 @@ _INT = re.compile(r"(?<![\w.])\d+(?!\w|\.\d)")
 _LATENCY_BUDGET_MS = 4000
 
 
-def load_bank(path: Path = BANK) -> list[dict]:
+def load_bank_doc(path: Path = BANK) -> dict:
+    """The whole bank document (``bank:`` meta + ``threads:``)."""
     doc = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    return [t for t in doc.get("threads") or [] if isinstance(t, dict)]
+    return doc if isinstance(doc, dict) else {}
+
+
+def load_bank(path: Path = BANK) -> list[dict]:
+    return [t for t in load_bank_doc(path).get("threads") or [] if isinstance(t, dict)]
 
 
 # ── Host oracles ────────────────────────────────────────────────────────────
@@ -67,6 +73,12 @@ class Host:
         if "me" not in self._cache:
             self._cache["me"] = self._get("/people/me/")
         return self._cache["me"]
+
+    def leave_balance(self) -> dict:
+        """Self leave balance (the ``get_my_leave_balance`` tool's payload)."""
+        if "lb" not in self._cache:
+            self._cache["lb"] = self._get("/people/me/leave-balance/")
+        return self._cache["lb"]
 
     def roster(self) -> list[dict]:
         """Active employees, one list pass. Rows are the ``emp:<no>`` oracle."""
@@ -140,6 +152,8 @@ class Host:
     def obj(self, ref: str) -> Any:
         if ref == "me":
             return self.me()
+        if ref in ("lb", "leave-balance", "leave_balance"):
+            return self.leave_balance()
         if ref.startswith("emp:"):
             return self.employee(ref[4:])
         raise ValueError(f"unknown object ref {ref!r}")
@@ -176,6 +190,100 @@ def _first_int(text: str) -> int | None:
     return int(found[0]) if found else None
 
 
+_NUM = re.compile(r"\d+(?:\.\d+)?")
+
+
+def _first_number(text: str | None) -> str | None:
+    """First number in the reply, decimals kept (``174.731`` stays whole)."""
+    found = _NUM.findall(text or "")
+    return found[0] if found else None
+
+
+def _reply_language(text: str | None) -> str:
+    """The engine's reply-language verdict (IRP-7; same function the contract names)."""
+    from ai.engine.cognition.turn.language import detect_reply_language
+
+    return detect_reply_language(text or "")
+
+
+#: An explicit "I don't have it" is a pass signal for an absent field (IB-03/
+#: IF-05): the answer may say unknown, it may not invent. These live in the
+#: eval bank, never in ``engine/**`` (ADR-0050).
+_UNKNOWN_EN = (
+    "doesn't carry", "does not carry", "don't have", "do not have", "not on file",
+    "no record", "not available", "unavailable", "unknown", "cannot find",
+    "can't find", "not in your profile", "not stored", "not held", "no such field",
+    "contact hr", "check with hr", "reach out to hr", "speak to hr",
+)
+_UNKNOWN_AR = (
+    "لا يحمل", "لا يحتوي", "لا يحتوى", "لا يتضم", "لا يتوفر", "لا تتوفر",
+    "لا توجد", "لا يوجد", "غير متوفر", "غير متوفّر", "غير موجود", "غير مدرج",
+    "غير متاح", "لا أعرف", "ليس في", "ليس لدي", "تواصل مع الموارد",
+    "تواصل مع قسم", "تواصل مع فريق", "يمكنك الرجوع إلى", "الرجوع إلى الموارد",
+    "راجع الموارد", "يمكنك مراجعة",
+)
+
+#: A raw record dump echoes host keys instead of answering (IB-03/IF-04).
+_RAW_DUMP = re.compile(
+    r"(?i)(?:^|[\s,{])(?:id|employee_no|is_active|full_name|basic_salary|"
+    r"job_title|org_unit|manager)\s*[=:]"
+)
+
+#: Field labels that, three-or-more in one table header, mean a whole-record
+#: dump (a table of ``الاسم | الرقم الوظيفي | …``), not an answer.
+_RAW_DUMP_FIELDS = frozenset({
+    "employee_no", "full_name", "job_title", "org_unit", "is_active", "basic_salary",
+    "employee number", "org unit", "job title", "full name", "active status",
+    "basic salary", "الرقم الوظيفي", "الاسم", "المسمى الوظيفي", "الوحدة التنظيمية",
+    "الإدارة", "المدير", "حالة الحساب", "الراتب الأساسي",
+})
+
+
+def _raw_dump(text: str | None) -> bool:
+    """True when the reply is a host record dump, not an answer."""
+    raw = text or ""
+    if _RAW_DUMP.search(raw):
+        return True
+    folded = {f.casefold() for f in _RAW_DUMP_FIELDS}
+    for line in raw.splitlines():
+        cells = [c.strip() for c in line.split("|") if c.strip()]
+        if len(cells) < 3:
+            continue
+        hits = sum(1 for c in cells if c.casefold() in folded or c in _RAW_DUMP_FIELDS)
+        if hits >= 3:
+            return True
+    return False
+
+#: A plan card is a ``form`` of these kinds; a clarify ``choice`` is not a plan.
+_PLAN_KINDS = frozenset({"plan_proposal", "plan", "plan_card"})
+
+
+def _says_unknown(text: str | None) -> bool:
+    raw = text or ""
+    low = raw.casefold()
+    return any(p.casefold() in low for p in _UNKNOWN_EN) or any(p in raw for p in _UNKNOWN_AR)
+
+
+def _tool_payloads(meta: dict) -> list:
+    """The payload the turn was shown (tool digest + trace), for grounding."""
+    payloads: list = []
+    digest = meta.get("tool_digest")
+    if digest:
+        payloads.append(digest)
+    for trace in meta.get("tool_trace") or []:
+        if not isinstance(trace, dict):
+            continue
+        for key in ("input", "output", "digest", "tool_digest"):
+            if trace.get(key):
+                payloads.append(trace[key])
+    return payloads
+
+
+def _plan_kind(meta: dict) -> str:
+    form = meta.get("form") if isinstance(meta.get("form"), dict) else {}
+    return str(form.get("kind") or "")
+
+
 def check_turn(spec: dict, reply: str, meta: dict, host: Host) -> list[str]:
     """Failed check descriptions for one turn. Empty when the turn passed."""
     from ai.engine.cognition.turn.grounding import ungrounded_numbers
@@ -198,6 +306,12 @@ def check_turn(spec: dict, reply: str, meta: dict, host: Host) -> list[str]:
         decided = str((meta.get("turn_meter") or {}).get("turn_decision") or "")
         if decided in spec["decision_not"]:
             misses.append(f"decision_not {spec['decision_not']} got={decided}")
+    if spec.get("decision_is"):
+        want = spec["decision_is"]
+        wants = [want] if isinstance(want, str) else [str(w) for w in want]
+        decided = str((meta.get("turn_meter") or {}).get("turn_decision") or "")
+        if decided not in wants:
+            misses.append(f"decision_is {wants} got={decided}")
     if spec.get("int_equals"):
         want = host.resolve(spec["int_equals"])
         got = _first_int(text)
@@ -216,6 +330,19 @@ def check_turn(spec: dict, reply: str, meta: dict, host: Host) -> list[str]:
                 prose = prose.replace(str(value), "")
         if not _mostly_arabic(prose):
             misses.append("arabic")
+    if spec.get("language"):
+        # IRP-7: reply language = message language, via the engine's own
+        # detector (turn/language.py: arabic_ratio >= 0.4 -> ar), not a local
+        # heuristic. Recorded per turn in the evidence.
+        from ai.engine.cognition.turn.language import detect_reply_language
+
+        want = str(spec["language"]).casefold()
+        got = detect_reply_language(text)
+        if want in ("en", "ar"):
+            if got != want:
+                misses.append(f"language {want} got={got}")
+        else:
+            misses.append(f"language {want!r} unknown")
     if spec.get("numbers_from"):
         payloads = [host.obj(ref) for ref in spec["numbers_from"]]
         bad = ungrounded_numbers(text, payloads)
@@ -244,6 +371,36 @@ def check_turn(spec: dict, reply: str, meta: dict, host: Host) -> list[str]:
             if isinstance(table, dict) and not (table.get("rows") or []):
                 misses.append("table_nonempty")
                 break
+    # ── Intention-bank checks (IB-01/03/07/10; contract §5) ────────────────
+    if spec.get("no_fallthrough") and str(meter.get("v21_miss") or "") in FALLTHROUGH_REASONS:
+        misses.append(f"no_fallthrough got={meter.get('v21_miss')}")
+    if spec.get("numbers_grounded"):
+        payloads = _tool_payloads(meta)
+        for ref in spec.get("ground_objects") or []:
+            payloads.append(host.obj(ref))
+        bad = ungrounded_numbers(text, payloads)
+        if bad:
+            misses.append(f"numbers_grounded {bad}")
+    if spec.get("field_or_unknown"):
+        ref = spec["field_or_unknown"]
+        value = host.resolve(ref)
+        if not (value not in (None, "") and str(value) in text) and not _says_unknown(text):
+            misses.append(f"field_or_unknown {ref}={value!r}")
+    if spec.get("unknown_required") and not _says_unknown(text):
+        misses.append("unknown_required")
+    if spec.get("no_raw_dump") and _raw_dump(text):
+        misses.append("no_raw_dump")
+    kind = _plan_kind(meta)
+    if spec.get("no_plan_card") and kind in _PLAN_KINDS:
+        misses.append(f"no_plan_card got={kind}")
+    if spec.get("plan_card") and kind not in _PLAN_KINDS:
+        misses.append(f"plan_card got={kind!r}")
+    if spec.get("plan_or_handoff"):
+        has_plan = kind in _PLAN_KINDS
+        decision = str(meter.get("turn_decision") or "")
+        has_handoff = decision == "handoff_agent" or bool(meta.get("action") or meta.get("actions"))
+        if not (has_plan or has_handoff):
+            misses.append(f"plan_or_handoff plan={has_plan} handoff={has_handoff} decision={decision}")
     return misses
 
 
@@ -398,7 +555,8 @@ def _call(method: str, path: str, **kwargs):
     return code, payload
 
 
-def run_thread(thread: dict, token: str, host: Host, *, quiet: bool = False) -> dict:
+def run_thread(thread: dict, token: str, host: Host, *, quiet: bool = False, mode: str | None = None) -> dict:
+    dialect = mode or thread.get("mode") or "ask"
     status, conv = _call(
         "POST", "/ai/workspace/conversations/", token=token,
         body={"title": f"Chat retest · {thread['id']}", "conversation_type": "chat"}, timeout=30,
@@ -411,7 +569,7 @@ def run_thread(thread: dict, token: str, host: Host, *, quiet: bool = False) -> 
         started = time.monotonic()
         code, payload = _call(
             "POST", f"/ai/workspace/conversations/{conv['id']}/messages/", token=token,
-            body={"content": spec["say"], "pulse_mode": "ask"}, timeout=180,
+            body={"content": spec["say"], "pulse_mode": dialect}, timeout=180,
         )
         seconds = round(time.monotonic() - started, 2)
         reply, meta = assistant_text(payload if isinstance(payload, dict) else {})
@@ -423,6 +581,12 @@ def run_thread(thread: dict, token: str, host: Host, *, quiet: bool = False) -> 
             "seconds": seconds,
             "llm_calls": meter.get("llm_calls"),
             "turn_decision": meter.get("turn_decision"),
+            "v21_miss": str(meter.get("v21_miss") or ""),
+            "fell_through": str(meter.get("v21_miss") or "") in FALLTHROUGH_REASONS,
+            "plan_kind": _plan_kind(meta),
+            "number": _first_number(reply),
+            "language": _reply_language(reply),
+            "mode": dialect,
             "tools": [t.get("input") for t in meta.get("tool_trace") or [] if isinstance(t, dict)],
             "misses": misses,
             "pass": not misses,
@@ -435,17 +599,30 @@ def run_thread(thread: dict, token: str, host: Host, *, quiet: bool = False) -> 
     if thread.get("no_host_write"):
         leave_after = host_leave_count(token)
         wrote = leave_before != leave_after
-    passed = all(t["pass"] for t in turns) and not wrote
+    stable = _stable_across_turns(turns) if thread.get("stable") else None
+    if stable is False:
+        turns[-1]["misses"] = list(turns[-1]["misses"]) + ["stable pass^3"]
+        turns[-1]["pass"] = False
+    passed = all(t["pass"] for t in turns) and not wrote and stable is not False
     return {
         "id": thread["id"],
         "closes": list(thread.get("closes") or []),
         "objectives": list(thread.get("objectives") or []),
+        "surface": thread.get("surface"),
+        "mode": dialect,
         "conversation_id": str(conv["id"]),
         "host_write": wrote,
+        "stable": stable,
         "turns": turns,
         "pass": passed,
         "volume": bool(thread.get("volume")),
     }
+
+
+def _stable_across_turns(turns: list[dict]) -> bool:
+    """IB-11 ``pass^3``: the first figure is the same on every repeat."""
+    numbers = [t.get("number") for t in turns]
+    return bool(numbers) and numbers[0] is not None and all(n == numbers[0] for n in numbers)
 
 
 def summarize(threads: list[dict]) -> dict:

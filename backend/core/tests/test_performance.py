@@ -212,16 +212,24 @@ class OrgUnitNPlusOneTest(TestCase, NPlusOneListMixin):
     def setUp(self):
         self._make_admin_client()
         self._seed = 0
+        self._root = None
 
     def _make_org_units(self, n):
-        """Create n top-level org units each with a child and grandchild."""
+        """Grow a depth-3 hierarchy under the single ADR-0028 deployment root.
+
+        ADR-0028 allows exactly one active parentless OrgUnit per deployment,
+        so the two calls grow ONE lazily-created root and add a depth-3
+        hierarchy per iteration: root -> child -> grandchild. The unit count
+        still grows between the ``small`` and ``large`` calls, and the shape
+        matches production (single root, deep tree) without redefining the
+        invariant.
+        """
+        if self._root is None:
+            self._root = OrgUnit.objects.create(name="OU_Root", slug="ou-root")
         for i in range(n):
-            root = OrgUnit.objects.create(
-                name=f"OU_Root_{self._seed}", slug=f"ou-root-{self._seed}"
-            )
             child = OrgUnit.objects.create(
                 name=f"OU_Child_{self._seed}", slug=f"ou-child-{self._seed}",
-                parent=root,
+                parent=self._root,
             )
             OrgUnit.objects.create(
                 name=f"OU_Grand_{self._seed}", slug=f"ou-grand-{self._seed}",

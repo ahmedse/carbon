@@ -1,0 +1,79 @@
+# IB-07 — Ask/Plan boundary (PULSE-INTENTION-CONTRACT §5, IF-06).
+#
+# Live Chat, read-only. The same 8 threads are mirrored in both dials
+# (``modes: [ask, plan]``; the runner opens a fresh conversation per dial, so
+# 8 threads x 1 turn x 2 dials = 16 scored rows). A **read** must never get a
+# plan card (``no_plan_card``); a **goal** must produce exactly one
+# plan/handoff (``plan_or_handoff``). Chat Plan drafts; it never host-mutates
+# (ADR-0046).
+#
+# Text here, never in engine/**. Threshold 100% rows; read -> no plan card;
+# goal -> one plan/handoff. Language is IB-02's axis, so it is not asserted.
+
+bank: IB-07
+purpose: "Ask/Plan boundary — a read never gets a plan card; a goal gets one plan/handoff."
+tier: live_intention
+surface: chat
+sample_threads: 8
+sample_turns: 16
+mirror_modes: [ask, plan]
+language_threads: {en: 4, ar: 4}
+threshold: "100% rows; read -> no plan card; goal -> one plan/handoff"
+run: live_read
+
+threads:
+  - id: ib07-read-en
+    modes: [ask, plan]
+    turns:
+      - say: "What is my annual leave balance?"
+        no_plan_card: true
+        not_degraded: true
+
+  - id: ib07-read-en-2
+    modes: [ask, plan]
+    turns:
+      - say: "What job title does my record show?"
+        no_plan_card: true
+        not_degraded: true
+
+  - id: ib07-read-ar
+    modes: [ask, plan]
+    turns:
+      - say: "ما هو رصيد إجازاتي السنوية؟"
+        no_plan_card: true
+        not_degraded: true
+
+  - id: ib07-read-ar-2
+    modes: [ask, plan]
+    turns:
+      - say: "ما هو مسماي الوظيفي في السجل؟"
+        no_plan_card: true
+        not_degraded: true
+
+  - id: ib07-goal-en
+    modes: [ask, plan]
+    turns:
+      - say: "Apply for 3 days of annual leave next week."
+        plan_or_handoff: true
+        not_degraded: true
+
+  - id: ib07-goal-en-2
+    modes: [ask, plan]
+    turns:
+      - say: "Submit a salary advance request for me of 100."
+        plan_or_handoff: true
+        not_degraded: true
+
+  - id: ib07-goal-ar
+    modes: [ask, plan]
+    turns:
+      - say: "قدّم طلب إجازة سنوية 3 أيام الأسبوع القادم."
+        plan_or_handoff: true
+        not_degraded: true
+
+  - id: ib07-goal-ar-2
+    modes: [ask, plan]
+    turns:
+      - say: "أريد التقدم بطلب سلفة راتب بمبلغ 100."
+        plan_or_handoff: true
+        not_degraded: true

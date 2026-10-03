@@ -1,0 +1,351 @@
+{
+  "tier": "live_intention",
+  "bank": "IB-04",
+  "bank_file": "chat_intention_bank_ib04.yaml",
+  "bank_purpose": null,
+  "run_at": "2026-10-03T12:53:21.677258+00:00",
+  "surface": "chat",
+  "user": "emp_1067",
+  "base": "http://127.0.0.1:8009/carbon-api",
+  "release": {
+    "tag": "",
+    "process_brand": "nibras",
+    "pack": "nibras",
+    "pack_version": "17",
+    "extra_packs": [],
+    "loaded_packs": [
+      "aast-med",
+      "carbon",
+      "eduos",
+      "nibras"
+    ],
+    "catalogs": [
+      "aast-med",
+      "carbon",
+      "eduos",
+      "nibras"
+    ],
+    "pulse_enabled": true,
+    "image_built_at": null,
+    "process_started_at": "2026-10-03T12:37:42.709934+00:00",
+    "deployed_at": null
+  },
+  "threads": [
+    {
+      "id": "ib04-greet-en",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "a405458f-3df1-44ec-a4a8-8c2098380c49",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "Hello! How are you today?",
+          "reply": "Hello! I'm well, thank you — ready to help. I'm Nibras, your People & Payroll assistant at GOFSCO. I can help with your leave balance, payslips, loans, attendance, profile, and HR questions. What would you like to look at?",
+          "seconds": 3.37,
+          "llm_calls": 1,
+          "turn_decision": "answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "en",
+          "mode": "ask",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib04-greet-ar",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "a91df092-1070-447b-a933-2497554d9b17",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "مرحباً، كيف حالك اليوم؟",
+          "reply": "أهلاً بك! بخير، شكراً لسؤالك. أنا مساعد نِبراس للموارد البشرية والرواتب في GOFSCO — أقدر أساعدك في استفساراتك عن الإجازات، القسائم، القروض، الحضور، وبياناتك الشخصية. كيف أقدر أخدمك اليوم؟",
+          "seconds": 3.47,
+          "llm_calls": 1,
+          "turn_decision": "answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "ar",
+          "mode": "ask",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib04-greet-en-2",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "b6ea49a7-6960-459b-a647-729897673236",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "Hi there, how's it going?",
+          "reply": "Hi! All good here — ready when you are. I can help with your leave balance, payslips, loans, attendance, or your profile. What would you like to look at?",
+          "seconds": 3.83,
+          "llm_calls": 1,
+          "turn_decision": "answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "en",
+          "mode": "ask",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib04-greet-ar-2",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "745cd8d0-0a39-48af-a009-e953c692a654",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "أهلاً، كيف الأمور معك؟",
+          "reply": "أهلاً بك! الأمور بخير، شكراً لسؤالك. أنا مساعد نبراس للموارد البشرية والرواتب في GOFSCO — أقدر أساعدك في رصيد إجازاتك، قسائم رواتبك، قروضك، وسجل حضورك، أو أشرح لك أي سياسة أو إجراء. تحت أمرك.",
+          "seconds": 2.95,
+          "llm_calls": 1,
+          "turn_decision": "answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "ar",
+          "mode": "ask",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib04-oos-en",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "2b4a34f4-497f-40d9-91ff-d18a369074f1",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "Show me my carbon footprint.",
+          "reply": "I'm the Nibras People & Payroll assistant — that topic is outside my scope. I can help with payroll runs, payslips, GOSI/WPS, leave, loans, attendance, and HR advisory. What would you like to know?",
+          "seconds": 1.11,
+          "llm_calls": 0,
+          "turn_decision": "refuse",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "en",
+          "mode": "ask",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib04-oos-ar",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "78def75b-b34d-457e-aa42-cd4918c6b3c4",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "اعرض لي carbon footprint الخاص بي.",
+          "reply": "أنا مساعد نبراس للموارد البشرية والرواتب — هذا الموضوع خارج نطاقي. يمكنني المساعدة في مسيرات الرواتب، وقسائم الراتب، والتأمينات الاجتماعية وحماية الأجور، والإجازات، والقروض، والحضور، والاستشارات الخاصة بالموارد البشرية. بماذا يمكنني مساعدتك؟",
+          "seconds": 0.99,
+          "llm_calls": 0,
+          "turn_decision": "refuse",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "ar",
+          "mode": "ask",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib04-inscope-loan-en",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "90e98fba-ccd0-4ab4-8f54-b06abb3b2309",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "Can I apply for a loan?",
+          "reply": "I can help you prepare a loan request, but Chat does not submit or change records in the system.\n\nTo make the change, use one of these paths:\n• **Plan** — switch the dial to Plan. Ask does not create tasks.\n• **My** — open Open My Requests and submit there.",
+          "seconds": 5.09,
+          "llm_calls": 2,
+          "turn_decision": "handoff_agent",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "en",
+          "mode": "ask",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib04-inscope-loan-ar",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "667a5a3f-c647-4039-a23f-2362d3465b50",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "أريد قرضاً.",
+          "reply": "جهّزت تفاصيل طلب قرض. لإرسال الطلب بدّل المفتاح إلى «خطّة» — سأنقل هذه التفاصيل معك. أو قدّم من تطبيقاتي. وضع «الدردشة» لا يُرسل ولا يغيّر السجلات. وضع السؤال لا يُنشئ مهاماً.",
+          "seconds": 2.27,
+          "llm_calls": 1,
+          "turn_decision": "handoff_agent",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "ar",
+          "mode": "ask",
+          "tools": [
+            "api_name=submit_my_loan"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib04-inscope-leave-en",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "c882c105-1e88-4363-ae70-6add69706374",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "How do I request annual leave?",
+          "reply": "I can help you prepare a leave request, but Chat does not submit or change records in the system.\n\nTo make the change, use one of these paths:\n• **Plan** — switch the dial to Plan. Ask does not create tasks.\n• **My** — open Open My Leave and submit there.",
+          "seconds": 6.83,
+          "llm_calls": 0,
+          "turn_decision": "handoff_agent",
+          "v21_miss": "ungrounded",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "en",
+          "mode": "ask",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib04-inscope-leave-ar",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "d1aed135-80ec-4749-8af5-97fe7aa3217f",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "كيف أطلب إجازة سنوية؟",
+          "reply": "يمكنني مساعدتك في تجهيز طلب إجازة، لكن الدردشة لا تُرسل ولا تغيّر السجلات في النظام. لإتمام التغيير استخدم أحد المسارين: • **الخطّة** — بدّل المفتاح إلى «خطّة». وضع السؤال لا يُنشئ مهاماً. • **تطبيقاتي** — افتح «فتح إجازاتي» وقدّم الطلب هناك.",
+          "seconds": 8.21,
+          "llm_calls": 3,
+          "turn_decision": "handoff_agent",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "ar",
+          "mode": "ask",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    }
+  ],
+  "findings": {},
+  "objectives": {
+    "C4": true
+  },
+  "latency": {
+    "turns": 10,
+    "p50_ms": 3420,
+    "over_4s": 3,
+    "llm_calls_p50": 1.0,
+    "llm_calls_max": 3
+  },
+  "total": 10,
+  "passed": 10,
+  "pass": true
+}

@@ -73,7 +73,7 @@ describe('Journey engagement wired into the page', () => {
         <JourneyPage />
       </MemoryRouter>,
     );
-    expect(screen.getByTestId('journey-arc')).toBeInTheDocument();
+    expect(screen.getByTestId('journey-scenario-progress')).toBeInTheDocument();
     expect(screen.getByTestId('journey-scenario-card')).toBeInTheDocument();
     expect(screen.getByTestId('journey-mission')).toHaveTextContent('Bring many rows');
   });

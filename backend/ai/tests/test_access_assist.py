@@ -98,8 +98,9 @@ def test_effective_capabilities_org_subtree_includes_scoped(
 def test_effective_capabilities_excludes_outside_subtree(
     make_user, make_role, make_org
 ):
-    org = make_org("Engineering")
-    other = make_org("Marketing")
+    root = make_org("Root")
+    org = make_org("Engineering", parent=root)
+    other = make_org("Marketing", parent=root)
     user = make_user("eng-dq")
     make_role(user, "dq_lead", org=org)
     result = access_assist.effective_capabilities(user.id, org_unit_ids=[other.id])
@@ -149,8 +150,9 @@ def test_users_with_capability_unknown_key(db):
 
 
 def test_users_with_capability_scoped(make_user, make_role, make_org):
-    org = make_org("Engineering")
-    other = make_org("Marketing")
+    root = make_org("Root")
+    org = make_org("Engineering", parent=root)
+    other = make_org("Marketing", parent=root)
     user = make_user("eng-dq")
     make_role(user, "dq_lead", org=org)
     in_scope = access_assist.users_with_capability(
@@ -248,8 +250,9 @@ def test_flag_access_anomalies_dormant_grant(make_user, make_role, make_org):
 
 
 def test_flag_access_anomalies_respects_scope(make_user, make_role, make_org):
-    org = make_org("Engineering")
-    other = make_org("Marketing")
+    root = make_org("Root")
+    org = make_org("Engineering", parent=root)
+    other = make_org("Marketing", parent=root)
     user = make_user("scoped-admin")
     make_role(user, "admin", org=org)  # scoped wildcard — NOT an over_grant
     scoped = access_assist.flag_access_anomalies(org_unit_ids=[other.id])

@@ -17,9 +17,18 @@ def reference_value(db):
 
 
 @pytest.fixture
-def org_unit(db):
+def root_org(db):
+    """ADR-0028 single active root shared by the two org fixtures."""
+    return OrgUnit.objects.create(
+        name='Root', slug='root-eng', code='ROOT', org_type='company',
+    )
+
+
+@pytest.fixture
+def org_unit(db, root_org):
     return OrgUnit.objects.create(
         name='Engineering', slug='engineering', code='ENG', org_type='department',
+        parent=root_org,
     )
 
 
@@ -36,7 +45,7 @@ def test_sequential_allocations_increment(reference_value, org_unit):
 
 
 @pytest.mark.django_db
-def test_sequence_is_global_across_units_and_types(reference_value, org_unit):
+def test_sequence_is_global_across_units_and_types(reference_value, org_unit, root_org):
     # A single global sequence means two different org units / corr types can
     # never produce the same reference number (the old per-unit counter bug).
     other = ReferenceValue.objects.create(
@@ -45,6 +54,7 @@ def test_sequence_is_global_across_units_and_types(reference_value, org_unit):
     )
     other_org = OrgUnit.objects.create(
         name='Finance', slug='finance', code='FIN', org_type='department',
+        parent=root_org,
     )
     fmt = '{PREFIX}-{YEAR}-{SEQ:04d}'
     first = allocate_reference_no(numbering_format=fmt)

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -31,7 +32,248 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 EVIDENCE = REPO_ROOT / "docs" / "pulse" / "evidence"
 OPERATOR_FILE = "PV2-chat-operator-2026-09-26.json"
 RETEST_GLOB = "PV2-chat-retest-*.json"
+INTENTION_GLOB = "PV2-intention-IB*.json"
+INTENTION_BLOCKED_GLOB = "PV2-intention-blocked-*.json"
+
+# ── Intention bank registry (PULSE-INTENTION-CONTRACT §5) ──────────────────
+# One registry: a new bank is a YAML in this directory. The runner
+# (``chat_intention_retest``) and this scorer both read the discovery below, so
+# adding a bank never means editing a hardcoded tuple in two places.
+INTENTION_BANK_GLOB = "chat_intention_bank_ib*.yaml"
+INTENTION_BANKS_DIR = Path(__file__).resolve().parent
+_BANK_FILE_RE = re.compile(r"^chat_intention_bank_(ib\d{2})\.yaml$")
+
+#: IB-09 is a unit bank (pytest); it has no live YAML and is reported apart.
+INTENTION_UNIT_BANKS: tuple[str, ...] = ("IB-09",)
+
+#: IF-* failure class -> owning banks (contract §3). This is the taxonomy
+#: mapping, not the bank registry: new banks are still auto-discovered.
+INTENTION_IF_OWNERS: dict[str, tuple[str, ...]] = {
+    "if_01": ("IB-04", "IB-05"),
+    "if_02": ("IB-04",),
+    "if_03": ("IB-06",),
+    "if_04": ("IB-03",),
+    "if_05": ("IB-03",),
+    "if_06": ("IB-07", "IB-06"),
+    "if_07": ("IB-08",),
+    "if_08": ("IB-10",),
+    "if_09": ("IB-11",),
+}
+
+
+def discover_intention_banks(directory: Path | None = None) -> dict[str, Path]:
+    """Map ``IB-nn`` -> bank YAML by globbing ``chat_intention_bank_ib*.yaml``.
+
+    The single registration point for a new intention bank: drop the file in
+    this directory and the runner, the bench, and the tests all see it. IB-04
+    and IB-05 are discovered exactly like every other bank (their YAML is
+    unchanged).
+    """
+    directory = Path(directory) if directory else INTENTION_BANKS_DIR
+    banks: dict[str, Path] = {}
+    for path in sorted(directory.glob(INTENTION_BANK_GLOB)):
+        match = _BANK_FILE_RE.match(path.name)
+        if not match:
+            continue
+        # "ib04" -> "IB-04"
+        banks[f"IB-{match.group(1)[2:]}"] = path
+    return banks
+
+
+#: Live/defined banks, discovered (not hardcoded).
+INTENTION_BANKS: tuple[str, ...] = tuple(discover_intention_banks())
 CLOSE_RUNS = 3
+
+#: A turn whose v21 understand recorded one of these reasons did not finish
+#: inside the Decision and is counted as a fallthrough (V21-1 fallthrough /
+#: unrepairable, V21-2 committed route whose v21 exit is superseded). This is a
+#: counter, not a pass bar: it never moves a thread, an objective, or ``honest``.
+FALLTHROUGH_REASONS: tuple[str, ...] = (
+    "fallthrough",
+    "unrepairable",
+    "committed_route_skipped",
+)
+
+
+def _turn_fell_through(turn: dict[str, Any]) -> bool | None:
+    """(fell) for one recorded turn, or None when that turn did not measure it."""
+    if not isinstance(turn, dict):
+        return None
+    if "fell_through" in turn:
+        return bool(turn.get("fell_through"))
+    if "v21_miss" in turn:
+        return str(turn.get("v21_miss") or "") in FALLTHROUGH_REASONS
+    return None
+
+
+def fallthrough_count(retests: list[dict[str, Any]]) -> dict[str, Any]:
+    """How many recorded turns fell through (V21-1 + V21-2).
+
+    Reads the per-turn marker a run records (``fell_through`` / ``v21_miss``).
+    A run that never recorded the marker is not counted as zero: the honest
+    status stays ``missing`` until a live bank measures it. Reported on its
+    own; it never changes a pass bar or the honest verdict (RULE_36).
+    """
+    measured = fell = 0
+    runs = 0
+    for run in retests:
+        run_measured = False
+        for thread in run.get("threads") or []:
+            for turn in thread.get("turns") or []:
+                got = _turn_fell_through(turn)
+                if got is None:
+                    continue
+                measured += 1
+                run_measured = True
+                fell += 1 if got else 0
+        if run_measured:
+            runs += 1
+    if not measured:
+        return {"status": "missing", "count": None, "turns": 0, "runs": 0}
+    return {
+        "status": "fail" if fell else "reached",
+        "count": fell,
+        "turns": measured,
+        "runs": runs,
+    }
+
+
+def load_intention_runs(root: Path = EVIDENCE) -> list[dict[str, Any]]:
+    """IB-04/IB-05 live runs, oldest first. A partial run never counts."""
+    runs = []
+    for path in sorted(root.glob(INTENTION_GLOB)):
+        try:
+            row = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(row, dict) and row.get("tier") == "live_intention" and row.get("bank"):
+            row["_file"] = path.name
+            runs.append(row)
+    return sorted(runs, key=lambda r: str(r.get("run_at") or ""))
+
+
+def _intention_run_pass(row: dict[str, Any]) -> bool:
+    threads = row.get("threads") or []
+    return bool(threads) and all(t.get("pass") for t in threads if isinstance(t, dict))
+
+
+def intention_bank_status(runs: list[dict[str, Any]], bank_id: str) -> dict[str, Any]:
+    """Honest bank status: missing / partial / fail / reached over CLOSE_RUNS.
+
+    A bank with no live run is ``missing``, never zero-fail. ``reached`` needs
+    the last ``CLOSE_RUNS`` full runs to pass every thread.
+    """
+    mine = [r for r in runs if r.get("bank") == bank_id]
+    if not mine:
+        return {"status": "missing", "runs": 0, "passed": 0, "of": 0, "last": None}
+    window = mine[-CLOSE_RUNS:]
+    passed = sum(1 for r in window if _intention_run_pass(r))
+    if not _intention_run_pass(mine[-1]):
+        status = "fail"
+    elif len(window) == CLOSE_RUNS and passed == CLOSE_RUNS:
+        status = "reached"
+    else:
+        status = "partial"
+    return {
+        "status": status,
+        "runs": len(mine),
+        "passed": passed,
+        "of": len(window),
+        "last": mine[-1].get("_file"),
+    }
+
+
+def _intention_class_status(*banks: dict[str, Any]) -> str:
+    """IF-* status from its owning banks. ``fixed`` needs every bank reached.
+
+    ``seen`` needs a dated live run that failed a turn; ``missing`` is no live
+    run at all; anything else is ``pending``.
+    """
+    statuses = [b.get("status") for b in banks]
+    if all(s == "reached" for s in statuses):
+        return "fixed"
+    if all(s == "missing" for s in statuses):
+        return "missing"
+    if any(s == "fail" for s in statuses):
+        return "seen"
+    return "pending"
+
+
+def _intention_ladder(banks: dict[str, dict[str, Any]]) -> dict[str, str]:
+    """``IR0``–``IR5`` each scored by its own exit gate (contract §6).
+
+    Reported per level, as the contract's Phase 4 does (``IR2`` reached while
+    ``IR1`` is not). Entry is cumulative on paper; the report never hides a
+    lower level's miss behind a higher pass, so no level is inferred. ``IR5``
+    additionally needs a locked paraphrase bank, which is not built: missing.
+    """
+    def reached(*ids: str) -> bool:
+        return all((banks.get(i) or {}).get("status") == "reached" for i in ids)
+
+    return {
+        "ir0": "reached",  # contract committed + unit bank green (this file)
+        "ir1": "reached" if reached("IB-10") else "not reached",
+        "ir2": "reached" if reached("IB-04", "IB-05") else "not reached",
+        "ir3": "reached" if reached("IB-03", "IB-01") else "not reached",
+        "ir4": "reached" if reached("IB-07", "IB-08") else "not reached",
+        # IR5 also needs the locked ≥5-paraphrase/adversarial bank: not built.
+        "ir5": "not reached",
+    }
+
+
+def intention_banks(root: Path = EVIDENCE) -> dict[str, Any]:
+    """Every discovered intention bank + IF-* classes + IR0–IR5. Never merged.
+
+    Reads the live intention evidence only. A bank with no live run is
+    ``missing``, never zero-fail; ``reached`` needs ``CLOSE_RUNS`` consecutive
+    full runs. IB-09 is a unit bank (pytest) and is reported apart. This block
+    never changes a Chat objective, the honest verdict, or the Ask 10/10 score
+    (RULE_36).
+    """
+    runs = load_intention_runs(root)
+    banks = {bank_id: intention_bank_status(runs, bank_id) for bank_id in INTENTION_BANKS}
+    unit_banks = {
+        bank_id: {
+            "status": "unit",
+            "runs": 0,
+            "passed": 0,
+            "of": 0,
+            "last": None,
+            "evidence": "backend/ai/tests/test_intention_banks.py",
+        }
+        for bank_id in INTENTION_UNIT_BANKS
+    }
+    classes = {
+        name: _intention_class_status(*(banks.get(b, {}) for b in owners))
+        for name, owners in INTENTION_IF_OWNERS.items()
+    }
+    blocked = None
+    files = sorted(root.glob(INTENTION_BLOCKED_GLOB))
+    if files:
+        try:
+            row = json.loads(files[-1].read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            row = {}
+        if isinstance(row, dict):
+            blocked = {
+                "file": files[-1].name,
+                "run_at": row.get("run_at"),
+                "reason": row.get("reason"),
+                "release": row.get("release"),
+            }
+    return {
+        "banks": banks,
+        "unit_banks": unit_banks,
+        **classes,
+        **_intention_ladder(banks),
+        "blocked": blocked,
+        "rule": (
+            "A bank with no live run is missing, never zero-fail. A bank reaches "
+            f"only after {CLOSE_RUNS} consecutive full live runs; a later fail "
+            "reopens it. IB-06 (write) needs STACK-HOLD and stays missing here. "
+            "IB-09 is unit. Reported, not merged into Ask 10/10 (RULE_36)."
+        ),
+    }
 
 
 def load_retests(root: Path = EVIDENCE) -> list[dict[str, Any]]:
@@ -415,6 +657,8 @@ def score_chat_bench(
             f"A week finding closes only after the last {CLOSE_RUNS} full live retest runs pass it."
         ),
         "l6_l7": "not scored — v21 rungs, not a Chat reliability claim",
+        "fallthrough": fallthrough_count(runs),
+        "intention": intention_banks(),
         "objectives": _dump(objectives),
         "metrics": _dump(metrics),
         "findings": [

@@ -7,12 +7,18 @@ import { useParams, Link } from "react-router-dom";
 import { Box, Typography, Paper, Button } from "@mui/material";
 import useDocumentTitle from "../hooks/useDocumentTitle";
 import HelpDocRenderer from "../help/HelpDocRenderer";
-import { getAppHelpDoc } from "../help/helpDocs";
+import AppGuides from "../help/AppGuides";
+import { getAppHelpDoc, getAppGuides } from "../help/helpDocs";
 
 export default function AppHelp() {
   const { appId } = useParams();
-  const doc = getAppHelpDoc(appId);
+  const guides = getAppGuides(appId);
+  const doc = guides.length > 0 ? guides[0].doc : getAppHelpDoc(appId);
   useDocumentTitle(doc ? doc.title : "Help");
+
+  if (guides.length > 0) {
+    return <AppGuides guides={guides} />;
+  }
 
   if (!doc) {
     return (

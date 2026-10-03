@@ -20,6 +20,7 @@ import AssignmentIcon from '@mui/icons-material/Assignment';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
+import FlagIcon from '@mui/icons-material/Flag';
 import SecurityIcon from '@mui/icons-material/Security';
 import LabelIcon from '@mui/icons-material/Label';
 import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
@@ -176,6 +177,17 @@ const ROUTE_CONFIG = {
     label: 'Coverage',
     icon: AccountTreeIcon,
     parent: '/carbon/console',
+  },
+  // User-facing rename only — the route + identifiers are unchanged.
+  '/carbon/admin/coverage-targets': {
+    label: 'Data completeness',
+    icon: FlagIcon,
+    parent: '/carbon/console',
+  },
+  '/carbon/admin/coverage-targets/:targetId': {
+    label: 'Data completeness target',
+    icon: FlagIcon,
+    parent: '/carbon/admin/coverage-targets',
   },
   '/carbon/analytics': {
     label: 'Analytics & Trends',

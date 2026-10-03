@@ -1,0 +1,116 @@
+# IB-03 — a read answers the asked field, or says unknown
+# (PULSE-INTENTION-CONTRACT §5, IF-04/IF-05; IRP-5).
+#
+# Live Chat Ask, read-only. A first-person read either states the asked host
+# field, or says plainly that the record does not carry it; it never dumps a
+# raw record and never invents a figure for a field the record lacks. Includes
+# the absent-field case (national ID, IBAN).
+#
+# Sample: 12 threads x 1 turn = 12 (6 EN / 6 AR). Threshold 100% threads;
+# field present or explicit unknown; no raw-record dump. Text here, never in
+# engine/**. Language is IB-02's axis, so it is not asserted here.
+#
+# Checks:
+#   field_or_unknown: <ref>  the host value appears, or an explicit unknown
+#   unknown_required: true   an absent field must be named as unknown
+#   no_raw_dump: true        no ``employee_no=``/table record echo
+#   numbers_grounded: true   an unknown must not carry an invented figure
+#   not_degraded: true
+
+bank: IB-03
+purpose: "A read answers the asked field, or says unknown; no raw dump."
+tier: live_intention
+surface: chat
+sample_threads: 12
+sample_turns: 12
+language_threads: {en: 6, ar: 6}
+threshold: "100% threads; field present or explicit unknown; no raw-record dump"
+run: live_read
+
+threads:
+  - id: ib03-title-en
+    turns:
+      - say: "What job title does my record show?"
+        field_or_unknown: me.job_title
+        no_raw_dump: true
+        not_degraded: true
+
+  - id: ib03-no-en
+    turns:
+      - say: "What is my employee number? Digits only."
+        field_or_unknown: me.employee_no
+        no_raw_dump: true
+        not_degraded: true
+
+  - id: ib03-name-en
+    turns:
+      - say: "What is my full name on the record?"
+        field_or_unknown: me.full_name
+        no_raw_dump: true
+        not_degraded: true
+
+  - id: ib03-manager-en
+    turns:
+      - say: "Who is my manager on the record? Name only."
+        field_or_unknown: me.manager
+        no_raw_dump: true
+        not_degraded: true
+
+  - id: ib03-org-en
+    turns:
+      - say: "Which org unit am I in? The unit name only."
+        field_or_unknown: me.org_unit
+        no_raw_dump: true
+        not_degraded: true
+
+  - id: ib03-nid-en
+    turns:
+      - say: "What is my national ID number?"
+        unknown_required: true
+        no_raw_dump: true
+        numbers_grounded: true
+        not_degraded: true
+
+  - id: ib03-title-ar
+    turns:
+      - say: "ما هو مسماي الوظيفي في السجل؟"
+        field_or_unknown: me.job_title
+        no_raw_dump: true
+        not_degraded: true
+
+  - id: ib03-no-ar
+    turns:
+      - say: "ما هو رقم الموظف الخاص بي؟ الرقم فقط."
+        field_or_unknown: me.employee_no
+        no_raw_dump: true
+        not_degraded: true
+
+  - id: ib03-name-ar
+    turns:
+      - say: "ما هو اسمي الكامل كما هو في السجل؟"
+        field_or_unknown: me.full_name
+        no_raw_dump: true
+        not_degraded: true
+
+  - id: ib03-manager-ar
+    turns:
+      - say: "من هو مديري في السجل؟ الاسم فقط."
+        field_or_unknown: me.manager
+        no_raw_dump: true
+        not_degraded: true
+
+  - id: ib03-nid-ar
+    turns:
+      - say: "ما هو رقم الهوية الوطنية الخاص بي؟"
+        unknown_required: true
+        no_raw_dump: true
+        numbers_grounded: true
+        not_degraded: true
+
+  - id: ib03-iban-ar
+    turns:
+      - say: "ما هو رقم الآيبان (IBAN) الخاص بي؟"
+        unknown_required: true
+        no_raw_dump: true
+        numbers_grounded: true
+        not_degraded: true

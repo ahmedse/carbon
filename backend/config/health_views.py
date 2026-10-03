@@ -42,11 +42,19 @@ def _pack_version(root: Path, pack_id: str) -> str | None:
 def release_payload() -> dict:
     """Read-only release identity for the shell tooltip and the deploy gate.
 
-    Pack ids come from directories that actually contain ``pack.yaml``.
-    A brand that falls back to another pack shows that pack id here.
+    ``loaded_packs`` / ``catalogs`` are honest disk listings: directories that
+    actually contain ``pack.yaml`` / ``api_catalog.yaml``.
+
+    ``extra_packs`` is a *policy* statement, not a disk listing: the packs the
+    running brand is authorized to load alongside its primary pack
+    (``ai.platform_bind.extra_packs_for_brand``), narrowed to those actually
+    mounted. Enumerating raw ``domain_packs/*`` here would over-report every
+    checked-out sibling pack and hide a broken isolation invariant — a nibras
+    cell must load no other platform pack.
     """
     from ai.instance_registry import active_brand, resolve_instance_id
     from ai.models.control_state import CONTAINMENT_FULL_STOP, PulseControlState
+    from ai.platform_bind import extra_packs_for_brand
 
     brand = active_brand()
     pack = resolve_instance_id()
@@ -61,6 +69,13 @@ def release_payload() -> dict:
                 loaded.append(child.name)
             if (child / "api_catalog.yaml").is_file():
                 catalogs.append(child.name)
+    # Authorized extras that are genuinely mounted (and never the primary pack).
+    loaded_set = set(loaded)
+    extra_packs = [
+        name
+        for name in extra_packs_for_brand(brand)
+        if name in loaded_set and name != pack
+    ]
     present = (root / pack / "pack.yaml").is_file()
     pulse_enabled = present
     try:
@@ -76,7 +91,7 @@ def release_payload() -> dict:
         "process_brand": brand,
         "pack": pack,
         "pack_version": _pack_version(root, pack),
-        "extra_packs": [name for name in loaded if name != pack],
+        "extra_packs": extra_packs,
         "loaded_packs": loaded,
         "catalogs": catalogs,
         "pulse_enabled": pulse_enabled,

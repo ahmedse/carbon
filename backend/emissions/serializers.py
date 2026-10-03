@@ -5,7 +5,7 @@ from rest_framework import serializers
 from django.utils import timezone
 from django.db.models import Sum
 from .models import ReportingPeriod, EmissionFactor, GWP, Calculation, CalculationRule, ReportConfig, VerificationRecord, SBTiTarget, CalculationAudit, ExportAudit, OrganizationalBoundary, BaseYear, RecalculationTrigger, InventorySource, InventorySourceStatus, CoverageGoal, CoverageAction, CoverageTarget, CoverageTask
-from .coverage_targets import task_evidence, probe_task, target_progress
+from .coverage_targets import co2e_unit_factor, task_evidence, probe_task, target_progress, task_closure
 
 
 class ReportingPeriodSerializer(serializers.ModelSerializer):
@@ -582,6 +582,7 @@ class CoverageTaskSerializer(serializers.ModelSerializer):
     stream_source_name = serializers.CharField(source='stream_source.source_name', read_only=True)
     factor_code = serializers.CharField(source='factor.code', read_only=True)
     evidence = serializers.SerializerMethodField()
+    closes = serializers.SerializerMethodField()
 
     class Meta:
         model = CoverageTask
@@ -590,6 +591,7 @@ class CoverageTaskSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at', 'created_by',
             'task_type_display', 'status_display', 'owner_username', 'owner_name',
             'data_table_name', 'stream_source_name', 'factor_code', 'evidence',
+            'closes',
         ]
 
     def get_owner_name(self, obj):
@@ -597,6 +599,10 @@ class CoverageTaskSerializer(serializers.ModelSerializer):
 
     def get_evidence(self, obj):
         return task_evidence(obj)
+
+    def get_closes(self, obj):
+        """The gap this task declares plus whether it is genuinely closed."""
+        return task_closure(obj)
 
     def validate(self, attrs):
         status_value = attrs.get('status', getattr(self.instance, 'status', 'open'))
@@ -670,8 +676,14 @@ class CoverageTargetSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({'goal_value': 'percent_lte_100'})
             if unit:
                 raise serializers.ValidationError({'goal_unit': 'percent_has_no_unit'})
-        elif kind == 'absolute' and not str(unit or '').strip():
-            raise serializers.ValidationError({'goal_unit': 'absolute_needs_unit'})
+        elif kind == 'absolute':
+            if not str(unit or '').strip():
+                raise serializers.ValidationError({'goal_unit': 'absolute_needs_unit'})
+            # An absolute goal is an EMISSIONS VALUE, not a coverage KPI: a
+            # free-text activity unit (kWh / litre / kg) cannot be compared to
+            # measured kgCO2e. Restrict it to a CO2e mass unit.
+            if co2e_unit_factor(unit) is None:
+                raise serializers.ValidationError({'goal_unit': 'absolute_unit_not_co2e'})
         if category is not None and '3' not in str(scope or ""):
             raise serializers.ValidationError({'scope3_category': 'category_without_scope3'})
 

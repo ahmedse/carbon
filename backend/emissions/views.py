@@ -1731,9 +1731,12 @@ class CoverageTargetViewSet(viewsets.ModelViewSet):
             'product': 'Carbon on AASTMT',
             'coverage_complete': False,
             'note': (
-                'Targets are declared goals. Progress is measured from streams '
-                'with a real row on that period, labelled measured_not_claimed. '
-                'This is not a coverage-complete claim.'
+                'Targets are declared goals. Progress counts only streams with a '
+                'real Calculation on that period (linked table populated) and at '
+                'or above the target quality floor, labelled measured_not_claimed. '
+                'Formal exclusions are reported separately and never make a target '
+                'read met. An absolute goal is an emissions-value figure, not a '
+                'coverage percent. This is not a coverage-complete claim.'
             ),
             'open_period': None if open_period is None else {
                 'id': open_period.id,

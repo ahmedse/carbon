@@ -1164,6 +1164,12 @@ api_catalog:
       The caller's own daily rows prefer list_my_attendance (self-scoped).
       Submitting a permission write is Agent / host UI, not this GET.
     empty_render: no_attendance_rows
+    value_labels:
+      status:
+        present: {en: present, ar: حاضر}
+        absent: {en: absent, ar: غائب}
+        leave: {en: leave, ar: إجازة}
+        permission: {en: permission, ar: إذن}
     examples:
       - {ar: "سجل الحضور للموظف", en: "Show attendance for an employee"}
     description: >
@@ -1188,6 +1194,12 @@ api_catalog:
       this read. "Clock me in now" / "سجل حضوري الآن" is a write → Agent
       (submit_my_attendance_permission / handoff), not this GET.
     empty_render: no_attendance_rows
+    value_labels:
+      status:
+        present: {en: present, ar: حاضر}
+        absent: {en: absent, ar: غائب}
+        leave: {en: leave, ar: إجازة}
+        permission: {en: permission, ar: إذن}
     examples:
       - {ar: "سجل حضوري", en: "Show my attendance"}
       - {ar: "ساعات حضوري", en: "my hours worked"}

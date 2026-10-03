@@ -79,7 +79,7 @@ def turn(monkeypatch):
 
     monkeypatch.setattr("ai.envelope_service.synthesize_envelope", fake_envelope)
 
-    def run(decision: Decision, *, surface="chat", process_mode="ask", answer=None, state=None):
+    def run(decision: Decision, *, surface="chat", process_mode="ask", answer=None, state=None, message="hi"):
         if answer is not None:
             seen["answer"] = answer
 
@@ -89,7 +89,7 @@ def turn(monkeypatch):
         monkeypatch.setattr("ai.engine.cognition.turn.understand.understand_turn", understood)
         ledger = TurnLedger()
         out = asyncio.run(_Runner()._try_v21_understand(
-            user_message="hi",
+            user_message=message,
             conversation_history=[],
             ledger=ledger,
             turn_id="t-finish",
@@ -167,6 +167,32 @@ def test_an_arabic_followup_after_a_read_does_not_reach_the_writer(turn):
     ), state=prior)
     assert out[0].text == "العدد 555"
     assert not seen["writer"]
+
+
+def test_the_message_language_overrides_the_decision_language(turn):
+    """IRP-7: copy follows the message, not the language the pack default named."""
+    out, _, seen = turn(
+        Decision(commands=[Command(op="answer")], language="en", confidence=0.9),
+        answer="حسنًا، كيف أساعدك؟", message="كيف حالك؟",
+    )
+    assert out is not None
+    assert seen["writer"], "an answer with no text is written"
+    assert "Reply in Arabic" in seen["writer"][0]["messages"][0]["content"]
+    assert out[0].text == "حسنًا، كيف أساعدك؟"
+
+
+def test_a_letterless_message_keeps_the_decision_language(turn):
+    """A bare figure carries no language; the Decision's named one stands."""
+    out, _, seen = turn(
+        Decision(
+            commands=[Command(op="answer", text="العدد 555", source="conversation")],
+            language="ar", confidence=0.9,
+        ),
+        message="555",
+    )
+    assert out is not None
+    assert out[0].text == "العدد 555"
+    assert not seen["writer"], "the Decision's own Arabic answer stands"
 
 
 def test_the_writer_is_told_the_decided_language(monkeypatch):

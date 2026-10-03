@@ -201,10 +201,13 @@
     "chairmanOverview": "Chairman Overview",
     "inventoryOnboarding": "Inventory onboarding",
     "journey": "Journey",
+    "journeyGuides": "Journey guides",
     "readiness": "Readiness checklist",
     "coverage": "Coverage",
     "inventoryCoverage": "Inventory Coverage",
     "coverageTargets": "Coverage targets",
+    "dataCompleteness": "Data completeness",
+    "dataCompletenessTarget": "Data completeness target",
     "stems": "Stems",
     "calibration": "Calibration",
     "markingQueue": "Marking queue",
@@ -239,6 +242,7 @@
     "workforce": "Workforce",
     "executive": "Executive",
     "onboarding": "Onboarding",
+    "guides": "Guides",
     "biAnalytics": "BI & Analytics"
   },
   "ui": {

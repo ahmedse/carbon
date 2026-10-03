@@ -914,5 +914,317 @@
     "conversation_id": "9c07b1e3-840f-4d83-bed8-7f1c35be3532",
     "nominated_at": "2026-09-29T20:35:38.041580+00:00",
     "status": "pending_human_review"
+  },
+  {
+    "utterance": "What is our carbon footprint this quarter?",
+    "audience": [
+      "ess"
+    ],
+    "raw_ops": [
+      "call_tool"
+    ],
+    "final_ops": [
+      "answer"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "carbon_home",
+        "code": "not_on_surface",
+        "detail": ""
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "conv-test-123",
+    "nominated_at": "2026-10-03T09:48:52.421022+00:00",
+    "status": "pending_human_review"
+  },
+  {
+    "utterance": "What is my national ID number?",
+    "audience": [
+      "ess"
+    ],
+    "raw_ops": [
+      "call_tool"
+    ],
+    "final_ops": [
+      "answer"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "get_my_profile",
+        "code": "unknown_field",
+        "detail": "This read does not return national_id; it returns full_name, employee_no, job_title, org_unit, manager, is_active, basic_salary. If the conversation already gives that value, answer from it; otherwise answer that the record does not carry it. Ask a read only for fields it returns."
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "e2e1bbfb-e0da-4063-bf5a-5045eb0bd92f",
+    "nominated_at": "2026-10-03T12:37:24.293678+00:00",
+    "status": "pending_human_review"
+  },
+  {
+    "utterance": "ما هو رقم الهوية الوطنية الخاص بي؟",
+    "audience": [
+      "ess"
+    ],
+    "raw_ops": [
+      "call_tool"
+    ],
+    "final_ops": [
+      "answer"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "get_my_profile",
+        "code": "unknown_field",
+        "detail": "This read does not return national_id; it returns full_name, employee_no, job_title, org_unit, manager, is_active, basic_salary. If the conversation already gives that value, answer from it; otherwise answer that the record does not carry it. Ask a read only for fields it returns."
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "be674b5c-b843-45c9-8e60-563b59a478e7",
+    "nominated_at": "2026-10-03T12:37:50.100450+00:00",
+    "status": "pending_human_review"
+  },
+  {
+    "utterance": "What is my IBAN?",
+    "audience": [
+      "ess"
+    ],
+    "raw_ops": [
+      "call_tool"
+    ],
+    "final_ops": [
+      "answer"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "get_my_profile",
+        "code": "unknown_field",
+        "detail": "This read does not return iban; it returns full_name, employee_no, job_title, org_unit, manager, is_active, basic_salary. If the conversation already gives that value, answer from it; otherwise answer that the record does not carry it. Ask a read only for fields it returns."
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "9c6f831e-7b81-48b2-b980-37f8f6181e9e",
+    "nominated_at": "2026-10-03T12:38:08.639699+00:00",
+    "status": "pending_human_review"
+  },
+  {
+    "utterance": "أعطني رقمي الوظيفي من السجل، بلا أي كلام آخر.",
+    "audience": [
+      "ess"
+    ],
+    "raw_ops": [
+      "answer"
+    ],
+    "final_ops": [
+      "answer"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "answer",
+        "code": "wrong_language",
+        "detail": "The reply must be in Arabic, the language this Decision names; figures stay as they are."
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "7975410f-ce83-409f-aa6f-dcf66f2c03b5",
+    "nominated_at": "2026-10-03T12:46:22.380558+00:00",
+    "status": "pending_human_review"
+  },
+  {
+    "utterance": "أعد كتابة الراتب الأساسي، الرقم فقط.",
+    "audience": [
+      "ess"
+    ],
+    "raw_ops": [
+      "answer"
+    ],
+    "final_ops": [
+      "answer"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "answer",
+        "code": "wrong_language",
+        "detail": "The reply must be in Arabic, the language this Decision names; figures stay as they are."
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "281a4a13-cef9-428c-9f54-608f3266be52",
+    "nominated_at": "2026-10-03T12:46:24.131016+00:00",
+    "status": "pending_human_review"
+  },
+  {
+    "utterance": "رقم الموظف الخاص بي، رقم فقط.",
+    "audience": [
+      "ess"
+    ],
+    "raw_ops": [
+      "answer"
+    ],
+    "final_ops": [
+      "answer"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "answer",
+        "code": "wrong_language",
+        "detail": "The reply must be in Arabic, the language this Decision names; figures stay as they are."
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "8c8e2bbc-bacf-4476-bdda-a0ea0972171a",
+    "nominated_at": "2026-10-03T12:50:12.516823+00:00",
+    "status": "pending_human_review"
+  },
+  {
+    "utterance": "الأيام المتبقية من إجازتي السنوية — الرقم فقط.",
+    "audience": [
+      "ess"
+    ],
+    "raw_ops": [
+      "answer"
+    ],
+    "final_ops": [
+      "answer"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "answer",
+        "code": "wrong_language",
+        "detail": "The reply must be in Arabic, the language this Decision names; figures stay as they are."
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "d0606a89-236e-4f21-a9e5-f397b6991d0f",
+    "nominated_at": "2026-10-03T12:50:14.791959+00:00",
+    "status": "pending_human_review"
+  },
+  {
+    "utterance": "الأيام المستخدمة من إجازتي السنوية — الرقم فقط.",
+    "audience": [
+      "ess"
+    ],
+    "raw_ops": [
+      "answer"
+    ],
+    "final_ops": [
+      "answer"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "answer",
+        "code": "wrong_language",
+        "detail": "The reply must be in Arabic, the language this Decision names; figures stay as they are."
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "b70bb5cc-46ea-41bd-a929-8c1b9267b41a",
+    "nominated_at": "2026-10-03T12:50:15.342705+00:00",
+    "status": "pending_human_review"
+  },
+  {
+    "utterance": "الإجازة السنوية المستخدمة، أرقام فقط.",
+    "audience": [
+      "ess"
+    ],
+    "raw_ops": [
+      "answer"
+    ],
+    "final_ops": [
+      "answer"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "answer",
+        "code": "wrong_language",
+        "detail": "The reply must be in Arabic, the language this Decision names; figures stay as they are."
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "b70bb5cc-46ea-41bd-a929-8c1b9267b41a",
+    "nominated_at": "2026-10-03T12:50:18.954281+00:00",
+    "status": "pending_human_review"
+  },
+  {
+    "utterance": "رصيد الإجازة السنوية المتبقي، أرقام فقط.",
+    "audience": [
+      "ess"
+    ],
+    "raw_ops": [
+      "answer"
+    ],
+    "final_ops": [
+      "answer"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "answer",
+        "code": "wrong_language",
+        "detail": "The reply must be in Arabic, the language this Decision names; figures stay as they are."
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "d0606a89-236e-4f21-a9e5-f397b6991d0f",
+    "nominated_at": "2026-10-03T12:50:18.960869+00:00",
+    "status": "pending_human_review"
+  },
+  {
+    "utterance": "كم يوم إجازة سنوية استخدمت حتى الآن؟ الرقم فقط.",
+    "audience": [
+      "ess"
+    ],
+    "raw_ops": [
+      "answer"
+    ],
+    "final_ops": [
+      "answer"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "answer",
+        "code": "wrong_language",
+        "detail": "The reply must be in Arabic, the language this Decision names; figures stay as they are."
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "6a0b5b60-f856-4e8d-9ee1-8ea0ddc9ed91",
+    "nominated_at": "2026-10-03T12:51:19.301689+00:00",
+    "status": "pending_human_review"
+  },
+  {
+    "utterance": "ما هو المسمى الوظيفي للموظف 2400؟",
+    "audience": [
+      "ess"
+    ],
+    "raw_ops": [
+      "call_tool"
+    ],
+    "final_ops": [
+      "answer"
+    ],
+    "rejections": [
+      {
+        "index": 0,
+        "name": "list_leave_entitlements",
+        "code": "unknown_field",
+        "detail": "This read does not return job_title; it returns id, employee, employee_no, employee_name, leave_type, entitled_days, used_days, carried_forward. If the conversation already gives that value, answer from it; otherwise answer that the record does not carry it. Ask a read only for fields it returns."
+      }
+    ],
+    "repaired": true,
+    "conversation_id": "ba06fa87-5716-4f42-990a-8c4699f248c0",
+    "nominated_at": "2026-10-03T12:55:49.308682+00:00",
+    "status": "pending_human_review"
   }
 ]

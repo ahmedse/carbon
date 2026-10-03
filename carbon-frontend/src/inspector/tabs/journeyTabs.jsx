@@ -7,7 +7,7 @@
 //
 // The tab registers only while the route names an app journey (/journey/<appId>
 // or an app studio route), so the drawer does not grow a dead tab on pages with
-// no journey. The body reuses the journey UI that already exists — StationRail +
+// no journey. The body reuses the journey UI that already exists — the trail +
 // LessonList for the station list, and the compact LessonReader on a lesson
 // route. It carries no notes store: notes are the drawer's standard Notes tab
 // right beside it (ADR-0046 read/teach + notes only, no host writes).
@@ -38,12 +38,13 @@ import {
   journeyContextFromPath,
   pickStation,
 } from '../../components/journey/journeyStages';
-import StationRail from '../../components/journey/StationRail';
+import JourneyTrail from '../../components/journey/JourneyTrail';
 import LessonList from '../../components/journey/LessonList';
 import LessonReader from '../../components/journey/LessonReader';
 import JourneyArc from '../../components/journey/JourneyArc';
 import JourneyScenario from '../../components/journey/JourneyScenario';
 import JourneyCelebration from '../../components/journey/JourneyCelebration';
+import CampDrama from '../../components/journey/CampDrama';
 import useJourneyRole from '../../components/journey/useJourneyRole';
 
 /** The Journey tab body: station list, or the compact lesson reader on a lesson route. */
@@ -57,7 +58,9 @@ export function JourneyTabBody() {
   const routeLessonId = route?.lessonId || null;
   const userKey = user?.id ?? user?.username ?? null;
   const [role] = useJourneyRole(userKey, appId);
-  const { phase, journey, reload, data } = useJourney(appId, role);
+  const {
+    phase, journey, reload, data, sendScenario,
+  } = useJourney(appId, role);
 
   // ONE shared, persisted, per user + per app view state. The main Journey page
   // writes the same key, so the two surfaces can never drift apart.
@@ -179,6 +182,8 @@ export function JourneyTabBody() {
           nextLesson={lessonContext.next}
           onNavigateLesson={(id) => openLesson(id, lessonContext.station)}
           onStationSummary={() => closeLesson(lessonContext.station)}
+          appId={appId}
+          onChanged={reload}
         />
       </Box>
     );
@@ -194,6 +199,11 @@ export function JourneyTabBody() {
         onGo={(target) => navigate(target)}
       />
       <JourneyCelebration journey={journey} userKey={userKey} appId={appId} />
+      <JourneyTrail
+        stations={journey.stages}
+        selectedN={station?.n}
+        onSelect={selectStation}
+      />
       <JourneyScenario
         compact
         journey={journey}
@@ -201,11 +211,13 @@ export function JourneyTabBody() {
         role={journey.path}
         onOpenLesson={(id) => openLesson(id, station)}
       />
-      <StationRail
-        stations={journey.stages}
-        selectedN={station?.n}
-        onSelect={selectStation}
-      />
+      {station && sendScenario && (
+        <CampDrama
+          station={station}
+          glossary={journey.glossary}
+          onAnswer={(index, choice) => sendScenario(station.key, { beat: index, choice })}
+        />
+      )}
       {station && station.lessons.length > 0 && (
         <>
           <Typography sx={{ ...FONT.sectionTitle, mt: 1, mb: 0.5 }} color="text.secondary">

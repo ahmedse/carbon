@@ -1,0 +1,33 @@
+# L-T T2 — STRUCTURED lesson vocabulary (TEACHING-WAVE-SPEC §1.1 T2 / §1.6 / §4).
+#
+# A structured lesson is ILO + grounded worked example + grounded assessment,
+# every line a VERBATIM span of the cited committed-bank passage. The builder is
+# deterministic and offline; a candidate that is not an exact substring of its
+# passage is dropped, never printed. Chat proposes; the Extra tab applies
+# (ADR-0046). Vocabulary stays in this pack, never in engine/**.
+version: 1
+miss: This is not in this course.
+# The proposal is labelled a proposal and claims no Moodle write (R11).
+label: "Structured lesson (proposal only — apply it in the Extra tab):"
+objectives_label: "Learning objectives (ILO):"
+example_label: "Worked example:"
+assessment_label: "Assessment (question + answer key):"
+blank: "________"
+grounding_note: "Every line is a verbatim span of the cited passage. No new facts."
+no_write: "No write was made by Chat. A staff member applies it in the Extra tab."
+# Objective detection is pack vocabulary; a span that matches no marker is still
+# grounded, so it may be used, but a real ILO line is preferred.
+objective_markers:
+  - "learning outcome"
+  - "learning objective"
+  - "intended learning"
+  - "at the end of this"
+  - "will be able to"
+  - "students will"
+  - "by the end"
+  - "aims to"
+  - "objective"
+# Bounds keep one lesson small and deterministic.
+max_objectives: 3
+max_examples: 2
+max_assessment: 2

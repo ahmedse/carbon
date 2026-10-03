@@ -95,6 +95,8 @@ function buildStage(stage, index, path, lessonMap, compDefs, allTracks) {
     key: stage.key || String(index + 1),
     title: stage.title || stage.key || '',
     what: stage.what || '',
+    // The camp's own voice line, read from the pack copy. Display text only.
+    voice: stage.voice || '',
     pending: Boolean(stage.pending),
     lessons,
     competencies,

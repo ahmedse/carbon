@@ -145,8 +145,11 @@ def test_entity_fetch_leave_record_returns_descriptor_fields():
 @pytest.mark.django_db(transaction=True)
 def test_entity_fetch_leave_record_org_scoped():
     """Scoped user sees leave only for employees in visible orgs."""
-    org_a = OrgUnit.objects.create(name="Org A", slug="ecf-leave-a")
-    org_b = OrgUnit.objects.create(name="Org B", slug="ecf-leave-b")
+    # ADR-0028 single active root; the scoped org and the other org are
+    # siblings, so a role on org_a does not reach org_b.
+    root = OrgUnit.objects.create(name="ECF Leave Root", slug="ecf-leave-root")
+    org_a = OrgUnit.objects.create(name="Org A", slug="ecf-leave-a", parent=root)
+    org_b = OrgUnit.objects.create(name="Org B", slug="ecf-leave-b", parent=root)
     lt = _leave_type()
     emp_a = _employee(org_a, "A1", "Alice")
     emp_b = _employee(org_b, "B1", "Bob")

@@ -1,0 +1,418 @@
+version: 1
+miss: This is not in this course.
+rule: 'Each case: draft_sentence is an exact sentence-bounded slice of passage_ref.text in the committed bank; verbatim_span == draft_sentence (a verbatim substring of the cited passage); passage_ref resolves in the open course bank. 100% verbatim; 0 fabricated spans.'
+thresholds:
+  min_cases: 50
+  verbatim_ratio: 1.0
+  fabricated_spans: 0
+out_of_scope:
+  no_passage:
+  - shortname: MED520
+    query: draft a lesson about zzznosuchtermqq
+    expect: miss
+  - shortname: NMD3101
+    query: draft a lesson about qqzznotinbankxx
+    expect: miss
+  student_audience:
+  - shortname: MED520
+    query: draft a lesson about alopecia
+    expect: refused
+  off_list:
+  - shortname: AHFAD
+    query: draft a lesson about alopecia
+    expect: refused
+  ungrounded_claim:
+  - passage_ref: MED520:file:1111:alopecia.pdf
+    fabricated_sentence: Alopecia is caused by a rare fungal enzyme that is not discussed anywhere in this course.
+    expect: dropped
+cases:
+- id: B3-1
+  shortname: MED213
+  topic: activity
+  passage_ref: MED213:file:895:EEG revision.pptx
+  draft_sentence: The electroencephalogram (EEG) is a measurement that enables us to detect the generalized activity of the cerebral cortex.
+  verbatim_span: The electroencephalogram (EEG) is a measurement that enables us to detect the generalized activity of the cerebral cortex.
+- id: B3-2
+  shortname: MED213
+  topic: activity
+  passage_ref: MED213:file:896:EMG 2025-26.pptx
+  draft_sentence: 2) To record skeletal muscle tonus as reflected by a basal level of electrical activity associated with the muscle in a resting state.
+  verbatim_span: 2) To record skeletal muscle tonus as reflected by a basal level of electrical activity associated with the muscle in a resting state.
+- id: B3-3
+  shortname: MED213
+  topic: alcohol
+  passage_ref: MED213:file:853:Clinical Skills I learning guide .pdf
+  draft_sentence: • Perform effective alcohol hand rub in 30 seconds.
+  verbatim_span: • Perform effective alcohol hand rub in 30 seconds.
+- id: B3-4
+  shortname: MED213
+  topic: alcohol
+  passage_ref: MED213:file:854:CLINICAL SKILLS 3,4 with examinations final, 2026 final.pdf
+  draft_sentence: It may result from central lesions of the brain or cerebellum, intoxications (such as alcohol), or neuromuscular disorders.
+  verbatim_span: It may result from central lesions of the brain or cerebellum, intoxications (such as alcohol), or neuromuscular disorders.
+- id: B3-5
+  shortname: MED213
+  topic: changes
+  passage_ref: MED213:file:859:Vital Signs- Pulse .docx
+  draft_sentence: Any physiological or pathological changes in the body functions would be reflected in the vital signs .
+  verbatim_span: Any physiological or pathological changes in the body functions would be reflected in the vital signs .
+- id: B3-6
+  shortname: MED520
+  topic: actinic
+  passage_ref: MED520:file:1124:Lichen planus and pityriasis rosea final.pdf
+  draft_sentence: '• Actinic lichen planus: • Mostly in children or young adults with dark skin.'
+  verbatim_span: '• Actinic lichen planus: • Mostly in children or young adults with dark skin.'
+- id: B3-7
+  shortname: MED520
+  topic: actinic
+  passage_ref: MED520:file:1126:Lichen planus.pdf
+  draft_sentence: Types of lichen planus • Hypertrophic type (shin of tibia) • Atrophic • Ulcerative • Follicular (lichen planopilaris) • Annular (glans penis) • Linear or zosteriform • Bullous • Actinic Scarring alopecia
+  verbatim_span: Types of lichen planus • Hypertrophic type (shin of tibia) • Atrophic • Ulcerative • Follicular (lichen planopilaris) • Annular (glans penis) • Linear or zosteriform • Bullous • Actinic Scarring alopecia
+- id: B3-8
+  shortname: MED520
+  topic: adhesion
+  passage_ref: MED520:file:1124:Lichen planus and pityriasis rosea final.pdf
+  draft_sentence: • Keratinocyte derived cytokines may up‐regulate the expression of cell surface adhesion molecules on, and migration by, T cells .
+  verbatim_span: • Keratinocyte derived cytokines may up‐regulate the expression of cell surface adhesion molecules on, and migration by, T cells .
+- id: B3-9
+  shortname: MED520
+  topic: adhesion
+  passage_ref: MED520:file:1145:Bullous dermatoses.pdf
+  draft_sentence: 'Pemphigus ➢ Pemphigus is a group of autoimmune blistering diseases of the skin and mucous membranes that is characterized by: histologically, intraepidermal blisters due to the loss of cell–cell adhesion of keratinocytes, immunopathologically the finding of in vivo bound and circulating IgG autoantibodies directed against the cell surface of keratinocytes.'
+  verbatim_span: 'Pemphigus ➢ Pemphigus is a group of autoimmune blistering diseases of the skin and mucous membranes that is characterized by: histologically, intraepidermal blisters due to the loss of cell–cell adhesion of keratinocytes, immunopathologically the finding of in vivo bound and circulating IgG autoantibodies directed against the cell surface of keratinocytes.'
+- id: B3-10
+  shortname: MED520
+  topic: agranulosis
+  passage_ref: MED520:file:1149:psoriasis.pdf
+  draft_sentence: • Near absence of the granular layer ( agranulosis, hypogranulosis).
+  verbatim_span: • Near absence of the granular layer ( agranulosis, hypogranulosis).
+- id: B3-11
+  shortname: MED5310
+  topic: health
+  passage_ref: MED5310:file:699:MED5310_L1_Healthcare_systems_Slides.pptx
+  draft_sentence: Healthcare system Financing Beveridge Bismark National Health Insurance Out-of-pocket National Health Insurance Combines government funding with private healthcare providers to achieve universal coverage through single-payer systems.
+  verbatim_span: Healthcare system Financing Beveridge Bismark National Health Insurance Out-of-pocket National Health Insurance Combines government funding with private healthcare providers to achieve universal coverage through single-payer systems.
+- id: B3-12
+  shortname: MED5310
+  topic: health
+  passage_ref: MED5310:file:700:MED5310_L2_Quality_(Slides).pptx
+  draft_sentence: The degree to which health services for individuals and populations increase the likelihood of desired health outcomes.
+  verbatim_span: The degree to which health services for individuals and populations increase the likelihood of desired health outcomes.
+- id: B3-13
+  shortname: MED5310
+  topic: control
+  passage_ref: MED5310:file:699:MED5310_L1_Healthcare_systems_Slides.pptx
+  draft_sentence: Private and Mixed Systems Involve private insurance and public programs, offering innovation and choice but facing equity and cost control challenges.
+  verbatim_span: Private and Mixed Systems Involve private insurance and public programs, offering innovation and choice but facing equity and cost control challenges.
+- id: B3-14
+  shortname: MED5310
+  topic: control
+  passage_ref: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  draft_sentence: Do Stage The Do stage focuses on implementing the plan and executing the defined strategy in a controlled manner.
+  verbatim_span: Do Stage The Do stage focuses on implementing the plan and executing the defined strategy in a controlled manner.
+- id: B3-15
+  shortname: MED5310
+  topic: improved
+  passage_ref: MED5310:file:700:MED5310_L2_Quality_(Slides).pptx
+  draft_sentence: What is not measured, cannot be improved.
+  verbatim_span: What is not measured, cannot be improved.
+- id: B3-16
+  shortname: NMD1000
+  topic: absorption
+  passage_ref: NMD1000:file:1288:L 17- Carbohydrates.pdf
+  draft_sentence: o Moreover it was found that Lactose play s a role in absorption of calcium, copper and zinc especially in infancy.
+  verbatim_span: o Moreover it was found that Lactose play s a role in absorption of calcium, copper and zinc especially in infancy.
+- id: B3-17
+  shortname: NMD1000
+  topic: absorption
+  passage_ref: NMD1000:file:1291:L13-Chemical Blocks of Life- Carbohydrates 2026.pdf
+  draft_sentence: ALL DIETARY CARBOHYDRATES MUST BE HYDROLYZED TO MONOSACCHARIDES TO ENABLE THEIR ABSORPTION.
+  verbatim_span: ALL DIETARY CARBOHYDRATES MUST BE HYDROLYZED TO MONOSACCHARIDES TO ENABLE THEIR ABSORPTION.
+- id: B3-18
+  shortname: NMD1000
+  topic: abundant
+  passage_ref: NMD1000:file:1288:L 17- Carbohydrates.pdf
+  draft_sentence: The most abundant monosaccharides in nature are the 6 - carbon sugars like glucose and fructose.
+  verbatim_span: The most abundant monosaccharides in nature are the 6 - carbon sugars like glucose and fructose.
+- id: B3-19
+  shortname: NMD1000
+  topic: abundant
+  passage_ref: NMD1000:file:1291:L13-Chemical Blocks of Life- Carbohydrates 2026.pdf
+  draft_sentence: '- The most abundant monosaccharides in nature are the 6 -carbon sugars like glucose and fructose.'
+  verbatim_span: '- The most abundant monosaccharides in nature are the 6 -carbon sugars like glucose and fructose.'
+- id: B3-20
+  shortname: NMD1000
+  topic: acetylcholine
+  passage_ref: NMD1000:file:1311:L20-chemical bonds.pdf
+  draft_sentence: Esterification can be seen in the process of condensation between fatty acids and glycerol to form triacylglycerols , in the formation of some neurotransmitters such as acetylcholine, and in the structure of several drugs.
+  verbatim_span: Esterification can be seen in the process of condensation between fatty acids and glycerol to form triacylglycerols , in the formation of some neurotransmitters such as acetylcholine, and in the structure of several drugs.
+- id: B3-21
+  shortname: NMD1103
+  topic: different
+  passage_ref: NMD1103:file:1005:Virtual Tour in Hospital Facilities.pdf
+  draft_sentence: Virtual Tour in Healthcare Facilities Transfer goaluIntroduce student to the different types of care and let them explore the different units and facilities in a hospital.
+  verbatim_span: Virtual Tour in Healthcare Facilities Transfer goaluIntroduce student to the different types of care and let them explore the different units and facilities in a hospital.
+- id: B3-22
+  shortname: NMD1103
+  topic: different
+  passage_ref: NMD1103:google:1006:1_4k2LQC4bfZblcbBRG-NSkepSl5defs8
+  draft_sentence: MBA Hospital Safety 1 Dear students & Transfer Goal Identify hospital environmental hazards and different hospital emergency codes Students’ learning outcomes At the end of this session, the student will be able to .
+  verbatim_span: MBA Hospital Safety 1 Dear students & Transfer Goal Identify hospital environmental hazards and different hospital emergency codes Students’ learning outcomes At the end of this session, the student will be able to .
+- id: B3-23
+  shortname: NMD1103
+  topic: following
+  passage_ref: NMD1103:file:1011:PPE reference (1).pdf
+  draft_sentence: 'Remove PPE in the following sequence: 1.'
+  verbatim_span: 'Remove PPE in the following sequence: 1.'
+- id: B3-24
+  shortname: NMD1103
+  topic: following
+  passage_ref: NMD1103:file:1020:Vital Signs Radial Pulse and Arterial blood pressure (2).docx
+  draft_sentence: 'Taking a pulse not only measures the heart rate, but also can indicate the following: Heart rhythm Strength of the pulse The normal pulse rate for health adults ranges from 60- 100 beats per minute.'
+  verbatim_span: 'Taking a pulse not only measures the heart rate, but also can indicate the following: Heart rhythm Strength of the pulse The normal pulse rate for health adults ranges from 60- 100 beats per minute.'
+- id: B3-25
+  shortname: NMD1103
+  topic: history
+  passage_ref: NMD1103:file:1020:Vital Signs Radial Pulse and Arterial blood pressure (2).docx
+  draft_sentence: If the patient has a history of postural hypotension.
+  verbatim_span: If the patient has a history of postural hypotension.
+- id: B3-26
+  shortname: NMD1301
+  topic: abstract
+  passage_ref: NMD1301:file:1172:lecture notes.pdf
+  draft_sentence: com Abstract An overview of what it means to be a professional, who is considered a medical professional, the foundations of medical ethics, communications skills, and how to conduct oneself to the best interest of the patient and medical profession.
+  verbatim_span: com Abstract An overview of what it means to be a professional, who is considered a medical professional, the foundations of medical ethics, communications skills, and how to conduct oneself to the best interest of the patient and medical profession.
+- id: B3-27
+  shortname: NMD1301
+  topic: abstract
+  passage_ref: NMD1301:file:1198:lecture notes NMD1301.docx
+  draft_sentence: com Abstract An overview of what it means to be a professional, who is considered a medical professional, how to think critically, the foundations of medical ethics, and how to conduct oneself to the best interest of the patient and medical profession.
+  verbatim_span: com Abstract An overview of what it means to be a professional, who is considered a medical professional, how to think critically, the foundations of medical ethics, and how to conduct oneself to the best interest of the patient and medical profession.
+- id: B3-28
+  shortname: NMD1301
+  topic: access
+  passage_ref: NMD1301:file:1182:Ethics overview and application.pptx
+  draft_sentence: It could be argued that prioritising cancer patients means you’re limiting the ability of other patients to access healthcare.
+  verbatim_span: It could be argued that prioritising cancer patients means you’re limiting the ability of other patients to access healthcare.
+- id: B3-29
+  shortname: NMD1301
+  topic: access
+  passage_ref: NMD1301:file:1188:12529_2021_Article_10047.pdf
+  draft_sentence: Given the high risk of psychological problems described in young people with diabetes, video consultation can be considered a useful opportunity to maintain access to a healthcare provider in a challenging time, such as the COVID-19 pandemic.
+  verbatim_span: Given the high risk of psychological problems described in young people with diabetes, video consultation can be considered a useful opportunity to maintain access to a healthcare provider in a challenging time, such as the COVID-19 pandemic.
+- id: B3-30
+  shortname: NMD1301
+  topic: accountable
+  passage_ref: NMD1301:file:1172:lecture notes.pdf
+  draft_sentence: Accountability (المساءلة:) Whether before he makes them, while he makes them, or after he makes them, a physician should always be ready and willing to be held accountable for his decisions.
+  verbatim_span: Accountability (المساءلة:) Whether before he makes them, while he makes them, or after he makes them, a physician should always be ready and willing to be held accountable for his decisions.
+- id: B3-31
+  shortname: NMD1402
+  topic: addition
+  passage_ref: NMD1402:file:758:Research skills step I, Theoretical and practical.pdf
+  draft_sentence: Which one the scientist uses, depends on the aims of the study in addition to the nature of the phenomenon (topic), availability of data and resources (cost, time, human resources,).
+  verbatim_span: Which one the scientist uses, depends on the aims of the study in addition to the nature of the phenomenon (topic), availability of data and resources (cost, time, human resources,).
+- id: B3-32
+  shortname: NMD1402
+  topic: addition
+  passage_ref: NMD1402:file:759:Student Guide Research Skills 1.pdf
+  draft_sentence: Introduction to Course Research skills is a vertical course (7 credit hours, extends throughout the five years of studying) that is concerned about research methodology, medical statistics, scientific writing in addition to how to find, appraise and use evidence from research and other scientific literature in your medical practice.
+  verbatim_span: Introduction to Course Research skills is a vertical course (7 credit hours, extends throughout the five years of studying) that is concerned about research methodology, medical statistics, scientific writing in addition to how to find, appraise and use evidence from research and other scientific literature in your medical practice.
+- id: B3-33
+  shortname: NMD1402
+  topic: always
+  passage_ref: NMD1402:file:758:Research skills step I, Theoretical and practical.pdf
+  draft_sentence: Although approach and specific objectives may vary, the ultimate goal of research always is to discover new knowledge .
+  verbatim_span: Although approach and specific objectives may vary, the ultimate goal of research always is to discover new knowledge .
+- id: B3-34
+  shortname: NMD1402
+  topic: always
+  passage_ref: NMD1402:file:760:Introduction to health research-first lecture.pdf
+  draft_sentence: Rapid developments in healthcare and increase in the amount of information, as well as the easy access to it, necessitate that every physician make decisions based on reliable scientific evidence Do you think that clinicians are always aware about the most recent research in their specialties?
+  verbatim_span: Rapid developments in healthcare and increase in the amount of information, as well as the easy access to it, necessitate that every physician make decisions based on reliable scientific evidence Do you think that clinicians are always aware about the most recent research in their specialties?
+- id: B3-35
+  shortname: NMD1402
+  topic: association
+  passage_ref: NMD1402:file:768:classification of study design-review.pptx
+  draft_sentence: Whether the exposure or the onset of disease came first Whether there are other explanations for the observed association (confounding variables).
+  verbatim_span: Whether the exposure or the onset of disease came first Whether there are other explanations for the observed association (confounding variables).
+- id: B3-36
+  shortname: NMD2101
+  topic: abundant
+  passage_ref: NMD2101:file:472:L8 activity sheet 2026-2027.docx
+  draft_sentence: Abundant mitochondria Microtubules Neurofilaments Nissl granules A patient develops a neurodegenerative disorder in which proteins and damaged organelles accumulate within axons and can not be transported into the perikaryon.
+  verbatim_span: Abundant mitochondria Microtubules Neurofilaments Nissl granules A patient develops a neurodegenerative disorder in which proteins and damaged organelles accumulate within axons and can not be transported into the perikaryon.
+- id: B3-37
+  shortname: NMD2101
+  topic: abundant
+  passage_ref: NMD2101:file:473:MED2101 L 8 2024 2025 Dr Rehab.pptx
+  draft_sentence: 'Others are electrical (gap junctions) Parts of a chemical synapse Types of synapses 1- Electrical Synapses (gap junctions) 2- Chemical Synapses (neurotransmitter) Parts of the chemical synapse Components of a chemical synapse: 1- Presynaptic neuron (axon terminal); abundant mitochondria, neurotransmitter vesicles.'
+  verbatim_span: 'Others are electrical (gap junctions) Parts of a chemical synapse Types of synapses 1- Electrical Synapses (gap junctions) 2- Chemical Synapses (neurotransmitter) Parts of the chemical synapse Components of a chemical synapse: 1- Presynaptic neuron (axon terminal); abundant mitochondria, neurotransmitter vesicles.'
+- id: B3-38
+  shortname: NMD2101
+  topic: acting
+  passage_ref: NMD2101:file:517:L14 Analgesics 26.pptx
+  draft_sentence: MORPHINE Agonist / > potent than morphine / fast acting & rapidly dissociates/ highly lipophilic Not medically used / Strong addicting It is injected, sniffed, snorted, or smoked HEROIN Fentanyl m agonism,  [50-100] times potency > morphine.
+  verbatim_span: MORPHINE Agonist / > potent than morphine / fast acting & rapidly dissociates/ highly lipophilic Not medically used / Strong addicting It is injected, sniffed, snorted, or smoked HEROIN Fentanyl m agonism,  [50-100] times potency > morphine.
+- id: B3-39
+  shortname: NMD2101
+  topic: acting
+  passage_ref: NMD2101:file:518:L14 Analgesics 26.docx
+  draft_sentence: 'Determine non - opiate analgesics acting on descending tracts PRE-REQUISITS: Terminologies linked to pai n, its incidence, types, nature, etiology , distribution ascending pathways to perception and descending inhibitory facilitatory modulation.'
+  verbatim_span: 'Determine non - opiate analgesics acting on descending tracts PRE-REQUISITS: Terminologies linked to pai n, its incidence, types, nature, etiology , distribution ascending pathways to perception and descending inhibitory facilitatory modulation.'
+- id: B3-40
+  shortname: NMD2101
+  topic: agonist
+  passage_ref: NMD2101:file:518:L14 Analgesics 26.docx
+  draft_sentence: 'Different approaches to induce analgesia with final stress on pharmacotherapeutic modulation by narcotic opioid analgesics, non-narcotic analgesics & others as α 2 adrenergic agonists NARCOTICS OPIOID ANALGESICS Opioid Receptors: mu [ ] [MOR] ; Supraspinal / delta [ ]; Supraspinal / kappa [ ]; Spinal .'
+  verbatim_span: 'Different approaches to induce analgesia with final stress on pharmacotherapeutic modulation by narcotic opioid analgesics, non-narcotic analgesics & others as α 2 adrenergic agonists NARCOTICS OPIOID ANALGESICS Opioid Receptors: mu [ ] [MOR] ; Supraspinal / delta [ ]; Supraspinal / kappa [ ]; Spinal .'
+- id: B3-41
+  shortname: NMD2303
+  topic: accept
+  passage_ref: NMD2303:file:791:Consent final.pdf
+  draft_sentence: The patient relies on the professional’s expertise, knowledge and advice, but it is up to the patient to decide whether he/she will accept or reject treatment, or in some circumstances request that the professional make the decision.
+  verbatim_span: The patient relies on the professional’s expertise, knowledge and advice, but it is up to the patient to decide whether he/she will accept or reject treatment, or in some circumstances request that the professional make the decision.
+- id: B3-42
+  shortname: NMD2303
+  topic: accept
+  passage_ref: NMD2303:file:806:Interprofessional  Intraprofessional Relationships in Healthcare_074300.pptx
+  draft_sentence: 'Routine universal immunization of physicians: Physicians have an ethical responsibility to encourage patients to accept immunization.'
+  verbatim_span: 'Routine universal immunization of physicians: Physicians have an ethical responsibility to encourage patients to accept immunization.'
+- id: B3-43
+  shortname: NMD2303
+  topic: against
+  passage_ref: NMD2303:google:790:1Mmv58BM65eR-T8hi9pqxEomcFdczv55J
+  draft_sentence: Treating a patient without informed consent could result in legal action for assault against the Health Practitioner who provided the care, irrespective of whether the patient suffered harm as a result of the procedure (constitutes medical malpractice).
+  verbatim_span: Treating a patient without informed consent could result in legal action for assault against the Health Practitioner who provided the care, irrespective of whether the patient suffered harm as a result of the procedure (constitutes medical malpractice).
+- id: B3-44
+  shortname: NMD2303
+  topic: against
+  passage_ref: NMD2303:google:796:1aRyg00IH1SVTwpdVwMIlbJXBJBTCPlqR
+  draft_sentence: If a patient's private information is disclosed without authorization and causes some type of harm to the patient, he could have a cause of action against the medical provider or malpractice.
+  verbatim_span: If a patient's private information is disclosed without authorization and causes some type of harm to the patient, he could have a cause of action against the medical provider or malpractice.
+- id: B3-45
+  shortname: NMD2303
+  topic: agreement
+  passage_ref: NMD2303:file:791:Consent final.pdf
+  draft_sentence: a) Consent is the giving of permission or agreement for an intervention (whether diagnostic or therapeutic) following a process of communication about the proposed intervention.
+  verbatim_span: a) Consent is the giving of permission or agreement for an intervention (whether diagnostic or therapeutic) following a process of communication about the proposed intervention.
+- id: B3-46
+  shortname: NMD2403
+  topic: allocation
+  passage_ref: NMD2403:file:732:Students notes.pdf
+  draft_sentence: 'Random selection of participants prevents the researcher from subconsciously selecting patients that they consider more suitable, or not including ‘non-acceptable’ patients • Random assignment (in clinical trials): Random allocation of participants to study groups • Ensure that study participants meet clearly defined criteria 2.'
+  verbatim_span: 'Random selection of participants prevents the researcher from subconsciously selecting patients that they consider more suitable, or not including ‘non-acceptable’ patients • Random assignment (in clinical trials): Random allocation of participants to study groups • Ensure that study participants meet clearly defined criteria 2.'
+- id: B3-47
+  shortname: NMD2403
+  topic: allocation
+  passage_ref: NMD2403:file:734:Research III students notes with activity worksheet.ocx.pdf
+  draft_sentence: 'Random selection of participants prevents the researcher from subconsciously selecting patients that they consider more suitable, or not including ‘non-acceptable’ patients • Random assignment (in clinical trials): Random allocation of participants to study groups • Ensure that study participants meet clearly defined criteria 2.'
+  verbatim_span: 'Random selection of participants prevents the researcher from subconsciously selecting patients that they consider more suitable, or not including ‘non-acceptable’ patients • Random assignment (in clinical trials): Random allocation of participants to study groups • Ensure that study participants meet clearly defined criteria 2.'
+- id: B3-48
+  shortname: NMD2403
+  topic: answer
+  passage_ref: NMD2403:file:732:Students notes.pdf
+  draft_sentence: Select the best study design to answer a specific clinical question.
+  verbatim_span: Select the best study design to answer a specific clinical question.
+- id: B3-49
+  shortname: NMD2403
+  topic: answer
+  passage_ref: NMD2403:file:733:Student Guide Research Skills 3.docx
+  draft_sentence: Identify threats to internal validity of research Determine the principle methodological issues in each study design in primary researc h Appraise the methods of published research articles using internationally recognised checklists Select the best study design to answer a specific clinical question .
+  verbatim_span: Identify threats to internal validity of research Determine the principle methodological issues in each study design in primary researc h Appraise the methods of published research articles using internationally recognised checklists Select the best study design to answer a specific clinical question .
+- id: B3-50
+  shortname: NMD2403
+  topic: appraisal
+  passage_ref: NMD2403:file:732:Students notes.pdf
+  draft_sentence: 'Research Skills III 1 Research Skills III Critical appraisal of research Intended learning outcomes: 1.'
+  verbatim_span: 'Research Skills III 1 Research Skills III Critical appraisal of research Intended learning outcomes: 1.'
+- id: B3-51
+  shortname: NMD3101
+  topic: abdominal
+  passage_ref: NMD3101:file:1630:L 20 notes.pdf
+  draft_sentence: The condition can be associated with nausea, vomiting and abdominal pain.
+  verbatim_span: The condition can be associated with nausea, vomiting and abdominal pain.
+- id: B3-52
+  shortname: NMD3101
+  topic: abdominal
+  passage_ref: NMD3101:file:1636:L22 Hepatitis Viruses (A, C, E).pdf
+  draft_sentence: '- More commonly (>70% of cases), the initial disease is asymptomatic or clinically mild (20–30% have jaundice; 10–20% have only nonspecific symptoms such as anorexia, malaise, and abdominal pain) but establishes chronic persistent disease.'
+  verbatim_span: '- More commonly (>70% of cases), the initial disease is asymptomatic or clinically mild (20–30% have jaundice; 10–20% have only nonspecific symptoms such as anorexia, malaise, and abdominal pain) but establishes chronic persistent disease.'
+- id: B3-53
+  shortname: NMD3101
+  topic: accomplished
+  passage_ref: NMD3101:file:1554:L8 Viral replication.pdf
+  draft_sentence: Thus, if protection from a virus infection is to be accomplished at the level of antibody binding to the virions, it must occur before adsorption and prevent the virus from attaching to and penetrating the cell.
+  verbatim_span: Thus, if protection from a virus infection is to be accomplished at the level of antibody binding to the virions, it must occur before adsorption and prevent the virus from attaching to and penetrating the cell.
+- id: B3-54
+  shortname: NMD3101
+  topic: accomplished
+  passage_ref: NMD3101:file:1555:L8 Viral replication (ppt).pdf
+  draft_sentence: Thus, if protection from a virus infection is to be accomplished at the level of antibody binding to the virions, it must occur before adsorption and prevent the virus from attaching to and penetrating the cell.
+  verbatim_span: Thus, if protection from a virus infection is to be accomplished at the level of antibody binding to the virions, it must occur before adsorption and prevent the virus from attaching to and penetrating the cell.
+- id: B3-55
+  shortname: NMD3101
+  topic: adequate
+  passage_ref: NMD3101:file:1548:L7 Viral structure  classification.pdf
+  draft_sentence: For example, the chlorine treatment of stools adequate to inactivate typhoid bacilli is inadequate to destroy poliomyelitis virus present in feces.
+  verbatim_span: For example, the chlorine treatment of stools adequate to inactivate typhoid bacilli is inadequate to destroy poliomyelitis virus present in feces.
+- id: B3-56
+  shortname: NMD3304
+  topic: actively
+  passage_ref: NMD3304:file:720:communication with elderly patient.pdf
+  draft_sentence: Also it easier for them to understand the treatment options available, the risks and benefits and allows them to participate actively in making decisions about their own health.
+  verbatim_span: Also it easier for them to understand the treatment options available, the risks and benefits and allows them to participate actively in making decisions about their own health.
+- id: B3-57
+  shortname: NMD3304
+  topic: actively
+  passage_ref: NMD3304:file:727:intra-interprof - Copy_074143.pdf
+  draft_sentence: 'Conflict resolution: It happens when healthcare providers work as a team that actively engages in addressing disagreements and responding effectively to all types of conflict .'
+  verbatim_span: 'Conflict resolution: It happens when healthcare providers work as a team that actively engages in addressing disagreements and responding effectively to all types of conflict .'
+- id: B3-58
+  shortname: NMD3304
+  topic: barriers
+  passage_ref: NMD3304:file:714:Professional safety - Copy.pptx
+  draft_sentence: Put in place shielding, protective barriers , safety interlocks, warning signs and signals Restrict access to areas where radiation is used to authorized persons only Monitor exposure and organize medical surveillance of exposed workers Provide workers with adequate PPE including protective aprons, gloves and organ shields V.
+  verbatim_span: Put in place shielding, protective barriers , safety interlocks, warning signs and signals Restrict access to areas where radiation is used to authorized persons only Monitor exposure and organize medical surveillance of exposed workers Provide workers with adequate PPE including protective aprons, gloves and organ shields V.
+- id: B3-59
+  shortname: NMD3304
+  topic: barriers
+  passage_ref: NMD3304:file:721:communication with  patient with special need...pdf
+  draft_sentence: '• Cultural or linguistic barriers: People who speak a different language or come from a different culture may have difficulty communicating with their healthcare providers.'
+  verbatim_span: '• Cultural or linguistic barriers: People who speak a different language or come from a different culture may have difficulty communicating with their healthcare providers.'
+- id: B3-60
+  shortname: NMD3304
+  topic: caused
+  passage_ref: NMD3304:file:713:Patient safety (narrated) - Copy.pptx
+  draft_sentence: Near-miss Error Adverse events Preventable Ameliorable Due to negligence High Reliability Organizations (HROs) “…catastrophic safety failures are almost never caused by isolated errors committed by individuals.
+  verbatim_span: Near-miss Error Adverse events Preventable Ameliorable Due to negligence High Reliability Organizations (HROs) “…catastrophic safety failures are almost never caused by isolated errors committed by individuals.
+- id: B3-61
+  shortname: NMD4201
+  topic: accidental
+  passage_ref: NMD4201:file:1365:History taking.pdf
+  draft_sentence: Gradual (or insidious); (over days, weeks or months) and accidental discovery.
+  verbatim_span: Gradual (or insidious); (over days, weeks or months) and accidental discovery.
+- id: B3-62
+  shortname: NMD4201
+  topic: accidental
+  passage_ref: NMD4201:file:1392:Cardiothoracic Trauma.pdf
+  draft_sentence: 2 | P a g e W a l i d A b u A r a b C a r d i o t h o r a c i c T r a u m a Chest Trauma ❑ Types of Thoracic Trauma ▪ Accidental Trauma.
+  verbatim_span: 2 | P a g e W a l i d A b u A r a b C a r d i o t h o r a c i c T r a u m a Chest Trauma ❑ Types of Thoracic Trauma ▪ Accidental Trauma.
+- id: B3-63
+  shortname: NMD4201
+  topic: achieved
+  passage_ref: NMD4201:file:1390:bleeding per rectum.pdf
+  draft_sentence: • Achieved by increasing fluid and fiber in the diet, recommending exercise, and perhaps adding fiber agents to the diet such as psyllium.
+  verbatim_span: • Achieved by increasing fluid and fiber in the diet, recommending exercise, and perhaps adding fiber agents to the diet such as psyllium.
+- id: B3-64
+  shortname: NMD4201
+  topic: achieved
+  passage_ref: NMD4201:file:1394:Surgery of Esophagus  mediastinum.pdf
+  draft_sentence: Originally described by Heller as an anterior and posterior myotomy, the procedure has bee n modified to a single anterior or lateral myotomy (modified 8 | P a g e W a l i d A b u A r a b C a r d i o t h o r a c i c T r a u m a Heller), achieved using an abdominal or thoracic approach.
+  verbatim_span: Originally described by Heller as an anterior and posterior myotomy, the procedure has bee n modified to a single anterior or lateral myotomy (modified 8 | P a g e W a l i d A b u A r a b C a r d i o t h o r a c i c T r a u m a Heller), achieved using an abdominal or thoracic approach.
+- id: B3-65
+  shortname: NMD4201
+  topic: address
+  passage_ref: NMD4201:file:1460:lecture appendicitis.pptx
+  draft_sentence: Address pre-existing cardiac,renal and pulmonary issues.
+  verbatim_span: Address pre-existing cardiac,renal and pulmonary issues.

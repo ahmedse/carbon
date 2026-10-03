@@ -12,6 +12,7 @@ import pytest
 
 from ai.moodle_bank import (
     course_roster,
+    listed_shortnames,
     load_c3,
     load_c4_drive,
     load_c4_files,
@@ -74,7 +75,17 @@ def test_unknown_module_has_no_join_and_reads_not_loaded():
 
 
 def test_activity_without_a_passage_reads_not_loaded():
-    activities = course_roster("MED520")["activities"]
+    # MED520 is fully loaded now, so find any listed course that still has an
+    # unread ingestible row with an empty status.
+    shortname = next(
+        name
+        for name in sorted(listed_shortnames())
+        if any(
+            row["key"] and row["status"] == "empty"
+            for row in course_roster(name)["activities"]
+        )
+    )
+    activities = course_roster(shortname)["activities"]
     case = next(row for row in activities if row["key"] and row["status"] == "empty")
     module = {
         "cmid": 888_888,
@@ -85,7 +96,7 @@ def test_activity_without_a_passage_reads_not_loaded():
     hit = match_roster_activity(module, activities)
     assert hit is not None
     assert hit["status"] != "ok"
-    assert not _has_passage("MED520", hit["cmid"])
+    assert not _has_passage(shortname, hit["cmid"])
 
 
 def test_activity_with_a_passage_reads_loaded():

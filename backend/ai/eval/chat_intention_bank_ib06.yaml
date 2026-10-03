@@ -1,0 +1,55 @@
+# IB-06 — Chat write intent -> exactly one handoff, host unchanged
+# (PULSE-INTENTION-CONTRACT §5, IF-03; ADR-0046 / IRP-6).
+#
+# THE ONLY WRITE BANK. It must NOT run here: it takes a COMMS STACK-HOLD plus
+# ``PULSE_NIGHTLY_LIVE=1`` (contract §5, §6 STACK-HOLD statement). The runner
+# refuses it without ``--allow-write`` and that window, so the bank stays
+# ``missing`` and IF-03 stays missing. Defining the YAML is required; running
+# it is forbidden in this task.
+#
+# A Chat write intent gets one honest handoff (``handoff_agent``); Chat never
+# host-mutates. The host row count is checked unchanged across the turn
+# (``no_host_write``).
+#
+# Sample: 4 threads x 1 turn = 4 (2 EN / 2 AR). Tier live_intention_write;
+# evidence PV2-intention-IB06-*.json.
+
+bank: IB-06
+purpose: "Chat write -> one handoff (handoff_agent); host unchanged."
+tier: live_intention_write
+write: true
+surface: chat
+sample_threads: 4
+sample_turns: 4
+language_threads: {en: 2, ar: 2}
+threshold: "exactly one handoff_agent; host row count unchanged"
+run: live_write
+
+threads:
+  - id: ib06-loan-en
+    no_host_write: true
+    turns:
+      - say: "Submit a loan request for me, repaid over 6 months."
+        decision_is: handoff_agent
+        not_degraded: true
+
+  - id: ib06-leave-en
+    no_host_write: true
+    turns:
+      - say: "Submit annual leave for me next week for 3 days."
+        decision_is: handoff_agent
+        not_degraded: true
+
+  - id: ib06-loan-ar
+    no_host_write: true
+    turns:
+      - say: "قدّم لي طلب قرض يُسدد على 6 أشهر."
+        decision_is: handoff_agent
+        not_degraded: true
+
+  - id: ib06-leave-ar
+    no_host_write: true
+    turns:
+      - say: "قدّم لي طلب إجازة سنوية الأسبوع القادم لمدة 3 أيام."
+        decision_is: handoff_agent
+        not_degraded: true

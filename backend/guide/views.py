@@ -68,6 +68,40 @@ def _merge_steps(structure, copy) -> list[dict]:
     return rows
 
 
+def _scenario_payload(spec: dict, stage_text: dict) -> dict:
+    """A stage's drama beats with localized text. The correct index never ships."""
+    beats = (spec.get("scenario") or {}).get("beats") or []
+    copy_beats = (
+        ((stage_text.get("scenario") or {}).get("beats") or [])
+        if isinstance(stage_text, dict) else []
+    )
+    by_id = {row.get("id"): row for row in copy_beats if isinstance(row, dict)}
+    rows = []
+    for beat in beats:
+        text = by_id.get(beat.get("id")) or {}
+        rows.append({
+            "id": beat.get("id"),
+            "cast": text.get("cast") or "",
+            "line": text.get("line") or "",
+            "question": text.get("question") or "",
+            "choices": [str(choice) for choice in (text.get("choices") or [])],
+            "explain": text.get("explain") or "",
+        })
+    return {"beats": rows}
+
+
+def _beat_copy(app_id: str, lang: str, stage_key: str, beat_id) -> dict | None:
+    """The localized copy for one beat, or None when the pack declares none."""
+    text = (
+        ((packs.copy_for(app_id, lang).get("stages") or {}).get(stage_key) or {})
+        .get("scenario") or {}
+    )
+    return next(
+        (row for row in text.get("beats") or [] if isinstance(row, dict) and row.get("id") == beat_id),
+        None,
+    )
+
+
 def _journey_payload(app_id: str, lang: str) -> dict:
     """Pack stages, competencies and journey copy, merged for one language.
 
@@ -89,6 +123,8 @@ def _journey_payload(app_id: str, lang: str) -> dict:
             "key": key,
             "title": text.get("title") or key,
             "what": text.get("what") or "",
+            "voice": text.get("voice") or "",
+            "scenario": _scenario_payload(row, text),
             "lessons": list(row.get("lessons") or []),
             "competencies": list(row.get("competencies") or []),
             "pending": bool(row.get("pending")),
@@ -130,6 +166,11 @@ def _enrich_lessons(app_id: str, lang: str, rows: list[dict]) -> None:
         row["steps"] = _merge_steps(spec.get("steps") or [], text.get("steps") or [])
         row["completion"] = spec.get("completion") or ("host" if spec.get("host") else "answer")
         row["competency"] = spec.get("competency") or ""
+        # Read-only learning copy for the trail, hazard cards and field notebook.
+        # Display text only, read from the pack's own copy: never a figure, never
+        # a factor value, and the lesson-detail endpoint stays authoritative.
+        row["know"] = str(text.get("know") or "")
+        row["dont"] = str(text.get("dont") or "")
 
 
 def _listing(ctx, available, now):
@@ -157,6 +198,9 @@ class GuideListAPIView(APIView):
                 row["blocker"] = {**row["blocker"], **(copy.get("blockers", {}).get(row["blocker"]["code"]) or {})}
         _enrich_lessons(app_id, lang, listing["lessons"])
         listing["journey"] = _journey_payload(app_id, lang)
+        walked = engine.load_scenarios(ctx.user, [app_id])
+        for stage in listing["journey"]["stages"]:
+            stage["scenarioBeat"] = walked.get((app_id, stage["key"]), 0)
         listing["app_id"] = app_id
         return Response(listing)
 
@@ -225,4 +269,38 @@ class GuideProgressAPIView(APIView):
         listing = _listing(ctx, available, now)
         out["next_id"] = listing["next_id"]
         out["resume"] = listing["resume"]
+        return Response(out)
+
+
+class GuideScenarioAPIView(APIView):
+    """POST one camp-drama answer. Writes ``GuideScenario`` only, never a lesson."""
+
+    permission_classes = [IsAuthenticated, GuideAppPermission]
+
+    def post(self, request, app_id, stage_key):
+        setup = _setup(request, app_id)
+        if setup is None:
+            return Response({"detail": "No guide for this app."}, status=404)
+        ctx, _available = setup
+        stage = next(
+            (
+                row for row in packs.load_pack(app_id).get("stages") or []
+                if str(row.get("key")) == stage_key
+            ),
+            None,
+        )
+        if stage is None:
+            return Response({"detail": "Stage not found."}, status=404)
+        beats = engine.beats_of(stage)
+        index = request.data.get("beat")
+        if isinstance(index, bool) or not isinstance(index, int) or not 0 <= index < len(beats):
+            return Response({"detail": "beat must be an integer naming a declared beat."}, status=400)
+        beat = beats[index]
+        beat_text = _beat_copy(app_id, _lang(request), stage_key, beat.get("id")) or {}
+        limit = len(beat_text.get("choices") or [])
+        choice = request.data.get("choice")
+        if isinstance(choice, bool) or not isinstance(choice, int) or not 0 <= choice < limit:
+            return Response({"detail": f"choice must be an integer 0 to {max(limit - 1, 0)}."}, status=400)
+        out = engine.apply_scenario(ctx, stage, index, choice)
+        out["stage"] = stage_key
         return Response(out)

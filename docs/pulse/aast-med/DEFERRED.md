@@ -8,13 +8,24 @@ change the spec implies but that I did not make, so the parent can sequence it.
 Nothing here is required for the code-side machinery I shipped
 (`backend/ai/moodle_readiness/`, all default-OFF).
 
-> **Update 3 Oct 2026 — status.** Item **#1** was executed for the **staff
-> notice only** (plugin `2026100214`): a `notice::publish` lever on the
+> **Update 3 Oct 2026 — status (supersedes the 2 Oct note).** Item **#1** was
+> executed for the **staff notice only**: a `notice::publish` lever on the
 > Connection tab, unpublished-by-default, refused unless the text carries every
 > R18 clause and a staff cohort + shortname are selected. Non-staff parts of #1
 > (the **student** notice UI and any student-visible surface) remain deferred —
-> forbidden before K11. Item **#2** (version bump) was completed by that work.
-> Items **#3–#8** remain deferred.
+> forbidden before K11. Item **#2** (version bump) is done; the plugin is now
+> `2026100215` (the plugin has since risen to `2026100301` on disk — T2
+> teach-apply — while the applied/DB version stays `2026100215`; DB upgrade
+> pending — see `STATUS.md` §1). The 3 Oct 2026 LOCAL K11 pilot separately executed item **#3**
+> (consent capture + append-only audit hook: `classes/local/consent.php`,
+> `classes/hook_callbacks.php`, Moodle tables `local_pulse_consent` /
+> `local_pulse_audit`) and the typed consent-state mirror side of item **#7**
+> (`ai/moodle_readiness/pilot.py` + `docs/pulse/aast-med/evidence/
+> pilot-consent-state.json`, which stores no student content). Items **#4**,
+> **#5** (no student-visible lang surface), **#6**, and the host **#7** audit
+> sink (no per-student table) remain deferred, as does the rung-colour part of
+> **#8** (the canvas now points at `PILOT-EXCEPTION.md` but marks no new rung).
+> See `STATUS.md` §5/§6 for the authoritative state.
 
 ## 1. Plugin — notice registry storage + Connection fields
 
@@ -34,13 +45,13 @@ Nothing here is required for the code-side machinery I shipped
 
 - **File:** `plugins/local_pulse/version.php`.
 - **Intended change:** bump `$plugin->version` when the plugin changes and keep
-  it `>= 2026100214`.
-- **Status:** done — bumped `2026100213` → `2026100214` with the staff-notice
-  lever.
+  it `>= 2026100215`.
+- **Status:** done — `2026100213` → `2026100214` (staff-notice lever), then
+  `2026100214` → `2026100215` by the LOCAL K11 pilot (consent + audit tables,
+  one `upgrade.php`, one cache purge).
 - **Dependency:** `PLUGIN_VERSION_MIN` in
-  `backend/ai/moodle_readiness/evaluator.py` mirrors this value; it was
-  re-synced to `2026100214` alongside the bump. Keep them equal whenever the
-  version rises.
+  `backend/ai/moodle_readiness/evaluator.py` mirrors this value; it is now
+  `2026100215`. Keep them equal whenever the version rises.
 
 ## 3. Plugin — consent capture + audit hook
 
@@ -53,6 +64,10 @@ Nothing here is required for the code-side machinery I shipped
 - **Why deferred:** co-owned, and it must not be built before K11
   preconditions (L5 passable, cohort, consent rules in
   `READINESS-SPEC.md` §1.3/§1.6).
+- **Update 3 Oct 2026:** **executed by the LOCAL K11 pilot** (not by the
+  original owner): `classes/local/consent.php`, `classes/hook_callbacks.php`,
+  and the append-only tables `local_pulse_consent` / `local_pulse_audit` in
+  `db/install.xml` + `db/upgrade.php`. Local dev only; no production surface.
 
 ## 4. Plugin — future student surface consults the gate
 
@@ -93,6 +108,12 @@ Nothing here is required for the code-side machinery I shipped
   with typed reason, subject, course, cohort, policy version, timestamp.
 - **Why deferred:** creating a per-student store before cohort + consent is the
   oversharing failure the contract forbids. No table was created.
+- **Update 3 Oct 2026:** the LOCAL K11 pilot added a **typed state mirror**
+  (`ai/moodle_readiness/pilot.py` + `docs/pulse/aast-med/evidence/
+  pilot-consent-state.json`) that stores only grant/revoke + policy version +
+  timestamp and never student content. The **host audit sink** (a Carbon
+  per-student append-only store) is still **not** built and no table was
+  created.
 
 ## 8. Canvas — reference the evaluator (no status change)
 

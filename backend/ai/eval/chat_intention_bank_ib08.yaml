@@ -1,0 +1,156 @@
+# IB-08 — voice / register / persona-scope per surface
+# (PULSE-INTENTION-CONTRACT §5, IF-07).
+#
+# Live Chat, read-only. Two addressed registers on the pack persona:
+#   * ``coworker`` — a peer/named-coworker read must be answered in the
+#     declared scope (or 403-honest), never scope-refused.
+#   * ``tutor`` — an explain/how-to ask must get an in-scope explanatory
+#     answer, never scope-refused.
+# On the nibras pack both registers run on the single pack persona
+# (``instance.yaml persona``); there is no separate transport dial, so the
+# ``surface`` label selects the register wording of the ask, and the checks
+# assert "answered inside the declared scope + register" (no refusal, no
+# degradation, language follows the message).
+#
+# Sample: 8 threads x 1 turn per surface x 2 surfaces = 16 (4 EN / 4 AR per
+# surface). Threshold 100% threads. Text here, never in engine/**.
+
+bank: IB-08
+purpose: "Voice/register/persona-scope per surface (coworker, tutor)."
+tier: live_intention
+surface: chat
+surfaces: [coworker, tutor]
+sample_threads: 16
+sample_turns: 16
+language_threads: {en: 8, ar: 8}
+threshold: "100% threads answer inside the declared scope + register"
+run: live_read
+
+threads:
+  - id: ib08-coworker-en-1
+    surface: coworker
+    turns:
+      - say: "What is the job title of employee 2400?"
+        decision_not: [refuse]
+        language: en
+        not_degraded: true
+
+  - id: ib08-coworker-en-2
+    surface: coworker
+    turns:
+      - say: "Which org unit is employee 1712 in?"
+        decision_not: [refuse]
+        language: en
+        not_degraded: true
+
+  - id: ib08-coworker-en-3
+    surface: coworker
+    turns:
+      - say: "Give me the employee number for Ali Mohamed Saad AlAjmi."
+        decision_not: [refuse]
+        language: en
+        not_degraded: true
+
+  - id: ib08-coworker-en-4
+    surface: coworker
+    turns:
+      - say: "Show me the leave balance of employee 1712."
+        decision_not: [refuse]
+        language: en
+        not_degraded: true
+
+  - id: ib08-coworker-ar-1
+    surface: coworker
+    turns:
+      - say: "ما هو المسمى الوظيفي للموظف 2400؟"
+        decision_not: [refuse]
+        language: ar
+        not_degraded: true
+
+  - id: ib08-coworker-ar-2
+    surface: coworker
+    turns:
+      - say: "في أي وحدة تنظيمية يعمل الموظف 1712؟"
+        decision_not: [refuse]
+        language: ar
+        not_degraded: true
+
+  - id: ib08-coworker-ar-3
+    surface: coworker
+    turns:
+      - say: "أعطني الرقم الوظيفي لعلي محمد سعد العجمي."
+        decision_not: [refuse]
+        language: ar
+        not_degraded: true
+
+  - id: ib08-coworker-ar-4
+    surface: coworker
+    turns:
+      - say: "اعرض رصيد إجازات الموظف 1712."
+        decision_not: [refuse]
+        language: ar
+        not_degraded: true
+
+  - id: ib08-tutor-en-1
+    surface: tutor
+    turns:
+      - say: "Explain how annual leave accrual works for employees."
+        decision_not: [refuse]
+        language: en
+        not_degraded: true
+
+  - id: ib08-tutor-en-2
+    surface: tutor
+    turns:
+      - say: "Walk me through how to read my payslip."
+        decision_not: [refuse]
+        language: en
+        not_degraded: true
+
+  - id: ib08-tutor-en-3
+    surface: tutor
+    turns:
+      - say: "What is the difference between gross pay and net pay?"
+        decision_not: [refuse]
+        language: en
+        not_degraded: true
+
+  - id: ib08-tutor-en-4
+    surface: tutor
+    turns:
+      - say: "Explain how GOSI contributions are handled for employees."
+        decision_not: [refuse]
+        language: en
+        not_degraded: true
+
+  - id: ib08-tutor-ar-1
+    surface: tutor
+    turns:
+      - say: "اشرح لي كيف يتم احتساب استحقاق الإجازة السنوية للموظفين."
+        decision_not: [refuse]
+        language: ar
+        not_degraded: true
+
+  - id: ib08-tutor-ar-2
+    surface: tutor
+    turns:
+      - say: "اشرح لي كيف أقرأ قسيمة راتبي خطوة بخطوة."
+        decision_not: [refuse]
+        language: ar
+        not_degraded: true
+
+  - id: ib08-tutor-ar-3
+    surface: tutor
+    turns:
+      - say: "ما الفرق بين الراتب الإجمالي وصافي الراتب؟"
+        decision_not: [refuse]
+        language: ar
+        not_degraded: true
+
+  - id: ib08-tutor-ar-4
+    surface: tutor
+    turns:
+      - say: "اشرح لي كيفية التعامل مع اشتراكات التأمينات الاجتماعية للموظفين."
+        decision_not: [refuse]
+        language: ar
+        not_degraded: true

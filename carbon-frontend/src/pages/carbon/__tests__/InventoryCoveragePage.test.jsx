@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import InventoryCoveragePage from '../InventoryCoveragePage';
@@ -248,5 +248,38 @@ describe('Inventory coverage O1 quote honesty', () => {
     expect(sourceId).toBe(5);
     expect(payload.excluded).toBe(true);
     expect(payload.reason).toBe('insufficient_data');
+  });
+
+  it('enables search on the streams grid without becoming a second reporter (M6)', async () => {
+    renderPage();
+    await screen.findByText('Reconciliation', undefined, SETTLE);
+
+    // Search is wired to the streams grid (no hideSearch), and the streams page
+    // remains the sole Missing / Entered / Excluded reporter.
+    expect(screen.getAllByPlaceholderText('Search streams').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Missing').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Entered').length).toBeGreaterThan(0);
+  });
+
+  it('uses SearchSelect (searchable combobox) for governed enums in the goal dialog (RULE 13)', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByRole('alert', undefined, SETTLE);
+
+    await user.click(screen.getByRole('tab', { name: 'Goals' }));
+    await user.click(screen.getByRole('button', { name: 'New Goal' }));
+    const dialog = await screen.findByRole('dialog');
+
+    // Min Quality Tier is a real searchable combobox, not a TextField select wall.
+    const tier = within(dialog).getByLabelText(/Min Quality Tier/i);
+    expect(tier).toHaveAttribute('role', 'combobox');
+    fireEvent.mouseDown(tier);
+    expect(await screen.findByText('Tier 2 — Verified')).toBeInTheDocument();
+
+    // Completeness definition is likewise a searchable combobox.
+    const completeness = within(dialog).getByLabelText(/Completeness definition/i);
+    expect(completeness).toHaveAttribute('role', 'combobox');
+    fireEvent.mouseDown(completeness);
+    expect(await screen.findByText('Materiality-bounded')).toBeInTheDocument();
   });
 });

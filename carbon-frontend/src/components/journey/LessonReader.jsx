@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { FONT } from '../../theme/themeTokens';
 import MixedText from './MixedText';
 import LessonStepTimeline from './LessonStepTimeline';
+import LessonMission from './LessonMission';
 
 /**
  * The master-detail lesson reader: one lesson at a time, its header naming the
@@ -22,6 +23,7 @@ import LessonStepTimeline from './LessonStepTimeline';
 export default function LessonReader({
   station, lesson, glossary, onGo, onBackToStation,
   prevLesson, nextLesson, onNavigateLesson, onStationSummary, compact,
+  appId, onChanged,
 }) {
   const { t } = useTranslation('journey');
   const steps = Array.isArray(lesson.steps) ? lesson.steps : [];
@@ -78,18 +80,36 @@ export default function LessonReader({
     </Box>
   );
 
+  // Waypoints first, then the mission loop (briefing, hazard, check, note).
+  // The mission is fetched per lesson; without it the pack's know/dont/question
+  // never reach the page. `LessonMission` renders nothing when the fetch fails.
+  const body = (
+    <>
+      <LessonStepTimeline
+        steps={steps}
+        glossary={glossary}
+        onGo={onGo}
+        activeIndex={clamped}
+        onSelectStep={setActiveStep}
+      />
+      {appId && (
+        <LessonMission
+          appId={appId}
+          lessonId={lesson.id}
+          glossary={glossary}
+          onChanged={onChanged}
+          compact={compact}
+        />
+      )}
+    </>
+  );
+
   if (compact) {
     return (
       <Box data-testid="lesson-reader" data-compact="true">
         <MixedText text={lesson.title} glossary={glossary} component="h3" sx={FONT.cardTitle} />
         <Box sx={{ mt: 0.5 }}>{controls}</Box>
-        <LessonStepTimeline
-          steps={steps}
-          glossary={glossary}
-          onGo={onGo}
-          activeIndex={clamped}
-          onSelectStep={setActiveStep}
-        />
+        {body}
       </Box>
     );
   }
@@ -115,13 +135,7 @@ export default function LessonReader({
         </Box>
         {controls}
       </Box>
-      <LessonStepTimeline
-        steps={steps}
-        glossary={glossary}
-        onGo={onGo}
-        activeIndex={clamped}
-        onSelectStep={setActiveStep}
-      />
+      {body}
     </Box>
   );
 }
@@ -137,8 +151,10 @@ LessonReader.propTypes = {
   onNavigateLesson: PropTypes.func.isRequired,
   onStationSummary: PropTypes.func.isRequired,
   compact: PropTypes.bool,
+  appId: PropTypes.string,
+  onChanged: PropTypes.func,
 };
 
 LessonReader.defaultProps = {
-  glossary: [], prevLesson: null, nextLesson: null, compact: false,
+  glossary: [], prevLesson: null, nextLesson: null, compact: false, appId: '', onChanged: undefined,
 };

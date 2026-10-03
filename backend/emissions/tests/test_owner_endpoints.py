@@ -16,8 +16,16 @@ class OwnerApiEndpointsTest(TestCase):
     def setUp(self):
         self.owner = User.objects.create_user(username='owner', password='pass123')
 
-        self.org_unit = OrgUnit.objects.create(name='Engineering', slug='engineering')
-        self.other_org_unit = OrgUnit.objects.create(name='Finance', slug='finance')
+        # ADR-0028: exactly one active deployment root. Engineering (the owner's
+        # scoped org) and Finance (out of scope) are siblings under it, so the
+        # owner's scope expansion (anchor + descendants) covers Engineering only.
+        self.root_org_unit = OrgUnit.objects.create(name='Test Root', slug='test-root-owner')
+        self.org_unit = OrgUnit.objects.create(
+            name='Engineering', slug='engineering', parent=self.root_org_unit
+        )
+        self.other_org_unit = OrgUnit.objects.create(
+            name='Finance', slug='finance', parent=self.root_org_unit
+        )
 
         self.module = Module.objects.create(org_unit=self.org_unit, name='Electricity - Main Campus', scope=2)
         self.other_module = Module.objects.create(org_unit=self.other_org_unit, name='Fleet - Main Campus', scope=1)

@@ -1,0 +1,87 @@
+# IB-04 — greeting + scope, bilingual (PULSE-INTENTION-CONTRACT §5).
+#
+# Live Chat Ask, read-only. A greeting must get an in-language, in-persona
+# answer (Decision answer, no tools), never the out-of-scope refusal card
+# (IF-02). A genuinely out-of-scope ask (a carbon/emissions term on the nibras
+# pack) must still be refused, in the user's language (IF-01). A declared
+# in-scope ask (loan / leave) must not be scope-refused (IF-01, IRP-9).
+#
+# Turn text lives here, in the bank, never in engine/**. Run against the
+# nibras cell only; the runner refuses to score any other pack.
+#
+# Checks (shared with chat_retest_bank.yaml):
+#   language: en|ar   the reply is mostly Latin / mostly Arabic
+#   decision_not: [..] the logged TurnDecision is none of these
+#   decision_is: d     the logged TurnDecision is d (scope card => refuse)
+#   not_degraded: true the reply is not a typed degradation sentence
+
+threads:
+  - id: ib04-greet-en
+    turns:
+      - say: "Hello! How are you today?"
+        decision_not: [refuse]
+        language: en
+        not_degraded: true
+
+  - id: ib04-greet-ar
+    turns:
+      - say: "مرحباً، كيف حالك اليوم؟"
+        decision_not: [refuse]
+        language: ar
+        not_degraded: true
+
+  - id: ib04-greet-en-2
+    turns:
+      - say: "Hi there, how's it going?"
+        decision_not: [refuse]
+        language: en
+        not_degraded: true
+
+  - id: ib04-greet-ar-2
+    turns:
+      - say: "أهلاً، كيف الأمور معك؟"
+        decision_not: [refuse]
+        language: ar
+        not_degraded: true
+
+  - id: ib04-oos-en
+    turns:
+      - say: "Show me my carbon footprint."
+        decision_is: refuse
+        language: en
+        not_degraded: true
+
+  - id: ib04-oos-ar
+    turns:
+      - say: "اعرض لي carbon footprint الخاص بي."
+        decision_is: refuse
+        language: ar
+        not_degraded: true
+
+  - id: ib04-inscope-loan-en
+    turns:
+      - say: "Can I apply for a loan?"
+        decision_not: [refuse]
+        language: en
+        not_degraded: true
+
+  - id: ib04-inscope-loan-ar
+    turns:
+      - say: "أريد قرضاً."
+        decision_not: [refuse]
+        language: ar
+        not_degraded: true
+
+  - id: ib04-inscope-leave-en
+    turns:
+      - say: "How do I request annual leave?"
+        decision_not: [refuse]
+        language: en
+        not_degraded: true
+
+  - id: ib04-inscope-leave-ar
+    turns:
+      - say: "كيف أطلب إجازة سنوية؟"
+        decision_not: [refuse]
+        language: ar
+        not_degraded: true

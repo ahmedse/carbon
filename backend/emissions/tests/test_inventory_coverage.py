@@ -172,7 +172,12 @@ class InventoryCoverageServiceTests(TestCase):
         self.assertEqual(result['target_coverage_pct'], 100.0)
 
     def test_org_unit_filter(self):
-        other_org = OrgUnit.objects.create(name='Other', slug='other-org')
+        # ADR-0028 allows only one active root OrgUnit per deployment, so the
+        # second unit is created as a child of the existing root. Coverage still
+        # filters by exact org_unit_id, so its sources stay excluded.
+        other_org = OrgUnit.objects.create(
+            name='Other', slug='other-org', parent=self.org
+        )
         self._make_source('Mine')
         InventorySource.objects.create(
             org_unit=other_org, scope=1, source_name='Theirs'

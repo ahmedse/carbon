@@ -1750,6 +1750,12 @@ class CoverageTarget(models.Model):
     Creating a target never changes any CoverageGoal.status.
     """
 
+    # Glossary decision (ADR-0018 / audit M4): a GHG "Scope" is a domain code,
+    # so these choice labels stay English-Latin on the API/domain surface and
+    # are NOT translated here (translating them would create a second,
+    # API-owned copy of a UI string). The coverage UI localizes the
+    # translatable word ("Scope" / "Category") from i18n and isolates the
+    # Latin code (e.g. "1+2") with the shared bdi primitive (LtrText).
     TARGET_SCOPE_CHOICES = [
         ('1', 'Scope 1'), ('2', 'Scope 2'), ('3', 'Scope 3'),
         ('1+2', 'Scope 1+2'), ('1+2+3', 'Scope 1+2+3'),

@@ -574,3 +574,53 @@ def test_execute_bound_read_keeps_wrapped_loan_restatement():
     assert text
     assert "emergency" in text
     assert "9600" in text
+
+
+_ATTENDANCE_ENTRY = {
+    "name": "list_my_attendance",
+    "kind": "history",
+    "empty_render": "no_attendance_rows",
+    "value_labels": {
+        "status": {
+            "present": {"en": "present", "ar": "حاضر"},
+            "absent": {"en": "absent", "ar": "غائب"},
+        },
+    },
+}
+_ATTENDANCE_ROWS = [
+    {"date": "2026-09-30", "status": "present"},
+    {"date": "2026-09-29", "status": "absent"},
+]
+
+
+def test_history_value_label_is_arabic_only_when_the_pack_declares_it():
+    from ai.engine.pack_vocab import bind_pack
+
+    with bind_pack("nibras"):
+        en = render_catalog_read(
+            {"result": _ATTENDANCE_ROWS}, "list_my_attendance", "en",
+            catalog_entry=_ATTENDANCE_ENTRY,
+        )
+        ar = render_catalog_read(
+            {"result": _ATTENDANCE_ROWS}, "list_my_attendance", "ar",
+            catalog_entry=_ATTENDANCE_ENTRY,
+        )
+    assert "present" in en and "absent" in en
+    assert "حاضر" in ar and "غائب" in ar
+    assert "present" not in ar and "absent" not in ar
+
+
+def test_history_english_is_identical_without_a_value_label_map():
+    from ai.engine.pack_vocab import bind_pack
+
+    plain = {k: v for k, v in _ATTENDANCE_ENTRY.items() if k != "value_labels"}
+    with bind_pack("nibras"):
+        with_map = render_catalog_read(
+            {"result": _ATTENDANCE_ROWS}, "list_my_attendance", "en",
+            catalog_entry=_ATTENDANCE_ENTRY,
+        )
+        without_map = render_catalog_read(
+            {"result": _ATTENDANCE_ROWS}, "list_my_attendance", "en",
+            catalog_entry=plain,
+        )
+    assert with_map == without_map

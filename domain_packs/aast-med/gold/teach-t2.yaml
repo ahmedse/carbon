@@ -1,0 +1,125 @@
+version: 1
+rule: Each case records the exact structured lesson the deterministic, offline builder emits for (shortname, topic). Every objectives/worked_example text and every assessment answer is an exact substring of the passage it cites (the B3 pass); a span-less candidate is dropped; no line is model-invented. 100% verbatim; 0 fabricated spans; a passage id must resolve in the open course bank.
+thresholds:
+  min_cases: 4
+  verbatim_ratio: 1.0
+  fabricated_spans: 0
+  dropped_ungrounded: true
+cases:
+- id: T2-1
+  shortname: MED520
+  topic: alopecia
+  lesson:
+    status: proposal
+    grounded: true
+    course: MED520
+    topic: alopecia
+    objectives:
+    - text: No Alopecia SLOs By the end of this lecture, students will be able to 1.
+      passage_ref: MED520:file:1111:alopecia.pdf
+    worked_example:
+    - text: of Dermatology Alexandria University Flexural lesions Patchy hair loss Patchy non-cicatrical hair loss Alopecia areata Non-inflammatory tinea capitis Inflammatory tinea capitis Alopecia areata Grey patch Black dot Black dots Hair stumps Scales +++ - +++ - +++ + - - - Nail changes/ dystrophy Nail pterygium Lichen planus Acne Comedonal acne scabies pemphigus Crusted impetigo ecthyma Urticarial wheal pediculosis Alopecia universalis Adulthood AD
+      passage_ref: MED520:google:1167:1fABOEo-XbwGPhoxa1dQZs7QqG2lloyfn
+      label: 'Worked example:'
+    - text: Types of lichen planus Hypertrophic type (shin of tibia) Atrophic Ulcerative Follicular (lichen planopilaris ) Annular (glans penis) Linear or zosteriform Bullous Actinic Definition It is an idiopathic inflammatory disease of the skin and mucous membranes It is a T-cell-mediated autoimmune disease It may be triggered by infections, vaccines , drugs(ACE inhibitors, thiazide diuretics, antimalarial drugs ) Scarring alopecia Histopathology
+      passage_ref: MED520:file:1125:Lichen planus.pptx
+      label: 'Worked example:'
+    assessment:
+    - question: ________ Hair cycle The timing of the phases of the hair cycle and its overall duration varies between species, between follicles in different regions of the skin in the same species .
+      answer: Alopecia Hair cycle The timing of the phases of the hair cycle and its overall duration varies between species, between follicles in different regions of the skin in the same species .
+      passage_ref: MED520:google:1112:1tdof3py-n4A-D6b8lEZFdDyiUfKQhT8b
+    - question: Alopecia areata ________ areata is a common, chronic, inflammatory disease that causes non‐scarring hair loss.
+      answer: Alopecia areata Alopecia areata is a common, chronic, inflammatory disease that causes non‐scarring hair loss.
+      passage_ref: MED520:google:1112:1tdof3py-n4A-D6b8lEZFdDyiUfKQhT8b
+- id: T2-2
+  shortname: MED213
+  topic: activity
+  lesson:
+    status: proposal
+    grounded: true
+    course: MED213
+    topic: activity
+    objectives:
+    - text: Brain Rhythm The electroencephalogram (EEG) is a measurement that enables us to detect the generalized activity of the cerebral cortex.
+      passage_ref: MED213:google:894:1zt0VZTrPLBcDC4O48kFOl4Vvj7zbqkNH
+    worked_example:
+    - text: 'Experiment 3 Record nerve conduction Nerve conduction test Procedures: nerve stimulated/ muscle activity recorded/ latent period/ compound action potential Equipments needed: surface electrodes/ stimulator Significane of the test 1- Identify this test 2- The highlighted part in blue represents the -----------------------.'
+      passage_ref: MED213:file:898:revision EMG .pptx
+      label: 'Worked example:'
+    - text: Beta is a ‘fast’ activity, present when we are alert, attentive , engaged in problem solving, judgment, decision making, and engaged in focused mental activity.
+      passage_ref: MED213:file:897:2025 Brain rhythm.pptx
+      label: 'Worked example:'
+    assessment:
+    - question: Electro Electrical encephalo Brain gram Picture Collective synchronous ________ of thousands of neurons are needed to create an EEG wave.
+      answer: Electro Electrical encephalo Brain gram Picture Collective synchronous activity of thousands of neurons are needed to create an EEG wave.
+      passage_ref: MED213:google:894:1zt0VZTrPLBcDC4O48kFOl4Vvj7zbqkNH
+    - question: Alpha ________ disappears normally with attention ( eg , mental arithmetic, stress, opening eyes).
+      answer: Alpha activity disappears normally with attention ( eg , mental arithmetic, stress, opening eyes).
+      passage_ref: MED213:file:897:2025 Brain rhythm.pptx
+- id: T2-3
+  shortname: NMD1000
+  topic: absorption
+  lesson:
+    status: proposal
+    grounded: true
+    course: NMD1000
+    topic: absorption
+    objectives:
+    - text: Explain how the breaking of covalent glycosidic , peptide and ester bonds by specific digestive enzymes enables nutrient absorption, predicting the clinical consequences when these bonds cannot be broken in malabsorption disorders and deduce the mechanism of action of drugs targeting esterases.
+      passage_ref: NMD1000:file:1316:L 16-chemical bonds 2026.pdf
+    worked_example:
+    - text: 'Oligosaccharides: Disaccharides - Milk sugar - Least sweet sugar Ca Cu Zn 1-Lactose Neural and immunological processes ABO blood groups Absorption Abdominal Pain Bloating Diarrhea 2- Sucrose Cane Sugar VERY SWEET Diabetics Obese Hunger &Craves 3- Maltose Polysaccharides (Complex Sugars) 1- Starch 2- Glycogen 3- Dextrins Highly Branched Since they do not easily go out of vascular compartment they are used for intravenous infusion as plasma volume'
+      passage_ref: NMD1000:file:1292:Carbohydrates  2026.pptx
+      label: 'Worked example:'
+    - text: This tight regulation helps in controlling several metabolic functions as the storage and release of energy and maintaining blood glucose levels in fed and fasting states, Digestion and absorption of nutrients, also the formation of complex molecules from the small, simple ones to produce cellular constituents 5- Location within the cell Many enzymes are localized in specific organelles within the cell.
+      passage_ref: NMD1000:file:1320:L 21- Enzyme properties and importance.pdf
+      label: 'Worked example:'
+    assessment:
+    - question: '• Also mal________ sy ndromes, such as lactose intolerance (refer to lecture 1: carbohydrates), is due to deficiency of enzymes breaking the glycosidic bond 2) Peptide bonds (Figure 4) • These are one of the strongest covalent bond.'
+      answer: '• Also malabsorption sy ndromes, such as lactose intolerance (refer to lecture 1: carbohydrates), is due to deficiency of enzymes breaking the glycosidic bond 2) Peptide bonds (Figure 4) • These are one of the strongest covalent bond.'
+      passage_ref: NMD1000:file:1316:L 16-chemical bonds 2026.pdf
+    - question: ALL DIETARY CARBOHYDRATES MUST BE HYDROLYZED TO MONOSACCHARIDES TO ENABLE THEIR ________.
+      answer: ALL DIETARY CARBOHYDRATES MUST BE HYDROLYZED TO MONOSACCHARIDES TO ENABLE THEIR ABSORPTION.
+      passage_ref: NMD1000:file:1291:L13-Chemical Blocks of Life- Carbohydrates 2026.pdf
+- id: T2-4
+  shortname: NMD4201
+  topic: accidental
+  lesson:
+    status: proposal
+    grounded: true
+    course: NMD4201
+    topic: accidental
+    objectives:
+    - text: Gradual (or insidious); (over days, weeks or months) and accidental discovery.
+      passage_ref: NMD4201:file:1365:History taking.pdf
+    worked_example:
+    - text: Octreotide and related analogs are in clinical trials for treatment of polycystic liver disease © GIT 2 21 Hydatid Cyst of the liver INDEX Etiology Due to infection with the helminth Ecchinococcus granulosa Adult worm is found normally in the dog and sheep intestine Man is an accidental intermediate host Infection seen in Mediterranean areas, Australia and South America Liver is the commonest organ involved Cysts are unilocular , can be up to 20
+      passage_ref: NMD4201:file:1446:Liver surgery.pptx
+      label: 'Worked example:'
+    - text: 'Mallampatti score State of nutrition: Height, weight and BMI State of dentition: the presence of loose, crowned or damaged teeth should be noted and the patient should be informed about possibility of accidental damage.'
+      passage_ref: NMD4201:file:1468:preoperative assessment and premedication ASA.ppt
+      label: 'Worked example:'
+    assessment:
+    - question: 2 | P a g e W a l i d A b u A r a b C a r d i o t h o r a c i c T r a u m a Chest Trauma ❑ Types of Thoracic Trauma ▪ ________ Trauma.
+      answer: 2 | P a g e W a l i d A b u A r a b C a r d i o t h o r a c i c T r a u m a Chest Trauma ❑ Types of Thoracic Trauma ▪ Accidental Trauma.
+      passage_ref: NMD4201:file:1392:Cardiothoracic Trauma.pdf
+    - question: jpg Achalasia Corrosive esophageal injury ❑ ________ (Children) or Deliberate (Adults) ingestion of alkali or acids.
+      answer: jpg Achalasia Corrosive esophageal injury ❑ Accidental (Children) or Deliberate (Adults) ingestion of alkali or acids.
+      passage_ref: NMD4201:file:1393:Surgery of Esophagus  Mediastinum Presentation.pdf
+out_of_scope:
+  ungrounded_ilo:
+    passage_ref: MED520:file:1111:alopecia.pdf
+    fabricated_ilo: Alopecia is caused by a rare fungal enzyme absent from every lecture.
+    expect: dropped
+  no_grounding:
+    shortname: MED520
+    topic: zzznosuchtermqq
+    expect: miss
+  student_audience:
+    shortname: MED520
+    topic: alopecia
+    expect: refused
+  off_list:
+    shortname: AHFAD
+    topic: alopecia
+    expect: refused

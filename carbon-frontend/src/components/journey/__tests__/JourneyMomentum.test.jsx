@@ -129,7 +129,7 @@ describe('StationCard sense of place', () => {
     </MemoryRouter>,
   );
 
-  it('renders a completion ring, an honest count and a check only when done', () => {
+  it('renders a numbered pip, a check only when done, and no lock', () => {
     render(
       <MemoryRouter>
         <StationCard station={stationByN(1)} active={false} onSelect={() => {}} />
@@ -138,7 +138,10 @@ describe('StationCard sense of place', () => {
     );
     expect(screen.getByTestId('journey-station-done-1')).toBeInTheDocument();
     expect(screen.queryByTestId('journey-station-done-3')).not.toBeInTheDocument();
-    expect(screen.getByTestId('journey-station-3')).toHaveTextContent('0 of 1 done');
+    // A done camp is a filled check; an open one keeps its number.
+    expect(screen.getByTestId('journey-station-marker-1')).toHaveAttribute('data-marker', 'done');
+    expect(screen.getByTestId('journey-station-marker-3')).toHaveAttribute('data-marker', 'current');
+    expect(screen.getByTestId('journey-station-3')).toHaveTextContent('Data entry');
     expect(screen.queryByText(/^locked$/i)).not.toBeInTheDocument();
   });
 

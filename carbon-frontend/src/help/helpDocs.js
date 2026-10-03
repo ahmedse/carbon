@@ -217,6 +217,260 @@ const APP_HELP_DOCS = {
     },
   },
 
+  // ── Carbon Lead guide — the full detail behind the Journey's "lead" seat ──
+  "carbon-lead": {
+    kind: "app",
+    title: "Carbon Lead guide",
+    intro: "Run the inventory: one open period, declared sources, a calculation you can defend, and a number you can quote.",
+    description:
+      "The Journey teaches by doing — seven camps, each finished by a real action in the app. This is the full written guide behind the Carbon Lead seat: what each camp is for, the decision it owns, and the field notes a lead is expected to know. The camps are always open and nothing is locked; a camp is complete only when the app proves the outcome.",
+    cards: [
+      {
+        icon: "period",
+        title: "Own the window",
+        description:
+          "The whole inventory points at exactly one open reporting period. With none, nobody can enter data; with two, every total and lock becomes ambiguous.",
+      },
+      {
+        icon: "boundary",
+        title: "Own the boundary",
+        description:
+          "The boundary decides which entities count and how they are consolidated — equity share, financial control, or operational control. Sources, factors and totals all sit inside it.",
+      },
+      {
+        icon: "calc",
+        title: "Own the number",
+        description:
+          "A calculation turns activity rows into emissions and writes an audit row naming who ran it. Read created, skipped and error counts before you run it again.",
+      },
+    ],
+    steps: [
+      {
+        label: "1 · Setup and policy",
+        icon: "period",
+        description:
+          "Keep exactly one reporting period open. Declare each source with its scope, and make sure each one has an active emission factor of the same scope and unit. Two open periods means every total has two meanings.",
+      },
+      {
+        label: "2 · Coverage targets",
+        icon: "check",
+        description:
+          "Every declared source ends up covered by data or excluded with a stated reason — not material, insufficient data, outside the boundary, or other. An exclusion is a decision; an omission is a mistake.",
+      },
+      {
+        label: "3 · Data products",
+        icon: "book",
+        description:
+          "Reusable data products will bring many rows in one shape. This path is not wired to the app yet, so no work is owed here today.",
+      },
+      {
+        label: "4 · Data entry",
+        icon: "add",
+        description:
+          "Your owners enter this period's activity rows in the unit the factor expects, from real meter or invoice readings. You own the hand-off: their rows in and clean, your coverage decision next.",
+      },
+      {
+        label: "5 · Calculation and quality",
+        icon: "calc",
+        description:
+          "Run the calculation for the open period and read its counts. Quality tiers run from 1 (audited) to 5 (proxy); a figure resting on a weak tier is shown and labelled, never dressed as assured.",
+      },
+      {
+        label: "6 · Lock and close",
+        icon: "lock",
+        description:
+          "A period moves open, locked, submitted, then verified or rejected. Open goes to locked — never straight to closed. A rejected period goes back for a fix and a new submission.",
+      },
+      {
+        label: "7 · Report and disclosure",
+        icon: "quote",
+        description:
+          "Before you quote a total, say in words what it sums: which sources and which boundary. A period in a header is a label, not a filter.",
+      },
+    ],
+    userStory: {
+      title: "A day in the lead's seat",
+      character: "Meet Ali, the carbon lead:",
+      scenes: [
+        { time: "Morning", text: "He confirms exactly one period is open on Reporting Periods, then declares a generator on Inventory Coverage and binds it to an active factor of the same scope." },
+        { time: "Midday", text: "A data owner reports their rows are in. Ali checks the coverage row, marks one source covered and excludes another with a stated reason." },
+        { time: "Afternoon", text: "He runs the calculation, reads the created, skipped and error counts, and fixes a failing row before touching a warning." },
+        { time: "End of day", text: "He locks the period, submits it for verification, and prepares a one-line scope note for any total he quotes." },
+      ],
+    },
+    faqs: [
+      {
+        q: "How many reporting periods should be open?",
+        a: "Exactly one. With none, data entry has no window. With two, every total and every lock points at two records. Open one if none is, and lock the extras if several are.",
+      },
+      {
+        q: "What must match between an activity row and its emission factor?",
+        a: "The unit — litres, kWh, and so on — and the scope. A factor multiplies an amount in a specific unit; a mismatch gives a wrong figure or no figure at all.",
+      },
+      {
+        q: "What does excluding a source require?",
+        a: "A stated reason: not material, insufficient data, outside the boundary, or other. The reason is what makes an exclusion a decision instead of a silent gap.",
+      },
+      {
+        q: "What does the boundary decide?",
+        a: "Which entities count in the inventory and how they are consolidated. Choose the approach before data is entered — changing it afterwards silently changes what every figure means.",
+      },
+      {
+        q: "Who can see that a calculation was run?",
+        a: "Anyone with audit access. Every run writes an audit row with the user, the time and the counts. Run it once, read the counts, then decide whether a re-run is needed.",
+      },
+      {
+        q: "What is the next legal transition when data entry is done?",
+        a: "Lock it — open goes to locked. Verification and closing come after submission, and closing straight from open is refused.",
+      },
+      {
+        q: "How is a Tier 4 or 5 figure treated?",
+        a: "It is shown and labelled 'not assured'. A proxy is a useful estimate, not proof, so it is improved over time rather than presented as audited.",
+      },
+      {
+        q: "The dashboard shows a total under a period name. What does it sum?",
+        a: "The Chairman page adds every calculation across all periods; the period in the header is a label, not a filter. State in words what a number covers before quoting it.",
+      },
+      {
+        q: "The period is locked and an owner needs to fix a row. What now?",
+        a: "A lock protects what was submitted. Only a lead can move the period back to open; owners should never archive and re-enter rows to get around it.",
+      },
+    ],
+    contact: {
+      intro: "Need help or want to suggest an improvement?",
+      email: "ahmed.saied@aast.edu",
+      version: "1.0.0",
+      lastUpdated: "October 2026",
+    },
+  },
+
+  // ── Carbon Field guide — the full detail behind the Journey's "owner" seat ──
+  "carbon-field": {
+    kind: "app",
+    title: "Carbon Field guide",
+    intro: "Enter this period's activity rows for your own sources — from real readings, in the unit the factor expects.",
+    description:
+      "This is the full written guide behind the Data Owner seat in the Journey. It covers the whole gathering job: finding the sources you owe, saving one honest activity row, reading the quality flags, and handing clean rows to the lead who owns coverage. Nothing here is invented — every figure comes from a meter, an invoice, or the app itself.",
+    cards: [
+      {
+        icon: "add",
+        title: "Enter what the meter says",
+        description:
+          "A row is one activity — litres of fuel, or kilowatt-hours — written in the unit the factor expects. Rounding or converting to look tidy is a silent edit to the record.",
+      },
+      {
+        icon: "tier",
+        title: "Read the flags, not the vibes",
+        description:
+          "Quality checks mark a row as passing, warning or failing. Fix a failing row first: it breaks a rule. A warning is a doubt worth a second look.",
+      },
+      {
+        icon: "handoff",
+        title: "Hand off, don't decide coverage",
+        description:
+          "You supply the data. The lead decides whether a source is covered or excluded with a reason. Your job ends when the rows are in and clean.",
+      },
+    ],
+    steps: [
+      {
+        label: "1 · Find what you owe",
+        icon: "navigate",
+        description:
+          "Data Entry lists the data products you own for the open period. Pick the source with the fewest rows — that gap is what you owe first.",
+      },
+      {
+        label: "2 · Save one honest row",
+        icon: "add",
+        description:
+          "Open your source, add one row with the amount and unit exactly as the meter or invoice states, and save it. The saved row is the proof the lesson is done.",
+      },
+      {
+        label: "3 · Bring many rows at once",
+        icon: "book",
+        description:
+          "For a whole file of readings, import: upload one file of up to 10 MB, map each column, then validate — in that order. Keep one file per import.",
+      },
+      {
+        label: "4 · Why the total didn't move",
+        icon: "calc",
+        description:
+          "Saving a row records activity; it does not calculate emissions. A calculation is run by someone with the calculate permission, usually the lead. Never re-enter the row.",
+      },
+      {
+        label: "5 · Read your quality status",
+        icon: "check",
+        description:
+          "Open a flagged row and read the reason. Failing rows break a rule and can block the period; warnings can wait until the failures are gone.",
+      },
+      {
+        label: "6 · Locked or rejected",
+        icon: "lock",
+        description:
+          "When a period is locked, its rows are read-only. When it is rejected, read the verifier's note and prepare the corrected row — the lead moves the period, not you.",
+      },
+      {
+        label: "7 · Hand the rows off",
+        icon: "handoff",
+        description:
+          "Confirm your source shows the rows are in and clean, then tell the lead they are ready. Coverage and exclusion are the lead's decision, with its own permission.",
+      },
+    ],
+    userStory: {
+      title: "A day in the field seat",
+      character: "Meet Bilagot, a data owner:",
+      scenes: [
+        { time: "Morning", text: "She opens Data Entry, finds the source with the fewest rows, and reads the meter reading off the log sheet." },
+        { time: "Midday", text: "She adds one row in the unit the factor expects, saves it, and does not round the figure to look tidy." },
+        { time: "Afternoon", text: "She imports a month of readings — upload, map columns, validate — and checks one flagged row's reason." },
+        { time: "End of day", text: "She tells the lead the rows are in and clean, and stops there: coverage is the lead's call." },
+      ],
+    },
+    faqs: [
+      {
+        q: "Which page lists the data I own this period?",
+        a: "Data Entry (My Data) is scoped to your org units. The Chairman page shows the whole picture and Emission Factors is configuration, so neither is your list.",
+      },
+      {
+        q: "The meter reads 1,027,668 kWh. Should I round it?",
+        a: "No. Enter exactly what the meter or invoice says, in the unit the factor expects. Tidy is not evidence, and rounding is a silent edit to the record.",
+      },
+      {
+        q: "My row is saved but the total didn't move. Did I do it wrong?",
+        a: "No. Entering data and calculating are separate steps with separate permissions. Ask the lead to run the calculation — and never enter the row a second time, or the activity doubles.",
+      },
+      {
+        q: "What are the import wizard's steps, in order?",
+        a: "Upload, map columns, validate. You upload first so the wizard can read your columns, then map them, then it validates before anything is saved.",
+      },
+      {
+        q: "One row is failing and another is warning. Which do I fix first?",
+        a: "The failing row. Failing rows break a rule and can block the period; warnings can wait until the failures are gone.",
+      },
+      {
+        q: "Can I edit a row when the period is locked?",
+        a: "No — a lock makes its rows read-only. Ask the lead to move the period; do not archive and re-enter rows to get around a lock.",
+      },
+      {
+        q: "Who decides that a source is covered or excluded?",
+        a: "The carbon lead. You supply rows, the lead decides coverage. Never mark a source excluded because it is hard to collect — that decision needs a stated reason.",
+      },
+      {
+        q: "A source has no real row this period. What do I enter?",
+        a: "Nothing. A stream with no real row stays missing — nothing is invented. Tell the lead the gap is real so they can chase the meter or exclude it with a reason.",
+      },
+      {
+        q: "How do I know a source is mine?",
+        a: "Your org unit decides it. A source you do not own will not appear in your list, and entering data for it is not your job.",
+      },
+    ],
+    contact: {
+      intro: "Need help or want to suggest an improvement?",
+      email: "ahmed.saied@aast.edu",
+      version: "1.0.0",
+      lastUpdated: "October 2026",
+    },
+  },
+
   people: {
     kind: "app",
     title: "Welcome to People",
@@ -448,6 +702,28 @@ export function getAppHelpDoc(appId) {
   if (APP_HELP_DOCS[appId]) return APP_HELP_DOCS[appId];
   const manifest = APP_BY_ID[appId];
   return manifest ? autoGenerateAppHelpDoc(manifest) : null;
+}
+
+// ── Multi-guide apps ─────────────────────────────────────────────────────
+// An app can offer more than one guide (an overview plus role guides). The
+// order below is the tab order; `docKey` points back into APP_HELP_DOCS so the
+// documents themselves stay in ONE place.
+const APP_GUIDES = {
+  carbon: [
+    { id: "overview", label: "Overview", docKey: "carbon" },
+    { id: "lead", label: "Lead guide", docKey: "carbon-lead" },
+    { id: "field", label: "Field guide", docKey: "carbon-field" },
+  ],
+};
+
+/** The guides an app offers, in tab order. Empty when the app has only one. */
+export function getAppGuides(appId) {
+  if (!appId) return [];
+  const rows = APP_GUIDES[appId];
+  if (!rows) return [];
+  return rows
+    .map((row) => ({ id: row.id, label: row.label, doc: APP_HELP_DOCS[row.docKey] }))
+    .filter((row) => Boolean(row.doc));
 }
 
 /** All app ids that have a help doc (used by the sidebar Help studio). */

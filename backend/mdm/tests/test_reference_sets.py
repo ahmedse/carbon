@@ -35,12 +35,19 @@ class ReferenceSetViewSetTest(APITestCase):
         self.admin_user.is_staff = True
         self.admin_user.save()
         
-        # Create org units
+        # Create org units — ADR-0028 single active root; the two colleges are
+        # siblings under it so each user's org scope stays independent (neither
+        # unit is an ancestor/descendant of the other).
+        self.root_org_unit = OrgUnit.objects.create(
+            name='University', code='UNI', org_type='company', slug='university'
+        )
         self.org_unit_1 = OrgUnit.objects.create(
-            name='Engineering', code='ENG', org_type='college', slug='engineering'
+            name='Engineering', code='ENG', org_type='college', slug='engineering',
+            parent=self.root_org_unit,
         )
         self.org_unit_2 = OrgUnit.objects.create(
-            name='Medicine', code='MED', org_type='college', slug='medicine'
+            name='Medicine', code='MED', org_type='college', slug='medicine',
+            parent=self.root_org_unit,
         )
         
         # Create data domains

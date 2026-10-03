@@ -20,6 +20,7 @@ TRACKS = ("C", "D", "L", "A", "U", "H")
 RECOMMEND_ORDER = ("D", "L", "A", "U", "H")
 SNOOZE_DAYS = 1
 STEP_MAX = 3
+SCENARIO_MAX_BEATS = 3
 LIVE_FALLBACK = {"kind": "none"}
 
 
@@ -119,6 +120,74 @@ def signal_for(lesson: Mapping[str, Any]) -> str:
     if not host:
         return "answer"
     return "host_row" if str(host).startswith("row_") else "host_state"
+
+
+# ── Camp drama (scenario beats) ────────────────────────────────────────────
+#
+# A stage may carry a short drama: a few beats, each with one honest choice.
+# The engine knows only the shape (beat ids and the correct index) and grades a
+# choice. It never completes a lesson: drama progress lives in its own table so
+# a right answer here can never mark a station done.
+
+def beats_of(stage: Mapping[str, Any]) -> list[dict]:
+    """A stage's drama beats, in pack order. Empty when the stage has none."""
+    return [dict(beat) for beat in ((stage.get("scenario") or {}).get("beats") or [])]
+
+
+def clamp_beat(value, total: int) -> int:
+    try:
+        index = int(value)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, min(int(total), index))
+
+
+def check_beat(beat: Mapping[str, Any], choice: int) -> bool:
+    """True only when the choice is the beat's declared honest move."""
+    return int(beat.get("correct", -1)) == choice
+
+
+def load_scenarios(user, pack_ids: Iterable[str]) -> dict[tuple[str, str], int]:
+    """How far the caller has walked each stage's drama, keyed by (pack, stage)."""
+    from guide.models import GuideScenario
+
+    return {
+        (row.pack_id, row.stage_key): row.beat
+        for row in GuideScenario.objects.filter(user=user, pack_id__in=list(pack_ids))
+    }
+
+
+def apply_scenario(ctx: Ctx, stage: Mapping[str, Any], index: int, choice: int) -> dict[str, Any]:
+    """Grade one drama beat. Writes ``GuideScenario`` only — never a lesson.
+
+    Only the caller's current beat can be answered; a replay of an earlier beat
+    is ignored and the current beat stays open. A correct answer advances one
+    beat. Nothing here touches ``GuideProgress``, so a drama answer can never
+    mark a lesson or a station done.
+    """
+    from guide.models import GuideScenario
+
+    beats = beats_of(stage)
+    total = len(beats)
+    with transaction.atomic():
+        row, _ = GuideScenario.objects.select_for_update().get_or_create(
+            user=ctx.user,
+            pack_id=ctx.app_id,
+            stage_key=str(stage.get("key") or ""),
+            defaults={"beat": 0},
+        )
+        out: dict[str, Any] = {"correct": None, "beat": row.beat, "total": total}
+        if index != row.beat or not 0 <= index < total:
+            out["done"] = row.beat >= total
+            return out
+        ok = check_beat(beats[index], choice)
+        out["correct"] = ok
+        if ok:
+            row.beat = row.beat + 1
+            row.save()
+        out["beat"] = row.beat
+        out["done"] = row.beat >= total
+        return out
 
 
 # ── Evaluation ─────────────────────────────────────────────────────────────

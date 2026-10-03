@@ -30,6 +30,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import useDocumentTitle from '../../hooks/useDocumentTitle';
+import { formatNumber } from '../../utils/formatNumber';
 import PageContainer from '../../components/layout/PageContainer';
 import PageHeader from '../../components/Page/PageHeader';
 import EmptyState from '../../components/Page/EmptyState';
@@ -51,16 +52,27 @@ import {
 import {
   EvidenceBadge,
   FieldRow,
+  FindingsAlerts,
   Ltr,
+  MeasuredExcludedRatio,
+  NextActions,
+  QualityFloorFlags,
+  ScopeLabel,
   TargetForm,
+  TargetStateChip,
   TargetStatusChip,
+  TaskClosureBadge,
   TaskStatusChip,
   TaskTypeChip,
   emptyTargetForm,
   formToTargetPayload,
   formatDate,
+  gapLabel,
   goalLabel,
   goalSummary,
+  isEmissionsValueTarget,
+  measuredValueText,
+  progressSummaryText,
   scopeLabel,
   targetToForm,
   useCoverageLookups,
@@ -202,12 +214,19 @@ function TaskForm({ values, onField, t }) {
   );
 }
 
+// M3 · neutral, TARGET-DERIVED counts rollup. These are the target's own
+// derived progress counters, NOT the streams state vocabulary: Coverage
+// streams remain the sole reporter of Missing / Entered / Excluded (R-DC-13).
+// `measured` is the settled-WITH-kg count; `below_floor` / `tier_unknown` are
+// surfaced distinctly so a below-floor stream never looks settled-at-target.
 const COUNT_CHIPS = [
-  ['countRequired', 'required', 'default'],
-  ['countEntered', 'entered', 'success'],
-  ['countExcluded', 'excluded', 'warning'],
+  ['countStreamsInScope', 'required', 'default'],
+  ['countMeasuredStreams', 'measured', 'success'],
+  ['countBelowFloorStreams', 'below_floor', 'warning'],
+  ['countTierUnknownStreams', 'tier_unknown', 'info'],
+  ['countExcludedRecords', 'excluded', 'warning'],
   ['countAwaiting', 'awaiting_factor', 'info'],
-  ['countMissing', 'missing', 'error'],
+  ['countStreamsNoEntry', 'missing', 'error'],
 ];
 
 export default function CoverageTargetDetailPage() {
@@ -232,7 +251,7 @@ export default function CoverageTargetDetailPage() {
 
   const [confirm, setConfirm] = useState(null); // { kind: 'target' | 'task', id }
 
-  useDocumentTitle(target?.name || 'Coverage target');
+  useDocumentTitle(target?.name || t('coverageTargets.pageTitle'));
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -384,20 +403,19 @@ export default function CoverageTargetDetailPage() {
     );
   }
 
-  const measuredRatioText = counts.required
-    ? t('coverageTargets.measuredRatio', {
-      settled: (counts.entered || 0) + (counts.excluded || 0),
-      required: counts.required || 0,
-      pct: progress.measured_pct ?? '—',
-    })
-    : t('coverageTargets.emptyProgress');
+  const emissionsValue = isEmissionsValueTarget(progress);
+  const measuredValue = measuredValueText(t, progress);
+  // Board and detail reuse the SAME measured / excluded keys so the two
+  // surfaces never name one concept with two different words.
+  const progressSummary = progressSummaryText(t, progress);
+  const closedTasks = tasks.filter((task) => task.closes?.state === 'closed').length;
 
   return (
     <PageContainer>
       <PageHeader
         icon={FlagIcon}
         title={target.name}
-        subtitle={`${target.reporting_period_name || '—'} · ${scopeLabel(target)}`}
+        subtitle={`${target.reporting_period_name || '—'} · ${scopeLabel(t, target)}`}
         actions={(
           <Button size="small" startIcon={<ArrowBackIcon />} onClick={() => navigate('/carbon/admin/coverage-targets')}>
             {t('coverageTargets.back')}
@@ -417,9 +435,12 @@ export default function CoverageTargetDetailPage() {
           <Stack spacing={1}>
             <FieldRow label={t('coverageTargets.colCampus')} value={target.campus_name || target.org_unit_name || '—'} />
             <FieldRow label={t('coverageTargets.colOrgUnit')} value={target.org_unit_name || target.org_unit || '—'} />
-            <FieldRow label={t('coverageTargets.colScope')} value={<Ltr>{scopeLabel(target)}</Ltr>} />
-            <FieldRow label={t('coverageTargets.goalKind')} value={target.goal_kind === 'absolute' ? t('coverageTargets.goalAbsolute') : t('coverageTargets.goalPercent')} />
-            <FieldRow label={t('coverageTargets.colGoal')} value={target.goal_kind === 'absolute' ? (<span>{target.goal_value} <Ltr>{target.goal_unit || ''}</Ltr></span>) : goalLabel(target)} />
+            <FieldRow label={t('coverageTargets.colScope')} value={<ScopeLabel target={target} t={t} />} />
+            <FieldRow
+              label={t('coverageTargets.goalKind')}
+              value={emissionsValue ? t('coverageTargets.emissionsValueTarget') : t('coverageTargets.goalPercent')}
+            />
+            <FieldRow label={t('coverageTargets.colGoal')} value={<Ltr>{goalLabel(target)}</Ltr>} />
             <FieldRow label={t('coverageTargets.qualityFloor')} value={target.min_quality_tier != null ? <Ltr>{`T${target.min_quality_tier}`}</Ltr> : t('coverageTargets.qualityFloorNone')} />
             <FieldRow label={t('coverageTargets.dueDate')} value={formatDate(target.due_date)} />
             <FieldRow label={t('coverageTargets.owner')} value={target.owner_name || target.owner_username || '—'} />
@@ -441,11 +462,12 @@ export default function CoverageTargetDetailPage() {
       <WorkflowCard
         icon={<CheckCircleIcon />}
         title={t('coverageTargets.sectionProgress')}
-        description={measuredRatioText}
+        description={progressSummary}
         onClick={() => toggle('progress')}
       />
       {expanded.progress && (
         <Box data-testid="coverage-progress-panel" sx={{ pl: 1, pr: 1, pb: 2, pt: 1.5 }}>
+          <FindingsAlerts progress={progress} t={t} />
           <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1, mb: 1 }}>
             {COUNT_CHIPS.map(([labelKey, countKey, color]) => (
               <Chip
@@ -457,18 +479,39 @@ export default function CoverageTargetDetailPage() {
               />
             ))}
           </Stack>
-          <Typography variant="body2" sx={{ fontWeight: 600 }}>
-            {measuredRatioText}
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
+            <MeasuredExcludedRatio progress={progress} t={t} emphasis="body1" />
+            <TargetStateChip value={progress.state} t={t} />
+            <QualityFloorFlags progress={progress} t={t} />
+          </Stack>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            {progressSummary}
           </Typography>
+          <Box sx={{ mt: 1 }}>
+            <NextActions progress={progress} t={t} />
+          </Box>
           <Chip size="small" variant="outlined" label={t('coverageTargets.measuredNotClaimed')} sx={{ mt: 0.5 }} />
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
             {t('coverageTargets.measuredNotClaimedHint')}
           </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            {progress.measured_kg != null
-              ? t('coverageTargets.measuredKg', { value: progress.measured_kg })
-              : t('coverageTargets.measuredKgAbsent')}
-          </Typography>
+          {emissionsValue ? (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              {measuredValue.absent
+                ? t('coverageTargets.measuredValueAbsent')
+                : t('coverageTargets.measuredValue', { value: measuredValue.value })}
+            </Typography>
+          ) : (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              {progress.measured_kg != null
+                ? t('coverageTargets.measuredKg', { value: formatNumber(progress.measured_kg) })
+                : t('coverageTargets.measuredKgAbsent')}
+            </Typography>
+          )}
+          {progress.measured_kg_at_target != null && (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              {t('coverageTargets.measuredKgAtTarget', { value: formatNumber(progress.measured_kg_at_target) })}
+            </Typography>
+          )}
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
             {t('coverageTargets.countsFromStreams')}
           </Typography>
@@ -491,7 +534,7 @@ export default function CoverageTargetDetailPage() {
       <WorkflowCard
         icon={<CheckCircleIcon />}
         title={t('coverageTargets.sectionTasks')}
-        description={`${tasks.filter((task) => task.status === 'done').length}/${tasks.length}`}
+        description={t('coverageTargets.taskClosureSummary', { closed: closedTasks, total: tasks.length })}
         onClick={() => toggle('tasks')}
       />
       {expanded.tasks && (
@@ -522,6 +565,12 @@ export default function CoverageTargetDetailPage() {
                       <TaskTypeChip value={task.task_type} t={t} />
                       <TaskStatusChip value={task.status} t={t} />
                       <EvidenceBadge evidence={task.evidence} t={t} />
+                      <TaskClosureBadge closes={task.closes} t={t} />
+                      {task.closes?.gap && (
+                        <Typography variant="caption" color="text.secondary">
+                          {t('coverageTargets.taskClosesGap', { gap: gapLabel(t, task.closes.gap) })}
+                        </Typography>
+                      )}
                       {!met && codes.length > 0 && (
                         <Typography variant="body2" color="text.secondary">
                           <Ltr>{codes.join(', ')}</Ltr>

@@ -647,6 +647,10 @@ def render_bound_catalog_read(
         catalog_entry=catalog_entry,
         fields=fields,
         restate_breakdown=True,
+        # IRP-5 / IF-04: a bound read answers the asked field or says unknown.
+        # An ask the record does not carry becomes the catalog's typed empty
+        # render, never a raw record restatement.
+        unknown_field=True,
     )
     return rendered or None
 

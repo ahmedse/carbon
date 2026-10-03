@@ -24,3 +24,17 @@ export async function postGuideEvent(appId, lessonId, body, token) {
     token,
   });
 }
+
+/**
+ * One camp-drama beat: { beat, choice }, where `beat` names the declared beat
+ * index. Writes GuideScenario only — it can never mark a lesson or a station
+ * done. The response grades the beat and reports the caller's new beat, never
+ * the answer to a later one.
+ */
+export async function postGuideScenario(appId, stageKey, body, token) {
+  return apiFetch(`${root(appId)}stages/${encodeURIComponent(stageKey)}/scenario/`, {
+    method: 'POST',
+    body,
+    token,
+  });
+}

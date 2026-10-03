@@ -216,6 +216,16 @@ function RedirectTeachRun() {
 }
 
 /**
+ * Any /embed/* URL resolves to the Pulse embed. This is the isolation boundary:
+ * a Moodle pane must NEVER fall through to the Carbon app shell (RootLayout),
+ * whose nested catch-all would render the Data Trust sidebar + NotFound.
+ */
+function EmbedRedirect() {
+  const location = useLocation();
+  return <Navigate to={`/embed/pulse${location.search}`} replace />;
+}
+
+/**
  * Protects all routes that require authentication.
  */
 function RequireAuth() {
@@ -265,6 +275,10 @@ export default function App() {
               <Routes>
                 <Route path="/login" element={<Login />} />
                 <Route path="/embed/pulse" element={<PulseEmbedPage />} />
+                {/* Isolation boundary: every other /embed/* path goes back to the
+                    Pulse embed, so it can never match RootLayout's nested
+                    path="*" and render the Carbon Data Trust app inside the pane. */}
+                <Route path="/embed/*" element={<EmbedRedirect />} />
                 <Route path="/forgot-password" element={<ForgotPasswordPage />} />
                 <Route path="/reset-password/:uidb64/:token" element={<ResetPasswordPage />} />
                 <Route element={<RequireAuth />}>

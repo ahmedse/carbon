@@ -56,7 +56,8 @@ export default {
       // Coverage is the driver: the row decides what is owed and reports
       // Missing / Entered / Excluded. Campus intake is reached from a row.
       { label: 'Coverage', path: '/carbon/admin/inventory-coverage', role: 'carbon:admin' },
-      { label: 'Coverage targets', path: '/carbon/admin/coverage-targets', role: 'carbon:admin' },
+      // User-facing rename only — the route + identifiers are unchanged.
+      { label: 'Data completeness', path: '/carbon/admin/coverage-targets', role: 'carbon:admin' },
       { label: 'Campus intake', path: '/carbon/onboarding/intake', role: '*' },
       { type: 'divider' },
 
@@ -95,6 +96,10 @@ export default {
       { label: 'Organizational Boundaries', path: '/carbon/admin/boundaries', role: 'carbon:admin' },
       { label: 'Base Years',               path: '/carbon/admin/base-years',  role: 'carbon:admin' },
       { label: 'Reporting Periods',        path: '/carbon/reporting/periods',  role: 'carbon:admin' },
+
+      // ── Help (bottom of the menu) — the full written guides for the Journey ──
+      { type: 'group', label: 'Guides' },
+      { label: 'Journey guides',       path: '/help/carbon',                role: '*' },
     ],
   },
 

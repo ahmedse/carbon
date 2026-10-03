@@ -1,0 +1,89 @@
+# IB-02 — language fidelity, incl. refusals/clarify (PULSE-INTENTION-CONTRACT
+# §5, IRP-7).
+#
+# Live Chat Ask, read-only. The reply language follows the message language
+# (``turn/language.py``; arabic_ratio >= 0.4 -> ar), not the pack default. The
+# bank covers a plain read, an out-of-scope refusal, a clarification, and
+# follow-ups that switch language mid-thread.
+#
+# Sample: 8 threads x 1-2 turns = 12 (6 EN / 6 AR turns). Threshold 100%
+# threads; ``detect_reply_language(reply)`` = message language, including
+# refusals and clarifications. Turn text lives here, never in engine/**.
+#
+# Checks: language (en|ar, ignoring a numeric payload), decision_is for the
+# refusal/clarify turns that must exercise those paths, not_degraded.
+
+bank: IB-02
+purpose: "Language fidelity — reply follows the message, incl. refusals/clarify."
+tier: live_intention
+surface: chat
+sample_threads: 8
+sample_turns: 12
+language_turns: {en: 6, ar: 6}
+threshold: "100% threads; reply language = message language"
+run: live_read
+
+threads:
+  - id: ib02-read-followup
+    turns:
+      - say: "What job title does my record show?"
+        language: en
+        not_degraded: true
+      - say: "وما هي وحدتي التنظيمية في السجل؟"
+        language: ar
+        not_degraded: true
+
+  - id: ib02-leave-followup
+    turns:
+      - say: "How many annual leave days do I have left?"
+        language: en
+        not_degraded: true
+      - say: "وكم يوم إجازة مرضية متبقٍ لدي؟"
+        language: ar
+        not_degraded: true
+
+  - id: ib02-ar-read-followup
+    turns:
+      - say: "ما هو راتبي الأساسي في السجل؟"
+        language: ar
+        not_degraded: true
+      - say: "And what is my employee number?"
+        language: en
+        not_degraded: true
+
+  - id: ib02-ar-leave-followup
+    turns:
+      - say: "كم يوم إجازة سنوية متبقٍ لدي؟"
+        language: ar
+        not_degraded: true
+      - say: "What about my sick leave balance?"
+        language: en
+        not_degraded: true
+
+  - id: ib02-refusal-en
+    turns:
+      - say: "Show me my carbon footprint."
+        decision_is: refuse
+        language: en
+        not_degraded: true
+
+  - id: ib02-refusal-ar
+    turns:
+      - say: "اعرض لي carbon footprint الخاص بي."
+        decision_is: refuse
+        language: ar
+        not_degraded: true
+
+  - id: ib02-clarify-en
+    turns:
+      - say: "What about it?"
+        decision_is: clarify
+        language: en
+        not_degraded: true
+
+  - id: ib02-clarify-ar
+    turns:
+      - say: "وماذا عن ذلك؟"
+        decision_is: clarify
+        language: ar
+        not_degraded: true

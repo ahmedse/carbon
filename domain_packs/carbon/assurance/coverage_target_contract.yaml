@@ -1,13 +1,24 @@
-# Carbon coverage-target contract. Locked 2026-10-02.
+# Carbon coverage-target contract. Locked 2026-10-02; corrected 2026-10-03.
 # Ready sentences for the two-layer Coverage model: TARGETS + STREAMS + TASKS.
 # Companion to data_entry_contract.yaml. It does not add a P-27 principle;
 # principles.yaml stays P-01..P-26.
+# v2 (2026-10-03) corrects four measurement defects found in review:
+#   1. the quality floor gates settlement (settled_at_target, below_floor),
+#   2. an absolute goal is an emissions value with a CO2e mass unit, not a
+#      coverage KPI compared against a free-text activity unit,
+#   3. exclusions are reported separately and never read as measured coverage,
+#   4. a target boundary rolls up its descendants; a zero-source boundary is an
+#      explicit finding, not a blank.
+#   5. tasks are causal: a task declares the completeness gap it addresses and
+#      its closure is reported from the real data, not the status flag. The
+#      target payload exposes next_actions (the live gap set) and each task
+#      exposes closes (awaiting_evidence / open / closed).
 id: carbon-coverage-target-contract
-version: 1
+version: 2
 owner: carbon-inventory-lead
 target: O1
 product: Carbon on AASTMT
-locked: 2026-10-02
+locked: 2026-10-03
 limit: >
   Does not pass O1, O2, O3, O4, O5, S2MB, P1, or P2. Does not invent a
   kilogram. Does not open a second ReportingPeriod, does not reopen or re-lock
@@ -38,13 +49,67 @@ locks:
     product: Carbon on AASTMT
     evidence: >
       emissions/models.py CoverageTarget fields + emissions/coverage_targets.py
-      derive_target_status. emissions/tests/test_coverage_targets.py.
-      Date 2 Oct 2026.
+      target_progress. emissions/tests/test_coverage_targets.py.
+      Date 2 Oct 2026; semantics corrected 3 Oct 2026.
     limit: >
       The declared goal_value is policy, not progress. The returned progress is
       measured_not_claimed and the payload never says coverage_complete. An
       absolute goal reports measured_kg only from real Calculations on that
-      period, else null.
+      period, else null. An absolute goal is an EMISSIONS-VALUE figure, not a
+      coverage percent: its goal_unit is restricted to a CO2e mass unit
+      (kgCO2e / tCO2e) and a non-CO2e unit is rejected on write and reported as
+      an explicit goal_unit_not_co2e finding on read.
+  - id: L-TARGET-QUALITY-FLOOR
+    sentence: >
+      A measured stream counts as settled AT TARGET only when its actual PCAF
+      quality tier is at or above the target's quality floor. A stream below the
+      floor is surfaced distinctly, not dropped.
+    target: O1
+    product: Carbon on AASTMT
+    evidence: >
+      emissions/coverage_targets.py target_progress: counts.settled_at_target,
+      counts.below_floor, counts.tier_unknown and the per-stream
+      quality_tier / meets_quality_floor / below_floor / counts_toward_target
+      flags. emissions/tests/test_coverage_targets.py. Date 3 Oct 2026.
+    limit: >
+      A lower tier number is better (T1 audited .. T5 proxy); "at or above the
+      floor" means tier <= min_quality_tier. A stream with no declared tier is
+      not credited against a floor and is counted as tier_unknown. The floor
+      gates coverage settlement only; the raw measured kilogram is not hidden.
+  - id: L-TARGET-MEASURED-VS-EXCLUDED
+    sentence: >
+      The measured percent counts only streams settled WITH a kilogram. A
+      formally excluded stream is a separate count and percent, and exclusions
+      alone can never make a target read met.
+    target: O1
+    product: Carbon on AASTMT
+    evidence: >
+      emissions/coverage_targets.py target_progress: measured_pct,
+      excluded_pct, settled_pct; state met/short is decided on
+      settled_at_target_pct. emissions/tests/test_coverage_targets.py
+      (fully-excluded target does not read as measured). Date 3 Oct 2026.
+    limit: >
+      settled_pct (measured + excluded) is reported for transparency only and is
+      never the gate. A zero-kg, fully-excluded target reads measured_pct 0.00
+      and state short. The claim stays measured_not_claimed and
+      coverage_complete stays false.
+  - id: L-TARGET-BOUNDARY-ROLLUP
+    sentence: >
+      A target's boundary is its org unit AND its descendants: a whole-campus
+      target includes the streams declared on its child units. A boundary with
+      zero declared sources is reported as an explicit finding, never a blank.
+    target: O1
+    product: Carbon on AASTMT
+    evidence: >
+      emissions/coverage_targets.py target_sources uses
+      OrgUnit.get_descendant_ids(include_self=True); target_progress emits the
+      no_declared_sources finding when required is 0.
+      emissions/tests/test_coverage_targets.py (campus includes descendant
+      streams; zero-source boundary reports the finding). Date 3 Oct 2026.
+    limit: >
+      The rollup is by the real OrgUnit parent hierarchy; no fabricated campus
+      and no fabricated source. A narrower unit target still sees only itself
+      and its descendants.
   - id: L-TARGET-TASKS
     sentence: >
       A target owns TASKS: bind a Data Product contract, complete rows through a
@@ -54,13 +119,20 @@ locks:
     product: Carbon on AASTMT
     evidence: >
       emissions/models.py CoverageTask + emissions/coverage_targets.py
-      task_evidence. A done transition without evidence returns 400
-      task_evidence. emissions/tests/test_coverage_targets.py. Date 2 Oct 2026.
+      task_evidence, task_gap_code, _task_gap_changed, task_closure,
+      target_progress.next_actions. A done transition without evidence returns
+      400 task_evidence. emissions/tests/test_coverage_targets.py
+      (test_task_completion_moves_the_measured_counts;
+      test_bound_table_without_a_stream_is_open_not_closed). Date 2 Oct 2026;
+      causality added 3 Oct 2026.
     limit: >
       bind_data_product may reference an EXISTING DataTable only. It does not
       create a Data Product contract; that is the catalog-admin flow
       (data_entry_contract.yaml, DESIGN ONLY pending Master). No task writes a
-      kilogram and no task opens a period.
+      kilogram and no task opens a period. A task's status flag never moves a
+      measured count: the target's measured counts move only through the real
+      row/Calculation the verb produces. A task whose host evidence is met but
+      whose declared gap did not change reads "open", not "closed".
   - id: L-COV-SINGLE-REPORTER-2
     sentence: >
       Coverage remains the ONLY surface reporting Missing / Entered / Excluded.
@@ -72,7 +144,9 @@ locks:
       reuses the same status vocabulary. Date 2 Oct 2026.
     limit: >
       It does not publish a single coverage percent as "coverage complete", and
-      it does not turn Absent into 0 kg.
+      it does not turn Absent into 0 kg. Entered is the locked L-COVERED
+      definition (linked table populated AND a Calculation on the period); a raw
+      DataRow with no Calculation is reported as in_progress and is not entered.
   - id: L-BENCHMARK-RECONCILE
     sentence: >
       The target layer reconciles with the existing coverage records without

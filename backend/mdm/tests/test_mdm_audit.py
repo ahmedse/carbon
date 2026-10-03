@@ -52,17 +52,25 @@ class MdmAuditTests(APITestCase):
         self.assertEqual(event.after['is_active'], False)
 
     def test_org_unit_parent_change_emits_event(self):
+        # `parent` is the single active deployment root here (setUp creates no
+        # root). Reparent the child onto another valid unit under that same
+        # root — ADR-0028 rejects a second active parentless root, so we must
+        # not detach the child to None.
         parent = OrgUnit.objects.create(name='Parent', slug='parent')
         child = OrgUnit.objects.create(name='Child', slug='child', parent=parent)
+        new_parent = OrgUnit.objects.create(
+            name='New Parent', slug='new-parent', parent=parent
+        )
         self.client.force_authenticate(user=self.admin)
 
         response = self.client.patch(
             f'/{self._api_prefix()}/mdm/org-units/{child.id}/',
-            {'parent': None},
+            {'parent': new_parent.id},
             format='json',
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         event = GovernanceEvent.objects.filter(entity_type='OrgUnit', entity_id=child.id, action='update').latest('timestamp')
+        self.assertEqual(event.user, self.admin)
         self.assertEqual(event.before['parent'], parent.id)
-        self.assertEqual(event.after['parent'], None)
+        self.assertEqual(event.after['parent'], new_parent.id)

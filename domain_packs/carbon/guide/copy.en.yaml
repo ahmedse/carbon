@@ -11,13 +11,111 @@ journey:
   title: "Your carbon onboarding journey"
   intro: "This journey teaches the whole carbon inventory job, not a page tour. It walks you from opening a reporting period, through declaring and covering sources, entering and checking activity data, to calculating, locking and quoting a number honestly. Every station is always open. Nothing is locked. A station is complete only when the real app proves the outcome — a saved row, a covered source, a boundary, a calculation you ran. You can work while you read: dock the journey on the side and keep the app page in front of you."
 stages:
-  setup: {title: "Setup and policy", what: "The one open reporting period and the emission factors are set here. One period stays open, and every source needs an active factor of the same scope. This is where the year gets a spine."}
-  coverage: {title: "Coverage targets", what: "Every declared source ends up covered by data or excluded with a stated reason. Your org scope decides which sources you see. This is where nothing is left silently missing."}
-  data_products: {title: "Data products", what: "Reusable data products will bring many rows in one shape. This path is not wired to the app yet, so no work is owed here today."}
-  data_entry: {title: "Data entry", what: "Campus intake is where this period's activity rows are entered: add a row only from a real meter or invoice reading, in the unit the factor expects, and a stream with no real row stays missing — nothing is invented. A saved row is the proof this station is done."}
-  calculation: {title: "Calculation and quality", what: "A calculation turns activity rows into emissions using the source's factor. Quality flags say which rows pass, warn or fail. Fix failing rows before warnings."}
-  lock: {title: "Lock and close", what: "Set the boundary, then move the period open, locked, submitted, and let a verifier decide verify or reject. A period is never closed straight from open."}
-  report: {title: "Report and disclosure", what: "Read the calculation summary and state the scope of any number before you quote it. The period in a header is a label, not a filter."}
+  setup:
+    title: "Setup and policy"
+    what: "The one open reporting period and the emission factors are set here. One period stays open, and every source needs an active factor of the same scope. This is where the year gets a spine."
+    voice: "Two open periods means every total has two meanings."
+    scenario:
+      beats:
+        - id: keep_one_open
+          cast: "Carbon Lead"
+          line: "A period from last year is still open when this year's period opens. Two doors, one record."
+          question: "What do you do first?"
+          choices:
+            - "Lock the old period, so exactly one stays open."
+            - "Leave both open and pick the right one later."
+            - "Open one more period, to be safe."
+          explain: "Exactly one period may be open at a time. With two open, every total has two meanings and no number is safe to quote."
+  coverage:
+    title: "Coverage targets"
+    what: "Every declared source ends up covered by data or excluded with a stated reason. Your org scope decides which sources you see. This is where nothing is left silently missing."
+    voice: "An exclusion is a decision. An omission is a mistake."
+    scenario:
+      beats:
+        - id: cover_or_exclude
+          cast: "Carbon Lead"
+          line: "A declared generator has no rows this period. The gap is real, and it is quiet."
+          question: "What belongs in the record?"
+          choices:
+            - "Say nothing, and hope it is small."
+            - "Chase the meter, or exclude it with a stated reason."
+            - "Delete the source, so the gap disappears."
+          explain: "Coverage is a decision, not an accident. A source is covered by data or excluded with a reason someone can read."
+  data_products:
+    title: "Data products"
+    what: "Reusable data products will bring many rows in one shape. This path is not wired to the app yet, so no work is owed here today."
+    voice: "Upload first, so the wizard can read your columns."
+    scenario:
+      beats:
+        - id: upload_first
+          cast: "Data Owner"
+          line: "A whole year of meter readings arrives as one spreadsheet."
+          question: "What is the first step?"
+          choices:
+            - "Upload the file, so the wizard can read your columns."
+            - "Map columns you have not seen yet."
+            - "Retype the rows by hand."
+          explain: "Upload comes first; the wizard cannot map columns it has not read. Upload, map, validate — in that order."
+  data_entry:
+    title: "Data entry"
+    what: "Campus intake is where this period's activity rows are entered: add a row only from a real meter or invoice reading, in the unit the factor expects, and a stream with no real row stays missing — nothing is invented. A saved row is the proof this station is done."
+    voice: "A row is one activity, written in the unit the factor expects."
+    scenario:
+      beats:
+        - id: enter_what_meter_says
+          cast: "Data Owner"
+          line: "The meter reads 1,027,668 kWh. Rounded, it would look tidier."
+          question: "What do you enter?"
+          choices:
+            - "1,027,000 — close enough for the report."
+            - "1,027,668, exactly what the meter says."
+            - "1,028,000, rounded up to be safe."
+          explain: "Enter what the meter or invoice says, in the unit the factor expects. Tidy is not evidence, and rounding is a silent edit to the record."
+  calculation:
+    title: "Calculation and quality"
+    what: "A calculation turns activity rows into emissions using the source's factor. Quality flags say which rows pass, warn or fail. Fix failing rows before warnings."
+    voice: "Rows are activity. A calculation turns them into emissions."
+    scenario:
+      beats:
+        - id: ask_the_lead
+          cast: "Carbon Lead"
+          line: "A row is saved, and the dashboard has not moved."
+          question: "Who turns rows into emissions?"
+          choices:
+            - "You, by refreshing until it changes."
+            - "Someone with the calculate permission, usually the carbon lead."
+            - "The verifier, when they approve."
+          explain: "Entering data and calculating are separate permissions. Ask your lead to run the calculation, and never re-enter the row."
+  lock:
+    title: "Lock and close"
+    what: "Set the boundary, then move the period open, locked, submitted, and let a verifier decide verify or reject. A period is never closed straight from open."
+    voice: "Open goes to locked. Verification comes after submission."
+    scenario:
+      beats:
+        - id: open_then_locked
+          cast: "Verifier"
+          line: "Data is in, and the board wants the number tonight."
+          question: "What is the next legal transition?"
+          choices:
+            - "Open to locked, then submit for verification."
+            - "Open straight to closed, to save a step."
+            - "Submitted back to open, so people can keep typing."
+          explain: "A period moves open, locked, submitted, then verified or rejected. Closing straight from open skips the check that makes the number defensible."
+  report:
+    title: "Report and disclosure"
+    what: "Read the calculation summary and state the scope of any number before you quote it. The period in a header is a label, not a filter."
+    voice: "What does this number add up to?"
+    scenario:
+      beats:
+        - id: state_the_scope
+          cast: "Chairman"
+          line: "A total sits under a period name, ready to be quoted."
+          question: "What do you say before quoting it?"
+          choices:
+            - "Nothing — the header already names the period."
+            - "What the number sums: which sources and which boundary."
+            - "Only the number, to keep it simple."
+          explain: "A period in a header is a label, not a filter. Say in words what a total covers before anyone quotes it."
 competencies:
   open_period: {title: "Keep exactly one reporting period open", good: "Reporting Periods shows one row with status open, and no second open row."}
   sources_factors: {title: "Declare sources and match an active factor", good: "Each declared source has an active emission factor of the same scope and unit."}

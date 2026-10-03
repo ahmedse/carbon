@@ -83,6 +83,31 @@ def _code_or_text(value: Any) -> str:
     return str(value).strip()
 
 
+def _enum_label(code: str, field: str, labels: dict | None, *, ar: bool) -> str:
+    """Localize one already-extracted host code when the pack declares it."""
+    if not code or not ar or not isinstance(labels, dict):
+        return code
+    table = labels.get(field)
+    if isinstance(table, dict):
+        entry = table.get(code)
+        if isinstance(entry, dict):
+            text = str(entry.get("ar") or "").strip()
+            if text:
+                return text
+    return code
+
+
+def _enum_text(row: dict, field: str, labels: dict | None, *, ar: bool) -> str:
+    """A row's enum value, shown in the pack's target-language label.
+
+    ``labels`` is the catalog's ``value_labels`` map (field -> code -> {en, ar}).
+    A label is used only when the reply language is the target and the pack
+    declares one for the exact host code. Otherwise the raw host value is
+    returned, so an English reply is byte-identical with or without the map.
+    """
+    return _enum_label(_code_or_text(row.get(field)), field, labels, ar=ar)
+
+
 def _as_record_list(payload: Any) -> list[dict]:
     if isinstance(payload, list):
         return [row for row in payload if isinstance(row, dict)]
@@ -260,11 +285,15 @@ def render_history_rows(
     empty_render: str,
     scope_key: str,
     row_formatter,
+    value_labels: dict | None = None,
 ) -> str | None:
     if not rows:
         return empty_render_text(empty_render, language)
     ar = _lang_code(language) == "ar"
-    parts = [row_formatter(row, ar=ar) for row in rows[:5]]
+    parts = [
+        row_formatter(row, ar=ar, value_labels=value_labels)
+        for row in rows[:5]
+    ]
     parts = [p for p in parts if p]
     if not parts:
         return empty_render_text(empty_render, language)
@@ -273,9 +302,14 @@ def render_history_rows(
     return f"{prefix} ({len(rows)})\n\n{bullets}"
 
 
-def _format_leave_history_row(row: dict, *, ar: bool) -> str:
+def _format_leave_history_row(
+    row: dict, *, ar: bool, value_labels: dict | None = None,
+) -> str:
     kind = _code_or_text(row.get(ID_LEAVE_TYPE)) or V("t_leave")
-    status = _code_or_text(row.get("status") or row.get("correspondence_status"))
+    status = _enum_label(
+        _code_or_text(row.get("status") or row.get("correspondence_status")),
+        "status", value_labels, ar=ar,
+    )
     start = row.get("start_date") or row.get("from_date")
     end = row.get("end_date") or row.get("to_date")
     bits = [kind]
@@ -288,11 +322,16 @@ def _format_leave_history_row(row: dict, *, ar: bool) -> str:
     return ", ".join(bits) if not ar else "، ".join(bits)
 
 
-def _format_loan_history_row(row: dict, *, ar: bool) -> str:
+def _format_loan_history_row(
+    row: dict, *, ar: bool, value_labels: dict | None = None,
+) -> str:
     kind = _code_or_text(row.get(ID_LOAN_TYPE)) or V("t_loan_2")
     principal = row.get("principal")
     months = row.get("term_months")
-    status = _code_or_text(row.get("status") or row.get("correspondence_status"))
+    status = _enum_label(
+        _code_or_text(row.get("status") or row.get("correspondence_status")),
+        "status", value_labels, ar=ar,
+    )
     bits = [kind]
     if principal is not None:
         bits.append(str(principal))
@@ -303,8 +342,10 @@ def _format_loan_history_row(row: dict, *, ar: bool) -> str:
     return ", ".join(bits) if not ar else "، ".join(bits)
 
 
-def _format_payslip_row(row: dict, *, ar: bool) -> str:
-    line = _code_or_text(row.get("line_type")) or "line"
+def _format_payslip_row(
+    row: dict, *, ar: bool, value_labels: dict | None = None,
+) -> str:
+    line = _enum_text(row, "line_type", value_labels, ar=ar) or "line"
     amount = row.get("amount")
     bits = [line]
     if amount is not None:
@@ -312,9 +353,11 @@ def _format_payslip_row(row: dict, *, ar: bool) -> str:
     return ", ".join(bits) if not ar else "، ".join(bits)
 
 
-def _format_attendance_row(row: dict, *, ar: bool) -> str:
+def _format_attendance_row(
+    row: dict, *, ar: bool, value_labels: dict | None = None,
+) -> str:
     day = row.get("date")
-    status = _code_or_text(row.get("status")) or ""
+    status = _enum_text(row, "status", value_labels, ar=ar)
     bits: list[str] = []
     if day:
         bits.append(str(day))
@@ -323,8 +366,13 @@ def _format_attendance_row(row: dict, *, ar: bool) -> str:
     return ", ".join(bits) if not ar else "، ".join(bits)
 
 
-def _format_permission_row(row: dict, *, ar: bool) -> str:
-    kind = _code_or_text(row.get(ID_PERMISSION_TYPE)) or "permission"
+def _format_permission_row(
+    row: dict, *, ar: bool, value_labels: dict | None = None,
+) -> str:
+    kind = (
+        _enum_text(row, ID_PERMISSION_TYPE, value_labels, ar=ar)
+        or "permission"
+    )
     hours = row.get("hours")
     day = row.get("date")
     bits = [kind]
@@ -404,6 +452,7 @@ def _markdown_table(
     *,
     ar: bool,
     labels: dict | None,
+    unknown_text: str = "",
 ) -> str:
     headers = [_present_header(field, labels, ar=ar) for field in fields]
     lines = [
@@ -414,7 +463,13 @@ def _markdown_table(
         cells: list[str] = []
         for field in fields:
             cell = _declared_cell(row, field)
-            cells.append(_present_cell(cell) if cell else "")
+            if cell:
+                cells.append(_present_cell(cell))
+            else:
+                # IRP-5 / IF-04: a field the user asked for that this record
+                # does not carry is an explicit unknown, never a blank cell
+                # that reads as a restated payload.
+                cells.append(unknown_text)
         lines.append("| " + " | ".join(cells) + " |")
     return "\n".join(lines)
 
@@ -584,6 +639,7 @@ def render_declared_rows(
     kind: str = "list",
     label: str = "",
     labels: dict | None = None,
+    unknown_text: str = "",
 ) -> str | None:
     """0-LLM restatement of catalog ``returns`` fields. Invents no values."""
     if not fields:
@@ -601,7 +657,7 @@ def render_declared_rows(
     shown = ordered[:1] if kind == "detail" else ordered[:_MAX_DECLARED_ROWS]
     if not any(_format_declared_row(row, fields, ar=ar, labels=labels) for row in shown):
         return _empty_declared(empty_render, language, ar=ar)
-    table = _markdown_table(shown, fields, ar=ar, labels=labels)
+    table = _markdown_table(shown, fields, ar=ar, labels=labels, unknown_text=unknown_text)
     if kind == "detail":
         return f"{label}\n\n{table}" if label else table
     total = len(rows)
@@ -702,6 +758,7 @@ def render_catalog_read(
     catalog_entry: dict | None = None,
     fields: list[str] | None = None,
     restate_breakdown: bool = False,
+    unknown_field: bool = False,
 ) -> str | None:
     """0-LLM restatement resolved by catalog ``kind``. Invents no numbers.
 
@@ -709,6 +766,11 @@ def render_catalog_read(
     restatement shows only those. Chat keeps a ``breakdown`` payload for the
     writer (ADR-0056). Agent bound GETs pass ``restate_breakdown`` so the
     host measures appear in the answer (ADR-0047).
+
+    ``unknown_field`` (IRP-5 / IF-04) is the bound-read contract: when the ask
+    names a field the catalog does not return, answer with the entry's typed
+    empty render — an explicit unknown — instead of ``None``. The default
+    keeps the direct-renderer contract (an unmatched ask is the writer's).
     """
     api = str(api_name or "").strip()
     payload = _unwrap_tool_payload(tool_output)
@@ -732,6 +794,13 @@ def render_catalog_read(
     rows = _as_record_list(payload)
     kind = meta["kind"]
     empty_key = meta.get("empty_render") or ""
+    vlabels = (
+        (catalog_entry or {}).get("value_labels")
+        if isinstance(catalog_entry, dict)
+        else None
+    )
+    if not isinstance(vlabels, dict):
+        vlabels = None
 
     if kind == "balance" or api in BALANCE_APIS:
         return render_balance_rows(rows, language, empty_render=empty_key or ID_NO_BALANCE)
@@ -743,6 +812,7 @@ def render_catalog_read(
             empty_render=empty_key or ID_NO_PAYSLIPS,
             scope_key=meta.get("scope") or V("t_payslip_2"),
             row_formatter=_format_payslip_row,
+            value_labels=vlabels,
         )
 
     if kind == "history":
@@ -752,6 +822,7 @@ def render_catalog_read(
                 empty_render=empty_key or ID_NO_LEAVE_REQUESTS,
                 scope_key=ID_LEAVE_HISTORY,
                 row_formatter=_format_leave_history_row,
+                value_labels=vlabels,
             )
         if api == ID_LIST_MY_LOANS:
             return render_history_rows(
@@ -759,6 +830,7 @@ def render_catalog_read(
                 empty_render=empty_key or ID_NO_LOANS,
                 scope_key=V("t_loans"),
                 row_formatter=_format_loan_history_row,
+                value_labels=vlabels,
             )
         if api in {ID_LIST_ATTENDANCE, ID_LIST_MY_ATTENDANCE}:
             return render_history_rows(
@@ -766,6 +838,7 @@ def render_catalog_read(
                 empty_render=empty_key or ID_NO_ATTENDANCE_ROWS,
                 scope_key=V("t_attendance"),
                 row_formatter=_format_attendance_row,
+                value_labels=vlabels,
             )
         if api == ID_LIST_MY_ATTENDANCE_PERMISSIONS:
             return render_history_rows(
@@ -773,6 +846,7 @@ def render_catalog_read(
                 empty_render=empty_key or ID_NO_ATTENDANCE_PERMISSIONS,
                 scope_key="permissions",
                 row_formatter=_format_permission_row,
+                value_labels=vlabels,
             )
 
     if kind in _DECLARED_KINDS:
@@ -784,27 +858,43 @@ def render_catalog_read(
             labels if isinstance(labels, dict) else None,
             _sensitive_fields(entry),
         )
+        ar = _lang_code(language) == "ar"
+        default_empty = empty_key or ("no_detail_row" if kind == "detail" else "no_list_rows")
+        if shown is None:
+            # IRP-5 / IF-04: the ask names a field the catalog does not
+            # return. A bound read answers with the entry's typed empty render
+            # (an explicit unknown), never a raw record restatement. A direct
+            # renderer keeps the writer contract and returns ``None``.
+            if not unknown_field:
+                return None
+            return _empty_declared(default_empty, language, ar=ar)
         if not shown:
             return None
+        # An explicitly asked field this record does not carry is an explicit
+        # unknown in the restatement, never a blank cell (IRP-5 / IF-04).
+        unknown_text = (
+            _empty_declared(default_empty, language, ar=ar) if fields else ""
+        )
         # A breakdown payload is evidence for the grounded writer and the
         # envelope. Restating it here made Chat exit as a hollow table and
         # never write the report (ADR-0056: the writer speaks from rows).
         if isinstance(payload, dict) and isinstance(payload.get("breakdown"), list):
             if not rows:
                 return _empty_declared(
-                    empty_key or "no_list_rows", language, ar=_lang_code(language) == "ar",
+                    empty_key or "no_list_rows", language, ar=ar,
                 )
             if not restate_breakdown:
                 return None
         return render_declared_rows(
             rows,
             language,
-            empty_render=empty_key or ("no_detail_row" if kind == "detail" else "no_list_rows"),
+            empty_render=default_empty,
             fields=shown,
             latest_by=str((entry or {}).get("latest_by") or "").strip(),
             kind=kind,
             label=str((entry or {}).get("label") or "").strip(),
             labels=labels if isinstance(labels, dict) else None,
+            unknown_text=unknown_text,
         )
 
     return None

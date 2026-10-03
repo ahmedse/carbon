@@ -1,0 +1,557 @@
+{
+  "tier": "live_intention",
+  "bank": "IB-08",
+  "bank_file": "chat_intention_bank_ib08.yaml",
+  "bank_purpose": "Voice/register/persona-scope per surface (coworker, tutor).",
+  "run_at": "2026-10-03T12:53:21.677258+00:00",
+  "surface": "chat",
+  "user": "emp_1067",
+  "base": "http://127.0.0.1:8009/carbon-api",
+  "release": {
+    "tag": "",
+    "process_brand": "nibras",
+    "pack": "nibras",
+    "pack_version": "17",
+    "extra_packs": [],
+    "loaded_packs": [
+      "aast-med",
+      "carbon",
+      "eduos",
+      "nibras"
+    ],
+    "catalogs": [
+      "aast-med",
+      "carbon",
+      "eduos",
+      "nibras"
+    ],
+    "pulse_enabled": true,
+    "image_built_at": null,
+    "process_started_at": "2026-10-03T12:37:42.709934+00:00",
+    "deployed_at": null
+  },
+  "threads": [
+    {
+      "id": "ib08-coworker-en-1",
+      "closes": [],
+      "objectives": [],
+      "surface": "coworker",
+      "mode": "ask",
+      "conversation_id": "e3aa5fae-e491-4266-a4e0-43910d60c40b",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "What is the job title of employee 2400?",
+          "reply": "I can only read your own records, so I can't look up another employee's job title. Employee 2400's job title isn't something I can fetch — HR or the employee's own profile would have it.",
+          "seconds": 3.01,
+          "llm_calls": 1,
+          "turn_decision": "answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "2400",
+          "language": "en",
+          "mode": "ask",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib08-coworker-en-2",
+      "closes": [],
+      "objectives": [],
+      "surface": "coworker",
+      "mode": "ask",
+      "conversation_id": "82c6bd46-14b7-4ca6-8f2b-93a5bf781e55",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "Which org unit is employee 1712 in?",
+          "reply": "I fetched the data, but I could not write the summary this time. The tables and charts below are exact.",
+          "seconds": 4.41,
+          "llm_calls": 3,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "en",
+          "mode": "ask",
+          "tools": [
+            "emp_1712"
+          ],
+          "misses": [
+            "not_degraded"
+          ],
+          "pass": false
+        }
+      ],
+      "pass": false,
+      "volume": false
+    },
+    {
+      "id": "ib08-coworker-en-3",
+      "closes": [],
+      "objectives": [],
+      "surface": "coworker",
+      "mode": "ask",
+      "conversation_id": "e4111206-f551-4534-bc6d-4de7ebd951d3",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "Give me the employee number for Ali Mohamed Saad AlAjmi.",
+          "reply": "Your leave balance has no rows configured yet.",
+          "seconds": 2.89,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "en",
+          "mode": "ask",
+          "tools": [
+            "api_name=list_leave_entitlements"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib08-coworker-en-4",
+      "closes": [],
+      "objectives": [],
+      "surface": "coworker",
+      "mode": "ask",
+      "conversation_id": "3cc15dac-293d-4331-87ef-e6aa79b52750",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "Show me the leave balance of employee 1712.",
+          "reply": "Your leave balance has no rows configured yet.",
+          "seconds": 2.6,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "en",
+          "mode": "ask",
+          "tools": [
+            "api_name=list_leave_entitlements"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib08-coworker-ar-1",
+      "closes": [],
+      "objectives": [],
+      "surface": "coworker",
+      "mode": "ask",
+      "conversation_id": "ba06fa87-5716-4f42-990a-8c4699f248c0",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "ما هو المسمى الوظيفي للموظف 2400؟",
+          "reply": "لا يتوفر لديّ المسمى الوظيفي للموظف 2400 — السجلات المتاحة لي لا تحمل هذا الحقل. يمكنني عرض بيانات إجازاته (النوع، الأيام المستحقة، المستخدمة، والمرحّلة) إن أردت.",
+          "seconds": 4.63,
+          "llm_calls": 2,
+          "turn_decision": "answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "2400",
+          "language": "ar",
+          "mode": "ask",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib08-coworker-ar-2",
+      "closes": [],
+      "objectives": [],
+      "surface": "coworker",
+      "mode": "ask",
+      "conversation_id": "2c15d578-cfff-41b4-8662-70b5c52b12e6",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "في أي وحدة تنظيمية يعمل الموظف 1712؟",
+          "reply": "رصيد إجازاتك لا يحتوي على صفوف مُهيّأة بعد.",
+          "seconds": 2.37,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "ar",
+          "mode": "ask",
+          "tools": [
+            "api_name=list_leave_entitlements"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib08-coworker-ar-3",
+      "closes": [],
+      "objectives": [],
+      "surface": "coworker",
+      "mode": "ask",
+      "conversation_id": "43077fcb-7260-4aa8-8704-6820b195738b",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "أعطني الرقم الوظيفي لعلي محمد سعد العجمي.",
+          "reply": "رصيد إجازاتك لا يحتوي على صفوف مُهيّأة بعد.",
+          "seconds": 2.42,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "ar",
+          "mode": "ask",
+          "tools": [
+            "api_name=list_leave_entitlements"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib08-coworker-ar-4",
+      "closes": [],
+      "objectives": [],
+      "surface": "coworker",
+      "mode": "ask",
+      "conversation_id": "6ecba088-e947-42eb-9fca-a2d0f139b0ec",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "اعرض رصيد إجازات الموظف 1712.",
+          "reply": "رصيد إجازاتك لا يحتوي على صفوف مُهيّأة بعد.",
+          "seconds": 2.5,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "ar",
+          "mode": "ask",
+          "tools": [
+            "api_name=list_leave_entitlements"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib08-tutor-en-1",
+      "closes": [],
+      "objectives": [],
+      "surface": "tutor",
+      "mode": "ask",
+      "conversation_id": "495dbe38-209b-4161-ae88-2469278091fa",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "Explain how annual leave accrual works for employees.",
+          "reply": "I could not process that message just now. Please try again in a moment.",
+          "seconds": 9.58,
+          "llm_calls": 0,
+          "turn_decision": "answer",
+          "v21_miss": "ungrounded",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "en",
+          "mode": "ask",
+          "tools": [],
+          "misses": [
+            "not_degraded"
+          ],
+          "pass": false
+        }
+      ],
+      "pass": false,
+      "volume": false
+    },
+    {
+      "id": "ib08-tutor-en-2",
+      "closes": [],
+      "objectives": [],
+      "surface": "tutor",
+      "mode": "ask",
+      "conversation_id": "14783b11-37e4-4799-9482-db99e7bdb01a",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "Walk me through how to read my payslip.",
+          "reply": "I could not process that message just now. Please try again in a moment.",
+          "seconds": 9.42,
+          "llm_calls": 0,
+          "turn_decision": "answer",
+          "v21_miss": "ungrounded",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "en",
+          "mode": "ask",
+          "tools": [],
+          "misses": [
+            "not_degraded"
+          ],
+          "pass": false
+        }
+      ],
+      "pass": false,
+      "volume": false
+    },
+    {
+      "id": "ib08-tutor-en-3",
+      "closes": [],
+      "objectives": [],
+      "surface": "tutor",
+      "mode": "ask",
+      "conversation_id": "ca8faebc-cde0-45cf-88a8-c0cbc17bc3fb",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "What is the difference between gross pay and net pay?",
+          "reply": "**Gross pay** is the total amount earned before any deductions. It's the starting figure for a pay period — built from your basic salary plus any allowances, overtime, or other earnings. **Net pay** is what actually reaches you after deductions are taken out. It's gross pay minus things like: - Income tax\n- Social insurance / employee contributions\n- Any other statutory or company deductions\n- Loan installments, if applicable So the simple relationship is: **Net pay = Gross pay − Total deductions** A few practical notes: - **Gross** is the figure used for things like salary comparisons, loan eligibility checks, and end-of-service calculations.\n- **Net** is the figure that matters for your day-to-day budget, since it's the amount deposited.\n- If your net looks lower than expected in a given month, the usual causes are a change in deductions (tax band, insurance, a loan installment starting) rather than a change in gross. If you'd like, I can walk you through how to read the gross and net lines on your own payslip in Nibras — just say the word.",
+          "seconds": 4.32,
+          "llm_calls": 2,
+          "turn_decision": "answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "en",
+          "mode": "ask",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib08-tutor-en-4",
+      "closes": [],
+      "objectives": [],
+      "surface": "tutor",
+      "mode": "ask",
+      "conversation_id": "4c1274f7-439d-4bdf-b7b9-eb7d5b7b4bb7",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "Explain how GOSI contributions are handled for employees.",
+          "reply": "GOSI (General Organization for Social Insurance) contributions are handled as a payroll deduction and employer contribution, not as something you manage directly in Nibras. Here is the general picture: **How it works**\n- GOSI applies to eligible employees (typically Saudi nationals and, for some branches, non-Saudis for occupational hazards only). Eligibility depends on nationality and the applicable branch.\n- Contributions are split between the **employee share** (deducted from your pay) and the **employer share** (paid by GOFSCO on top of your salary).\n- The employee share is withheld automatically during the payroll run, so it appears as a deduction on your payslip rather than as a separate payment you make.\n- The employer share is a company cost and is not deducted from your pay. **The branches**\n- **Annuity (retirement/pension)** — the main branch for eligible nationals, with both employee and employer shares.\n- **Occupational Hazards** — covers work-related injury, with the employer paying the share.\n- **SANED (unemployment insurance)** — where applicable, again with an employer share. **Where you see it**\n- On your **payslip**, the employee portion shows as a GOSI deduction line.\n- Your **gross-to-net** calculation reflects it as a statutory deduction, alongside any other deductions. **What I can and cannot do here**\n- I can explain the structure and point you to where it appears on your payslip.\n- I cannot change, recalculate, or adjust GOSI amounts — those are set by GOSI rules and applied by payroll. If you believe a GOSI deduction on your payslip is wrong, raise it with HR/Payroll through **Agent** or **My**, and they can verify the contribution base and rate applied to your record. If you'd like, I can walk through how a GOSI line typically appears on a payslip, or you can check your own payslips in **My** to see the deduction as recorded for you.",
+          "seconds": 10.95,
+          "llm_calls": 3,
+          "turn_decision": "answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "en",
+          "mode": "ask",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib08-tutor-ar-1",
+      "closes": [],
+      "objectives": [],
+      "surface": "tutor",
+      "mode": "ask",
+      "conversation_id": "5f902c28-1d1b-4b6c-a52c-c3b6e2232b86",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "اشرح لي كيف يتم احتساب استحقاق الإجازة السنوية للموظفين.",
+          "reply": "جلبت البيانات، لكن تعذّر عليّ كتابة الملخص هذه المرة. الجداول والرسوم أدناه دقيقة.",
+          "seconds": 1.69,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "ar",
+          "mode": "ask",
+          "tools": [
+            "احتساب استحقاق الإجازة السنوية للموظفين"
+          ],
+          "misses": [
+            "not_degraded"
+          ],
+          "pass": false
+        }
+      ],
+      "pass": false,
+      "volume": false
+    },
+    {
+      "id": "ib08-tutor-ar-2",
+      "closes": [],
+      "objectives": [],
+      "surface": "tutor",
+      "mode": "ask",
+      "conversation_id": "580de9b9-3edc-4d72-a578-559c4a465336",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "اشرح لي كيف أقرأ قسيمة راتبي خطوة بخطوة.",
+          "reply": "تعذّر عليّ فهم هذه الرسالة الآن. أعد المحاولة بعد لحظة.",
+          "seconds": 11.19,
+          "llm_calls": 0,
+          "turn_decision": "answer",
+          "v21_miss": "ungrounded",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "ar",
+          "mode": "ask",
+          "tools": [],
+          "misses": [
+            "not_degraded"
+          ],
+          "pass": false
+        }
+      ],
+      "pass": false,
+      "volume": false
+    },
+    {
+      "id": "ib08-tutor-ar-3",
+      "closes": [],
+      "objectives": [],
+      "surface": "tutor",
+      "mode": "ask",
+      "conversation_id": "345d33d1-7940-4cc6-afa7-f22e5e8222e8",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "ما الفرق بين الراتب الإجمالي وصافي الراتب؟",
+          "reply": "تعذّر عليّ فهم هذه الرسالة الآن. أعد المحاولة بعد لحظة.",
+          "seconds": 7.56,
+          "llm_calls": 0,
+          "turn_decision": "answer",
+          "v21_miss": "ungrounded",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "ar",
+          "mode": "ask",
+          "tools": [],
+          "misses": [
+            "not_degraded"
+          ],
+          "pass": false
+        }
+      ],
+      "pass": false,
+      "volume": false
+    },
+    {
+      "id": "ib08-tutor-ar-4",
+      "closes": [],
+      "objectives": [],
+      "surface": "tutor",
+      "mode": "ask",
+      "conversation_id": "25dea184-5d99-41b3-a511-c4492981962b",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "اشرح لي كيفية التعامل مع اشتراكات التأمينات الاجتماعية للموظفين.",
+          "reply": "تعذّر عليّ فهم هذه الرسالة الآن. أعد المحاولة بعد لحظة.",
+          "seconds": 14.94,
+          "llm_calls": 0,
+          "turn_decision": "answer",
+          "v21_miss": "ungrounded",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "ar",
+          "mode": "ask",
+          "tools": [],
+          "misses": [
+            "not_degraded"
+          ],
+          "pass": false
+        }
+      ],
+      "pass": false,
+      "volume": false
+    }
+  ],
+  "findings": {},
+  "objectives": {
+    "C4": true
+  },
+  "latency": {
+    "turns": 16,
+    "p50_ms": 4365,
+    "over_4s": 9,
+    "llm_calls_p50": 1.0,
+    "llm_calls_max": 3
+  },
+  "total": 16,
+  "passed": 9,
+  "pass": false
+}

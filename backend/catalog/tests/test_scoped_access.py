@@ -28,9 +28,11 @@ class AssetProfileScopedAccessTest(TestCase):
         cls.owner2 = User.objects.create_user(username='owner2', password='pass123')
         cls.outsider = User.objects.create_user(username='outsider', password='pass123')
         
-        # Create org units
-        cls.org_unit1 = OrgUnit.objects.create(name='Unit 1', slug='unit-1')
-        cls.org_unit2 = OrgUnit.objects.create(name='Unit 2', slug='unit-2')
+        # Create org units — ADR-0028 single active root; both units are
+        # siblings so each owner's org scope stays disjoint from the other's.
+        cls.root_org_unit = OrgUnit.objects.create(name='Root', slug='root-asset-scope')
+        cls.org_unit1 = OrgUnit.objects.create(name='Unit 1', slug='unit-1', parent=cls.root_org_unit)
+        cls.org_unit2 = OrgUnit.objects.create(name='Unit 2', slug='unit-2', parent=cls.root_org_unit)
         
         # Create modules
         cls.module1 = Module.objects.create(org_unit=cls.org_unit1, name='Module 1', scope=1)
@@ -119,9 +121,11 @@ class OwnerDashboardAccessTest(TestCase):
         self.owner1 = User.objects.create_user(username='owner1', password='pass123')
         self.outsider = User.objects.create_user(username='outsider', password='pass123')
         
-        # Create org units and modules
-        self.org_unit1 = OrgUnit.objects.create(name='Unit 1', slug='unit-1')
-        self.org_unit2 = OrgUnit.objects.create(name='Unit 2', slug='unit-2')
+        # Create org units — ADR-0028 single active root; both units are
+        # siblings so each owner's org scope stays disjoint from the other's.
+        self.root_org_unit = OrgUnit.objects.create(name='Root', slug='root-owner-dashboard')
+        self.org_unit1 = OrgUnit.objects.create(name='Unit 1', slug='unit-1', parent=self.root_org_unit)
+        self.org_unit2 = OrgUnit.objects.create(name='Unit 2', slug='unit-2', parent=self.root_org_unit)
         self.module1 = Module.objects.create(org_unit=self.org_unit1, name='Module 1', scope=1)
         self.module2 = Module.objects.create(org_unit=self.org_unit2, name='Module 2', scope=1)
         

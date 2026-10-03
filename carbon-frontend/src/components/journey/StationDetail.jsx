@@ -2,6 +2,8 @@ import React, { useMemo } from 'react';
 import PropTypes from 'prop-types';
 import { Box, Typography } from '@mui/material';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import PlaylistPlayIcon from '@mui/icons-material/PlaylistPlay';
+import FactCheckIcon from '@mui/icons-material/FactCheck';
 import { useTranslation } from 'react-i18next';
 
 import { FONT } from '../../theme/themeTokens';
@@ -9,27 +11,31 @@ import EmptyState from '../Page/EmptyState';
 import MixedText from './MixedText';
 import CompetencyOutcome from './CompetencyOutcome';
 import LessonList from './LessonList';
+import CampDrama from './CampDrama';
 import JourneyRecall from './JourneyRecall';
 import { provenOutcomes } from './journeyVoice';
 
 /**
- * One station panel: a plain-language description of the station, its checkable
- * outcomes with "what good looks like", and its lessons as a compact list that
- * opens the dedicated lesson reader. No lesson body is rendered inline.
+ * One camp's detail panel — the lessons first, the checkable outcomes last.
  *
- * There is no lock reason and no hidden action. Every outcome and lesson row
- * navigates to the real host page or to the reader for that lesson.
+ * The camp title and its one-line "what" live in the camp hero above, so this
+ * panel never repeats them. What it owes the reader, in order, is:
+ *   1. the camp's lessons as a clean timeline you can open with one click,
+ *   2. then the outcomes the engine can actually prove.
  *
- * When the station is genuinely done, it says in warm, specific terms what is
- * now true — one line per outcome the engine proved, never a click. A read-only
- * spaced-review check-in resurfaces an earlier finished lesson's question.
+ * The field hazards and the field notebook are gone from the journey: their
+ * full detail lives in the Lead guide and the Field guide under Help. Nothing
+ * here is a lock or a score.
+ *
+ * When the camp is genuinely done it says in warm, specific terms what is now
+ * true — one line per outcome the engine proved, never a click.
  */
 export default function StationDetail({
-  station, glossary, onOpenLesson, onNavigate, appId, recallLesson,
+  station, glossary, onOpenLesson, onNavigate, appId, recallLesson, onScenarioAnswer,
 }) {
   const { t } = useTranslation('journey');
 
-  // The lesson row's one-line outcome: the station outcome that lesson proves.
+  // The lesson row's one-line outcome: the camp outcome that lesson proves.
   const outcomeByLesson = useMemo(() => {
     const map = {};
     (station?.competencies || []).forEach((competency) => {
@@ -50,15 +56,13 @@ export default function StationDetail({
       tabIndex={0}
       data-testid={`journey-station-panel-${station.n}`}
       data-state={station.state}
-      sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5, mt: 1.5, outline: 'none' }}
+      sx={{ mt: 2, outline: 'none' }}
     >
-      <MixedText text={station.title} glossary={glossary} component="h2" sx={FONT.pageTitle} />
-      {station.what && (
-        <MixedText
-          text={station.what}
+      {onScenarioAnswer && (
+        <CampDrama
+          station={station}
           glossary={glossary}
-          component="p"
-          sx={{ ...FONT.body2, color: 'text.secondary', mt: 0.5 }}
+          onAnswer={(index, choice) => onScenarioAnswer(station.key, { beat: index, choice })}
         />
       )}
 
@@ -66,12 +70,14 @@ export default function StationDetail({
         <Box
           data-testid="journey-station-done"
           sx={{
-            mt: 1.25,
+            mt: 1.5,
             display: 'flex',
             alignItems: 'flex-start',
             gap: 1,
-            p: 1,
-            borderRadius: 1,
+            p: 1.25,
+            borderRadius: 1.5,
+            border: '1px solid',
+            borderColor: 'success.main',
             bgcolor: 'action.hover',
           }}
         >
@@ -112,11 +118,31 @@ export default function StationDetail({
         </Box>
       ) : (
         <>
+          {station.lessons.length > 0 && (
+            <Box sx={{ mt: 1.5 }} data-testid="journey-lessons">
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
+                <PlaylistPlayIcon sx={{ fontSize: 18, color: 'primary.main' }} aria-hidden="true" />
+                <Typography sx={FONT.sectionTitle} color="text.secondary">
+                  {t('sections.missions', { n: station.lessons.length })}
+                </Typography>
+              </Box>
+              <LessonList
+                lessons={station.lessons}
+                glossary={glossary}
+                outcomeByLesson={outcomeByLesson}
+                onOpen={onOpenLesson}
+              />
+            </Box>
+          )}
+
           {station.competencies.length > 0 && (
-            <Box sx={{ mt: 1.5 }}>
-              <Typography sx={FONT.sectionTitle} color="text.secondary">
-                {t('sections.outcomesTitle')}
-              </Typography>
+            <Box sx={{ mt: 2 }} data-testid="journey-outcomes">
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.25 }}>
+                <FactCheckIcon sx={{ fontSize: 18, color: 'success.main' }} aria-hidden="true" />
+                <Typography sx={FONT.sectionTitle} color="text.secondary">
+                  {t('sections.outcomesTitle')}
+                </Typography>
+              </Box>
               {station.competencies.map((competency) => (
                 <CompetencyOutcome
                   key={competency.key}
@@ -125,20 +151,6 @@ export default function StationDetail({
                   onGo={onNavigate}
                 />
               ))}
-            </Box>
-          )}
-
-          {station.lessons.length > 0 && (
-            <Box sx={{ mt: 1.5 }}>
-              <Typography sx={{ ...FONT.sectionTitle, mb: 0.5 }} color="text.secondary">
-                {t('sections.lessons')}
-              </Typography>
-              <LessonList
-                lessons={station.lessons}
-                glossary={glossary}
-                outcomeByLesson={outcomeByLesson}
-                onOpen={onOpenLesson}
-              />
             </Box>
           )}
         </>
@@ -158,8 +170,9 @@ StationDetail.propTypes = {
   onNavigate: PropTypes.func.isRequired,
   appId: PropTypes.string,
   recallLesson: PropTypes.shape({}),
+  onScenarioAnswer: PropTypes.func,
 };
 
 StationDetail.defaultProps = {
-  station: null, glossary: [], appId: '', recallLesson: null,
+  station: null, glossary: [], appId: '', recallLesson: null, onScenarioAnswer: undefined,
 };

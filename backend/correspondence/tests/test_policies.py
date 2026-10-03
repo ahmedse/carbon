@@ -16,9 +16,18 @@ def reference_value(db):
 
 
 @pytest.fixture
-def org_unit(db):
+def root_org(db):
+    """ADR-0028 single active root shared by the policy-test org units."""
+    return OrgUnit.objects.create(
+        name='Root', slug='root-eng-pol', code='ROOT', org_type='company',
+    )
+
+
+@pytest.fixture
+def org_unit(db, root_org):
     return OrgUnit.objects.create(
         name='Engineering', slug='engineering', code='ENG', org_type='department',
+        parent=root_org,
     )
 
 
@@ -30,8 +39,10 @@ def _make_policy(corr_type, org_unit, name, version='1.0.0', is_active=True):
 
 
 @pytest.mark.django_db
-def test_resolve_prefers_org_specific(reference_value, org_unit):
-    OrgUnit.objects.create(name='HR', slug='hr', code='HR', org_type='division')
+def test_resolve_prefers_org_specific(reference_value, org_unit, root_org):
+    OrgUnit.objects.create(
+        name='HR', slug='hr', code='HR', org_type='division', parent=root_org,
+    )
     _make_policy(reference_value, None, 'Global Leave')
     org_policy = _make_policy(reference_value, org_unit, 'Org Leave')
 
@@ -39,9 +50,9 @@ def test_resolve_prefers_org_specific(reference_value, org_unit):
 
 
 @pytest.mark.django_db
-def test_resolve_falls_back_to_global(reference_value, org_unit):
+def test_resolve_falls_back_to_global(reference_value, org_unit, root_org):
     other_ou = OrgUnit.objects.create(
-        name='HR', slug='hr', code='HR', org_type='division',
+        name='HR', slug='hr', code='HR', org_type='division', parent=root_org,
     )
     global_policy = _make_policy(reference_value, None, 'Global Leave')
 

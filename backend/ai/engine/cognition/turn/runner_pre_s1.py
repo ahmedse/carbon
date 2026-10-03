@@ -43,6 +43,81 @@ from ai.engine.cognition.turn.runner_util import (
 
 logger = logging.getLogger("pulse.cognition.turn.runner")
 
+
+def _superseded_committed_exit(turn_route) -> str:
+    """Gate a committed route's v21 exit can no longer stage (V21-2), or ``""``.
+
+    ``REPORT_CLARIFY`` commits the turn to the typed report-focus question, but
+    that exit is superseded on ``PULSE_UNDERSTAND=v21`` (``may_stage`` is
+    ``False``) and the Decision call below is skipped for committed routes. The
+    skip is recorded by the fallthrough counter with its reason instead of
+    staying silent; the Phase 2 fix gates the route itself.
+    """
+    if not getattr(turn_route, "committed", False):
+        return ""
+    gate = ""
+    if turn_route.kind is RouteKind.REPORT_CLARIFY:
+        gate = "typed_router"
+    elif turn_route.kind is RouteKind.RESTYLE:
+        gate = "restyle"
+    if gate and not may_stage(gate):
+        return gate
+    return ""
+
+
+def _unfinished_v21_decision(ledger) -> str:
+    """The Decision miss this turn recorded, or ``""`` when it finished (IRP-8).
+
+    On ``PULSE_UNDERSTAND=v21`` an un-fired ``v21_understand`` signal with one
+    of these reasons means the Decision did not finish: ``fallthrough`` /
+    ``unrepairable`` (the call ran and produced no exit) and
+    ``committed_route_skipped`` (a committed route whose v21 exit is
+    superseded). A deliberate skip — ``plan_dial`` (the Plan drafter owns the
+    dial) or ``shadow_only`` (shadow logs, legacy answers) — is not a miss and
+    is never returned.
+    """
+    for signal in getattr(ledger, "decision_signals", None) or []:
+        if not isinstance(signal, dict):
+            continue
+        if signal.get("gate") != "v21_understand" or signal.get("fired"):
+            continue
+        reason = str((signal.get("detail") or {}).get("reason") or "")
+        if reason in ("fallthrough", "unrepairable", "committed_route_skipped"):
+            return reason
+    return ""
+
+
+def _v21_chat_no_fallthrough(st, *, ledger, state, surface):
+    """ADR-0056 / IRP-8 (V21-1): a v21 Chat turn the Decision did not finish.
+
+    pre-S1 owns the boundary: every soft exit has been considered and none was
+    staged, so a Chat turn on v21 has no legacy spine (S1–S6) to fall into. The
+    recorded miss is answered with the typed, visible error (ADR-0053) and
+    named on the ledger (``fell_through`` / ``fallthrough_reason``) so a live
+    run (IB-10) can count it.
+
+    Agent keeps the planner path: its surface is not Chat, so this returns
+    ``None`` and the spine runs exactly as before.
+    """
+    from ai.engine.cognition.turn.degradation import Degradation
+    from ai.engine.cognition.turn.runner_surfaces import _degraded_reply
+    from ai.engine.cognition.turn.understand import understand_mode
+
+    if understand_mode() != "v21":
+        return None
+    if surface is None or not getattr(surface, "is_chat", False):
+        return None
+    reason = _unfinished_v21_decision(ledger)
+    if not reason:
+        return None
+    ledger.fell_through = True
+    ledger.fallthrough_reason = reason
+    return _degraded_reply(
+        ledger, Degradation("understand", reason), state, "v21",
+        user_message=str(getattr(st, "user_message", "") or ""),
+    )
+
+
 async def run_pre_s1_gates(
     runner,
     st: MeteredTurnState,
@@ -235,6 +310,18 @@ async def run_pre_s1_gates(
         st.ess_bound = await runner._try_bound_ess_self_read(user_message=st.user_message, conversation_history=conversation_history, state_ctx=state_ctx, ledger=ledger, meter=meter, turn_id=turn_id, instance_id=instance_id, conversation_id=conversation_id, host_user_id=host_user_id, instance_config=instance_config, t0=t0, surface=surface)
     if st.ess_bound is not None:
         stage_exit(staged, 'tool_answer', 'ess_bound_self_read', st.ess_bound[0])
+    _superseded_exit = _superseded_committed_exit(turn_route)
+    if _superseded_exit:
+        # V21-2 defect: a committed route whose exit is superseded cannot be
+        # reached by the Decision (the call below is skipped on committed
+        # routes). Record the fallthrough with its reason so the counter sees
+        # it, never a silent S3–S6 answer. Fired=False: the Arbiter ignores it.
+        _signal(
+            ledger, 'v21_understand', False,
+            reason='committed_route_skipped',
+            route=turn_route.kind.value,
+            exit_gate=_superseded_exit,
+        )
     if st.ess_bound is None and (not turn_route.committed) and (st.chat_handoff is None) and (runner.executor is not None):
         _v21 = await runner._try_v21_understand(user_message=st.user_message, conversation_history=conversation_history, ledger=ledger, turn_id=turn_id, instance_id=instance_id, conversation_id=conversation_id, host_user_id=host_user_id, instance_config=instance_config, t0=t0, surface=surface, state_ctx=state_ctx, user_info=user_info, process_mode=process_mode, progress_callback=progress_callback, dense_thinking=bool(getattr(st, 'dense_thinking', False)), page_context=page_context)
         if _v21 is not None:
@@ -289,4 +376,5 @@ async def run_pre_s1_gates(
     _early = _commit_staged(ledger, meter, staged)
     if _early is not None:
         return _early
+    return _v21_chat_no_fallthrough(st, ledger=ledger, state=state, surface=surface)
 

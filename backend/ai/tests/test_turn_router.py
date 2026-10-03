@@ -40,7 +40,10 @@ def test_ask_mode_same_brief_does_not_create_plan():
     assert decision.committed is False
 
 
-def test_report_clarify_is_typed_open_question():
+def test_report_clarify_is_typed_open_question(monkeypatch):
+    # On v21 the Decision owns a broad report (V21-2); the typed route is the
+    # legacy shape, so pin the legacy path here to keep this coverage.
+    monkeypatch.setenv("PULSE_UNDERSTAND", "legacy")
     decision = TurnRouter().decide(
         message="I need a full report about salaries in the company",
         process_mode="ask",

@@ -42,6 +42,15 @@ vi.mock('../hooks/useIsMobile', () => ({
   usePulseFullscreen: () => false,
 }));
 
+// The reader now fetches the lesson detail; this suite covers persistence, so
+// resolve nothing and keep the reader on its waypoint timeline.
+const guideApi = vi.hoisted(() => ({ fetchGuide: vi.fn(), fetchGuideLesson: vi.fn(), postGuideEvent: vi.fn() }));
+vi.mock('../api/guide', () => ({
+  fetchGuide: (...args) => guideApi.fetchGuide(...args),
+  fetchGuideLesson: (...args) => guideApi.fetchGuideLesson(...args),
+  postGuideEvent: (...args) => guideApi.postGuideEvent(...args),
+}));
+
 vi.mock('../auth/AuthContext', async (importOriginal) => {
   const actual = await importOriginal();
   return { ...actual, useAuth: () => ({ user: hoisted.user, token: 'test-token' }) };
@@ -113,6 +122,8 @@ beforeEach(() => {
   hoisted.journey = deriveJourney(LISTING, 'D');
   notesApi.fetchNotes.mockResolvedValue({ count: 0, next: null, results: [] });
   notesApi.fetchComments.mockResolvedValue({ count: 0, next: null, results: [] });
+  guideApi.fetchGuideLesson.mockResolvedValue(null);
+  guideApi.postGuideEvent.mockResolvedValue({});
 });
 
 afterEach(() => {

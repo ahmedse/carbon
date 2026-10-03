@@ -2,7 +2,7 @@ import React from 'react';
 import PropTypes from 'prop-types';
 import { Box, Typography, Chip } from '@mui/material';
 
-function PageHeader({ icon: Icon = null, title, subtitle, description, badge, actions, titleComponent = undefined }) {
+function PageHeader({ icon: Icon = null, title, subtitle, description, badge, info, actions, titleComponent = undefined }) {
   return (
     <Box sx={{ borderBottom: '1px solid', borderColor: 'divider', pb: 0.5, mb: 1 }}>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', gap: 0.75 }}>
@@ -14,6 +14,7 @@ function PageHeader({ icon: Icon = null, title, subtitle, description, badge, ac
               {badge && (
                 <Chip label={badge.label} size="small" color={badge.color} />
               )}
+              {info}
             </Box>
             {subtitle && (
               <Typography sx={{ fontSize: '0.6875rem', color: 'text.secondary' }}>{subtitle}</Typography>
@@ -37,6 +38,8 @@ PageHeader.propTypes = {
   description: PropTypes.string,
   icon: PropTypes.elementType,
   badge: PropTypes.shape({ label: PropTypes.string.isRequired, color: PropTypes.string }),
+  /** Optional inline affordance rendered next to the title (e.g. an info button). */
+  info: PropTypes.node,
   actions: PropTypes.node,
   titleComponent: PropTypes.elementType,
 };
@@ -46,6 +49,7 @@ PageHeader.defaultProps = {
   description: '',
   icon: null,
   badge: null,
+  info: null,
   actions: null,
   titleComponent: undefined,
 };

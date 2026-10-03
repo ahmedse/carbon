@@ -35,6 +35,8 @@ export default function FilteredDataGrid({
   searchValue = '',
   onSearchChange,
   searchPlaceholder,
+  /** Extra control(s) rendered at the start of the search/filter row. */
+  toolbarExtra = null,
   filterDefs = [],
   filterValues = {},
   onFilterChange,
@@ -94,9 +96,10 @@ export default function FilteredDataGrid({
         <PageHeader title={title} subtitle={subtitle} description={description} actions={actions} />
       )}
 
-      {(!hideSearch || filterDefs.length > 0) && (
+      {(!hideSearch || filterDefs.length > 0 || toolbarExtra) && (
       <Paper sx={{ p: 2, mb: embedded ? 2 : 3, bgcolor: 'background.paper' }}>
         <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+          {toolbarExtra}
           {!hideSearch && (
           <TextField
             placeholder={searchPlaceholder || t('searchByName')}

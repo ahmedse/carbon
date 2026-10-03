@@ -86,7 +86,7 @@ def _emission_head(decision, limit: int = 400) -> str:
     return ""
 
 
-def _degraded_reply(ledger, degradation, state, mode: str):
+def _degraded_reply(ledger, degradation, state, mode: str, *, user_message: str = ""):
     """ADR-0053: a failed v21 stage answers with a typed error, not another path.
 
     Shadow mode never answers; the legacy kill switch never reaches here.
@@ -96,9 +96,17 @@ def _degraded_reply(ledger, degradation, state, mode: str):
     from ai.engine.agent.reasoning import AgentResponse
     from ai.engine.cognition.turn.arbiter import Arbiter
     from ai.engine.cognition.turn.degradation import caveat, record, sentence
+    from ai.engine.cognition.turn.language import detect_reply_language
 
     record(ledger, degradation)
-    language = str(getattr(state, "language", "") or "en")
+    # IRP-7: the failure copy follows this message's language. ``state.language``
+    # is the last finished turn's language (empty on turn 1), so it is only the
+    # fallback for a message that carries no letters of its own.
+    message = (user_message or "").strip()
+    if message and any(ch.isalpha() for ch in message):
+        language = detect_reply_language(message)
+    else:
+        language = str(getattr(state, "language", "") or "en")
     text = sentence(degradation, language)
     ledger.final_response = text
     ledger.turn_decision = Arbiter().decide(ledger.decision_signals).value
@@ -457,6 +465,7 @@ class SoftSurfacesMixin:
         from ai.engine.cognition.turn.decision import PLAN_PROCESS_ID, Rejection
         from ai.engine.cognition.turn.execute import ExecuteWitness
         from ai.engine.cognition.turn.pipeline_v21 import (
+            _copy_language,
             act_on_decision,
             arbiter_gate,
             decision_render,
@@ -497,7 +506,10 @@ class SoftSurfacesMixin:
         # executor binds it. Write twins are described (Agent-only) so their
         # not_for can route; validate_decision hands any write to Agent.
         caps = capability_surface(instance_config, user_info)
-        from ai.engine.cognition.turn.runner_util import catalog_for_page
+        from ai.engine.cognition.turn.runner_util import (
+            _is_declared_in_scope,
+            catalog_for_page,
+        )
 
         scoped_catalog = catalog_for_page(
             list(caps.entries), user_message or "", page_context,
@@ -574,6 +586,11 @@ class SoftSurfacesMixin:
                 arg_violations=caps.arg_violations,
                 field_gaps=caps.field_gaps,
                 list_fields=caps.supplied_by,
+                # IRP-9: the pack's declared scope, applied as a typed
+                # contract check — an in-scope ask may not be refused.
+                declared_in_scope=_is_declared_in_scope(
+                    user_message or "", instance_config,
+                ),
                 on_malformed=malformed,
             )
         except Exception:
@@ -586,7 +603,16 @@ class SoftSurfacesMixin:
             raise
         if decision is None:
             _signal(ledger, "v21_understand", False, reason="malformed_decision")
-            return _degraded_reply(ledger, Degradation("understand", "malformed_decision"), state, mode)
+            return _degraded_reply(
+                ledger, Degradation("understand", "malformed_decision"), state, mode,
+                user_message=user_message or "",
+            )
+
+        # IRP-7: the reply language follows the message, not the pack default.
+        # A message with letters of its own is authoritative, so the writer,
+        # every template and the degradation line answer in the user's
+        # language even when the model named the other one.
+        decision.language = _copy_language(user_message or "", decision.language)
 
         async def record(outcome: str, executed_rows: list[dict]) -> None:
             await self._record_understand(
@@ -679,6 +705,7 @@ class SoftSurfacesMixin:
                 executed=rows,
                 surface=surface,
                 catalog=(instance_config or {}).get("api_catalog"),
+                instance_config=instance_config,
             )
             # A tool entry ran as itself; its row says so, so its actions
             # (download, memory card) reach the reply.
@@ -732,12 +759,16 @@ class SoftSurfacesMixin:
                     await record("record_mismatch", [])
                     return _degraded_reply(
                         ledger, Degradation("act", "record_mismatch"), state, mode,
+                        user_message=user_message or "",
                     )
         except Exception:  # noqa: BLE001
             logger.warning("v21 act failed", exc_info=True)
             _signal(ledger, "v21_understand", False, reason="act_error")
             await record("act_error", [])
-            return _degraded_reply(ledger, Degradation("act", "act_error"), state, mode)
+            return _degraded_reply(
+                ledger, Degradation("act", "act_error"), state, mode,
+                user_message=user_message or "",
+            )
         text, envelope, degraded = await speak_turn(
             decision, executed, text=text, user_message=user_message or "",
             instance_id=instance_id, conversation_id=conversation_id, state=state,
@@ -771,6 +802,7 @@ class SoftSurfacesMixin:
             await record("handoff_not_on_host", [])
             return _degraded_reply(
                 ledger, Degradation("act", "handoff_not_on_host"), state, mode,
+                user_message=user_message or "",
             )
         if handoff_api and handoff_api != PLAN_PROCESS_ID and not on_agent and known_write:
             # Chat proposes, Agent applies (ADR-0046): the model's own write
@@ -817,7 +849,10 @@ class SoftSurfacesMixin:
                 if nav.action != "navigate":
                     _signal(ledger, "v21_understand", False, reason="unknown_route")
                     await record("unknown_route", [])
-                    return _degraded_reply(ledger, Degradation("act", "unknown_route"), state, mode)
+                    return _degraded_reply(
+                        ledger, Degradation("act", "unknown_route"), state, mode,
+                        user_message=user_message or "",
+                    )
                 text = _navigation_text(nav)
                 handoff_actions = _navigation_actions(nav)
             elif lead.op in {"answer", "set_slot"}:
@@ -868,7 +903,10 @@ class SoftSurfacesMixin:
                             (usage or {}).get("ungrounded"), (usage or {}).get("rejected_head"),
                         )
                         await record(cause, [])
-                        return _degraded_reply(ledger, Degradation("speak", cause), state, mode)
+                        return _degraded_reply(
+                            ledger, Degradation("speak", cause), state, mode,
+                            user_message=user_message or "",
+                        )
             elif lead.op == "handoff_agent" and (
                 (handoff_api == PLAN_PROCESS_ID and plan_on) or on_agent
             ):

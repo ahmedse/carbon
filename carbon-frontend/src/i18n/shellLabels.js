@@ -156,9 +156,13 @@ export const NAV_LABEL_KEYS = {
   'Chairman Overview': 'nav.chairmanOverview',
   'Inventory onboarding': 'nav.inventoryOnboarding',
   Journey: 'nav.journey',
+  'Journey guides': 'nav.journeyGuides',
   Readiness: 'nav.readiness',
   Coverage: 'nav.coverage',
   'Coverage targets': 'nav.coverageTargets',
+  // User-facing rename only — the route + identifiers are unchanged.
+  'Data completeness': 'nav.dataCompleteness',
+  'Data completeness target': 'nav.dataCompletenessTarget',
   'Inventory Coverage': 'nav.inventoryCoverage',
   Stems: 'nav.stems',
   Calibration: 'nav.calibration',
@@ -217,6 +221,7 @@ export const GROUP_LABEL_KEYS = {
   'Payroll & Benefits': 'group.payrollBenefits',
   Executive: 'group.executive',
   Onboarding: 'group.onboarding',
+  Guides: 'group.guides',
   'BI & Analytics': 'group.biAnalytics',
 };
 

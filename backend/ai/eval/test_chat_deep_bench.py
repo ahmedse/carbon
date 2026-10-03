@@ -24,6 +24,34 @@ def test_stub_does_not_upgrade_a_week_fail():
     assert by_id["C5"]["column"]["honest"] == "reached"
 
 
+def test_fallthrough_counter_counts_a_run_without_moving_honest():
+    from ai.eval.chat_deep_bench import fallthrough_count
+
+    run = {
+        **_run("z", {}),
+        "threads": [{"id": "t", "turns": [
+            {"say": "a", "fell_through": True},
+            {"say": "b", "fell_through": False},
+            {"say": "c", "v21_miss": "committed_route_skipped"},
+        ]}],
+    }
+    assert fallthrough_count([run]) == {"status": "fail", "count": 2, "turns": 3, "runs": 1}
+
+    report = score_chat_bench(retests=[run])
+    baseline = {row["id"]: row for row in score_chat_bench(retests=[])["objectives"]}
+    by_id = {row["id"]: row for row in report["objectives"]}
+    # The counter is reported on its own; it never changes a pass bar or honest.
+    assert report["fallthrough"]["count"] == 2
+    assert by_id["C2"]["column"]["honest"] == baseline["C2"]["column"]["honest"]
+
+
+def test_fallthrough_counter_is_missing_without_a_measurement():
+    from ai.eval.chat_deep_bench import fallthrough_count
+
+    assert fallthrough_count([_run("z", {})])["status"] == "missing"
+    assert fallthrough_count([])["count"] is None
+
+
 def test_verdict_is_fragile_and_does_not_claim_l6():
     report = score_chat_bench(retests=[])
     assert report["verdict"] == "fragile"

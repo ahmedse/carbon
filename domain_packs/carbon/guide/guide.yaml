@@ -54,6 +54,9 @@ stages:
     competencies: [open_period, sources_factors, period_status, tiers]
     lead: [L2, L3, C2, C3]
     owner: [C2, C3]
+    scenario:
+      beats:
+        - {id: keep_one_open, correct: 0}
   - n: 2
     key: coverage
     title_key: stage.coverage.title
@@ -62,6 +65,9 @@ stages:
     competencies: [cover_exclude, handoff]
     lead: [L5]
     owner: [D6]
+    scenario:
+      beats:
+        - {id: cover_or_exclude, correct: 1}
   - n: 3
     key: data_products
     title_key: stage.data_products.title
@@ -71,6 +77,9 @@ stages:
     competencies: []
     lead: []
     owner: []
+    scenario:
+      beats:
+        - {id: upload_first, correct: 0}
   - n: 4
     key: data_entry
     title_key: stage.data_entry.title
@@ -79,6 +88,9 @@ stages:
     competencies: [what_owed, one_row, data_product]
     lead: []
     owner: [D1, D2, D7]
+    scenario:
+      beats:
+        - {id: enter_what_meter_says, correct: 1}
   - n: 5
     key: calculation
     title_key: stage.calculation.title
@@ -87,6 +99,9 @@ stages:
     competencies: [calculation, restate, quality]
     lead: [L4]
     owner: [D3, D4]
+    scenario:
+      beats:
+        - {id: ask_the_lead, correct: 1}
   - n: 6
     key: lock
     title_key: stage.lock.title
@@ -95,6 +110,9 @@ stages:
     competencies: [boundary, legal_transition, lock_read]
     lead: [L1, L6]
     owner: [D5]
+    scenario:
+      beats:
+        - {id: open_then_locked, correct: 0}
   - n: 7
     key: report
     title_key: stage.report.title
@@ -103,6 +121,9 @@ stages:
     competencies: [quote_scope]
     lead: [L7]
     owner: []
+    scenario:
+      beats:
+        - {id: state_the_scope, correct: 1}
 
 # Checkable outcomes. `kind: host` is proven only when its probe passes.
 # Titles and "what good looks like" live in copy under `competencies.<key>`.

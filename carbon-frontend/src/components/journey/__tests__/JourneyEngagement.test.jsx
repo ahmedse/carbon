@@ -152,7 +152,7 @@ describe('JourneyScenario — a story, not a screen tour', () => {
   it('frames the current station as a scene with a mission and real minutes', () => {
     renderScenario();
     const card = screen.getByTestId('journey-scenario-card');
-    expect(card).toHaveTextContent('Scene 3 of 4');
+    expect(card).toHaveTextContent('Camp 3 of 4');
     expect(screen.getByTestId('journey-mission')).toHaveTextContent('Bring many rows');
     expect(screen.getByTestId('journey-mission')).toHaveTextContent('Drop one file up to 10 MB.');
     expect(screen.getByTestId('journey-mission-minutes')).toHaveTextContent('About 4 min');

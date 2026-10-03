@@ -167,22 +167,29 @@ class MoodleIndexView(APIView):
         extras = payload.get("extras") or []
         if not isinstance(extras, list):
             return Response({"ok": False, "error": "bad_json"}, status=400)
-        from ai.moodle_bank import listed_shortnames, write_extra_index
+        from ai.moodle_bank import listed_shortnames
 
         if shortname not in listed_shortnames():
             return Response(
                 {"ok": False, "error": "off_list", "shortname": shortname, "indexed": 0, "skipped": ["drive", "youtube"]},
                 status=404,
             )
-        indexed = write_extra_index(shortname, extras)
-        return Response(
-            {
-                "ok": True,
-                "shortname": shortname,
-                "indexed": indexed,
-                "skipped": ["drive", "youtube"],
-            }
-        )
+        # The orchestration (extra readers, chunk index, graph, default-OFF
+        # Drive, OCR-pending) lives in a lazily-imported staff job module so a
+        # Chat turn never imports the content engine.
+        from ai.moodle_content_job import run_index
+
+        result = run_index(shortname, payload)
+        body = {
+            "ok": bool(result.get("ok")),
+            "shortname": shortname,
+            "indexed": int(result.get("indexed") or 0),
+            "skipped": result.get("skipped") or ["drive", "youtube"],
+        }
+        for key in ("extra_source", "index", "graph", "drive"):
+            if key in result:
+                body[key] = result[key]
+        return Response(body)
 
 
 @method_decorator(csrf_exempt, name="dispatch")
@@ -249,3 +256,52 @@ class MoodleEmbedSessionView(APIView):
             "app_identifier": "moodle",
             "page_context": payload.get("page_context") or "",
         })
+
+
+@method_decorator(csrf_exempt, name="dispatch")
+class MoodleTeachApplyView(APIView):
+    """Staff Apply (HOST UI, Extra tab): append one grounded structured lesson.
+
+    This is not a Chat door. It is reachable only by the Moodle plugin's
+    HMAC-signed POST, and it never trusts an externally supplied lesson: the
+    lesson is rebuilt from the committed bank and re-verified before a single
+    JSONL record is appended. ADR-0046: Chat never host-mutates.
+    """
+
+    authentication_classes: list = []
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        secret = configured_secret(getattr(settings, "MOODLE_PULSE_HMAC_SECRET", "") or "")
+        raw = request.body or b""
+        if not verify_signature(
+            secret,
+            request.headers.get("X-Pulse-Timestamp", ""),
+            raw,
+            request.headers.get("X-Pulse-Signature", ""),
+        ):
+            return Response({"ok": False, "error": "unauthorized"}, status=401)
+        try:
+            payload = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return Response({"ok": False, "error": "bad_json"}, status=400)
+        if not isinstance(payload, dict):
+            return Response({"ok": False, "error": "bad_json"}, status=400)
+        shortname = str(payload.get("shortname") or "").strip()
+        topic = str(payload.get("topic") or "").strip()
+        if not shortname or not topic:
+            return Response({"ok": False, "error": "bad_json"}, status=400)
+        from ai.moodle_bank import listed_shortnames
+
+        if shortname not in listed_shortnames():
+            return Response({"ok": False, "error": "off_list"}, status=404)
+        from ai.moodle_teach import apply_structured_lesson
+
+        result = apply_structured_lesson(
+            topic,
+            shortname,
+            staff_ref=str(payload.get("staff_ref") or ""),
+        )
+        if not result.get("ok"):
+            return Response(result, status=422)
+        return Response(result, status=200)

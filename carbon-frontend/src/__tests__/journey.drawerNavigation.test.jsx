@@ -31,6 +31,15 @@ vi.mock('../hooks/useIsMobile', () => ({
   usePulseFullscreen: () => false,
 }));
 
+// The reader now fetches the lesson detail (briefing / hazard / check); this
+// suite stays on the waypoint reader, so resolve nothing.
+const guideApi = vi.hoisted(() => ({ fetchGuide: vi.fn(), fetchGuideLesson: vi.fn(), postGuideEvent: vi.fn() }));
+vi.mock('../api/guide', () => ({
+  fetchGuide: (...args) => guideApi.fetchGuide(...args),
+  fetchGuideLesson: (...args) => guideApi.fetchGuideLesson(...args),
+  postGuideEvent: (...args) => guideApi.postGuideEvent(...args),
+}));
+
 vi.mock('../notes/notesApi', () => ({
   fetchNotes: vi.fn(),
   createNote: vi.fn(),
@@ -122,6 +131,8 @@ beforeEach(() => {
   hoisted.journey = deriveJourney(LISTING, 'D');
   notesApi.fetchNotes.mockResolvedValue({ count: 0, next: null, results: [] });
   notesApi.fetchComments.mockResolvedValue({ count: 0, next: null, results: [] });
+  guideApi.fetchGuideLesson.mockResolvedValue(null);
+  guideApi.postGuideEvent.mockResolvedValue({});
 });
 
 afterEach(() => {

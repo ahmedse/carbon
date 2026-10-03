@@ -24,7 +24,7 @@ the readiness evaluator (`ai/moodle_readiness.evaluator`), which marks K10
 ## 1. Install / upgrade the plugin
 
 Plugin source: `plugins/local_pulse` (component `local_pulse`, version
-`2026100214`, requires Moodle 4.1 `2022112800`).
+`2026100301` on disk — T2 teach-apply; requires Moodle 4.1 `2022112800`).
 
 1. Copy `local_pulse` into `<moodleroot>/local/pulse` on **production**. Do
    **not** restore a database backup onto production; do **not** copy users or
@@ -111,7 +111,7 @@ Trigger on any smoke fail that is not a config typo, or on a PHP fatal.
 Attach each item; the evaluator reads the booleans.
 
 - [ ] `production_installed` — plugin present and enabled on production 4.1;
-      version `>= 2026100214`.
+      version `>= 2026100215`.
 - [ ] `hmac_configured` — Ask URL + pane URL + secret set; correct signature
       accepted, tampered signature rejected.
 - [ ] `staff_cohorts_non_empty` — the named staff cohort idnumber(s).

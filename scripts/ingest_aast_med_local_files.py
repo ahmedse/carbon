@@ -28,13 +28,18 @@ from pathlib import Path
 import yaml
 
 _SCRIPTS = Path(__file__).resolve().parent
-_PACK = _SCRIPTS.parent / "domain_packs" / "aast-med" / "bank" / "course-meat-13"
-_GOLD = _SCRIPTS.parent / "domain_packs" / "aast-med" / "gold"
+_REPO = _SCRIPTS.parent
+_PACK = _REPO / "domain_packs" / "aast-med" / "bank" / "course-meat-13"
+_GOLD = _REPO / "domain_packs" / "aast-med" / "gold"
 
-sys.path.insert(0, str(_SCRIPTS))
-from ingest_aast_med_external import _clean, _office_text, _pdf_text  # noqa: E402
+sys.path.insert(0, str(_REPO / "backend"))
+from ai.content_engine import ingest as content_ingest  # noqa: E402
+from ai.moodle_content_job import record_ocr_pending  # noqa: E402
 
-_OFFICE = {".pptx", ".pptm", ".docx"}
+# Every extension the shared content-engine registry routes: office (.pptx,
+# .pptm, .ppsx, .ppt, .docx), pdf, txt/md/json/csv, html, and images. There is
+# no second PDF/office stack; the registry is the single reader dispatcher.
+_EXTRACTABLE = content_ingest.ROUTED_SUFFIXES
 _SENTENCE = re.compile(r"(?<=[.!?؟])\s+")
 _MIN_DEDUPE = 30
 
@@ -111,23 +116,13 @@ def _bytes_from_docker(container: str, dataroot: str, contenthash: str) -> bytes
 
 
 def _extract(filename: str, data: bytes) -> tuple[str, str]:
-    """(status, text). Status is ok, empty, or unavailable with a reason."""
-    suffix = Path(filename).suffix.lower()
-    if suffix in _OFFICE:
-        try:
-            text = _office_text(data)
-        except Exception as exc:  # noqa: BLE001 - a bad archive is a status, not a crash.
-            return f"unavailable:format:{type(exc).__name__}", ""
-        return ("ok", text) if text else ("empty:no_text", "")
-    if suffix == ".pdf":
-        try:
-            text = _pdf_text(data)
-        except Exception as exc:  # noqa: BLE001
-            return f"unavailable:format:{type(exc).__name__}", ""
-        return ("ok", text) if text else ("empty:no_text", "")
-    if suffix in {".ppt", ".mp4", ".mov", ".avi"}:
-        return "unavailable:legacy_video", ""
-    return "unavailable:no_extractor", ""
+    """(status, text) through the shared content-engine registry.
+
+    Routes office (pptx/pptm/ppsx/ppt/docx), pdf, txt/md/json/csv, html, and
+    images to one reader stack; a scanned PDF/image falls back to OCR
+    (``signoff:arabic`` when the recovered text is Arabic and needs sign-off).
+    """
+    return content_ingest.extract_text(data, filename)
 
 
 def _update_course(shortname: str, texts: dict[str, str]) -> int:
@@ -158,12 +153,75 @@ def _update_course(shortname: str, texts: dict[str, str]) -> int:
     return written
 
 
+def _append_course(shortname: str, texts: dict[str, str]) -> tuple[int, list[str]]:
+    """Append one filled row per newly-read ref. Never edits or deletes a row.
+
+    The placeholder row stays exactly as it is; a new row carrying the text is
+    appended and the stable join key (section + family + name) is copied from
+    the placeholder, so coverage counts it. A ref the bank already owns, or a
+    passage that dedupes to nothing, is skipped with a printed reason.
+    """
+    path = _PACK / f"{shortname}.jsonl"
+    blob = path.read_text(encoding="utf-8")
+    rows = [json.loads(line) for line in blob.splitlines() if line.startswith("{")]
+    owned = {
+        str(row.get("ref") or "")
+        for row in rows
+        if str(row.get("text") or "").strip()
+    }
+    others = _existing_texts(shortname, set(texts))
+    gold_quotes = _gold_quotes(shortname)
+    appended: list[str] = []
+    reasons: list[str] = []
+    for ref, text in texts.items():
+        if ref in owned:
+            reasons.append(f"{ref}:already_owned")
+            continue
+        template = next(
+            (
+                row
+                for row in rows
+                if row.get("kind") == "file" and str(row.get("ref") or "") == ref
+            ),
+            None,
+        )
+        if template is None:
+            reasons.append(f"{ref}:no_placeholder")
+            continue
+        cleaned = _dedupe(text, others, gold_quotes)
+        if not cleaned:
+            reasons.append(f"{ref}:duplicate_only")
+            continue
+        row = {
+            "course": shortname,
+            "sectionnum": int(template.get("sectionnum") or 0),
+            "section": str(template.get("section") or ""),
+            "visible": bool(template.get("visible", True)),
+            "kind": "file",
+            "name": str(template.get("name") or ""),
+            "ref": ref,
+            "text": cleaned,
+        }
+        appended.append(json.dumps(row, ensure_ascii=False, separators=(",", ":")))
+        others.append(cleaned)
+    if appended:
+        prefix = "" if not blob or blob.endswith("\n") else "\n"
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(prefix + "\n".join(appended) + "\n")
+    return len(appended), reasons
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", required=True)
     parser.add_argument("--docker", default="med-moodle-webserver-1")
     parser.add_argument("--dataroot", default="/var/www/moodledata")
     parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument(
+        "--append",
+        action="store_true",
+        help="append a new filled row instead of filling a placeholder in place",
+    )
     args = parser.parse_args()
 
     manifest = json.loads(Path(args.manifest).read_text(encoding="utf-8"))
@@ -171,6 +229,7 @@ def main() -> int:
         manifest = manifest[: args.limit]
 
     per_course: dict[str, dict[str, str]] = {}
+    pending: dict[str, list[dict]] = {}
     tally: dict[str, int] = {}
     for entry in manifest:
         shortname = str(entry.get("shortname") or "")
@@ -182,8 +241,8 @@ def main() -> int:
         contenthash = str(record.get("contenthash") or "")
         if not filename or not contenthash:
             continue
-        if Path(filename).suffix.lower() not in _OFFICE | {".pdf"}:
-            # Do not pull a video or a legacy .ppt we cannot read.
+        if Path(filename).suffix.lower() not in _EXTRACTABLE:
+            # Do not pull a video we cannot read.
             status, text = _extract(filename, b"")
         else:
             data = _bytes_from_docker(args.docker, args.dataroot, contenthash)
@@ -191,15 +250,39 @@ def main() -> int:
         tally[status.split(":")[0] + ":" + status.split(":")[-1]] = (
             tally.get(status.split(":")[0] + ":" + status.split(":")[-1], 0) + 1
         )
-        if status == "ok" and text:
+        if status == "signoff:arabic" and text:
+            # Arabic scanned content: keep it verbatim but out of the citable
+            # bank until the recorded human sign-off clears it.
+            pending.setdefault(shortname, []).append(
+                {
+                    "filename": filename,
+                    "ref": "file:" + filename,
+                    "locator": "ocr",
+                    "text": text,
+                    "signoff": "arabic",
+                }
+            )
+            print(
+                f"  {status} {shortname} {filename} ({len(text)} chars, pending sign-off)",
+                flush=True,
+            )
+        elif status == "ok" and text:
             per_course.setdefault(shortname, {})["file:" + filename] = text
             print(f"  ok {shortname} {filename} {len(text)} chars", flush=True)
         else:
             print(f"  {status} {shortname} {filename} ({record.get('filesize')} bytes)", flush=True)
 
     for shortname, texts in per_course.items():
-        written = _update_course(shortname, texts)
+        if args.append:
+            written, reasons = _append_course(shortname, texts)
+            for reason in reasons:
+                print(f"  skip {shortname} {reason}", flush=True)
+        else:
+            written = _update_course(shortname, texts)
         print(f"{shortname}: wrote {written} file rows", flush=True)
+    for shortname, rows in pending.items():
+        stored = record_ocr_pending(shortname, rows)
+        print(f"{shortname}: {stored} OCR passages pending Arabic sign-off", flush=True)
     print("tally:", json.dumps(tally, sort_keys=True), flush=True)
     return 0
 

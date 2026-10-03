@@ -1,0 +1,593 @@
+# R2 retrieval gold (L-R R2) - R1 single-chunk top-5 misses; the R2 overlap
+# window across adjacent chunks of the one open-activity passage answers.
+# Authored for the aast-med teaching wave (TEACHING-WAVE-SPEC §1.2).
+# Additive: it does not edit or replace retrieval-b3.yaml.
+# Each case is a real R0 whole-file title/body miss and an R1 (top-5,
+# allow_window=False) miss whose R2 overlap window (allow_window=True)
+# resolves to a UNIQUE passage with a verbatim span in the stored text.
+# Re-derived from the committed bank/index during R2-GOLD remediation
+# (2026-10-03); MED5310 genuinely contributes 0 qualifying cases.
+version: 1
+miss: This is not in this course.
+target_passage_rule: unique R2 combined top score in the open activity; R1 single-chunk top-5 has no in-scope winner
+thresholds:
+  recall_min: 0.95
+  precision: 1.0
+  min_cases: 40
+cases:
+- shortname: MED213
+  open_activity: 868
+  query: what is skills disease
+  expected_passage_ref: MED213:file:868:History taking (2).pdf
+  expected_span: Clinical Skills 1 (MED112) *Adapted from bmjopen-2017-May-7-5--inline-supplementary-material-osce station History Taking Step Done Comments 1 Wash hands 2 Intro
+  matched_terms:
+  - skills
+  - disease
+- shortname: MED213
+  open_activity: 861
+  query: what is recording korotkoff
+  expected_passage_ref: MED213:file:861:final Measuring and recording Blood Pressure .pptx
+  expected_span: Measuring and Recording Blood Pressure Aneroid Sphygmomanometer Aneroid means “without fluid,” and as the name suggests, this type of BP apparatus doesn’t make
+  matched_terms:
+  - recording
+  - korotkoff
+- shortname: MED213
+  open_activity: 861
+  query: what is procedure lateral
+  expected_passage_ref: MED213:file:861:final Measuring and recording Blood Pressure .pptx
+  expected_span: v=UTJvWLi2uCM To complete procedure Completely deflate the cuff Remove the cuff and blood pressure device Tell the patient readings and explain the significance
+  matched_terms:
+  - procedure
+  - lateral
+- shortname: MED213
+  open_activity: 863
+  query: what is hand check
+  expected_passage_ref: MED213:file:863:Vital Signs Radial Pulse and Arterial blood pressure (2).docx
+  expected_span: On the other hand, runners who do a lot of cardiovascular conditions may have slower heart rate with 40 beats per minute. Pulse could be recorded from accessibl
+  matched_terms:
+  - hand
+  - check
+- shortname: MED213
+  open_activity: 863
+  query: what is pressure gauge
+  expected_passage_ref: MED213:file:863:Vital Signs Radial Pulse and Arterial blood pressure (2).docx
+  expected_span: 'Blood pressure is measured in millimeters of mercury (mmHg) and is given as 2 figures: systolic pressure – the pressure when the heart pushes blood out diastoli'
+  matched_terms:
+  - pressure
+  - gauge
+- shortname: MED213
+  open_activity: 897
+  query: what is rhythm dominant
+  expected_passage_ref: MED213:file:897:2025 Brain rhythm.pptx
+  expected_span: occur most often in sleep but are also dominant in deep meditation. Delta waves (3 Hz or less) They normally are seen in deep sleep , in adults as well as in i
+  matched_terms:
+  - rhythm
+  - dominant
+- shortname: MED520
+  open_activity: 1107
+  query: what is potential infection
+  expected_passage_ref: MED520:file:1107:Introduction to male infertility.pdf
+  expected_span: The two potential etiologies are Y chromosome microdeletions and karyotypic abnormalities. The most common karyotypic abnormalities are Klinefelter’s (47,XXY) a
+  matched_terms:
+  - potential
+  - infection
+- shortname: MED520
+  open_activity: 1107
+  query: what is infection causes
+  expected_passage_ref: MED520:file:1107:Introduction to male infertility.pdf
+  expected_span: testis may be sustained by exposure to infection or inflammation of the testis as with mumps. Infection of the testis with the mumps virus causes inflammation
+  matched_terms:
+  - infection
+  - causes
+- shortname: MED520
+  open_activity: 1109
+  query: what is ultrastructurally hair
+  expected_passage_ref: MED520:file:1109:Basic skin lesions  skin examination  dermatologic therapies.pdf
+  expected_span: The hair shaft is the portion of the hair that is visible on the outside of the skin. It is made up of cuticle cells that surround the cortex, with a central me
+  matched_terms:
+  - ultrastructurally
+  - hair
+- shortname: MED520
+  open_activity: 1109
+  query: what is hair visible
+  expected_passage_ref: MED520:file:1109:Basic skin lesions  skin examination  dermatologic therapies.pdf
+  expected_span: The hair shaft is the portion of the hair that is visible on the outside of the skin. It is made up of cuticle cells that surround the cortex, with a central me
+  matched_terms:
+  - hair
+  - visible
+- shortname: MED520
+  open_activity: 1105
+  query: what is sexual nerve
+  expected_passage_ref: MED520:file:1105:Sexual dysfunction.pdf
+  expected_span: 9 Sexual dysfunction SLOs By the end of this lecture, students will be able to 1. Define erectile dysfynction 2. Describe risk factors, pathophysiology, investi
+  matched_terms:
+  - sexual
+  - nerve
+- shortname: MED520
+  open_activity: 1105
+  query: what is events genital
+  expected_passage_ref: MED520:file:1105:Sexual dysfunction.pdf
+  expected_span: Such events lead to vasoconstriction Diabetes mellitus The etiology of ED in diabetic men probably involves both vascular and neurogenic mechanisms. Endocrine d
+  matched_terms:
+  - events
+  - genital
+- shortname: NMD1000
+  open_activity: 1249
+  query: what is welcome skills
+  expected_passage_ref: NMD1000:file:1249:MED100 Study guide 23-24 (2).pdf
+  expected_span: '” WELCOME NOTE 1 IN THIS SECTION:  The different Course Themes  The course Objectives  Different Teaching and Learning Methods EDUCATIONAL OPPORTUNITIES 2 Th'
+  matched_terms:
+  - welcome
+  - skills
+- shortname: NMD1000
+  open_activity: 1249
+  query: what is need program
+  expected_passage_ref: NMD1000:file:1249:MED100 Study guide 23-24 (2).pdf
+  expected_span: 'You will also need to reply on two of your colleagues’ posting NB: Please Follow Netiquette while writing your initial posting or replying to your colleagues In'
+  matched_terms:
+  - need
+  - program
+- shortname: NMD1000
+  open_activity: 1305
+  query: what is blocks factors
+  expected_passage_ref: NMD1000:file:1305:L19-Chemical blocks of life -Proteins.pdf
+  expected_span: '1 19 Chemical Blocks of Life: Proteins ILOs By the end of this lecture, students will be able to 1. Describe how proteins help us function and survive 2. Descri'
+  matched_terms:
+  - blocks
+  - factors
+- shortname: NMD1000
+  open_activity: 1305
+  query: what is forming carbon
+  expected_passage_ref: NMD1000:file:1305:L19-Chemical blocks of life -Proteins.pdf
+  expected_span:  Essential for forming coagulation factors, which control bleeding  Essential for growth and development  Proteins form molecules (secondary messengers), tha
+  matched_terms:
+  - forming
+  - carbon
+- shortname: NMD1000
+  open_activity: 1288
+  query: what is page contain
+  expected_passage_ref: NMD1000:file:1288:L 17- Carbohydrates.pdf
+  expected_span: 'Page 1 of 3 17 Chemical Blocks of Life: CHO: ILOs By the end of this lecture, students will be able to 1. Describe how carbohydrates help us function and surviv'
+  matched_terms:
+  - page
+  - contain
+- shortname: NMD1000
+  open_activity: 1288
+  query: what is glucose derivatives
+  expected_passage_ref: NMD1000:file:1288:L 17- Carbohydrates.pdf
+  expected_span: Although glucose can be obtained from several food types, Lactose is the only source of galactose which plays an integral role in various neural and immunologic
+  matched_terms:
+  - glucose
+  - derivatives
+- shortname: NMD1103
+  open_activity: 1010
+  query: what is isolation hands
+  expected_passage_ref: NMD1103:file:1010:PPE skill lab (Academy) 2021-2022 (1).pptx
+  expected_span: Isolation precautions Disposable Gown ILOs Provide information on the selection and use of PPE in healthcare settings Practice how to safely don and doff non-st
+  matched_terms:
+  - isolation
+  - hands
+- shortname: NMD1103
+  open_activity: 1010
+  query: what is centers hand
+  expected_passage_ref: NMD1103:file:1010:PPE skill lab (Academy) 2021-2022 (1).pptx
+  expected_span: ERILE GLOVES How to don gloves? Perform Hand hygiene Don gloves last Select correct type and size Insert hands into gloves Extend gloves over white coat/gown cu
+  matched_terms:
+  - centers
+  - hand
+- shortname: NMD1103
+  open_activity: 1012
+  query: what is tour hands
+  expected_passage_ref: NMD1103:file:1012:Skill Lab.pptx
+  expected_span: Tour in the Skill Lab Put your name Types of Manikins High-fidelity Low-Fidelity High-fidelity manikins used to teach students how to deal with a patient who is
+  matched_terms:
+  - tour
+  - hands
+- shortname: NMD1103
+  open_activity: 1018
+  query: what is muffling remove
+  expected_passage_ref: NMD1103:file:1018:final Measuring and recording Blood Pressure .pptx
+  expected_span: The muffling and disappearance of the Korotkov sounds indicate the diastolic blood pressure. Record the blood pressure as the systolic reading over the diastoli
+  matched_terms:
+  - muffling
+  - remove
+- shortname: NMD1103
+  open_activity: 1020
+  query: what is vital hand
+  expected_passage_ref: NMD1103:file:1020:Vital Signs Radial Pulse and Arterial blood pressure (2).docx
+  expected_span: Vital Signs Radial Pulse Vital signs are indicators of the basic functions of body. A ny physiological or pathological changes in the body functions would be re
+  matched_terms:
+  - vital
+  - hand
+- shortname: NMD1103
+  open_activity: 1020
+  query: what is hand check
+  expected_passage_ref: NMD1103:file:1020:Vital Signs Radial Pulse and Arterial blood pressure (2).docx
+  expected_span: On the other hand, runners who do a lot of cardiovascular conditions may have slower heart rate with 40 beats per minute. Pulse could be recorded from accessibl
+  matched_terms:
+  - hand
+  - check
+- shortname: NMD1301
+  open_activity: 1208
+  query: what is introduc physician
+  expected_passage_ref: NMD1301:file:1208:lecture notes.docx
+  expected_span: 'on MED131 Medical profession MED131 L1: Introduc tion & Overview of Professionalism Part 1: What is professionalism The competences expected of a professional C'
+  matched_terms:
+  - introduc
+  - physician
+- shortname: NMD1301
+  open_activity: 1208
+  query: what is relatives medicine
+  expected_passage_ref: NMD1301:file:1208:lecture notes.docx
+  expected_span: Patients, relatives, caregivers, colleagues, managers, seniors, and junior doctors just to name a few. In dealing with all these people, doctors should have res
+  matched_terms:
+  - relatives
+  - medicine
+- shortname: NMD1301
+  open_activity: 1206
+  query: what is component physicians
+  expected_passage_ref: NMD1301:file:1206:Document (14).pdf
+  expected_span: a) Prove to society that Physicians are better than all other professionals b) Threaten to strike & leave hospitals empty when medicine is under attack c) Lie t
+  matched_terms:
+  - component
+  - physicians
+- shortname: NMD1301
+  open_activity: 1206
+  query: what is society autonomy
+  expected_passage_ref: NMD1301:file:1206:Document (14).pdf
+  expected_span: a) Prove to society that Physicians are better than all other professionals b) Threaten to strike & leave hospitals empty when medicine is under attack c) Lie t
+  matched_terms:
+  - society
+  - autonomy
+- shortname: NMD1301
+  open_activity: 1209
+  query: what is profession critical
+  expected_passage_ref: NMD1301:file:1209:lecture notes MED131.pdf
+  expected_span: duction & overview of professionalism 2 Critical thinking 7 Attributes of a physician 9 Doctor-patient relationship 10 Maintaining a professional boundary 11 Ov
+  matched_terms:
+  - profession
+  - critical
+- shortname: NMD1301
+  open_activity: 1209
+  query: what is contents whether
+  expected_passage_ref: NMD1301:file:1209:lecture notes MED131.pdf
+  expected_span: 1 Contents Introduction & overview of professionalism 2 Critical thinking 7 Attributes of a physician 9 Doctor-patient relationship 10 Maintaining a professiona
+  matched_terms:
+  - contents
+  - whether
+- shortname: NMD1402
+  open_activity: 759
+  query: what is summative covid
+  expected_passage_ref: NMD1402:file:759:Student Guide Research Skills 1.pdf
+  expected_span: 'Summative assessment: • Three quizes • Final written exam: Objective MCQ exam to assess ILOs knowledge & intellectual skills 12 marks 12 marks 7 Route to Study'
+  matched_terms:
+  - summative
+  - covid
+- shortname: NMD1402
+  open_activity: 759
+  query: what is conducted period
+  expected_passage_ref: NMD1402:file:759:Student Guide Research Skills 1.pdf
+  expected_span: A study conducted to explore attitude of physicians towards COVID 19 vaccine. which of the following study type most suitable for this study? a. Quantitative re
+  matched_terms:
+  - conducted
+  - period
+- shortname: NMD1402
+  open_activity: 760
+  query: what is explain research
+  expected_passage_ref: NMD1402:file:760:Introduction to health research-first lecture.pdf
+  expected_span: 'Explain what is meant by evidence-based practice Lecture plan•Part I: What is meant by scientific research •Part II: Examples of research ideas•Part III: The re'
+  matched_terms:
+  - explain
+  - research
+- shortname: NMD1402
+  open_activity: 760
+  query: what is thedevelopmentofnewmedicaltreatmentsthatcuremillionsofpeoplewouldnothappenwithouthealthresearch research
+  expected_passage_ref: NMD1402:file:760:Introduction to health research-first lecture.pdf
+  expected_span: 'lan•Part I: What is meant by scientific research •Part II: Examples of research ideas•Part III: The relationship between medical research and medical practice•P'
+  matched_terms:
+  - thedevelopmentofnewmedicaltreatmentsthatcuremillionsofpeoplewouldnothappenwithouthealthresearch
+  - research
+- shortname: NMD1402
+  open_activity: 769
+  query: what is mini research
+  expected_passage_ref: NMD1402:file:769:Study types (lecture 3  lecture 4)_Dr Heba elweshahi.pdf
+  expected_span: The quantitative research design , which generates numerical data or information that can be converted into numbers 2. The qualitative research design generates
+  matched_terms:
+  - mini
+  - research
+- shortname: NMD1402
+  open_activity: 769
+  query: what is research were
+  expected_passage_ref: NMD1402:file:769:Study types (lecture 3  lecture 4)_Dr Heba elweshahi.pdf
+  expected_span: The quantitative research design , which generates numerical data or information that can be converted into numbers 2. The qualitative research design generates
+  matched_terms:
+  - research
+  - were
+- shortname: NMD2101
+  open_activity: 417
+  query: what is page consists
+  expected_passage_ref: NMD2101:file:417:Neuroscience I SG.pdf
+  expected_span: It consists of an extensive and in-depth study of the anatomical and functional aspects of central nervous system in order to understand the human brain & behav
+  matched_terms:
+  - page
+  - consists
+- shortname: NMD2101
+  open_activity: 417
+  query: what is consists cerebral
+  expected_passage_ref: NMD2101:file:417:Neuroscience I SG.pdf
+  expected_span: It consists of an extensive and in-depth study of the anatomical and functional aspects of central nervous system in order to understand the human brain & behav
+  matched_terms:
+  - consists
+  - cerebral
+- shortname: NMD2101
+  open_activity: 524
+  query: what is likely carotid
+  expected_passage_ref: NMD2101:file:524:Tutorial Cortical Anatomy (1).pptx
+  expected_span: 'The lesion is most likely in the: left frontal lobe left parietal lobe left temporal lobe right frontal lobe right parietal lobe Q: A Ophthalmic Artery Anterior'
+  matched_terms:
+  - likely
+  - carotid
+- shortname: NMD2101
+  open_activity: 524
+  query: what is anterior artery
+  expected_passage_ref: NMD2101:file:524:Tutorial Cortical Anatomy (1).pptx
+  expected_span: 'Anterior cerebral Anterior choroidal Interior carotid Middle cerebral Posterior cerebral Q: A Which of the following arteries, on occlusion, can result in Broca'
+  matched_terms:
+  - anterior
+  - artery
+- shortname: NMD2101
+  open_activity: 576
+  query: what is histology axon
+  expected_passage_ref: NMD2101:file:576:1_Histology Practical Session neuroscience (neurons  receptors).pptx
+  expected_span: 'Histology Practical Session Neurons & Receptors Chemical synapse Chemical synapse Skin receptors Free nerve endings Merkel’s disc Function: slow adaptation to p'
+  matched_terms:
+  - histology
+  - axon
+- shortname: NMD2101
+  open_activity: 507
+  query: what is histology cells
+  expected_passage_ref: NMD2101:file:507:2. Histology Practical Session neuroscience (skin).pptx
+  expected_span: 'Histology Practical Session Skin Contents of the practical session: Slides: Thin skin Revision (Pyramidal & Purkinje cells). Labelled photos: Layers of the skin'
+  matched_terms:
+  - histology
+  - cells
+- shortname: NMD2303
+  open_activity: 791
+  query: what is giving information
+  expected_passage_ref: NMD2303:file:791:Consent final.pdf
+  expected_span: a) Consent is the giving of permission or agreement for an intervention (whether diagnostic or therapeutic) following a process of communication about the propo
+  matched_terms:
+  - giving
+  - information
+- shortname: NMD2303
+  open_activity: 791
+  query: what is sufficiently members
+  expected_passage_ref: NMD2303:file:791:Consent final.pdf
+  expected_span: '3) Sufficiently specific: The consent must be specific and is valid only for the condition being treated and the specified treatment or procedure about which th'
+  matched_terms:
+  - sufficiently
+  - members
+- shortname: NMD2303
+  open_activity: 806
+  query: what is avoiding information
+  expected_passage_ref: NMD2303:file:806:Interprofessional  Intraprofessional Relationships in Healthcare_074300.pptx
+  expected_span: • Avoiding discipline-specific terminology. • Expressing one’s knowledge and opinions to team members with clarity, and respect. • Active listening to encourage
+  matched_terms:
+  - avoiding
+  - information
+- shortname: NMD2303
+  open_activity: 806
+  query: what is involved name
+  expected_passage_ref: NMD2303:file:806:Interprofessional  Intraprofessional Relationships in Healthcare_074300.pptx
+  expected_span: Physicians involved in the media environment should be aware of their ethical obligations to patients, the public, and the medical profession; and that their co
+  matched_terms:
+  - involved
+  - name
+- shortname: NMD2303
+  open_activity: 800
+  query: what is ethical need
+  expected_passage_ref: NMD2303:file:800:Values and beliefs.pptx
+  expected_span: According to the ethical construct of justice, treatment and resources should be reserved for people with lower chance of reinfection. According to the doctor’s
+  matched_terms:
+  - ethical
+  - need
+- shortname: NMD2303
+  open_activity: 802
+  query: what is embody team
+  expected_passage_ref: NMD2303:file:802:Leadership - Copy.pptx
+  expected_span: They then embody that vision in everything they do and find ways of connecting it to employee performance to make it a reality. 20XX PRESENTATION TITLE 10 Leade
+  matched_terms:
+  - embody
+  - team
+- shortname: NMD2403
+  open_activity: 732
+  query: what is appraisal validity
+  expected_passage_ref: NMD2403:file:732:Students notes.pdf
+  expected_span: Research Skills III 2 Critical appraisal of research To practice evidence -based medicine and after asking a specific foreground question (PICO question) ( STEP
+  matched_terms:
+  - appraisal
+  - validity
+- shortname: NMD2403
+  open_activity: 732
+  query: what is cebm were
+  expected_passage_ref: NMD2403:file:732:Students notes.pdf
+  expected_span: 'pdf • CEBM Randomised Controlled Trial Critical Appraisal sheet: • SIGN critical appraisal checklists: Methodology Checklist 2: Randomised controlled trials. ht'
+  matched_terms:
+  - cebm
+  - were
+- shortname: NMD2403
+  open_activity: 735
+  query: what is inwhichoneintervenestopreventorchangethecourseofadisease control
+  expected_passage_ref: NMD2403:file:735:Lecture 2_ descriptive studies.pdf
+  expected_span: rizedbyabsenceofawellselectedcomparison(control)group.a.Ecological(populationbased)studiesb.Individualbasedstudies:•Casereport•Caseseriesreport•Crosssectionalde
+  matched_terms:
+  - inwhichoneintervenestopreventorchangethecourseofadisease
+  - control
+- shortname: NMD2403
+  open_activity: 735
+  query: what is control deathrateswereplottedagainstthecorrespondingestimatesofmeanfatintake
+  expected_passage_ref: NMD2403:file:735:Lecture 2_ descriptive studies.pdf
+  expected_span: rizedbyabsenceofawellselectedcomparison(control)group.a.Ecological(populationbased)studiesb.Individualbasedstudies:•Casereport•Caseseriesreport•Crosssectionalde
+  matched_terms:
+  - control
+  - deathrateswereplottedagainstthecorrespondingestimatesofmeanfatintake
+- shortname: NMD2403
+  open_activity: 738
+  query: what is collaborating research
+  expected_passage_ref: NMD2403:file:738:JBI_Critical_Appraisal-Checklist_for_Cohort_Studies.docx
+  expected_span: With over 80 collaborating centres and entities, servicing over 90 countries, the Institute is a recognized global leader in evidence-based healthcare. JBI Syst
+  matched_terms:
+  - collaborating
+  - research
+- shortname: NMD2403
+  open_activity: 738
+  query: what is exists critical
+  expected_passage_ref: NMD2403:file:738:JBI_Critical_Appraisal-Checklist_for_Cohort_Studies.docx
+  expected_span: dologies and rigorous processes for the critical appraisal and synthesis of these diverse forms of evidence in order to aid in clinical decision-making in healt
+  matched_terms:
+  - exists
+  - critical
+- shortname: NMD3101
+  open_activity: 1519
+  query: what is principles interpret
+  expected_passage_ref: NMD3101:file:1519:L2 Bacterial structure, classification  growth.pdf
+  expected_span: Interpret bacterial growth-curve data and predict how the different growth phases and environmental conditions may influence bacterial multiplication and the ef
+  matched_terms:
+  - principles
+  - interpret
+- shortname: NMD3101
+  open_activity: 1519
+  query: what is interpret figure
+  expected_passage_ref: NMD3101:file:1519:L2 Bacterial structure, classification  growth.pdf
+  expected_span: Interpret bacterial growth-curve data and predict how the different growth phases and environmental conditions may influence bacterial multiplication and the ef
+  matched_terms:
+  - interpret
+  - figure
+- shortname: NMD3101
+  open_activity: 1521
+  query: what is principles cell
+  expected_passage_ref: NMD3101:file:1521:L2 Bacterial structure, classification  growth (activity sheet).pdf
+  expected_span: 1 MED217 Principles of infection L2 Bacterial structure, classification & growth Activity sheet What is the morphological structure of the organism demonstrated
+  matched_terms:
+  - principles
+  - cell
+- shortname: NMD3101
+  open_activity: 1524
+  query: what is principles bacteria
+  expected_passage_ref: NMD3101:file:1524:L3 Pathogenesis of bacterial infection.pdf
+  expected_span: appendages like pili. In gram-negative bacteria, the outer membrane is a major site for adhesins. Most adhesins are proteins, but carbohydrates and teichoic ac
+  matched_terms:
+  - principles
+  - bacteria
+- shortname: NMD3101
+  open_activity: 1524
+  query: what is extremely body
+  expected_passage_ref: NMD3101:file:1524:L3 Pathogenesis of bacterial infection.pdf
+  expected_span: 'e presence of multiplying bacteria on a body surface (like on the skin, mouth, intestines or airway) without causing disease in the person. • Infection: Invasio'
+  matched_terms:
+  - extremely
+  - body
+- shortname: NMD3101
+  open_activity: 1526
+  query: what is principles following
+  expected_passage_ref: NMD3101:file:1526:L3 Pathogenesis of bacterial infection (activity sheet).pdf
+  expected_span: 1 MED217 Principles of infection L3 Pathogenesis of bacterial infection Activity sheet What is the process by which bacteria stick to the surfaces of host cells
+  matched_terms:
+  - principles
+  - following
+- shortname: NMD3304
+  open_activity: 723
+  query: what is communication acknowledged
+  expected_passage_ref: NMD3304:file:723:Communication with difficult patients 3rd y-AAST_052917.pdf
+  expected_span: If not acknowledged and managed correctly, these feelings can lead to diagnostic errors, unpleasant confrontations, and troublesome complaints or legal claims.
+  matched_terms:
+  - communication
+  - acknowledged
+- shortname: NMD3304
+  open_activity: 723
+  query: what is concerns give
+  expected_passage_ref: NMD3304:file:723:Communication with difficult patients 3rd y-AAST_052917.pdf
+  expected_span: Psychiatric concerns e,g, borderline PD, substance use disorders and bipolar disorder 7. Difficult diagnoses 8. Others as unfocused patients and slow talkers im
+  matched_terms:
+  - concerns
+  - give
+- shortname: NMD3304
+  open_activity: 718
+  query: what is pediatric members
+  expected_passage_ref: NMD3304:file:718:Pediatric communication.pdf
+  expected_span: 1 Communication with pediatric patients By Somaya Madkour Prof. of Forensic Medicine & Clinical Toxicology 2 Why Do Pediatricians Need Communication Skills? • P
+  matched_terms:
+  - pediatric
+  - members
+- shortname: NMD3304
+  open_activity: 720
+  query: what is avoid show
+  expected_passage_ref: NMD3304:file:720:communication with elderly patient.pdf
+  expected_span: it is important to avoid paternalistic attitudes that might limit their participation in making decisions about their own health. Instead, the role of the healt
+  matched_terms:
+  - avoid
+  - show
+- shortname: NMD3304
+  open_activity: 720
+  query: what is reflection communication
+  expected_passage_ref: NMD3304:file:720:communication with elderly patient.pdf
+  expected_span: process information and respond better. Reflection is the skill to repeat or conclude what the elderly have said. By using reflection, you show that you are rea
+  matched_terms:
+  - reflection
+  - communication
+- shortname: NMD3304
+  open_activity: 721
+  query: what is wait care
+  expected_passage_ref: NMD3304:file:721:communication with  patient with special need...pdf
+  expected_span: e in his abilities and limitations, and care should be tailored to individual needs. When providing care for a patient with Down syndrome, tailor care to the pa
+  matched_terms:
+  - wait
+  - care
+- shortname: NMD4201
+  open_activity: 1387
+  query: what is anatomy back
+  expected_passage_ref: NMD4201:file:1387:Abdominal trauma.pdf
+  expected_span: 'Anatomy of the abdominal trauma 1 These are the 4 regions of the abdomen to consider particularly in penetrating injury:  Anterior abdomen — Between the anteri'
+  matched_terms:
+  - anatomy
+  - back
+- shortname: NMD4201
+  open_activity: 1387
+  query: what is operative manual
+  expected_passage_ref: NMD4201:file:1387:Abdominal trauma.pdf
+  expected_span: NOM = non -operative management; PRC = packed red cells; OT = operating theatre; CA = car diac; ARREST St-Y = sternotomy; TACC = thoracic aorta cross -clamping;
+  matched_terms:
+  - operative
+  - manual
+- shortname: NMD4201
+  open_activity: 1390
+  query: what is approach acute
+  expected_passage_ref: NMD4201:file:1390:bleeding per rectum.pdf
+  expected_span: genitor of IBD Diagnosis • Inspection – Acute fissure is seen as Linear tear • most important • Palpation • Anoscopy • Sigmoidoscopy • Biopsy Differential diagn
+  matched_terms:
+  - approach
+  - acute
+- shortname: NMD4201
+  open_activity: 1390
+  query: what is acute fresh
+  expected_passage_ref: NMD4201:file:1390:bleeding per rectum.pdf
+  expected_span: '• Acute LGIB: of recent duration (<3 days) that may result in hemodynamic instability, anemia&/or the need for blood transfusion. • Chronic LGIB: passage of blo'
+  matched_terms:
+  - acute
+  - fresh
+- shortname: NMD4201
+  open_activity: 1437
+  query: what is define lower
+  expected_passage_ref: NMD4201:file:1437:breast surgery.pdf
+  expected_span: Define is the role of surgery for breast lumps Mind Map Breast Anatomy • Four quadrants • Parenchyma – Alveoli Lobules Lobes – Three tissue types • Glandular ep
+  matched_terms:
+  - define
+  - lower
+- shortname: NMD4201
+  open_activity: 1437
+  query: what is four supply
+  expected_passage_ref: NMD4201:file:1437:breast surgery.pdf
+  expected_span: 'The Four Quadrants are the: • UIQ: Upper Inner Quadrant • LIQ: Lower Inner Quadrant • UOQ: Upper Outer Quadrant • LOQ: Lower Outer Quadrant • Woman''s breast is'
+  matched_terms:
+  - four
+  - supply

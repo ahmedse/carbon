@@ -53,3 +53,36 @@ class GuideProgress(models.Model):
 
     def __str__(self):
         return f"{self.user_id}:{self.pack_id}:{self.lesson_id}:{self.state}"
+
+
+class GuideScenario(models.Model):
+    """Per-user progress through one pack stage's camp drama.
+
+    Stores a beat count only: no answer text, no score, no figure. It is
+    deliberately a separate table from ``GuideProgress`` so a drama answer can
+    never mark a lesson or a station done — lesson completion stays driven by
+    the pack's declared probe or answer. One row serves every pack and language.
+    """
+
+    user = models.ForeignKey(
+        "accounts.User", on_delete=models.PROTECT, related_name="guide_scenarios"
+    )
+    pack_id = models.CharField(max_length=40)
+    stage_key = models.CharField(max_length=40)
+    beat = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Drama beats answered honestly so far (0 = none).",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "pack_id", "stage_key"], name="uniq_guide_user_pack_stage"
+            ),
+        ]
+        indexes = [models.Index(fields=["user", "pack_id"])]
+
+    def __str__(self):
+        return f"{self.user_id}:{self.pack_id}:{self.stage_key}:{self.beat}"

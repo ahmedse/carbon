@@ -201,10 +201,13 @@
     "chairmanOverview": "نظرة الرئيس",
     "inventoryOnboarding": "تهيئة المخزون",
     "journey": "الرحلة",
+    "journeyGuides": "أدلّة الرحلة",
     "readiness": "قائمة الجاهزية",
     "coverage": "التغطية",
     "inventoryCoverage": "تغطية المخزون",
     "coverageTargets": "أهداف التغطية",
+    "dataCompleteness": "اكتمال البيانات",
+    "dataCompletenessTarget": "هدف اكتمال البيانات",
     "stems": "جذوع الأسئلة",
     "calibration": "المعايرة",
     "markingQueue": "طابور التصحيح",
@@ -239,6 +242,7 @@
     "workforce": "القوى العاملة",
     "executive": "الإدارة التنفيذية",
     "onboarding": "التهيئة",
+    "guides": "الأدلّة",
     "biAnalytics": "التحليلات وذكاء الأعمال"
   },
   "ui": {

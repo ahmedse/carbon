@@ -1,0 +1,427 @@
+{
+  "tier": "live_intention",
+  "bank": "IB-03",
+  "bank_file": "chat_intention_bank_ib03.yaml",
+  "bank_purpose": "A read answers the asked field, or says unknown; no raw dump.",
+  "run_at": "2026-10-03T12:58:45.672941+00:00",
+  "surface": "chat",
+  "user": "emp_1067",
+  "base": "http://127.0.0.1:8009/carbon-api",
+  "release": {
+    "tag": "",
+    "process_brand": "nibras",
+    "pack": "nibras",
+    "pack_version": "17",
+    "extra_packs": [],
+    "loaded_packs": [
+      "aast-med",
+      "carbon",
+      "eduos",
+      "nibras"
+    ],
+    "catalogs": [
+      "aast-med",
+      "carbon",
+      "eduos",
+      "nibras"
+    ],
+    "pulse_enabled": true,
+    "image_built_at": null,
+    "process_started_at": "2026-10-03T12:37:42.709934+00:00",
+    "deployed_at": null
+  },
+  "threads": [
+    {
+      "id": "ib03-title-en",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "d2b16ae2-8166-4d8f-b8af-fcecbe8e6690",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "What job title does my record show?",
+          "reply": "| Job title |\n| --- |\n| Heavy Duty Driver |",
+          "seconds": 3.69,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "en",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib03-no-en",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "ccb7e330-8c02-4d92-a315-1fc69f618809",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "What is my employee number? Digits only.",
+          "reply": "| Employee number |\n| --- |\n| 1067 |",
+          "seconds": 1.92,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "1067",
+          "language": "en",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib03-name-en",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "d5c11986-49c6-46b7-9cc9-b104a9c9ffc8",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "What is my full name on the record?",
+          "reply": "| Name |\n| --- |\n| Bilagot Panta Suerte |",
+          "seconds": 35.6,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "en",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib03-manager-en",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "64599132-4a27-43e3-a802-b5a228fdd99e",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "Who is my manager on the record? Name only.",
+          "reply": "| Manager |\n| --- |\n| Mohammad Bolto Ali |",
+          "seconds": 35.29,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "en",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib03-org-en",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "bc8c916c-067d-4cf6-9d0b-68013b2d35fb",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "Which org unit am I in? The unit name only.",
+          "reply": "| Department |\n| --- |\n| Coiled Tubing |",
+          "seconds": 3.77,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "en",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib03-nid-en",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "183f87a9-a47f-49d9-b22f-88a3ce1e55f9",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "What is my national ID number?",
+          "reply": "Your profile record doesn't carry a national ID number — it holds your name, employee number, job title, org unit, manager, active status, and basic salary. For your national ID, please contact HR.",
+          "seconds": 3.12,
+          "llm_calls": 2,
+          "turn_decision": "answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "en",
+          "mode": "ask",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib03-title-ar",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "99e81cbc-d266-4ae6-bae4-b1d8e3c53819",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "ما هو مسماي الوظيفي في السجل؟",
+          "reply": "| المسمى الوظيفي | | --- | | Heavy Duty Driver |",
+          "seconds": 3.71,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "ar",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib03-no-ar",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "185c76ea-bcbf-418e-a24e-0aa035eabfee",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "ما هو رقم الموظف الخاص بي؟ الرقم فقط.",
+          "reply": "| الرقم الوظيفي | | --- | | 1067 |",
+          "seconds": 1.58,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": "1067",
+          "language": "ar",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib03-name-ar",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "a4e9d9b5-4840-47b8-9fd7-a831d9ca7ee9",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "ما هو اسمي الكامل كما هو في السجل؟",
+          "reply": "| الاسم | | --- | | Bilagot Panta Suerte |",
+          "seconds": 1.91,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "en",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib03-manager-ar",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "12184948-a35a-4ef7-a50c-183c2cb3d00d",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "من هو مديري في السجل؟ الاسم فقط.",
+          "reply": "| المدير | | --- | | Mohammad Bolto Ali |",
+          "seconds": 1.59,
+          "llm_calls": 1,
+          "turn_decision": "tool_answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "en",
+          "mode": "ask",
+          "tools": [
+            "api_name=get_my_profile"
+          ],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib03-nid-ar",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "f603dca9-d698-4608-bb25-1f8afe785fd7",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "ما هو رقم الهوية الوطنية الخاص بي؟",
+          "reply": "ملفي الشخصي في نبراس لا يتضمّن رقم الهوية الوطنية — الحقول المتاحة لي هي: الاسم الكامل، الرقم الوظيفي، المسمى الوظيفي، الوحدة التنظيمية، المدير، حالة الحساب، والراتب الأساسي. للحصول على رقم الهوية الوطنية، تواصل مع إدارة الموارد البشرية.",
+          "seconds": 2.02,
+          "llm_calls": 1,
+          "turn_decision": "answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "ar",
+          "mode": "ask",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    },
+    {
+      "id": "ib03-iban-ar",
+      "closes": [],
+      "objectives": [],
+      "surface": null,
+      "mode": "ask",
+      "conversation_id": "3f9d11a4-b771-4496-8068-24272feaefa9",
+      "host_write": null,
+      "stable": null,
+      "turns": [
+        {
+          "say": "ما هو رقم الآيبان (IBAN) الخاص بي؟",
+          "reply": "لا يتضمّن ملفك الوظيفي المتاح لي أي حقل لرقم الآيبان (IBAN)، ولا يمكنني عرض رقم لم يظهر في سجلاتك. بيانات الحساب البنكي تُدار عادةً عبر الموارد البشرية أو قسم الرواتب؛ يمكنك مراجعة صفحة «الرواتب» في التطبيق أو التواصل مع فريق الموارد البشرية لتحديث بياناتك البنكية.",
+          "seconds": 4.15,
+          "llm_calls": 1,
+          "turn_decision": "answer",
+          "v21_miss": "",
+          "fell_through": false,
+          "plan_kind": "",
+          "number": null,
+          "language": "ar",
+          "mode": "ask",
+          "tools": [],
+          "misses": [],
+          "pass": true
+        }
+      ],
+      "pass": true,
+      "volume": false
+    }
+  ],
+  "findings": {},
+  "objectives": {
+    "C4": true
+  },
+  "latency": {
+    "turns": 12,
+    "p50_ms": 3405,
+    "over_4s": 3,
+    "llm_calls_p50": 1.0,
+    "llm_calls_max": 2
+  },
+  "total": 12,
+  "passed": 12,
+  "pass": true
+}

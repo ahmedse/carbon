@@ -1,0 +1,542 @@
+# B3 retrieval gold (R1) — title-door misses a unique passage window answers.
+#
+# Authored for the aast-med teaching wave (TEACHING-WAVE-SPEC §1.2 / §1.6).
+# Each case is a REAL question whose R0 whole-file title/body door returns the
+# exact course miss (the topic phrase is not a passage or section title and is
+# not a contiguous substring of any whole-file passage), while exactly ONE
+# committed index chunk row answers it. `expected_span` is a verbatim slice of
+# `expected_passage_ref`, which resolves in the bank for `open_activity`.
+# This is new evidence; it edits no existing gold.
+
+version: 1
+miss: This is not in this course.
+target_passage_rule: 'unique: exactly one passage in the open activity answers'
+thresholds:
+  recall_min: 0.9
+  precision: 1.0
+  min_cases: 40
+cases:
+- shortname: NMD1000
+  open_activity: 1249
+  query: what is signed expectation
+  expected_passage_ref: NMD1000:file:1249:MED100 Study guide 23-24 (2).pdf
+  expected_span: 'In the following section, we will explain to you in details what is expected from you in each task, how and when you should submit the task and how it will be graded. Each task is de signed to assess different sets of knowledge and skills gained in Course 1. Again, the purpose of these tasks not only to assess your learning but also stimulate your thinking and creativity. Please review the following section carefully to understand wha t you need to do with each activity.  Assignment 1: Discussion Forum Posting  Due date: » Initial Posting Tuesday 01/10 » Replying to two of your colleagues on Wednesday or Thursday 10or 12/10 What is expected from you in this task? By Thursday 12/10, you will need to log to Introduction to Medical Profession course on your school portal. You will find a discussion Forum named “ DF: Assignment 1, What is your expectation from Arab Academy Medical School? Initial post due 11/10/2022 Grade: 6 Marks In this discussion forum, you will create a new posting with title “my expectations are…” and you will right down your expectations. You should mention 1- Minimum three expectations from studying medicine in Arab Academy Medical school.'
+  matched_terms:
+  - signed
+  - expectation
+- shortname: NMD1000
+  open_activity: 1250
+  query: what is english arabic
+  expected_passage_ref: NMD1000:file:1250:NMD1000 Study guide. 24-25.pdf
+  expected_span: 'You will find a discussion Forum named “ DF: Assignment 1, What is your expectation from Arab Academy Medical School? Initial post due 8/10/2024 Grade: 6 Marks In this discussion forum, you will create a new posting with title “my expectations are…” and you will right down your expectations. You should mention 1- Minimum three expectations from studying medicine in Arab Academy Medical School. you could write them in bullet points if you want. 2- Write your post in English (you could write an Arabic wo'
+  matched_terms:
+  - english
+  - arabic
+- shortname: NMD1000
+  open_activity: 1251
+  query: what is attach netiquette
+  expected_passage_ref: NMD1000:file:1251:NMD1000 Study guide. 25-26.pdf
+  expected_span: 'Initial Posting: Tuesday 30/9/25 Reply on two of colleagues Wednesday& Thursday 1&2/10 You will be required to create initial posting on course discussion forum answering the following question: What do you expect in Academy college of Medicine? You will also need to reply on two of your colleagues’ posting NB: Please Follow Netiquette while writing your initial posting or replying to your colleagues Initial Post: 6 Marks Reply to your colleagues: 4 Marks EKB activity & Email 2 LINKs; One video and a pdf article Saturday 4/10 using your email, you will be sending one link to a video and attach a PDF on the same topic Good Medical Practice 10 Marks Reflective sheet Monday 6/10 You will write maximum 2 pages reflecting on why you choose to apply for medical school? What you expect to achieve after finishing your medical program?'
+  matched_terms:
+  - attach
+  - netiquette
+- shortname: NMD1000
+  open_activity: 1252
+  query: what is attach netiquette
+  expected_passage_ref: NMD1000:file:1252:NMD1000 Study guide. 26-27.pdf
+  expected_span: 'Initial Posting: Tuesday 29/9/256 Reply on two of colleagues Wednesday& Thursday 30/9&1/10 You will be required to create initial posting on course discussion forum answering the following question: What do you expect in Academy college of Medicine? You will also need to reply on two of your colleagues’ posting NB: Please Follow Netiquette while writing your initial posting or replying to your colleagues Initial Post: 6 Marks Reply to your colleagues: 4 Marks EKB activity & Email 2 LINKs; One video and a pdf article Saturday 3/10 using your email, you will be sending one link to a video and attach a PDF on the same topic Good Medical Practice 10 Marks Reflective sheet Monday 5/10 You will write maximum 2 pages reflecting on why you choose to apply for medical school? What you expect to achieve after finishing your medical program?'
+  matched_terms:
+  - attach
+  - netiquette
+- shortname: NMD1000
+  open_activity: 1253
+  query: what is الفارماكولوجي باراسيتولوجي
+  expected_passage_ref: NMD1000:youtube:1253:Q08Is1Yq1vc
+  expected_span: وصلتش الوجع بتاع العيان جاي منين ليه لان انا كده افتكرت كل النورمال كل الطبيعي علشان البني ادم يعيش كويس اول ما ابتدي افكر اللي سبب المرض يبقى انا دخلت في علم الباثولوجي اللي هو علم الامراض طب والله ده انا اكتشفت ان الرئه بتاعته تعبانه وان هو عنده ايه طب ممكن يكون عنده ايه عنده التهاب عنده التهاب رئوي عنده احتقان في زوره عنده لوز طب انا هعرف منين اللي سبب المرض من الميكروبيولوجي اللي هو علم الاحياء الدقيقه بتاعه الميكروبس او من طفيليات زي الديدان من باراسيتولوجي ولما اوصل ان انا عرفت سبب المرض هبتدي افكر في العينين يجي لي علم مهم جدا جدا اللي هو الفارماكولوجي علم الادويه علشان يقول لي على علاج الادويه وجرعاتها وايه اللي يتاخد مع ايه والا انا اتجنب ان انا اديه للعيان مع بعضه عشان ما اضربوش لما اوصل لكده وقلت للعيان انت مريض بالمرض الفلاني وعلاجك هيبقى كذا هيسالني سؤال مهم جدا جدا ليه لانه هو عايز يعرف وانا ممكن اقعد حد يا دكتور اللي يجاوبني على الموضوع ده ويعرف الموضوع ده هو اللي قالوا لنا ان ده وان هو انتشر على مستوى العالم وبالتالي واحد من العلوم اللي ما نقدرش نغسلها ابدا ابدا ابدا يبقى مع اول كلمه للعيان عند وجع في صدري عند وجع في بطني انا فكرت في ست سبع تمن علوم طبيه اساسيه علشان بعد كده اوصل للامراض الباطنه اللي هتخليني اربط ده كله مع بعضه طول الوقت وانت في كليه الطب هتشتغل
+  matched_terms:
+  - الفارماكولوجي
+  - باراسيتولوجي
+- shortname: NMD1103
+  open_activity: 1005
+  query: what is hospitalsuintegrated hospitalsudistrict
+  expected_passage_ref: NMD1103:file:1005:Virtual Tour in Hospital Facilities.pdf
+  expected_span: 'Virtual Tour in Healthcare Facilities Transfer goaluIntroduce student to the different types of care and let them explore the different units and facilities in a hospital. Objectives1.List types of care and types of hospitals in the Egyptian Healthcare System.2.List different units and facilities in a hospital. 3.Virtually explore hospital facilities. Types of CareuPrimary careuFirst point of care when you have a medical complaintuYou may also seek primary care for an injury (broken bone, sore muscle)uReferral to other levels of care happens from hereuSecondary careuPatients are coming by referral from primary care unitsuContains different specialties: cardiology, endocrinology, oncology,….etc.uTertiary careuFor cases that needs higher level of specialty care. uContains highly specialized equipment and expertise. Types of HospitalsuIntegrated Hospitalsusmall, 20-to 60-bed hospitals providing primary health care and specialized medical services in the rural areas. uDistrict HospitalsuDistrict hospitals are 100-to 200-bed hospitals that provide more specialized medical services and are available in every district.'
+  matched_terms:
+  - hospitalsuintegrated
+  - hospitalsudistrict
+- shortname: NMD1103
+  open_activity: 1006
+  query: what is misunderstanding identification
+  expected_passage_ref: NMD1103:google:1006:1_4k2LQC4bfZblcbBRG-NSkepSl5defs8
+  expected_span: 'These hazards are noted only after it has caused harm to the body. 6. ERGONOMIC HAZARDS Hospital emergency codes are coded messages announced over a public address system of a hospital to alert staff to various on-site emergencies. The codes convey essential information quickly and with minimal misunderstanding to staff while preventing stress and panic among visitors to the hospital. Hospital emergency codes have varied widely by location, even between hospitals in the same community. Codes are posted on placards throughout the hospital or are printed on employee identification badges for ready reference. Codes usually accompanied by a specific location description (e.g., "Code red, second floor, corridor three, room two-twelve"). Use of this code Code Bomb threats black As Bioterrorism is the use of a biological agent (e.g., smallpox, plague, anthrax Evacuation Green Disaster major chemical spill Orange Violent/Behavioral Situation White one of three weather-related situations: snow and/or ice, hurricane, or tornado. Infrastructure Loss or system failure Grey Cardiac Arrest/Medical Emergency –adult Blue Missing Person Yellow Pediatric cardiac arrest Pink Fire Red 34 THANK YOU!'
+  matched_terms:
+  - misunderstanding
+  - identification
+- shortname: NMD1103
+  open_activity: 1007
+  query: what is interactive detecting
+  expected_passage_ref: NMD1103:file:1007:interactive-diagram-hospital.pdf
+  expected_span: This is Interactive Diagram on detecting hazards in the hospital environment. Detect as many hazards as possible. How many hazards can you find? Visit www.safework.nsw.gov.au for more information or call Customer Experience on 13 10 50
+  matched_terms:
+  - interactive
+  - detecting
+- shortname: NMD1103
+  open_activity: 1009
+  query: what is manipulating antisepsis
+  expected_passage_ref: NMD1103:file:1009:Hand Hygiene Skill lab (Academy) 2021-2022 (2).pptx
+  expected_span: Review the session handout before clinical skills session on Hand Hygiene HAND HYGIENE Wash your hands with soap and water when hands are visibly dirty or visibly soiled with blood or other body fluids or after using the toilet . Preferred mean for routine hygienic hand antisepsis if hands are not visibly soiled . It is faster , more effective, and better tolerated by your hands than washing with soap and water. THANK YOU ILOs Understand the rational behind hand hygiene. State the indications for hand washing and antisepsis. Identify the WHO five moments for hand hygiene. Describe various hand hygiene techniques . Perform routine hand wash using the correct procedure. Perform alcohol hand rub using the correct procedure. Hand Hygiene Why? When? How? With what? WHY? WHEN? Before and after direct contact with patients. After removing gloves . Before manipulating an invasive device , with or without gloves. After coming into contact with liquids or bodily excretions , mucosa, non- intact skin or wound dressings. When caring for patients when moving from a contaminated area of the body to a clean one.
+  matched_terms:
+  - manipulating
+  - antisepsis
+- shortname: NMD1103
+  open_activity: 1010
+  query: what is appropriateness recommendations
+  expected_passage_ref: NMD1103:file:1010:PPE skill lab (Academy) 2021-2022 (1).pptx
+  expected_span: The Centers for Disease Control and Prevention ( CDC ) issues recommendations for when and what PPE should be used to prevent exposure to infectious diseases. General rules of PPE use Don before contact with the patient. Use carefully – don’t spread contamination. Remove and discard carefully . Immediately perform hand hygiene. Factors to consider Type and degree of exposure anticipated Splash/spray versus touch Category of isolation precautions Durability and appropriateness for the task Fit or availability of correct size. Selection of PPE TYPES OF PPE Gloves – protect hands. Masks and respirators (N95)– protect mouth/nose. Gowns/aprons – protect skin and/or clothing. Goggles – protect eyes. Face shields – protect face, mouth, nose, and eyes. Head cover – protect head (hair) & forehead. SURGICAL MASK Indications of use Protect HCWs nose and mouth from splashes or sprays of large droplets. SURGICAL MASK How to don a surgical mask? Perform Hand hygiene Find the top side of the mask (nose piece up) Place over nose, mouth and chin to cover the face Fit flexible nose piece over nose bridge Secure on head with ties or elastic Fit the mask to your face and under your chin.
+  matched_terms:
+  - appropriateness
+  - recommendations
+- shortname: NMD1301
+  open_activity: 1172
+  query: what is december derstand
+  expected_passage_ref: NMD1301:file:1172:lecture notes.pdf
+  expected_span: 'Autonomy: in practicing medicine, doctors need to have autonomy and not to be forced to take any actions they believe is not in the best interest of their patients. Self-regulation: The medical profession is a complicated one, where many professionals work together and where the slightest margin of error can prove fatal. Therefore, regulating this delicate workplace should be left to those carrying this responsibility and who best un derstand it. A health care system that is value -driven and adequately funded : imagine a patient who has a problem in the arteries of his lower limbs (a condition called ischemia), he cannot walk properly and has started using a wheelchair. Which is a more proper target to describe this patient’s need: to be able to walk freely again (value), or to perform an operation on his arteries (service)? Lecture notes, Medical Profession 1 (MED131) AASTMT – College of Medicine December 28, 2021 4 Sometimes just performing a service such as surgery, writing a prescription, or doing physiotherapy is not enough on its own to achieve the value that the patient needs. In a service- oriented healthcare system, patients provide fees and doctors provide service.'
+  matched_terms:
+  - december
+  - derstand
+- shortname: NMD1301
+  open_activity: 1173
+  query: what is والاكسبيرتات اورجانيزيشن
+  expected_passage_ref: NMD1301:youtube:1173:RBvFTwbm5Ak
+  expected_span: مستشفى صح فنشي المستشفيات زي ما هي بتساعد الناس ان هي تتحسن هي برده اماكن بيحصل فيها مشاكل كتير فلو كل الناس متشائمه انت عليك الدور ان ان انت او انت تكونوا متفائلين نص الكوبايه المليان ده هو ده كل شغلك يعني كل الحته اللي احنا بنشتغل وبنطلع شغلنا منها هي نص الكوبايه المليان فمثلا يعني دكتور متشائم مش هيكون حد يعني مش هيعرف يعمل مجهود كويس مش هيبقى موتيفيت كويس ورا الحاله يعني حالات كتير منه بقى باي سلف وفيل بروفيسي كده ممكن تحصل ان هي ايه ما يطلعش منها اوت كم كويس تاني حاجه ودي من الحاجات اللي هتلمس بسرعه جدا وكتير قوي هي الكوميشن سكيلز وقد ايه كونكشن سكيلز دي از انتجرال في الطب بشكل غير عادي يعني انت ممكن تبقى اشطر دكتور في الدنيا بس مش عارف توصل المعلومه للمريض اللي قدامك او مش عارف تسمع منه المعلومه اللي هو بيقولها ولا حاجه خالص كل مذاكرتك وشغلك والاكسبيرتات خلاص مالهاش اي قيمه لو انت مش عارف تسمع المريض تستوعب هو بيقول ايه توصل له المعلومه اللي انت بتقولها ف كومينكيشن سكيلز اسكي ولو احكي لكم على كام موقف حصل في تراجيدي بسبب فيلير اوف كومينكيشن سواء ما بيني وما بين المريض او ما بيني وما بين زملائي او ما بيني وما بين الجمهور حتى ف مواقف كتير جدا جدا كومينكيشن سكيلز بتبقى الفارق بين الحياه والموت فعلا طبعا اورجانيزيشن سكيلز واظن يعني ممكن ماتكونوش لسه لمستواي ده قوي بس على
+  matched_terms:
+  - والاكسبيرتات
+  - اورجانيزيشن
+- shortname: NMD1301
+  open_activity: 1174
+  query: what is attendance researcher
+  expected_passage_ref: NMD1301:file:1174:NMD1301_L1_Competencies.pptx
+  expected_span: 'Lecture slides THIS COURSE Lectures start 10 minutes after :00 Attendance taken 15 minutes after :00 Dress code will be strictly observed No food No phones You can miss 2 lecture s ( ~70 % attendance) If you needed a doctor, what competencies would you like him to have? Who decides what competencies? Medical schools Syndicates Certification authorities Regulatory boards Employers Clients “Aspiring toward altruism, accountability, excellence, duty, service, honor, integrity, and respect for others.” American Board of Internal Medicine National Authority for Quality Assurance and Accreditation of Education (NAQAAE) National Academic Reference Standards (NARS) Area 1: Healthcare provider Area 2: Health promoter Area 3: professional Area 4: Scholar and a scientist Area 5: Member of team and system Area 6: Lifelong learner and researcher 17 competencies 9 competencies 9 competencies 8 competencies 12 competencies 10 competencies 65 competencies Medicine’s social contract with society Society''s expectations of medicine Medicine''s expectations of society Competencies vs attributes Variation in medical practice What are your expectations? What is a good fit for you?'
+  matched_terms:
+  - attendance
+  - researcher
+- shortname: NMD1301
+  open_activity: 1175
+  query: what is specialization articulating
+  expected_passage_ref: NMD1301:file:1175:NARS-2017-medicine-1.pdf
+  expected_span: 'The NARS-Medicine are meant to express the stakeholders'' expectations about the graduate of a medical school in Egypt, defining (and articulating) the attributes and competencies that holders of the qualification " Bachelor Degree in Medicine and Surgery (MBBCh) " should exhibit. As a bachelor degree, MBBCh is a level 5 qualification on the Egyptian National Qualification Framework. According to the Egyptian NQF descriptors, the holder of a level 5 qualification should be able to: - Apply integrated general/ professional knowledge covering a broad spectrum of facts, principles and theories within inter -related domains with specialization in a field of study or work. - Use analytic critical thinking to solve specialized problems in predictable and non- predictable contexts, while dealing with variation and interfering factors. - Master a wide spectrum of specialized skills using familiar and less familiar tools. - Critically evaluate the results of achieved tasks to establish multi-dimensional correlations and build technical expertise. - Identify occupational hazards and design mitigation measures for them - Apply cost/effectiveness measures.'
+  matched_terms:
+  - specialization
+  - articulating
+- shortname: NMD1301
+  open_activity: 1177
+  query: what is الادمنستريتيف سبيشلايزيشن
+  expected_passage_ref: NMD1301:youtube:1177:pL2uOCyH9W4
+  expected_span: بدايه حياته وبعد كده بتخصص وده بقى اللي انا بدات ابقى دكتور مستقل بقى بدات لاول مره بعد التخصص ان انا ابقى ابقى النهائي لبدايه الكبير بتاعي حلوه دي فكره النهائي لبدايه الكارير بتاعي دي يعني وزي ما انتم شايفين سبيشلايزيشن دي ممكن تبقى اورام مبدئيا انتم فيه حاجتين بيبقوا مهمين جدا الدراسه اللي انتم بتدرسوها والشغل اللي انتم بتشتغلوه فالدراسه والاتنين دول بينقسموا يا اما ميديكال يا اما ادمان الاستمهم جدا جدا ومؤخرا الادمنستريتيف بقى عليه اقبال كبير جدا ووظائف كتير جدا بقت مهمه في موضوع الادمان يعني الطب الاداري يعني ازاي انا ادير مستشفى ازاي [موسيقى] ادير اي منظومه صحيه سواء كبيره قوي زي مثلا وزاره الصحه او زي الحقيقه او حاجه صغيره زي عياده مثلا او كده الاداره بقى لها جانب كبير جدا جدا الموضوع ده بقى مهم اللي هي علم الاداره بدا يدخل في الطب هو مش حاجه جديده يعني هو داخل في الطب من زمان علم الاداره بس مؤخرا بقى مهم جدا علشان زي ما انتم شفتوا كده وزي ما احنا اتكلمنا الترم اللي فات او السنه اللي فاتت على الموارد في الطب قد ايه هي ضعيفه وقد ايه كوفيد ابرز ضعف الموارد عامل ازاي فدلوقتي اداره الموارد دي سواء اداره الموارد من اماكن او من الناس او من ادويه او من ايا كان فسيره زي ما انا بحاول ادارها او الموارد اللي عندي مهم جدا ان انا اديرها بطريقه تكون وكمان الحاجه التانيه المهمه في اداره
+  matched_terms:
+  - الادمنستريتيف
+  - سبيشلايزيشن
+- shortname: NMD1402
+  open_activity: 758
+  query: what is dimension female
+  expected_passage_ref: NMD1402:file:758:Research skills step I, Theoretical and practical.pdf
+  expected_span: 'The word Morbidity refers to departure from a state of physical o r psychological well- being, resulting from disease, illness, injury, or sickness. The most common rates used to measure morbidity (disease frequency) in a population are incidence and prevalence rates. I: Disease Prevalence Prevalence is the proportion of people in a population who have a particular disease at a specified point in time, or over a specified period of time. Prevalence is an indication of how frequent a specific outcome or disease is present in a specified population. It i s most useful for A ratio is a measure in which the value of numerator (x) is not included in the denominator (y). e.g., Male/ Female or M:F. (X / Y) A Proportion is a ratio in which the numerator (x) is included in the denominator. X / (X +Y) A rate is a proportion with addition of time dimension. It measures the occurrence of an event in a population over time. Incident cases: New cases over a specific period of time Prevalent cases: Both old and new cases Mini-Lecture Notes 6 measuring the burden of chronic diseases such as hypertension, diabetes mellitus and obesity in a population.'
+  matched_terms:
+  - dimension
+  - female
+- shortname: NMD1402
+  open_activity: 759
+  query: what is ultrasonographic contraceptive
+  expected_passage_ref: NMD1402:file:759:Student Guide Research Skills 1.pdf
+  expected_span: 'A study conducted to explore attitude of physicians towards COVID 19 vaccine. which of the following study type most suitable for this study? a. Quantitative research b. Qualitative research 2. The most important limitation of correlation study? a. Difficult to ascertain exposure b. Doesn’t relate exposure and outcome in the same individual c. Expensive and time consumimg 3. A researcher conducted a study to compare the effectiveness of two different treatments in controlling the blood pressure. What is the type of study? a. Observational study b. Intervention study 9 Lecture 3: Cross sectional designs 1. An investigator screened 1000 women above 50 years of age using breast ultrasonographic examination to sort out those with breast mass from those without. He also asked about current use of oral contraceptive pills intake. What is the rate that could be calculated in the previous study? a. Incidence rate b. Attack rate c. Point Prevalence rate d. Period prevalence rate 2. In the previous study, what is the exposure? a. Breast mass b. Oral contraceptive pills c. Sex of participants d. Radiation 10 Lecture 4: Case control study 1.'
+  matched_terms:
+  - ultrasonographic
+  - contraceptive
+- shortname: NMD1402
+  open_activity: 760
+  query: what is inhisfollowupvisitheaskedyouabouttheeffectivenessofpracticingaerobicexerciseincontrollinghisbloodpressure hewasprescribedoralantihypertensivemedications
+  expected_passage_ref: NMD1402:file:760:Introduction to health research-first lecture.pdf
+  expected_span: Do they apply its results in their practice? A clinical Scenario •Ahmedisa40-year-oldobesepatientsufferedelevationofthebloodpressureinthelast2years.Hewasprescribedoralantihypertensivemedications.•Inhisfollowupvisitheaskedyouabouttheeffectivenessofpracticingaerobicexerciseincontrollinghisbloodpressure. The sources of information that shape clinical practiceTextbooksCollogues
+  matched_terms:
+  - inhisfollowupvisitheaskedyouabouttheeffectivenessofpracticingaerobicexerciseincontrollinghisbloodpressure
+  - hewasprescribedoralantihypertensivemedications
+- shortname: NMD1402
+  open_activity: 762
+  query: what is explainhowobesityisconsideredasanexposureinoneresearchideaandasanoutcomeinanother riskfactorsuchasapossiblecausalagentforadisease
+  expected_passage_ref: NMD1402:file:762:Know your basics second lecture.pdf
+  expected_span: Anexposureorintervention(Whichmaybea‘riskfactorsuchasapossiblecausalagentforadisease,oratreatment/therapy),itisalsocalledindependentfactorb.Anoutcomes(suchasaparticulardiseaseorcondition),itisalsocalleddependentfactor. Exposure versus outcome•Studying the relationship between smoking and lung cancer•Smoking is the exposure •Lung cancer is the outcome Exposure (E)Outcome (D) Exposure versus outcome Q:Explainhowobesityisconsideredasanexposureinoneresearchideaandasanoutcomeinanother Exposure versus Outcome•Obesity as a risk factor for heart disease•Obesity is the exposure•Heart disease is the outcome Exposure versus Outcome•Lack of physical exercise as a risk factor for obesity•Lack of exercise is the exposure•Obesity is the outcome Descriptive epidemiology Epidemiologic studies that are concerned with characterizing the amount and distributionof the disease withina population. Distribution of the disease TIMEPLACE PERSON Where is the disease ocurring? Who is getting the disease? When is the disease ocurring?
+  matched_terms:
+  - explainhowobesityisconsideredasanexposureinoneresearchideaandasanoutcomeinanother
+  - riskfactorsuchasapossiblecausalagentforadisease
+- shortname: NMD1402
+  open_activity: 763
+  query: what is demonstrates prostatic
+  expected_passage_ref: NMD1402:file:763:Lecture notes- Know your basics.pdf
+  expected_span: 'Knowing that at the beginning of the study period , there were, 200 men that were free from prostatic cancer. calculate the incidence of prostatic cancer during this year? The number of new cases = 5 The population at risk= 200 The incidence rate = (5 / 200) X 100= 2.5% Factors affecting incidence of diseases 1. Increase in the proportion of population who has the risk factor (who are at risk). 2. Appearance of new risk factors for the disease in a community. 3. Change in the etiological factors e.g., mutation of organisms; influenza virus mutation and multi-drug resistance tuberculosis (MDR-TB). 4. Change in the effectiveness of the preventive program (either decrease or increase). 5. New diagnostic tools, screening p rograms, improved case finding, and reporting of diseases may lead to apparent (or false) increase in the incident cases. Relation between incidence and prevalence Figure 1: Relation between incidence and prevalence Figure 1 shows what is called prevalence pot . It demonstrates that new cases join pre -existing cases to make up total prevalence. However prevalent cases leave the prevalence pot in one of two ways: recovery or death.'
+  matched_terms:
+  - demonstrates
+  - prostatic
+- shortname: NMD2101
+  open_activity: 417
+  query: what is research consideration
+  expected_passage_ref: NMD2101:file:417:Neuroscience I SG.pdf
+  expected_span: '4-10 L5: Posterior angle L6: Anatomy of vertebrae & spinal cords Clinical skills (1) Hall 102 Skill lab 4-103/4-105 Wed 5- 10 L7: Development of H&N L8: Somatic sensory system Practical: Brain parts Clinical skills (2) Thu 6-10 Hall 102 Lab 4-101 / 4-201 Lab Skill lab 4-103/4-105 Fri 7-10 Week 1 Timetable 10 | Page Week 2: (Covered lectures L7-L14, Practical 3,4,5) Day Session 1 9-11 Session 2 11-1 Session 3 1-3 Sat 8-10 Sun 9-10 L9: Skin & its receptors L10: Physiological function of receptors & sensory coding Practical: Ant, Post triangle Clinical skills (3) Hall 102 2 Labs (Anatomy) Skill lab 4-103/4-105 Mon 10-10 L11: Ascending pathways & Somatosensory cortex I L12: Pain sources & transduction of painful stimuli - pain pathways Practical: Vertebrae Medical profession 3/ Research 3 (L3 &4) Hall 102 2 Labs (Anatomy) Lab 206 Lab 401 2-103/2-105 Tues 11-10 L13: Central control of pain L14: Analgesics Tutorial: Overview of sensory structural consideration & function (anatomy& physiology) Clinical skills (4) Hall 102 228 / 4-302 Skill lab 4-103/4-105 Wed 12-10 Practical: N'
+  matched_terms:
+  - research
+  - consideration
+- shortname: NMD2101
+  open_activity: 418
+  query: what is scopic neurosciences
+  expected_passage_ref: NMD2101:file:418:Neuroscience I SG 2324.docx
+  expected_span: Here in the sixth course" Neurosciences I”, y ou will learn how to integrate smoothly between basic medical and clinical sciences, in a manner that will help you rationalize the clinical importance of the topics your study in the pre-clerkship phase . I t consists of an extensive and in-depth study of the anatomical and functional aspects of central nervous system in order to understand the human brain & behavior. The aim of this course is to help you be acquainted with the gross and micro scopic structural features of the brain, brain stem, basal ganglia and spinal cord. You will discover the miraculous physiology of synapses, neurotransmitters and mechanisms of neuronal excitation as well as the structure and functions of different receptors during neuronal excitation. You will discover the mechanisms and pathways of sensory inputs in the nervous system. You will explore the structure and functions of motor system and how can you maintain your posture. You will be surprised a lot about neuronal plasticity and memory types. You will realize the structure of skin and how you can feel pain.
+  matched_terms:
+  - scopic
+  - neurosciences
+- shortname: NMD2101
+  open_activity: 419
+  query: what is instructor plagiarism
+  expected_passage_ref: NMD2101:file:419:Study Guide 2425.pdf
+  expected_span: 'Each PBL leader will collect the ready-made maps (whatever the maps’ number as compared to the number of the group members) and deliver them once to the course instructor Dr. Gehan Yassin on Tuesday 8/10/2024. The delay will be counted in the marks. Plagiarism will be tested among all the presented students’ maps. ü Concept map of case 2: (in PBL 2 opening session): (Group work) Assessment Method Weight in marks Peri'
+  matched_terms:
+  - instructor
+  - plagiarism
+- shortname: NMD2101
+  open_activity: 420
+  query: what is ppassessment periodicity
+  expected_passage_ref: NMD2101:file:420:Study Guide 25-26.pdf
+  expected_span: 'aast.online/mod/folder/view.php?id=1395 ! BLOCK TIMETABLE 9 | Page Week 6: EXAM WEEK 6 Day Session 1 9-11 Session 2 11-1 Session 3 1-3 Sat 4-11 Sun 5-11 Mon27-10 written exam Tues 7-11 Wed 8-11 Thu 30-10 Practical exam Fri 10-11 10 | Page ppASSESSMENT METHODS TOTAL MARKS: 125 IN THIS SECTION: • Different Assessment Methods • Detailed direction for each Task • Grades and due date for each task 11 | Page Assessment Method Weight in marks Periodicity Date Summative Assessment Continuous assessment 1 MCQS 15 2 exams Monday 6/10 Continuous assessment 2 Short answers 14 Monday 20/10 Practical 25 Once Monday 30/10 Final Neuroscience I MCQs Exam 50 Once Monday 27/10 Assignment 15 Power point presentation on a chosen topic Wednesday 22/10 PBL 6 Formative Assessment In all tutorial and practical classes - Weekly Mock electronic exam - Before each written assessment Mock practical and assignment - Once Overview of assessment 12 | Page Objective structured practical exam (OSPE) ü Consists of stations including practical samples of the involved specialties. ü The time allowed for each station will be 1.5 minutes. ü Each student will cover the whole stations.'
+  matched_terms:
+  - ppassessment
+  - periodicity
+- shortname: NMD2101
+  open_activity: 421
+  query: what is preparat facilitator
+  expected_passage_ref: NMD2101:file:421:Study Guide 26-27.pdf
+  expected_span: ü The time allowed for each station will be 1.5 minutes. ü Each student will cover the whole stations. ü The change signal will be announced. Assignment NMD2101 Neuroscience I (15 marks) ü Power point presentation on a chosen topic “Each PBL group will be required to prepare an innovative interactive power point presentation on one of the proposed topics, which will be announced later. The PBL tutor will be your guide and your facilitator during preparat
+  matched_terms:
+  - preparat
+  - facilitator
+- shortname: MED213
+  open_activity: 853
+  query: what is electrocardiogram cardiopulmonary
+  expected_passage_ref: MED213:file:853:Clinical Skills I learning guide .pdf
+  expected_span: LEARNING GUIDE TO CLINICAL SKILLS I & II YEAR 1 MED112, MED115 (2022-2023) Clinical Skills I & II (MED112, MED115) Page 1 of 64 Table of contents Topic Page number Hand Hygiene 4 Personal Protective Equipment 14 History taking 21 Vital signs 23 Measuring temperature 24 Measuring pulse rate 26 Measuring blood pressure 29 Heart sounds 33 Electrocardiogram (ECG) 37 Cardiopulmonary resuscitation (CPR) 43 Blood sample withdrawal 48 Intravenous injection 54 Insertion of urinary catheter 57 Clinical Skills I & II (MED112, MED115) Page 2 of 64 This course will help you achieve part of the following program competencies. The graduate as a health care provider •1.6 Take and record structured history from patient •1.7 Perform relevant systematic physical, neurological, and psychological examination The graduate as a professional •3.8Exhibit commitment to quality improvement and patient’s safety. The graduate as a lifelong learner and researcher •6.1 Develop, implement, monitor, and revise a personal learning plan to enhance professional practice•6.2 Explore opportunities and use various resources for learning.
+  matched_terms:
+  - electrocardiogram
+  - cardiopulmonary
+- shortname: MED213
+  open_activity: 854
+  query: what is appropriateness satisfactorily
+  expected_passage_ref: MED213:file:854:CLINICAL SKILLS 3,4 with examinations final, 2026 final.pdf
+  expected_span: 'Intelligence: mathematical problem- Educational and professional achievements (Average versus above average/below average) V. Insight: Awareness of the illness and its implications VI. Judgment: Ability to satisfactorily resolve a proposed hypothetical scenario utilizing good judgment VII. General knowledge Neurologic examination 5 3) Mood, Affect & Emotion Stability, Range, Appropriateness, Intensity, Mood (Experience and Expression) Behavior (expression): Aggressive, assertive, passive, and passive aggressive. Thought content: Suicidal ideation, Homicidal ideation, Depressive cognitions, Obsessions, Ruminations, Phobias, Ideas of reference, Paranoid ideation, Delusions C. Speech & articulation  Disturbance of speech is called, according to its severity, dysphasia or aphasia  Disturbance of articulation is called dysarthria, or anarthria  Speech examination: 1. Spontaneous speech a. Informal interview: Attention should be paid to the fluency of speech, presence of initiation difficulty, the presence of word-finding pauses. b. Structured task 2. Naming objects: tested by asking the patient to name objects, object parts, pictures, colors, or body parts to confrontation. 3.'
+  matched_terms:
+  - appropriateness
+  - satisfactorily
+- shortname: MED213
+  open_activity: 855
+  query: what is registration اليردخينني
+  expected_passage_ref: MED213:file:855:Year 2 semester 3 2026-2027 students groups updated.pdf
+  expected_span: 251000250ملك أيمن مجدي مصطفني أبو سنه 35 3 251010164ملك محمود إسماعيل محمد اسماعيل شتا 36 3 251012760مؤمن أحمد حامد أحمد 37 3 251000393هاجر موسى إبراهيم قناوي 38 3 251010163هادي اشرف جمعه ابراهيم 39 3 251001996هنا احمد عبد الحليم سالم 40 3 251001036يوسف محمد عبدالرحمن ابراهيم اليردخينني Station 6 Year 2 Academic Year 2026-2027 Group Registration Number Name 1 4 251010486احمد محمد نبيل محمدالقواس 2 4 251011390اسيل محمد احمد الفكي 3 4 251003953أنس إيهاب عبد المنعم عبد الغنني 4 4 251001576بجاد إبراهيم إبراهيم عبد الحميد عبد العال 5 4 251000505جمانة طارق محمد المليحري 6 4 251000046جنا محمد محمود عبد الرحمن علي 7 4 251001255جنن احمد سالم الديب 8 4 251000931جنن طارق فتحي محمد 9 4 251000265جودى عل عبد الغفار عل محمد عل 10 4 251000282جودي عمرو محمد مهدي محمد 11 4 251012558حبيبه عل يوسف محمد عطيه 12 4 251000995حسام ناصر محمود محمد احمد الحصري 13 4 251000344حلا زهي محمود لطفني 14 4 251002667حلا طارق ابراهيم محمد شعبان 15 4 251001478حني ن أسامة أحمد محمد علي 16 4 251000537سلم أحمد سمي حسي ن 17 4 251002030شهد عبدالقادر عبدالرحمن عبدالقادر 18 4 251002070عبدالرحمن طارق احمد كمال عبدالحميد جميعي 19 4 251011639عبدالرحمن وائل عبده قداده 20 4 251010601عمر أحمد عل حسي ن خليل 21 4 251000100فرح جاش
+  matched_terms:
+  - registration
+  - اليردخينني
+- shortname: MED213
+  open_activity: 857
+  query: what is الفريكونسي مايكروسوفت
+  expected_passage_ref: MED213:youtube:857:Stic7v4YWUI
+  expected_span: هو نايم لا ماينفعش يكون نايم انا عايزاه بس لا تمام يبقى دي بنسميها البرين هنا لا مريح ولكن مش نايم اوكي طيب نفترض ان انت قاعد عينك م كنت حال حد ند عليك حصل اي اتنشن تمام حصل اي ريس او فتحت عينك الالفا هنسميها الفا بلوك هتختفي وهتظهر مكانها ويف تانيه اللي هي اسمها بيتا ويف هنتكلم عنها دلوقتي طيب فاضلي نقطه واحده الالفا ويت هو الفريكونسي بتاعها التردد بتاعها من 8 ل 12 هرتز الارقام علينا حفظ بيسالك في الفريكونسي من 8 ل 12 طب هل دي اعلى حاجه لا هنعرف دلوقتي ان في اعلى منها لان انت هنا ريلاكسد لكن مش مش في اكتر حاله اكتف تمام طيب يبقى ايه تاني ايه البوينت اللي احنا خدناها في الالفا ويفز تاني هنراجع اول حاجه ان هي في الادت تاني حاجه بحط الالكترود اكسبيت ورا تت حاجه ان الكشن ان قاعد ري ومغمض عينه واخر حاجه بعتها من 8 12 ه انتو عايزين الور بوينت انا عامله للور بوينت بس مش عارفه هل ممكن انت بتعمل داونلود او حاجه دكتور ممكن حضرتك تبعتيه في الشات في ديلاي في في السلايد انا دلوقتي في سلايد نمبر 10 يا دكتور هو ممكن حضرتك تبعتيه في الشات بتاع مايكروسوفت تيمز ماشي انا مش سمعت دكتور هو حضرتك حضرتك ممكن تبعتي الفيديو الريكورد والفايل بتاع باور بوينت لدكتور منى تنزلهم لنا خلاص حاضر حاضر هخلص وابعته لك حاضر انتوا مش معاكم الباور بوينت اصلا مش نازل لكم على البورتال او حاجه لا طيب ماشي طب انتوا دلوقتي
+  matched_terms:
+  - الفريكونسي
+  - مايكروسوفت
+- shortname: MED213
+  open_activity: 859
+  query: what is assistance competently
+  expected_passage_ref: MED213:file:859:Vital Signs- Pulse .docx
+  expected_span: 'Place the tips of the index, middle and ring fingers just proximal to the patient’s wrist on the thumb side, orienting them over the vessel. Push lightly at first, gradually adding pressure till you feel the pulse. Check for regularity: if regular, count the pulse rate for 15 seconds and multiply by 4, and if irregular, count for 3 minutes and divide by 3. After the procedure Wash the hands. Discuss the findings with the patient. Record the results as beats / minute and comment on regularity. Thank the patient. CP: Competently performed PA performed with Assistance NP ( not done)'
+  matched_terms:
+  - assistance
+  - competently
+- shortname: NMD2303
+  open_activity: 790
+  query: what is cardiopulmonary representatives
+  expected_passage_ref: NMD2303:google:790:1Mmv58BM65eR-T8hi9pqxEomcFdczv55J
+  expected_span: 'Such discussions might include: the patient’s wishes and fears, their preferences about future options for care, and the values and priorities that influence their decision making any treatment or care the patient might want to refuse, and in what circumstances any interventions that might become necessary in an emergency, such as cardiopulmonary resuscitation whether the patient would like anyone else – relatives, friends, carers or representatives – to be involved in decisions about their care If a patient has a condition that is likely to impair their capacity as it progresses, 17 Exceptions to requirement of consent Mentally incapacitated patient: Minor (child): less than 18 years Comatose patient: In emergency requiring immediate action, only to save the patient’s life or avoid major deterioration of the patient''s health. Third-party consent; The patient is mentally incapable of understanding the procedure and/or the ramifications of consent or refusal, so consent is given or withheld on their behalf by a legal designate, eg a parent or guardian in the case of children, or a power of attorney delegated by a person suffering a degenerative neural disease.'
+  matched_terms:
+  - cardiopulmonary
+  - representatives
+- shortname: NMD2303
+  open_activity: 791
+  query: what is criteria irrespective
+  expected_passage_ref: NMD2303:file:791:Consent final.pdf
+  expected_span: 'b) Written consent: For more invasive tests or for major procedures with significant risks e.g. ▪ blood transfusion ▪ breast biopsy ▪ all operations requiring general or spinal anesthesia. What are the requirements for obtaining a valid consent? 1) the patient giving consent must have capacity 2) the consent must be freely given 3) the consent must be sufficiently specific to the procedure or treatment proposed 4) the consent must be informed. The four criteria for a valid consent must be met irrespective of whether the consent is in writing or oral. 1) Capacity The patient must have the capacity to give consent. A person has decision making capacity if they can: • understand the facts and choices involved • weigh up the consequences and evaluate the personal cost and benefit of each of the consequences and relate them to your own set of values and priorities • communicate their decision. Legally, adults are presumed to have capacity to consent to or refuse medical treatment unless otherwise indicated.'
+  matched_terms:
+  - criteria
+  - irrespective
+- shortname: NMD2303
+  open_activity: 796
+  query: what is consequentialism communications
+  expected_passage_ref: NMD2303:google:796:1aRyg00IH1SVTwpdVwMIlbJXBJBTCPlqR
+  expected_span: Generally, this also includes communications between the patient and other professional staff working with the doctor. - Respect for confidentiality is firmly established in codes of medical ethics. Hippocratic Oath "What I may see or hear in the course of the treatment or even outside of the treatment in regard to the life of men, which on no account one must spread abroad, I will keep to myself, holding such things shameful to be spoken about". Ethical considerations Confidentiality can be considered from a number of different ethical perspectives • Respect for patient autonomy Any breach of confidentiality means that the patient’s autonomy has not been respected, whether or not the patient is aware of the breach. • Implied promise 3 The physician -patient relationship could be seen as having elements of an implied contract and this could include an implied promise that health professionals keep information about their patients confidential. If confidentiality is subsequently breached the patient may feel that a promise has been broken. • Consequentialism The question of whether it is wrong to breach confidentiality is determined by the consequences of the breach.
+  matched_terms:
+  - consequentialism
+  - communications
+- shortname: NMD2303
+  open_activity: 798
+  query: what is trustworthiness conference
+  expected_passage_ref: NMD2303:youtube:798:XgQRvDiO4EA
+  expected_span: could be retrieved even after you have deleted it you must protect any information you learn about clients in your care clients need to be confident that their nurse will protect their personal information and basic dignity as discussed in the previous slide about elements of care if you breach this trust even unintentionally it can damage the nurse-client relationship co-worker relationships and the general trustworthiness of the nursing profession case 2 use of pictures a nurse educator from a tropical Disease Clinic is preparing a presentation poster for an infectious diseases conference she includes pictures of varying stages of a client's lesions in this poster in this scenario what factors does this nurse need to consider although the client is not directly identified in this scenario pictures can provide information that makes it possible to identify the client in addition the conference attendees in this scenario are not in this client Circle of Care therefore they should not be receiving this information about the client according to the college's consent practice guideline nurses are accountable for obtaining consent you must consider whether the client has given you
+  matched_terms:
+  - trustworthiness
+  - conference
+- shortname: NMD2303
+  open_activity: 799
+  query: what is الكونسرفريشن البروسيدير
+  expected_passage_ref: NMD2303:youtube:799:q6UpQA1ix0Q
+  expected_span: الطب ولا ان انت تنشر بتاعتك في المجتمع صح الدور بتاعك هو ان انت تقدم الطب السليم بس الفانيوز بتاعتك او بتاعت حضرتك او بتاعتك دي حاجه احنا بنحترمها في ممارستك او ممارستك للمهنه بتاعتك انما دي مش حاجه انت مطلوب منك ان انت تفرضها او بيتوقع منك ان انت تفرضها على المريض بتاعك هو عنده بتاعته انت عندك بتاعتك لازم نحاول ان احنا نلاقي ايه ما بين ان انا ببقى مرتاح في شغلي وان هو يحقق الهدف بتاعه طيب اللي فاتت اتكلمنا لو في ضروره طبيه بس انا الفاليوس بتاعتي متعارضه معاها او فيكت ما بينهم اعمل ايه طب لو مفيش ضروره طبيه يعني مثلا المرضى اللي بيعمله تدخلات او عمليه تجميليه مثلا هل انا من حقي ان انا افرض بقى بتاعتي على المريض ده برضو هنرجع نقول ايا كان ايه السؤال افرض الفيروس بتاعتي عمليه لا لو البروسيدير اللي بيتعمل ده ما فيهوش ضرر على المريض انا في المواقف اللي زي دي اللي هي ما لهاش ضروره طبيه واللي المديكال المطلوب مني ده جاي في سياق الفاليوز والبلافس بتاعه المريض بس حتى لو هي متعرضه معتي بس هي جايه في الباليز بتاعه المريض ده نفسه انا لازم اكون صدر بنفس اللي عنده ايه اشهر مثال قلنا على الموضوع ده وموضوع نقل الدم انا ممكن انا عندي كبيره جدا هي الكونسرفريشن والسكيورتي جايه من السكيورتي بتاع الحقيقه لازم تستمر لازم انقذ نفسي وان صحتي اهم من اي حاجه وبعد كده نبقى نتكلم في الحاجات الثانيه بس ممكن
+  matched_terms:
+  - الكونسرفريشن
+  - البروسيدير
+- shortname: NMD2403
+  open_activity: 732
+  query: what is determinants phenomenon
+  expected_passage_ref: NMD2403:file:732:Students notes.pdf
+  expected_span: 'Data are not published before. 2. Secondary research: Data were published before, and the investigators retrive these data to summarize them, add them, reanalyze them, or synthesize new evidence from them. Secondary research includes collection, summary and/or synthesis of an evidence from existing research. 1. Primary research: Table 1: Observational versus intervention studies Observational studies Intervention studies Uses -Describe disease distribution in terms of person -place -time -Estimate the magnitude of a health problem or a health -related phenomenon -Study determinants (risk factors) of a diseas'
+  matched_terms:
+  - determinants
+  - phenomenon
+- shortname: NMD2403
+  open_activity: 733
+  query: what is calssification interactive
+  expected_passage_ref: NMD2403:file:733:Student Guide Research Skills 3.docx
+  expected_span: Video-record ed lectures (available on student portal)-a pre- requisite before attending your interactive lecture Interactive lectures Designed practical activity sheets Wrap up tutorial session Measures of association Calculate and interpret measures of risk in studying cause effect relationship in descriptive observational studies Calculate and interpret measures of risk in studying cause effect relationship in analytic observational studies Calculate and interpret measures of risk in studying cause effect relationship in intervention studies with qualitative outcome Timetable Group A (groups 1,2,5,6,9,10) Group B (groups 3,4,7,8,11 ,12 ) Session Date Headings First session Week 1 (Group A) Week 8 (Group B) Define critical appraisal Compare between internal and external validity Identify major threats to internal validity Second session Week 2 (Group A) Week 9 (Group B) Calssification of study designs(re-visit) Observational descriptive studies ( strengths, weaknes, measures of association) Third session Week 3 (Group A) Week 10 (Group B) Cohort study designs ( design, strengths, weaknes, measures of association) Forth session Week 4 (Group A) Week 1 1 (Group B) Case control
+  matched_terms:
+  - calssification
+  - interactive
+- shortname: NMD2403
+  open_activity: 734
+  query: what is generalizable limits
+  expected_passage_ref: NMD2403:file:734:Research III students notes with activity worksheet.ocx.pdf
+  expected_span: 'pdf • CEBM Randomised Controlled Trial Critical Appraisal sheet: • SIGN critical appraisal checklists: Methodology Checklist 2: Randomised controlled trials. http://www.sign.ac.uk/methodology/checklists.html There are main questions should be answered while apparisaing any study regardless the study design in addition to questions specific to each type. In this module we will study details of methodolgy of different study types to be able to critically appraise any research for the purpose of assesment of its validity. MED143 8 Worksheet I Q1: Select the best answer: 1. The extent to which the study findings are generalizable beyond the limits of the study to the whole target population is: a. Bias b. Internal validity c. External validity 2. Conducting a study in a way that tends to lead to a particular conclusion, regardless of the truth is: a. Bias b. Internal validity c. External validity 3. Critical appraisal of research is an essential step for which of the follo'
+  matched_terms:
+  - generalizable
+  - limits
+- shortname: NMD2403
+  open_activity: 735
+  query: what is ortesthypothesisabouttherelationshipbetweenanexposureandoutcometesthypothesisabouttherelationshipbetweenanexposureandoutcome problemsminimalornoethicalproblemethicalissuesaresometimesproblematicdirection
+  expected_passage_ref: NMD2403:file:735:Lecture 2_ descriptive studies.pdf
+  expected_span: •Inwhichoneintervenestopreventorchangethecourseofadisease,•Areusedtoevaluatepreventiveortherapeuticinterventions, The investigator passively observes as nature takes its course The investigators actively manipulate the exposure (has a control) OBSERVATIONAL STUDIESINTERVENTION STUDIES Uses-Describediseasedistributionintermsofperson-place-time-Estimatethemagnitudeofahealthproblemorahealth-relatedphenomenon-Studydeterminants(riskfactors)ofadisease-Helpinstudyingprognosisofthedisease -Testeffectivenessandsafetyoftherapeuticintervention Testing or generating hypothesisEithergenerate(descriptive)ortesthypothesisabouttherelationshipbetweenanexposureandoutcomeTesthypothesisabouttherelationshipbetweenanexposureandoutcome Ethical problemsMinimalornoethicalproblemEthicalissuesaresometimesproblematicDirection of the studyProspectiveorretrospectiveorcrosssectional Alwaysprospective Observational studies Observational studies Descriptive studies:Inwhichthemainobjectiveoftheresearchistodescribecertaincharacteristic(s)inthepopulation. Theyaremainlycharacterizedbyabsenceofawellselectedcomparison(control)group.a.Ecological(populationbased)studiesb.
+  matched_terms:
+  - ortesthypothesisabouttherelationshipbetweenanexposureandoutcometesthypothesisabouttherelationshipbetweenanexposureandoutcome
+  - problemsminimalornoethicalproblemethicalissuesaresometimesproblematicdirection
+- shortname: NMD2403
+  open_activity: 737
+  query: what is البرفيسور الكومبليت
+  expected_passage_ref: NMD2403:youtube:737:nBTMdFsLIUs
+  expected_span: 7 يبقى لازم التمييز بتاعي يبقى لان انا ما قسمت على الت انا قسمت على فتره المتابعه الحقيقيه للاشخاص يبقى بفضلها ليه لان يعني ايه فكره يعني ناس كمان بتفقد وناس بتدخل متاخر عن بتاعتها بعد ما بدات ناس اتحركت وم من بعد ما بدات وسعتها الحضانه الاطفال بيجيلها فيهاش مشكله بتاعي هو حصلهم التهاب راوي اثناء يعني ايه يعني معك في قبل ماحص صله نيمونيا اوو ف اب قعدت نتبعه كام يوم يبقى ده اسمه اونيا في الكب ايه اللي يخليني احسب الان وافضلها على الف ان البشن نامك نامك يعني ايه يعني في حالات بتي حالات بيحصلها الاوت ك حالات بتدخل متاخر حاجات حالات بتطلع قبل الكومبليت ف اب يبقى بدل ما احسبهم كانهم نمبر في المقام ححسب الاك بعد كده بنتكلم ايه اللي بستخدمها في يعني اذا كان في علاقه بين وطلعت ويكن الناس عملها قبل كده بمعدل 50 في والناس اللي متعملهاش قبل كدهب هيت سي بنسبه 2% 50% ان اكسب و 50% ان اكسب هنا واضح جدا ان البرفيسور س السؤال دلوقتي ايه قوه الارتباط بينهم فمحتاجه احسب ميجرز ارقام تقوللي ايه قوه الارتباط بين الاكسبوجر والاوت ك اللي انا ثبت ان هو موجود برسم الجدول بتاعي العادي خالص بحط فيه الدييز في الكولم والاكبر في الرو والتوت بقى موجود في ككم في الم ككم واحد حصله من هو كم واحد حصله ل احسب يبقى بقس يطلعلي اندس اكسبو اي على اي ب بي واندس اك سي على سي ب دي لحد كده انا قلت في علاقه لكن محددتش ايه قوه
+  matched_terms:
+  - البرفيسور
+  - الكومبليت
+- shortname: NMD3101
+  open_activity: 1511
+  query: what is certificates certificate
+  expected_passage_ref: NMD3101:file:1511:NMD3101 Principles of Infection Assessment Plan.pdf
+  expected_span: 'College of Medicine Course Title: Principles of Infection Course Code: NMD3101 Assessment components and marks Assessment component Marks Notes Continuous assessment 20 MCQs exam After two study weeks Assignment 10 - Completing 3 courses on Incision Academy “Course1: Introduction to Decontamination” “Course 2: Introduction to Disinfection” “Course 3: Introduction to Sterilization” - Submission of the three courses certificate during study week 3 / 4 (Instruction for certificates’ submission will be announced on time) Practical Exam 15 OSPE Week 4 Final written exam 30 MCQs exam Week 4'
+  matched_terms:
+  - certificates
+  - certificate
+- shortname: NMD3101
+  open_activity: 1513
+  query: what is الاستاتيلوس الميكروبيوت
+  expected_passage_ref: NMD3101:youtube:1513:tqrO2I75hG4
+  expected_span: طول حياتها ومش عامله لها انفكشن ولا اعتبرها دي بدايه انه ممكن الاطفال دول يعني هل اعمل الاطفال دول دي كلنا اشيل الميكروب ده من عندهم ولا اسيبهم ده دبيك كبير قوي قوي قوي ما حدش عارف له رد لغايه دلوقتي فعشان كده الكاريير ده في ناس كارير الميكروبات باتروج زي دول وزي الاستاتيلوس لما هنعرفها في اماكنها طيب المهم ان احنا نعرف ان الميكرو بيوتا دي او بتاعها لها ديفانس رول وليها العكس ممكن تبقى الاهم والاهم في المعمل ان انا لما اشخص الانفاكشن اعرف افرق بين الميكروبات اللي هي بوتنش واللي هي الفلورا علشان ما اطلعش ريبورت للمريض بطريقه غلط اوكي هنفهمها بقى في مكانها الكلام ده بالتفاصيل الممل لان البلاط ستراي هو ممكن الميكروب اللي على الجيل اللي على الجلد او اللي موجود في بادي يجين اكسس للبلاد لو حصل تروما لو حصل عمليه لكن البلاط فيه ميكروب لا وساعتها لما هيجين اكسس ممكن يعمل زي الصمام مثلا الصناعي بركبه وده بيحصل كتير في حالات الانفاكتيف اندوكارديتس اللي خدتوها في بيروح لطبيب الاسنان ويحصل له بعديها وهو اراضي يبقى عنده صمام القلب اللي مش سليم يقعد عليه الميكروب يعمل انفكشن هو الميكروب كان اصلا في الدم لا هو الجنس وساعتها عمل ان الميكروبيوت اللي موجوده على السكين زي السفينه موجوده على السكين ونور لها نور من فانكشن هي اللي بتخلي السكينه كويس واويلي ولطيف وما يجيليش اكزيما وبتبقى ريزيستنت لكل
+  matched_terms:
+  - الاستاتيلوس
+  - الميكروبيوت
+- shortname: NMD3101
+  open_activity: 1514
+  query: what is lactobacilli duodenum
+  expected_passage_ref: NMD3101:file:1514:L1 Basic concept of infection (activity sheet).pdf
+  expected_span: 1 MED217 Principles of infection L1 Basic concepts of infection Activity sheet What is the size range of bacteria? A. 0.5 – 5 µm B. 10 – 20 µm C. 100 - 200 µm D. 200 – 400 µm Which of the following is the largest sized organisms? A. Bacteria B. Viruses C. Fungi D. parasites Which of the following is prokaryote? A. Bacteria B. Viruses C. Fungi D. Parasites Which of the following organisms lack machinery for synthesizing macromolecules? A. Bacteria B. Viruses C. Fungi D. Parasites Which of the following is a multicellular organism? A. Bacteria B. Viruses C. Fungi D. Parasites 2 Which of the following contains DNA NOT surrounded by nuclear membrane? A. Bacteria B. Viruses C. Fungi D. Parasites Which of the following is considered a skin microbiota? A. Lactobacilli B. Staphylococci C. Bacteroides D. E. coli Which of the following is part of vaginal microbiota? A. Lactobacilli B. Staphylococci C. Bacteroides D. E. coli Which of the following GIT sites has the highest microbiota abundance? A. Stomach B. Duodenum C. Colon D. Pharynx Which of the following respiratory tract parts is almost devoid of microbiota? A. Trachea B. Large bronchi C. Nose D. Lung
+  matched_terms:
+  - lactobacilli
+  - duodenum
+- shortname: NMD3101
+  open_activity: 1515
+  query: what is reticuloendothelial interpreting
+  expected_passage_ref: NMD3101:file:1515:L1 Basic concepts of infection.pdf
+  expected_span: It is important to understand the role of the microbiota because of its significance both as a defense mechanism against infection and as a source of potentially pathogenic organisms. In addition, it is important for physicians to know the typical composition of the microbiota at various sites to avoid confusion when interpreting laboratory culture results. The composition of the human microbiota is dynamic and is influenced by age, diet, geography, medications (especially antibiotics), hormones, disease, immune status, and environmental exposures. Microbiota at different body sites 1. Blood, Body Fluids, and Tissues In health, the blood, body fluids, and tissues are sterile. Occasional organisms may be displaced across epithelial barriers as a result of trauma or during childbirth; they may be briefly recoverable from the bloodstream before they are filtered out in the pulmonary capillaries or removed by cells of the reticuloendothelial system. Such transient bacteremia may be the source of infection when structures such as damaged heart valves and foreign bodies (prostheses) are in the bloodstream. 2. Skin The skin surface provides a dry, slightly acidic, aerobic environment.
+  matched_terms:
+  - reticuloendothelial
+  - interpreting
+- shortname: NMD3101
+  open_activity: 1516
+  query: what is biodeterioration biodegradation
+  expected_passage_ref: NMD3101:file:1516:L1 Basic concepts of infection (ppt).pdf
+  expected_span: • Moreover, bioterrorist forces have unearthed two previously controlled infectious diseases —anthrax and smallpox—and threatened their distribution as agents of biological warfare. • For students of medicine, understanding the fundamental basis of infectious diseases has more relevance than ever. • The science of medical microbiology dates back to the pioneering studies of Pasteur and Koch , who isolated specific agents and proved that they could cause disease by introducing the experimental method. • Microbiology is the study of all living organisms that are too small to be visible with the naked eye. This includes bacteria, archaea, viruses, fungi, prions, protozoa and algae, collectively known as 'microbes’. • These microbes play key roles in nutrient cycling, biodegradation/biodeterioration, climate change, food spoilage, the cause and control of disease, and biotechnology. Classification of medically important microbes 13 • All organisms other than viruses and prions are made up of cells.
+  matched_terms:
+  - biodeterioration
+  - biodegradation
+- shortname: NMD3304
+  open_activity: 710
+  query: what is nondiscrimination stigmatization
+  expected_passage_ref: NMD3304:file:710:Health education (source).pptx
+  expected_span: Apply components of health literacy and use them to analyze health education needs in vignette case studies. Correlate health behavior theories with health education planning. Simulate responsibilities involved in a health education program. Respect for human dignity and rights Respect for individual and family independence Client full consent Confidentiality Nondiscrimination or stigmatization Equity in access, coverage and service delivery Respect for cultural values and cultural diversity Refraining from conflict of interest, particularly commercial interest Integrity and good personal conduct. Thank you Outline Key terms and definitions Planning and strategies Responsibilities and competencies Code of ethics Definitions and key terms Health “Is a state of complete physical, mental and social well-being, and not merely the absence of disease or infirmity” Individuals or groups must be able to identify and realize aspirations, to satisfy needs, and to change or cope with the environment. Health is a resource for everyday life and not just the objective of living.
+  matched_terms:
+  - nondiscrimination
+  - stigmatization
+- shortname: NMD3304
+  open_activity: 711
+  query: what is والانفيرومينت الكومينيكيشن
+  expected_passage_ref: NMD3304:youtube:711:Idkux7Ona3k
+  expected_span: ازاي هنطبقها بقى هنا كلها الكامل بتاع مقصود ومتجهز له بعنايه للغايه بتاعه ان انا اوصل ان انا اعلي الهيلت لي يعني ايه يعني الثقافه الصحيه عند المتلقي لهذه الكومينيكيشن اللي انا بعملها طيب يبقى ده بتاع ايه بتاع المحتوى بتاع الرساله كنا اتكلمنا في الموضوع ده في مواضع مختلفه قبل كده مش شرط ان هو يكون معلومات فقط مش كده انا ممكن كمان اعمل ايه ممكن ازود الموتوريشن عند الشخص اللي قدامي ان هو يعمل حاجه اوبروتش اللي انا عايز اقوله له ده ممكن احسن السكيل بتاعته فمثلا مثلا خلينا ناخد في الموضوع ده ان انا اعمل له ان هو يوقف تدخين ادي له سكيل ان انا اعلمه لعبه رياضيه معينه مثلا ان انا ازود القنف دنس اللي عنده ان هو يقدر يعمل ده ان انت تقدر تعمل عليه وحتى لو غلطت مره كمل هتنقص في الوزن بعد شويه وهكذا يكون عنده قانون فيدنس ان ده في الاخر هيجيب نتيجه ان انا اقدر اسقف الشخص اللي قدامي ده عن ايه هي السوشيال فاكتورز الايكونوميك والانفيرومينت الفاكتورز اللي ممكن تاثر على صحته مثلا سوشيال فاكتورز زي مثلا لو احنا بنتكلم عن اوبيزيتي فهو لازم يكون عارف ان ان العادات والتقاليد مثلا بتاعه العزايم ورمضان ومش عارف ايه دي عادات انت مش لازم تتابعها دي حاجه انت ممكن تركز في صحتك ومصلحتك دي حاجه مضره لك مثلا زي ان انت محتاج تجيب هاي كواليتي فود حتى لو ده هيبقى اغلب بالنسبه لك شويه ان حتى لو ده اخد منك وقت ان انت
+  matched_terms:
+  - والانفيرومينت
+  - الكومينيكيشن
+- shortname: NMD3304
+  open_activity: 712
+  query: what is compartmentalized institutionalized
+  expected_passage_ref: NMD3304:file:712:Diversity  Privilege.pptx
+  expected_span: Are seen and treated as expendable and replaceable. without an individual identity apart from their group. compartmentalized into narrowly defined roles. Kept in their place by the agent of oppression’s ideology. Fewer “life chances” or benefits as a result of their membership in a particular social group. Agents of oppression Members of the dominant social groups. Privileged by birth or acquisition, which knowingly or unknowingly exploit and reap unfair advantage over members of groups that are targets of oppression. Agents of oppression are also trapped by the system of institutionalized oppression that benefits them and are confined to roles and prescribed behaviors. Internalized oppression The process whereby people in the target group make oppression internal and personal by coming to believe that the lies, prejudices, and stereotypes about them are true. Members of target groups exhibit internalized oppression when they alter their attitudes, behaviors, speech, and self-confidence to reflect the stereotypes and norms of the dominant group. Internalized oppression can create low self-esteem, self-doubt, and even self-loathing.
+  matched_terms:
+  - compartmentalized
+  - institutionalized
+- shortname: NMD3304
+  open_activity: 713
+  query: what is circumferentially endotracheal
+  expected_passage_ref: NMD3304:file:713:Patient safety (narrated) - Copy.pptx
+  expected_span: Areas of concern Transition of care Medication error Possible solution Double checking Automatic dispenser Time locked medication bottles Communication with community pharmacy Example 2 Endotracheal Tube Fallout in a Patient with Severe Obesity During Eye Surgery. Areas of concern Risk assessment Reversal of anesthesia Possible solutions Employ regional anesthesia Secure the ETT circumferentially Disconnect the breathing circuit before transferring an intubated patient Hyper-oxygenate and hypo-ventilate before transfer The methods and tools for measuring and monitoring patient safety performance and outcomes Incident reporting Root Cause Analysis (RCA) Audits Checklists Failure Mode and Effect Analysis (FMEA) Incident report An incident report is used to formally document an event that involves an unusual occurance . Audit M easuring a clinical outcome or a process, against well-defined standards set on the principles of evidence-based medicine. E.g. Tracer method LOs Understand the concepts and principles of patient safety and how they apply to clinical practice. Identify the common causes and consequences of patient harm and how to prevent and manage them.
+  matched_terms:
+  - circumferentially
+  - endotracheal
+- shortname: NMD3304
+  open_activity: 714
+  query: what is transportation disinfectants
+  expected_passage_ref: NMD3304:file:714:Professional safety - Copy.pptx
+  expected_span: 'handling to prevent unnecessary lifting In absence of lifting aids, ensure that at least two workers lift the patient Adjust the layout of working areas to ensure enough space for safe transfers III. Chemical risk Acute risks: Asphyxiation Acid burns Dizziness Nausea Vomiting Chronic risks: Asthma Bronchitis Dermatitis Cancer Liver damage Most common culprits Disinfectants cleaning products sterilants anesthetic gases mercury hazardous drugs pesticides Preventive measures Eliminate unnecessary chemicals or substitute with equally effective and less toxic chemicals Ensure adequate ventilation and use of closed systems when handling chemicals Provide medical surveillance and regular training for workers handling chemicals Apply safe work procedures for handling, storage, transportation and disposal of all chemicals according to the recommendations of the manufacturer Provide facilities for personal hygiene including washing and changing clothes Ensure safe disposal of empty or nearly empty pesticides containers Organize first aid and emergency care procedures in case of accidental exposures Provide and ensure usage of appropriate well fitted PPE IV.'
+  matched_terms:
+  - transportation
+  - disinfectants
+- shortname: NMD4201
+  open_activity: 1365
+  query: what is opsychological ocarcinomas
+  expected_passage_ref: NMD4201:file:1365:History taking.pdf
+  expected_span: 'HISTORY-TAKING I. Basic Data: a. NAME: oFor identification oEase of communication. oPsychological support to the patient since the patient is assured that his doctor knows him by name. oGive indirect clue about the socioeconomic status and background. HISTORY-TAKING I. Basic Data: b. AGE: oCertain diseases are peculiar to a particular age e.g. acute osteomyelitis and Wilms'' tumor of kidney are found mostly in infants while Sarcomas affect teenagers. oCarcinomas affect mostly patients passed 40 years of age. HISTORY-TAKING I. Basic Data: c. SEX: oCertain diseases are predominantly seen in a particular sex, as diseases of thyroid and urinary tract infections are more common in females, whereas Hemophilia affects males only. HISTORY-TAKING I. Basic Data: d. OCCUPATION: oSome diseases have shown their peculiar predilection towards certain occupations e.g. jobs requiring lifting heavy predispose to hernias while jobs requiring prolonged standing predispose to chronic venous insufficiency in the lower limbs. HISTORY-TAKING I. Basic Data: e. RESIDENCE: oA few surgical diseases have got geographical distribution e.g.'
+  matched_terms:
+  - opsychological
+  - ocarcinomas
+- shortname: NMD4201
+  open_activity: 1366
+  query: what is optimisation designation
+  expected_passage_ref: NMD4201:file:1366:History taking from a surgical point of view.pptx
+  expected_span: Complications Previous Anaesthetic Explain common and rare risks of operation Explain possible complications of operation Surgery Specific Aspects The process Before the history taking Prepare yourself (mentally sharp, appearance, confidence, welcoming gesture) Prepare the environment (comfortable setup for the patient, who is attending, chaperone) During Introduce yourself and designation Allow a space for the patient to express their thoughts and emotions Maintain professional body language Maintain a dialogue You may take notes After Summarize to patient Address concerns and manage expectations Accurate and thorough records Explain plan forward What is the problem ? Does it need a surgical fix? Is there a reasonable alternative ? Does the patient (+/- family, society) appreciate the intervention? What needs optimisation prior to surgery? What prevents surgical intervention? The surgical approach to history taking? Start with open ended questions, then focused questions Actively Listen Show Empathy Pictures and Diagrams very useful Ask if patient understands and has any questions Tips and Helpful Hints
+  matched_terms:
+  - optimisation
+  - designation
+- shortname: NMD4201
+  open_activity: 1367
+  query: what is disciplines practically
+  expected_passage_ref: NMD4201:file:1367:Introduction to Surgery.pptx
+  expected_span: Hard work will not get you faster but it will get you there stronger and well developed Follow a straightforward pathway. you life family Challenge Reward Challenge Reward Challenge Reward Surgery & Your goal in life Why should someone choose to be a surgeon? Potentially at home!! In the ward In the street In MDT In theatre Leadership & management Practically Career pathway Medical school 🡪 foundation training 🡪 basic surgical training 🡪 speciality training 🡪 real life career training Academia Build your network and sustainable collaborative Institutes Disciplines Researchers Record you activity and measure you Outputs Industrial Clinical Publication Audits Clinical Trial Return on research excellence framework Peer reviewed journals Book Book chapter Presentations Patents Innovations Don't omit yourself, your family, your primary function in life Surgery is not only the operation Strategy Operation/ intervention Indication & CI Choice of the environment Patient assessment postoperative
+  matched_terms:
+  - disciplines
+  - practically
+- shortname: NMD4201
+  open_activity: 1368
+  query: what is implementation introductionto
+  expected_passage_ref: NMD4201:file:1368:Introduction to surgery.pdf
+  expected_span: INTRODUCTIONTO SURGERY Walid Abu Arab Professor Cardiothoracic Surgery University of Alexandria WHY ONE MAY CHOOSE SURGERY AS SPECIALITY? WHY ONE MAY CHOOSE SURGERY AS SPECIALITY? WHY ONE MAY CHOOSE SURGERY AS SPECIALITY? NOTHING IS IMPOSSIBLE YOU CAN GET ALL……IF YOU DESERVE At certain age, for certain people, for certain specialties', in certain places . Surgery needs a Life style and affect your life style FACT • Surgery is a unique model for leadership and management. • You certainly can achieve those qualities in other branches of medicine or life in general. • Surgery accentuates those qualities. Leadership & Management In the ward In the Theater In MDT In the street Potentially at home Carrere Pathway Medical school Foundation training Basic surgical training Specialty training Real life career training Academia • There must be a minimum understanding of research. • The minimum is what enables you to appraise evidence and understand the methods of implementation.
+  matched_terms:
+  - implementation
+  - introductionto
+- shortname: NMD4201
+  open_activity: 1369
+  query: what is musculoskeletal claudication
+  expected_passage_ref: NMD4201:file:1369:approach to patient with pain.pdf
+  expected_span: 'Physician should ask the following questions: Where exactly is the pain? Does it radiate or stay localized? Radiating pain might suggest nerve involvement, while localized pain may suggest musculoskeletal issues. 2) Onset (Timing), Progress & Offset: Physician should ask about the timing of a pain, include its onset, progress and offset. The onset may be sudden or gradual. Sudden onset is typical of pain associated with an injury or with the blockage or rupture of an artery (as in myocardial infarction or a ruptured abdominal aorta) or the rupture of a viscus (such as a spontaneous pneumothorax or a perforated peptic ulcer). Most patien ts are be able to describe the precise time of onset in these examples. With a Gradual Onset , the timing may vary greatly. Acute inflammatory lesions may progress during a day or overnight, while claudication from degenerative arterial disease or the pain of an osteo -arthritic knee may build up over many years before the patient realizes that a vague ache is a specific problem and seeks medical advice. ‘Gradual’ in these examples implies a gradual awareness of the pain; it also indicates a gradual increase in the severity of the pain.'
+  matched_terms:
+  - musculoskeletal
+  - claudication
+- shortname: MED520
+  open_activity: 1104
+  query: what is attendance sessions
+  expected_passage_ref: MED520:file:1104:MED520 Assessment plan.pdf
+  expected_span: College of Medicine Dermatology (MED520) Assessment plan Week Exam Assessment plan W1 W2 W3 Exam 1 15 Marks W4 Final Exam Final MCQ 30 marks OSCE 25 marks Assessment Marks Continuous assessment (30%- 20 marks) Exam 1 (15 marks) Incision Academy course (Examination of dermatological lesions) + attendance of clinical sessions (5 marks) Clinical (30 % - 25 marks) OSCE Final (40% - 30 marks) MCQs
+  matched_terms:
+  - attendance
+  - sessions
+- shortname: MED520
+  open_activity: 1105
+  query: what is dysfynction intracavernosal
+  expected_passage_ref: MED520:file:1105:Sexual dysfunction.pdf
+  expected_span: '9 Sexual dysfunction SLOs By the end of this lecture, students will be able to 1. Define erectile dysfynction 2. Describe risk factors, pathophysiology, investigations and management lines. Definition: Erectile dysfunction (ED), formerly termed impotence, is defined as the failure to achieve or maintain a rigid penile erection suitable for satisfactory sexual intercourse Physiology of erection: The critical process in penile erection activity is the relaxation of the intracavernosal smooth muscle. This process permits increased blood flow into the corpora cavernosa, which fills with blood and compresses the emissary veins, reducing venous outflow. The paraventricular and medial preoptic nuclei of the hypothalamus control this process. Signals travel through the parasympathetic nervous system to the parasympathetic nerves of the S2-S4 sacral plexus and then to the penis via the cavernosal nerves. Nitric oxide released by the cavernous nerve terminals initiates the erectile process, while nitric oxide from endothelial cells acts to maintain it. Nitric oxide stimulates the production of cyclic guanosine monophosphate (GMP) when it enters the smooth muscle.'
+  matched_terms:
+  - dysfynction
+  - intracavernosal
+- shortname: MED520
+  open_activity: 1106
+  query: what is neovascularization revascularization
+  expected_passage_ref: MED520:google:1106:13ESoy2NUjyZB6K-DyM3yz6XGOKQcLHrC
+  expected_span: 'The most serious side effect is priapism (prolonged erection) 15 Penile prostheses: are a surgically invasive treatment typically offered when all other, less intrusive measures fail or are otherwise unacceptable. These devices are surgically inserted into the corpora cavernosa to restore erectile function artificially. There are 2 main types available: malleable and inflatable. The malleable prosthesis is physically manipulatable into a straight or bent position per the patient’s wishes. The inflatable type becomes erect by activating a small pump in the scrotum, which fills the inflatable penile balloon cylinders from a hidden fluid reservoir surgically implanted in the lower abdomen. Penile revascularization surgery is performed in patients with ED following pelvic/perineal trauma who have sustained an isolated vascular injury. Low-intensity shockwave therapy has shown efficacy, particularly in patients with severe ED not responding to PDE-5 inhibitors. Shockwave therapy increases angiogenic factors that promote neovascularization, restore smooth muscle activity, and attract stem cells.'
+  matched_terms:
+  - neovascularization
+  - revascularization
+- shortname: MED520
+  open_activity: 1107
+  query: what is hypogonadotropic deleteriously
+  expected_passage_ref: MED520:file:1107:Introduction to male infertility.pdf
+  expected_span: This definition also include the inability to carry a pregnancy to term, including miscarriages or stillbirths. Of all sexually active couples, 12%–15% are infertile, of which a male component can be identified 50% of the time either in isolation or in combination with a female factor. Idiopathic infertility remains a common diagnosis, with approximately 25% of patients not having an identifiable cause of infertility Causes of Male Infertility Pre-testicular Hypogonadotropic Hypogonadism Sperm production is deleteriously affected by a lack of testosterone (from low luteinizing hormone LH) and a lack of a stimulatory effect of Follicle stimulating hormone (FSH) on the Sertoli/germ cell complex. The most common causes of Hypogonadotropic Hypogonadism include elevated prolactin, medications, illicit drugs, and pituitary damage. Idiopathic Hypogonadotropic Hypogonadism ( Kallmann Syndrome) Idiopathic Hypogonadotropic Hypogonadism (IHH) is a rare disorder caused by defects in gonadotropin-releasing hormone, including its action and/or release, in the setting of an otherwise normal HPG axis .
+  matched_terms:
+  - hypogonadotropic
+  - deleteriously
+- shortname: MED520
+  open_activity: 1108
+  query: what is asthenozoospermia cryptozoospermia
+  expected_passage_ref: MED520:google:1108:1XO4BNKII6VQfSzLsPInM6l71HNCAaNCq
+  expected_span: 'Asthenozoospermia: <30% progressively motile spermatozoa. Absolute asthenozoospermia is when no sperm moves at all, but they are still viable and not dead. Azoospermia: No spermatozoa in the ejaculate. Cryptozoospermia: Spermatozoa absent from fresh preparation but observed in a centrifuged pellet. Leukospermia: >1 million white blood cells/mL ejaculate (also called pyospermia and leukocytospermia). Necrospermia or Necrozoospermia: Complete when all the sperm are dead on a fresh semen sample; incomplete if 5%-45% are still viable. Normospermia: All semen parameters within the acceptable reference limits. Oligozoospermia: Sperm concentration <15 million/mL; total sperm number <39 million/ejaculate. Severe if <5 million/mL. Oligo-astheno-teratozoospermia: Disturbance of all 3 parameters. Teratozoospermia: <4% morphologically normal spermatozoa. 11 Other tests: DNA integrity test: assesses the degree of sperm DNA fragmentation. The test should be done in those with recurrent miscarriages.[94] Genetic Screening: chromosomal testing may be indicated with azoospermia or severe oligozoospermia, Imaging: Ultrasound is the initial radiological method that is used to evaluate the testis.'
+  matched_terms:
+  - asthenozoospermia
+  - cryptozoospermia
+- shortname: MED5310
+  open_activity: 699
+  query: what is interoperability confidentiality
+  expected_passage_ref: MED5310:file:699:MED5310_L1_Healthcare_systems_Slides.pptx
+  expected_span: technology Clinical Workforce Physicians, Nurses and midwives, Pharmacists, Allied health professionals Public Health Workforce Epidemiologists, Health educators, Preventive medicine specialists Community-Based Workforce Community health workers (CHWs), Outreach and social care workers Health Management & Support Hospital administrators, Health informatics staff, Policy and planning personnel Dimensions Availability accessibility Competence Challenges Shortage Maldistribution Skill imbalance Retention & burnout Workforce Health Information systems Governance & leadership Medication & technology Accuracy & completeness data quality Timeliness near real-time where needed Interoperability systems “talk” to each other Usability fits clinical workflow Security & confidentiality governance, access control Fragmented platforms multiple non-communicating systems Data entry burden → clinician burnout Data quality issues missing/inaccurate fields Privacy concerns and regulatory gaps Infrastructure limits connectivity, hardware Financing Service delivery model Workforce Health Information systems Governance & leadership Hierarchical Direct access /specialist led Integrated Community based
+  matched_terms:
+  - interoperability
+  - confidentiality
+- shortname: MED5310
+  open_activity: 700
+  query: what is individuals populations
+  expected_passage_ref: MED5310:file:700:MED5310_L2_Quality_(Slides).pptx
+  expected_span: 'The degree to which health services for individuals and populations increase the likelihood of desired health outcomes.
+
+    What is not measured, cannot be improved.
+
+    The practice of comparing business processes and performance metrics to industry bests and best practices from other companies.'
+  matched_terms:
+  - individuals
+  - populations
+- shortname: MED5310
+  open_activity: 701
+  query: what is misunderstandings implementation
+  expected_passage_ref: MED5310:file:701:MED5310_L3_QI_Slides.pptx
+  expected_span: Steps for Successful Implementation Leadership Commitment Strong leadership commitment is essential for guiding the Lean implementation process and ensuring alignment with organizational goals. Staff Training Providing comprehensive training for staff is crucial to equip them with the necessary skills and knowledge for successful Lean practices. Identifying Areas for Improvement Conducting assessments to identify areas for improvement helps target specific processes that can enhance efficiency and patient care. Continuous Monitoring Regularly monitoring progress ensures that Lean initiatives remain on track and allows for timely adjustments when necessary. Challenges and Solutions Resistance to Change One of the main challenges in Lean implementation is the resistance from staff who are accustomed to existing processes. Lack of Training Insufficient training can hinder successful Lean implementation, leading to misunderstandings and ineffective practices. Misalignment of Goals A lack of alignment between Lean initiatives and organizational objectives can lead to fragmented efforts and poor outcomes.
+  matched_terms:
+  - misunderstandings
+  - implementation
+- shortname: MED5310
+  open_activity: 702
+  query: what is sterilization reproduction
+  expected_passage_ref: MED5310:file:702:١ آداب وقوانين مهنة الطب.pptx
+  expected_span: 'مادة 262- المرأة آلتي رضيت بتعاطي الأدوية مع علمها بها أو رضيت باستعمال الوسائل السالف ذكرها أو مكنت غيرها من استعمال تلك ال و سائل لها وتسبب الإسقاط عن ذلك حقيقة تعاقب بالعقوبة السابق ذكرها ) الحبس) . مادة 263- إذا كان المسقط طبيبا أو جراحا أو صيدليا أو قابل ة يحكم عليه بالأشغال الشاقة المؤقتة . إباحة الأعمال الطبية : سند الإباحة: المادة 60 عقوبات: “لا تسرى أحكام هذا القانون على كل فعل ارتكب بنية سليمة عملا بحق مقرر بمقتضى الشريعة ” شروط المشروعية : إجازة القانون (جريمة عمدية) رضاء المريض (جريمة عمدية) قصد العلاج (جريمة عمدية) اتباع الأصول العلمية (جريمة غير عمدية) Abortion for: Social or economic reasons Rape, adultery and incest Deformed or ill foetus Maternal health Ethical issues in reproduction Sterilization Ante and post natal screening Assisted reproduction (IVF) Fetal sex selection Surrogate mother Fetal reduction Sperm and ova banks الحبس مدّة لا تقلّ عن ثلاثة أشهر، ولا تزيد عن سنتين أو بغرامة لا تقلّ عن ألف جنيه، ولا تزيد عن خمسة آلاف جنيه.'
+  matched_terms:
+  - sterilization
+  - reproduction
+- shortname: MED5310
+  open_activity: 703
+  query: what is ﺍﻟﻜﻴﻤﻴﺎﺌﻴﻴﻥ ﻭﺘﻜﻨﻭﻟﻭﺠﻴﻭ
+  expected_passage_ref: MED5310:file:703:قانون المسئولية الطبيه.pdf
+  expected_span: ') ﺍﳌﺎﺩﺓ ﺍﻟﺮﺍﺑﻌﺔ ( ﻴ ، ﻭﻴﺍ ﻤـﻥ ﺍﻟﻴـﻭﻡ ﺍﻟﺘـﺎﻟﻲ ﻻﻨﻘﻀﺎﺀ ﺴﺘﺔ ﺃﺸﻬﺭ ﻤﻥ ﺘﺎﺭﻴﺦ ﻨﺸﺭﻩ . ﻴﺒﺼﻡ ﻫﺫﺍ ﺍﻟﻘﺎﻨﻭﻥ ﺒﺨﺎﺘﻡ ﺍﻟﺩﻭﻟﺔ ، ﻭﻴ. ﺼـﺩﺭ ﺒﺭﺌﺎﺴـﺔ ﺍﻟﺠﻤﻬﻭﺭﻴﺔ ﻓﻰ ٩٢ ﺸﻭﺍل ﺴﻨﺔ ٦٤٤١ ﻫ ) ﺍﻟﻤﻭﺍﻓﻕ ٨٢ ﺃﺒﺭﻴل ﺴﻨﺔ ٥٢٠٢ ﻡ ( . ﻋﺒﺪ ﺍﻟﻔﺘﺎﺡ ﺍﻟﺴﻴﺴﻰ اﻟﺠﺮﯾﺪة اﻟﺮﺳﻤﯿﺔ– اﻟﻌﺪد ٧١ )ﻣﻜﺮر( ﻓﻰ ٨٢ أﺑﺮﯾﻞ ﺳﻨﺔ ٥٢٠٢ ٣ ﻗﺎﻧﻮﻥ ﺗﻨﻈﻴﻢ ﺍﳌﺴﺌﻮﻟﻴﺔ ﺍﻟﻄﺒﻴﺔ ﻭﺳﻼﻣﺔ ﺍﳌﺮﻳﺾ ﺍﻟﻔﺼﻞ ﺍﻷﻭﻝ ﺍﻷﺣﻜﺎﻡ ﺍﻟﻌﺎﻣﺔ ﻟﻠﻤﺴﺌﻮﻟﻴﺔ ﺍﻟﻄﺒﻴﺔ ﻣﺎﺩﺓ )١( : ﻓﻲ ﺘﻁﺒﻴﻕ ﺃﺤﻜﺎﻡ ﻫﺫﺍ ﺍﻟﻘﺎﻨﻭﻥ، ﻴﻘﺼﺩ ﺒﺎﻟﻜﻠﻤﺎﺕ ﻭﺍﻟﻌﺒﺎﺭﺍ ﺕ ﺍﻟﺘﺎﻟﻴﺔ ﺍﻟﻤﻌﺎﻨﻲ ﺍﻟﻤﺒﻴﻨـﺔ ﻗﺭﻴﻥ ﻜل ﻤﻨﻬﺎ : ١ - ﺍﻟﻤﻬﻥ ﺍﻟﻁﺒﻴﺔ : ﺍﻟﻤﻬﻥ ﺍﻟﺘﻰ ﻴﺘﻡ ﻤﻥ ﺨﻼﻟﻬﺎ ﺘﻘﺩﻴﻡ ﺨﺩﻤﺎﺕ ﺍﻟﺭﻋﺎﻴـﺔ ﺍﻟﻁﺒﻴـﺔ ﺍﻟﻭﻗﺎﺌﻴﺔ ﺃﻭ ﺍﻟﺘﺸﺨﻴﺼﻴﺔ ﺃﻭ ﺍﻟﻌﻼﺠﻴﺔ ﺃﻭ ﺍﻟﺘﺄﻫﻴﻠﻴﺔ، ﻭﺍﻟﺘﻲ ﻴﺯﺍﻭﻟﻬﺎ ﺍﻷﻁﺒﺎﺀ، ﻭﺃﻁﺒﺎﺀ ﺍﻷﺴﻨﺎﻥ ﻭﺍﻟﺼﻴﺎﺩﻟﺔ، ﻭﻤﻤﺎﺭﺴﻭ ﻭﺃﺨﺼﺎﺌﻴﻭ ﺍﻟﻌﻼﺝ ﺍﻟﻁﺒﻴﻌﻲ، ﻭﺍﻟﺘﻤﺭﻴﺽ ﺍﻟﻌﺎﻟ ﻰ، ﻭﺨﺭﻴﺠﻭ ﻜﻠﻴﺎﺕ ﺍﻟﻌﻠﻭﻡ ﻤﻥ ﺍﻟﻜﻴﻤﻴﺎﺌﻴﻴﻥ ﻭﺍﻟﻔﻴﺯﻴﻘﻴﻴﻥ، ﻭﻫﻴﺌﺎﺕ ﺍﻟﺘﻤـﺭﻴﺽ ﺍﻟﻔﻨﻴـﺔ، ﻭﺍﻟﻔﻨﻴـﻭﻥ ﺍﻟـﺼﺤﻴﻭﻥ ﻭﺍﻟﻔﻨﻴﻭﻥ ﻓﻰ ﻓﺭﻭﻉ ﺍﻷﺸﻌﺔ ﻭﺍﻟﺘﺤﺎﻟﻴل ﻭﺍﻟﺒﺼﺭﻴﺎﺕ، ﻭﺘﻜﻨﻭﻟﻭﺠﻴﻭ ﺍﻟﻌﻠﻭﻡ ﺍﻟﺼﺤﻴﺔ ﺍﻟﺘﻁﺒﻴﻘﻴﺔ ﻭﻓﻨﻴﻭ ﺍﻹﺴﻌﺎﻑ، ﺍﻟﻤﺭﺨﺹ ﻟﻬﻡ ﺒﻤﺯﺍﻭﻟﺔ ﺍﻟﻤﻬﻨﺔ، ﻭﻏﻴﺭﻫﻡ ﻤﻥ ﺍﻟﻔﺌـﺎﺕ ﺍﻷﺨـﺭﻯ ﺍﻟﺘـﻰ ﻴﺼﺩﺭ ﺘﺸﺭﻴﻊ ﻴﺨﺹ ﻟﻬﻡ ﺒﻤﺯﺍﻭﻟﺘﻬﺎ.'
+  matched_terms:
+  - ﺍﻟﻜﻴﻤﻴﺎﺌﻴﻴﻥ
+  - ﻭﺘﻜﻨﻭﻟﻭﺠﻴﻭ

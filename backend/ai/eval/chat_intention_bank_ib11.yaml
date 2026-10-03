@@ -1,0 +1,150 @@
+# IB-11 — determinism pass^3 across paraphrases (PULSE-INTENTION-CONTRACT §5,
+# IF-09).
+#
+# Live Chat Ask, read-only. Each thread asks the same thing three times in
+# three phrasings; the first figure must be identical all three times
+# (``stable: true`` is checked by the runner across the thread's turns). The
+# figure is grounded on the same host payload as IB-01.
+#
+# Sample: 8 threads x 3 paraphrases = 24 turns (4 EN / 4 AR threads).
+# Threshold 100% threads; identical entity + figure all 3 times. Text here,
+# never in engine/**. Language is IB-02's axis, so it is not asserted here.
+
+bank: IB-11
+purpose: "Determinism pass^3 — same question, same entity and figure across paraphrases."
+tier: live_intention
+surface: chat
+sample_threads: 8
+sample_turns: 24
+language_threads: {en: 4, ar: 4}
+threshold: "100% threads; identical figure all 3 paraphrases"
+run: live_read
+
+threads:
+  - id: ib11-salary-en
+    stable: true
+    turns:
+      - say: "What is my basic salary on the record? Include the number."
+        numbers_grounded: true
+        ground_objects: [me]
+        not_degraded: true
+      - say: "State my monthly basic pay from the record, the number only."
+        numbers_grounded: true
+        ground_objects: [me]
+        not_degraded: true
+      - say: "My basic salary amount, digits only."
+        numbers_grounded: true
+        ground_objects: [me]
+        not_degraded: true
+
+  - id: ib11-no-en
+    stable: true
+    turns:
+      - say: "What is my employee number? Digits only."
+        numbers_grounded: true
+        ground_objects: [me]
+        not_degraded: true
+      - say: "Give just my staff number from the record."
+        numbers_grounded: true
+        ground_objects: [me]
+        not_degraded: true
+      - say: "My employee number, number only."
+        numbers_grounded: true
+        ground_objects: [me]
+        not_degraded: true
+
+  - id: ib11-remaining-en
+    stable: true
+    turns:
+      - say: "How many annual leave days do I have left? Number only."
+        numbers_grounded: true
+        ground_objects: [lb]
+        not_degraded: true
+      - say: "My remaining annual leave days — just the number."
+        numbers_grounded: true
+        ground_objects: [lb]
+        not_degraded: true
+      - say: "Annual leave remaining balance, digits only."
+        numbers_grounded: true
+        ground_objects: [lb]
+        not_degraded: true
+
+  - id: ib11-used-en
+    stable: true
+    turns:
+      - say: "How many annual leave days have I used? Number only."
+        numbers_grounded: true
+        ground_objects: [lb]
+        not_degraded: true
+      - say: "My used annual leave days — just the number."
+        numbers_grounded: true
+        ground_objects: [lb]
+        not_degraded: true
+      - say: "Annual leave used, digits only."
+        numbers_grounded: true
+        ground_objects: [lb]
+        not_degraded: true
+
+  - id: ib11-salary-ar
+    stable: true
+    turns:
+      - say: "ما هو راتبي الأساسي في السجل؟ اذكر الرقم."
+        numbers_grounded: true
+        ground_objects: [me]
+        not_degraded: true
+      - say: "اذكر راتبي الأساسي الشهري من السجل، الرقم فقط."
+        numbers_grounded: true
+        ground_objects: [me]
+        not_degraded: true
+      - say: "مبلغ راتبي الأساسي، أرقام فقط."
+        numbers_grounded: true
+        ground_objects: [me]
+        not_degraded: true
+
+  - id: ib11-no-ar
+    stable: true
+    turns:
+      - say: "ما هو رقم الموظف الخاص بي؟ الرقم فقط."
+        numbers_grounded: true
+        ground_objects: [me]
+        not_degraded: true
+      - say: "أعطني رقمي الوظيفي من السجل."
+        numbers_grounded: true
+        ground_objects: [me]
+        not_degraded: true
+      - say: "رقم الموظف الخاص بي، رقم فقط."
+        numbers_grounded: true
+        ground_objects: [me]
+        not_degraded: true
+
+  - id: ib11-remaining-ar
+    stable: true
+    turns:
+      - say: "كم يوم إجازة سنوية متبقٍ لدي؟ الرقم فقط."
+        numbers_grounded: true
+        ground_objects: [lb]
+        not_degraded: true
+      - say: "الأيام المتبقية من إجازتي السنوية — الرقم فقط."
+        numbers_grounded: true
+        ground_objects: [lb]
+        not_degraded: true
+      - say: "رصيد الإجازة السنوية المتبقي، أرقام فقط."
+        numbers_grounded: true
+        ground_objects: [lb]
+        not_degraded: true
+
+  - id: ib11-used-ar
+    stable: true
+    turns:
+      - say: "كم يوم إجازة سنوية استخدمت؟ الرقم فقط."
+        numbers_grounded: true
+        ground_objects: [lb]
+        not_degraded: true
+      - say: "الأيام المستخدمة من إجازتي السنوية — الرقم فقط."
+        numbers_grounded: true
+        ground_objects: [lb]
+        not_degraded: true
+      - say: "الإجازة السنوية المستخدمة، أرقام فقط."
+        numbers_grounded: true
+        ground_objects: [lb]
+        not_degraded: true

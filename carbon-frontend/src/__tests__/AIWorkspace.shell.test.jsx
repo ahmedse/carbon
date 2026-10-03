@@ -332,6 +332,18 @@ describe('AIWorkspace deferred activity panels', () => {
   });
 });
 
+describe('AIWorkspace progress canvas entry (Pulse Master)', () => {
+  it('shows the Progress button in the Pulse header and opens the canvas', async () => {
+    render(<AIWorkspace onClose={vi.fn()} />);
+
+    const progressButton = await screen.findByTestId('pulse-progress-button');
+    fireEvent.click(progressButton);
+
+    expect(await screen.findByTestId('pulse-progress-canvas')).toBeInTheDocument();
+    expect(screen.getByText('Excellence ladder')).toBeInTheDocument();
+  });
+});
+
 describe('AIWorkspace new-chat (Phase 24 — always creates a fresh thread)', () => {
   it('always creates a NEW chat even when an empty open thread exists (Phase 24 fix)', async () => {
     // Regression: reusing the empty "New Chat" placeholder thread made the

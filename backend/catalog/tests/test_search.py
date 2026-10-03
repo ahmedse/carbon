@@ -15,13 +15,19 @@ User = get_user_model()
 
 
 @pytest.fixture
-def org_unit_1(db):
-    return OrgUnit.objects.create(name='OrgUnit1', slug='org1')
+def root_org_unit(db):
+    """ADR-0028 single active root shared by the two scoped org fixtures."""
+    return OrgUnit.objects.create(name='RootOrg', slug='root-org')
 
 
 @pytest.fixture
-def org_unit_2(db):
-    return OrgUnit.objects.create(name='OrgUnit2', slug='org2')
+def org_unit_1(db, root_org_unit):
+    return OrgUnit.objects.create(name='OrgUnit1', slug='org1', parent=root_org_unit)
+
+
+@pytest.fixture
+def org_unit_2(db, root_org_unit):
+    return OrgUnit.objects.create(name='OrgUnit2', slug='org2', parent=root_org_unit)
 
 
 @pytest.fixture

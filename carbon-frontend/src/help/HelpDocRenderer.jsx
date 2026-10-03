@@ -30,6 +30,17 @@ import DashboardIcon from "@mui/icons-material/Dashboard";
 import EmojiObjectsIcon from "@mui/icons-material/EmojiObjects";
 import StarIcon from "@mui/icons-material/Star";
 import AppsIcon from "@mui/icons-material/Apps";
+import RouteIcon from "@mui/icons-material/Route";
+import FactCheckIcon from "@mui/icons-material/FactCheck";
+import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import MenuBookIcon from "@mui/icons-material/MenuBook";
+import EventAvailableIcon from "@mui/icons-material/EventAvailable";
+import LockClockIcon from "@mui/icons-material/LockClock";
+import CalculateIcon from "@mui/icons-material/Calculate";
+import WorkspacePremiumIcon from "@mui/icons-material/WorkspacePremium";
+import RequestQuoteIcon from "@mui/icons-material/RequestQuote";
+import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
+import AccountTreeIcon from "@mui/icons-material/AccountTree";
 
 // Icon token → MUI icon (kept in the renderer so help docs stay pure data).
 const ICONS = {
@@ -42,6 +53,17 @@ const ICONS = {
   export: InsightsIcon,
   collaborate: StarIcon,
   app: AppsIcon,
+  route: RouteIcon,
+  check: FactCheckIcon,
+  alert: WarningAmberIcon,
+  book: MenuBookIcon,
+  period: EventAvailableIcon,
+  lock: LockClockIcon,
+  calc: CalculateIcon,
+  tier: WorkspacePremiumIcon,
+  quote: RequestQuoteIcon,
+  handoff: SwapHorizIcon,
+  boundary: AccountTreeIcon,
 };
 
 const STEP_COLORS = ["primary.dark", "info.dark", "success.main", "warning.main", "secondary.main"];
