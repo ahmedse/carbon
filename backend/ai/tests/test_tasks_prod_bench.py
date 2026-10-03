@@ -109,3 +109,68 @@ def test_profile_hides_pay():
     assert check_host_grounded("profile", plan, Host(), "tok") == []
     leaked = {"final_response": "Ali Mohamed Saad AlAjmi 2407.622", "steps": []}
     assert "leaked me.basic_salary" in check_host_grounded("profile", leaked, Host(), "tok")
+
+
+def test_hidden_pay_fields_cover_basic_and_net():
+    from ai.eval import tasks_prod_bench as m
+
+    assert set(m._HIDDEN_PAY_FIELDS) == {"basic_salary", "net_pay"}
+    assert m._OBSERVE_STATUS_OK == frozenset({"completed", "completed_with_gaps"})
+
+    class NetHost:
+        def me(self):
+            return {"full_name": "Bilagot Panta Suerte", "net_pay": "1234.56"}
+
+    leaked = {"final_response": "Bilagot Panta Suerte net 1234.56", "steps": []}
+    assert "leaked me.net_pay" in check_host_grounded("profile", leaked, NetHost(), "tok")
+
+
+def test_non_completed_observe_is_a_miss():
+    plan = {
+        "status": "awaiting_approval",
+        "final_response": "Ali Mohamed Saad AlAjmi",
+        "steps": [],
+    }
+    misses = check_host_grounded("profile", plan, Host(), "tok")
+    assert any(m.startswith("status=") for m in misses)
+
+
+def test_mutation_step_in_observe_is_a_miss():
+    plan = {
+        "status": "completed",
+        "final_response": "Ali Mohamed Saad AlAjmi",
+        "steps": [{"tool_name": "submit_my_leave", "tool_args": {}, "is_mutation": True}],
+    }
+    misses = check_host_grounded("profile", plan, Host(), "tok")
+    assert "mutation step in observe" in misses
+
+
+def test_score_r4_never_reaches_without_a_taskso_file():
+    from ai.eval.tasks_prod_bench import score_r4
+
+    honest, note = score_r4(False, None)
+    assert honest == "partial"
+    assert "Taskso" in note
+    assert score_r4(True, None)[0] == "fail"
+    reached, note = score_r4(False, "PV2-tasks-taskso-2026-10-01.json")
+    assert reached == "reached"
+    assert "PV2-tasks-taskso-2026-10-01.json" in note
+
+
+def test_score_r7_missing_and_r8_fail_are_pinned():
+    from ai.eval.tasks_prod_bench import score_r7, score_r8
+
+    assert score_r7()[0] == "missing"
+    assert "STACK-HOLD" in score_r7()[1]
+    assert score_r8()[0] == "fail"
+    assert "2026-09-23" in score_r8()[1]
+
+
+def test_kpis_carry_falsified_by_and_r12_fails_off_file():
+    kpis = {k["id"]: k for k in score_kpis(_scored_rows())}
+    assert all(k.get("falsified_by") for k in kpis.values())
+    assert kpis["R4"]["tier"] == "live_browser"
+    assert kpis["R7"]["honest"] == "missing"
+    assert kpis["R8"]["honest"] == "fail"
+    assert kpis["R12"]["honest"] == "fail"
+

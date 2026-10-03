@@ -1,0 +1,457 @@
+{
+  "date": "2026-10-03",
+  "surface": "plan",
+  "offline": {
+    "total": 73,
+    "passed": 73,
+    "gate_pass": true,
+    "path_bank": {
+      "n": 41,
+      "passed": 41,
+      "misses": [],
+      "gate_pass": true
+    },
+    "contract_bank": {
+      "n": 32,
+      "passed": 32,
+      "misses": [],
+      "gate_pass": true
+    },
+    "inventory": [
+      {
+        "id": "ap-001",
+        "check": "seed",
+        "bank": "agent_plan_bank"
+      },
+      {
+        "id": "ap-002",
+        "check": "seed",
+        "bank": "agent_plan_bank"
+      },
+      {
+        "id": "ap-003",
+        "check": "seed",
+        "bank": "agent_plan_bank"
+      },
+      {
+        "id": "ap-004",
+        "check": "seed",
+        "bank": "agent_plan_bank"
+      },
+      {
+        "id": "ap-013",
+        "check": "seed",
+        "bank": "agent_plan_bank"
+      },
+      {
+        "id": "ap-014",
+        "check": "seed",
+        "bank": "agent_plan_bank"
+      },
+      {
+        "id": "ap-005",
+        "check": "continuity",
+        "bank": "agent_plan_bank"
+      },
+      {
+        "id": "ap-015",
+        "check": "continuity",
+        "bank": "agent_plan_bank"
+      },
+      {
+        "id": "ap-016",
+        "check": "continuity",
+        "bank": "agent_plan_bank"
+      },
+      {
+        "id": "ap-006",
+        "check": "commit",
+        "bank": "agent_plan_bank"
+      },
+      {
+        "id": "ap-007",
+        "check": "commit",
+        "bank": "agent_plan_bank"
+      },
+      {
+        "id": "ap-008",
+        "check": "commit",
+        "bank": "agent_plan_bank"
+      },
+      {
+        "id": "ap-009",
+        "check": "commit",
+        "bank": "agent_plan_bank"
+      },
+      {
+        "id": "ap-010",
+        "check": "commit",
+        "bank": "agent_plan_bank"
+      },
+      {
+        "id": "ap-017",
+        "check": "commit",
+        "bank": "agent_plan_bank"
+      },
+      {
+        "id": "ap-018",
+        "check": "commit",
+        "bank": "agent_plan_bank"
+      },
+      {
+        "id": "ap-011",
+        "check": "ess_confirm",
+        "bank": "agent_plan_bank"
+      },
+      {
+        "id": "ap-012",
+        "check": "chat_guard",
+        "bank": "agent_plan_bank"
+      },
+      {
+        "id": "ap-019",
+        "check": "chat_guard",
+        "bank": "agent_plan_bank"
+      },
+      {
+        "id": "ap-020",
+        "check": "proposal",
+        "bank": "agent_plan_bank"
+      },
+      {
+        "id": "ap-021",
+        "check": "proposal",
+        "bank": "agent_plan_bank"
+      },
+      {
+        "id": "ap-022",
+        "check": "proposal",
+        "bank": "agent_plan_bank"
+      },
+      {
+        "id": "ap-023",
+        "check": "proposal",
+        "bank": "agent_plan_bank"
+      },
+      {
+        "id": "ap-024",
+        "check": "proposal",
+        "bank": "agent_plan_bank"
+      },
+      {
+        "id": "ap-025",
+        "check": "proposal",
+        "bank": "agent_plan_bank"
+      },
+      {
+        "id": "ap-026",
+        "check": "proposal",
+        "bank": "agent_plan_bank"
+      },
+      {
+        "id": "ap-027",
+        "check": "await_user",
+        "bank": "agent_plan_bank"
+      },
+      {
+        "id": "ap-028",
+        "check": "await_user",
+        "bank": "agent_plan_bank"
+      },
+      {
+        "id": "ap-029",
+        "check": "await_user",
+        "bank": "agent_plan_bank"
+      },
+      {
+        "id": "ap-030",
+        "check": "await_user",
+        "bank": "agent_plan_bank"
+      },
+      {
+        "id": "ap-031",
+        "check": "guard",
+        "bank": "agent_plan_bank"
+      },
+      {
+        "id": "ap-032",
+        "check": "guard",
+        "bank": "agent_plan_bank"
+      },
+      {
+        "id": "ap-033",
+        "check": "guard",
+        "bank": "agent_plan_bank"
+      },
+      {
+        "id": "ap-034",
+        "check": "guard",
+        "bank": "agent_plan_bank"
+      },
+      {
+        "id": "ap-035",
+        "check": "guard",
+        "bank": "agent_plan_bank"
+      },
+      {
+        "id": "ap-036",
+        "check": "guard",
+        "bank": "agent_plan_bank"
+      },
+      {
+        "id": "ap-037",
+        "check": "affirmation",
+        "bank": "agent_plan_bank"
+      },
+      {
+        "id": "ap-038",
+        "check": "affirmation",
+        "bank": "agent_plan_bank"
+      },
+      {
+        "id": "ap-039",
+        "check": "affirmation",
+        "bank": "agent_plan_bank"
+      },
+      {
+        "id": "ap-040",
+        "check": "affirmation",
+        "bank": "agent_plan_bank"
+      },
+      {
+        "id": "ap-041",
+        "check": "contract",
+        "bank": "agent_plan_bank"
+      },
+      {
+        "id": "aec8f39a-within-band",
+        "check": "contract",
+        "bank": "plan_contract_bank"
+      },
+      {
+        "id": "aec8f39a-over-band",
+        "check": "contract",
+        "bank": "plan_contract_bank"
+      },
+      {
+        "id": "aec8f39a-both-branches",
+        "check": "contract",
+        "bank": "plan_contract_bank"
+      },
+      {
+        "id": "0bd5072d-workforce",
+        "check": "contract",
+        "bank": "plan_contract_bank"
+      },
+      {
+        "id": "declared-output-uncovered",
+        "check": "contract",
+        "bank": "plan_contract_bank"
+      },
+      {
+        "id": "declared-output-covered",
+        "check": "contract",
+        "bank": "plan_contract_bank"
+      },
+      {
+        "id": "declared-output-unnamed",
+        "check": "contract",
+        "bank": "plan_contract_bank"
+      },
+      {
+        "id": "declared-output-live-shape",
+        "check": "contract",
+        "bank": "plan_contract_bank"
+      },
+      {
+        "id": "declared-output-eight-step",
+        "check": "contract",
+        "bank": "plan_contract_bank"
+      },
+      {
+        "id": "declared-output-pay-structure",
+        "check": "contract",
+        "bank": "plan_contract_bank"
+      },
+      {
+        "id": "declared-output-pay-structure-p90",
+        "check": "contract",
+        "bank": "plan_contract_bank"
+      },
+      {
+        "id": "declared-output-kuwaitization",
+        "check": "contract",
+        "bank": "plan_contract_bank"
+      },
+      {
+        "id": "declared-output-kuwaitization-p90",
+        "check": "contract",
+        "bank": "plan_contract_bank"
+      },
+      {
+        "id": "declared-output-no-hop-leave-list",
+        "check": "contract",
+        "bank": "plan_contract_bank"
+      },
+      {
+        "id": "declared-output-no-hop-loan-list",
+        "check": "contract",
+        "bank": "plan_contract_bank"
+      },
+      {
+        "id": "declared-output-leave-utilization",
+        "check": "contract",
+        "bank": "plan_contract_bank"
+      },
+      {
+        "id": "declared-output-leave-utilization-p90",
+        "check": "contract",
+        "bank": "plan_contract_bank"
+      },
+      {
+        "id": "declared-output-loan-book",
+        "check": "contract",
+        "bank": "plan_contract_bank"
+      },
+      {
+        "id": "declared-output-loan-book-p90",
+        "check": "contract",
+        "bank": "plan_contract_bank"
+      },
+      {
+        "id": "declared-output-gosi",
+        "check": "contract",
+        "bank": "plan_contract_bank"
+      },
+      {
+        "id": "declared-output-gosi-p90",
+        "check": "contract",
+        "bank": "plan_contract_bank"
+      },
+      {
+        "id": "declared-output-cert-expiry",
+        "check": "contract",
+        "bank": "plan_contract_bank"
+      },
+      {
+        "id": "declared-output-cert-expiry-p90",
+        "check": "contract",
+        "bank": "plan_contract_bank"
+      },
+      {
+        "id": "declared-output-leave-presence",
+        "check": "contract",
+        "bank": "plan_contract_bank"
+      },
+      {
+        "id": "declared-output-leave-presence-p90",
+        "check": "contract",
+        "bank": "plan_contract_bank"
+      },
+      {
+        "id": "sibling-exports-are-one-effect",
+        "check": "contract",
+        "bank": "plan_contract_bank"
+      },
+      {
+        "id": "two-writes-without-a-guard-branch",
+        "check": "contract",
+        "bank": "plan_contract_bank"
+      },
+      {
+        "id": "exclusive-guards-allow-two-writes",
+        "check": "contract",
+        "bank": "plan_contract_bank"
+      },
+      {
+        "id": "guarded-within-band-keeps-the-export",
+        "check": "contract",
+        "bank": "plan_contract_bank"
+      },
+      {
+        "id": "review-cannot-call-a-tool",
+        "check": "contract",
+        "bank": "plan_contract_bank"
+      },
+      {
+        "id": "review-needs-something-to-review",
+        "check": "contract",
+        "bank": "plan_contract_bank"
+      },
+      {
+        "id": "tool-less-hop-feeding-an-export-is-a-gap",
+        "check": "contract",
+        "bank": "plan_contract_bank"
+      }
+    ]
+  },
+  "live_banks": [
+    {
+      "bank": "PL-01",
+      "file": "chat_plan_bank_pl01.yaml",
+      "purpose": "Ask/Plan boundary — a read never gets a plan card; a goal gets one plan/handoff and no host write.",
+      "tier": "live_plan",
+      "sample_threads": 8,
+      "sample_turns": 16,
+      "language_threads": {
+        "en": 4,
+        "ar": 4
+      },
+      "threshold": "100% rows; read -> no plan card; goal -> one plan/handoff; no host write",
+      "precondition": null,
+      "evidence_pattern": "PV2-plan-PL01-*.json",
+      "honest": {
+        "status": "missing",
+        "runs": 0,
+        "close_runs": 3,
+        "evidence": []
+      }
+    },
+    {
+      "bank": "PL-02",
+      "file": "chat_plan_bank_pl02.yaml",
+      "purpose": "Plan revision is typed state — a discuss seed stays a revision and 'apply' is a 0-LLM handoff to Agent.",
+      "tier": "live_plan",
+      "sample_threads": 4,
+      "sample_turns": 8,
+      "language_threads": {
+        "en": 2,
+        "ar": 2
+      },
+      "threshold": "100% rows; apply -> plan/handoff with llm_calls=0; no host write",
+      "precondition": "operator seeds an Agent plan and opens the FE Discuss handoff",
+      "evidence_pattern": "PV2-plan-PL02-*.json",
+      "honest": {
+        "status": "missing",
+        "runs": 0,
+        "close_runs": 3,
+        "evidence": []
+      }
+    },
+    {
+      "bank": "PL-03",
+      "file": "chat_plan_bank_pl03.yaml",
+      "purpose": "A goal missing a fact asks one question — it never drafts silently, invents a value, or host-mutates.",
+      "tier": "live_plan",
+      "sample_threads": 4,
+      "sample_turns": 4,
+      "language_threads": {
+        "en": 2,
+        "ar": 2
+      },
+      "threshold": "100% rows; asks a question; not degraded; no host write",
+      "precondition": null,
+      "evidence_pattern": "PV2-plan-PL03-*.json",
+      "honest": {
+        "status": "missing",
+        "runs": 0,
+        "close_runs": 3,
+        "evidence": []
+      }
+    }
+  ],
+  "live_reached": 0,
+  "live_total": 3,
+  "rule": "Honest = worst of the last CLOSE_RUNS=3 full live runs. No live evidence → missing. Offline pass never closes a live Plan rung. Never merged into the Chat Ask / Tasks / ladder scores. L6/L7 not claimed.",
+  "blocked": "The local cell is aastmt/carbon; the nibras cell is down. Live PL banks stay missing until a nibras cell is up — no brand switch, no STACK-HOLD (every PL bank is read-only)."
+}

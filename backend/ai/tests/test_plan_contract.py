@@ -377,6 +377,7 @@ def test_golden_bank_both_briefs():
                 is_mutation=s.get("is_mutation", False),
                 gap=s.get("gap"),
                 guard=s.get("guard"),
+                agent_role=s.get("agent_role", "orchestrator"),
             )
             for s in case["steps"]
         ]

@@ -392,3 +392,111 @@ cases:
         tool_name: export_document
         tool_args: {title: Report, columns: [p90]}
         depends_on: [0]
+  - id: sibling-exports-are-one-effect
+    brief: xlsx + pdf off the same closed aggregate is one file write
+    blocking: []
+    steps:
+      - step_id: 0
+        intent: pay by org
+        tool_name: call_host_api
+        tool_args: {api_name: analyze_committed_pay, dimension: org_unit}
+      - step_id: 1
+        intent: workbook
+        tool_name: export_document
+        tool_args: {title: Pay, format: xlsx}
+        depends_on: [0]
+      - step_id: 2
+        intent: brief
+        tool_name: export_document
+        tool_args: {title: Pay, format: pdf}
+        depends_on: [0]
+  - id: two-writes-without-a-guard-branch
+    brief: two effects neither of which depends on the other
+    blocking: [branch]
+    steps:
+      - step_id: 0
+        intent: validate first
+        tool_name: call_host_api
+        tool_args: {api_name: validate_payroll_run}
+      - step_id: 1
+        intent: validate second
+        tool_name: call_host_api
+        tool_args: {api_name: validate_payroll_run}
+  - id: exclusive-guards-allow-two-writes
+    brief: the two effects are mutually exclusive on one field
+    blocking: []
+    steps:
+      - step_id: 0
+        intent: band
+        depends_on: []
+      - step_id: 1
+        intent: validate when within band
+        tool_name: call_host_api
+        tool_args: {api_name: validate_payroll_run}
+        depends_on: [0]
+        guard: {step: 0, field: within_band, value: true}
+      - step_id: 2
+        intent: validate the other branch
+        tool_name: call_host_api
+        tool_args: {api_name: validate_payroll_run}
+        depends_on: [0]
+        guard: {step: 0, field: within_band, value: false}
+  - id: guarded-within-band-keeps-the-export
+    brief: a guarded board pack is a legal single branch
+    blocking: []
+    steps:
+      - step_id: 0
+        intent: variance read
+        tool_name: call_host_api
+        tool_args: {api_name: list_payroll_runs}
+      - step_id: 1
+        intent: band
+        depends_on: [0]
+      - step_id: 2
+        intent: read lines bound to the run
+        tool_name: call_host_api
+        tool_args: {api_name: list_payroll_runs}
+        depends_on: [1]
+      - step_id: 3
+        intent: board pack
+        tool_name: export_document
+        tool_args: {title: Board, columns: [id, status]}
+        depends_on: [2]
+        guard: {step: 1, field: within_band, value: true}
+  - id: review-cannot-call-a-tool
+    brief: a review step that calls a tool is refused
+    blocking: [review]
+    steps:
+      - step_id: 0
+        intent: read runs
+        tool_name: call_host_api
+        tool_args: {api_name: list_payroll_runs}
+      - step_id: 1
+        intent: pass critic
+        tool_name: call_host_api
+        tool_args: {api_name: validate_payroll_run}
+        depends_on: [0]
+        agent_role: critic
+  - id: review-needs-something-to-review
+    brief: a review step with no dependency is refused
+    blocking: [review]
+    steps:
+      - step_id: 0
+        intent: pass critic
+        agent_role: critic
+  - id: tool-less-hop-feeding-an-export-is-a-gap
+    brief: a compute hop with no catalog capability in front of a file
+    blocking: [output_fit]
+    steps:
+      - step_id: 0
+        intent: lines
+        tool_name: call_host_api
+        tool_args: {api_name: list_payslip_lines}
+      - step_id: 1
+        intent: compute groups
+        depends_on: [0]
+      - step_id: 2
+        intent: export
+        tool_name: export_document
+        tool_args: {title: Report, columns: [amount]}
+        depends_on: [1]

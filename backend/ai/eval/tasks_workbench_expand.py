@@ -40,6 +40,12 @@ def expand_core() -> list[dict]:
     cases.extend(_core_nested())
     cases.extend(_core_hidden())
     cases.extend(_core_binds())
+    cases.extend(_core_consent_order())
+    cases.extend(_core_citation_strict())
+    cases.extend(_core_toolsets())
+    cases.extend(_core_compensate_core())
+    cases.extend(_core_edit_consent())
+    cases.extend(_core_hidden_broad())
     return cases
 
 
@@ -507,6 +513,366 @@ def _core_hidden() -> list[dict]:
             "expect": {
                 "valid": True,
                 "args": {"read": {"ref": "a1"}},
+                "hidden_on": {"read": [hidden]},
+            },
+        })
+    return cases
+
+
+def _core_consent_order() -> list[dict]:
+    """Consent must precede every mutation. Order and separation are structural."""
+    cases: list[dict] = []
+    kinds = ("wait", "observe", "subflow")
+    for kind in kinds:
+        cases.append({
+            "id": f"core.gen.consent.{kind}.before",
+            "lane": "graph",
+            "brief": f"{kind} then a human, then a write.",
+            "graph": {
+                "entry": "step",
+                "nodes": [
+                    {"id": "step", "node_type": kind},
+                    {"id": "ask", "node_type": "human"},
+                    {"id": "write", "node_type": "task", "tool_name": "write_record", "is_mutation": True},
+                    {"id": "done", "node_type": "succeed"},
+                ],
+                "edges": [
+                    {"source": "step", "target": "ask"},
+                    {"source": "ask", "target": "write"},
+                    {"source": "write", "target": "done"},
+                ],
+            },
+            "expect": {"valid": True, "path": ["step", "ask", "write", "done"], "mutations_gated": True},
+        })
+        cases.append({
+            "id": f"core.gen.consent.{kind}.write-before-human",
+            "lane": "graph",
+            "brief": f"{kind} writes before the human. That is a trap.",
+            "graph": {
+                "entry": "step",
+                "nodes": [
+                    {"id": "step", "node_type": kind},
+                    {"id": "write", "node_type": "task", "tool_name": "write_record", "is_mutation": True},
+                    {"id": "ask", "node_type": "human"},
+                    {"id": "done", "node_type": "succeed"},
+                ],
+                "edges": [
+                    {"source": "step", "target": "write"},
+                    {"source": "write", "target": "ask"},
+                    {"source": "ask", "target": "done"},
+                ],
+            },
+            "expect": {"valid": True, "path": ["step", "write", "ask", "done"], "detects": "ungated_mutation"},
+        })
+        cases.append({
+            "id": f"core.gen.consent.{kind}.two-humans-differ",
+            "lane": "graph",
+            "brief": "Two humans with different roles precede the write.",
+            "graph": {
+                "entry": "step",
+                "nodes": [
+                    {"id": "step", "node_type": kind},
+                    {"id": "ask", "node_type": "human", "meta": {"role": "requester"}},
+                    {"id": "review", "node_type": "human", "meta": {"role": "approver"}},
+                    {"id": "write", "node_type": "task", "tool_name": "write_record", "is_mutation": True},
+                    {"id": "done", "node_type": "succeed"},
+                ],
+                "edges": [
+                    {"source": "step", "target": "ask"},
+                    {"source": "ask", "target": "review"},
+                    {"source": "review", "target": "write"},
+                    {"source": "write", "target": "done"},
+                ],
+            },
+            "expect": {
+                "valid": True,
+                "path": ["step", "ask", "review", "write", "done"],
+                "roles_differ": ["ask", "review"],
+                "mutations_gated": True,
+            },
+        })
+        cases.append({
+            "id": f"core.gen.consent.{kind}.two-humans-same",
+            "lane": "graph",
+            "brief": "Two humans who share a role do not separate duties.",
+            "graph": {
+                "entry": "step",
+                "nodes": [
+                    {"id": "step", "node_type": kind},
+                    {"id": "ask", "node_type": "human", "meta": {"role": "reviewer"}},
+                    {"id": "review", "node_type": "human", "meta": {"role": "reviewer"}},
+                    {"id": "write", "node_type": "task", "tool_name": "write_record", "is_mutation": True},
+                    {"id": "done", "node_type": "succeed"},
+                ],
+                "edges": [
+                    {"source": "step", "target": "ask"},
+                    {"source": "ask", "target": "review"},
+                    {"source": "review", "target": "write"},
+                    {"source": "write", "target": "done"},
+                ],
+            },
+            "expect": {
+                "valid": True,
+                "path": ["step", "ask", "review", "write", "done"],
+                "detects": "same_role",
+                "humans": ["ask", "review"],
+                "mutations_gated": True,
+            },
+        })
+    return cases
+
+
+def _core_citation_strict() -> list[dict]:
+    """Citation refuses when any token is missing. Match is case-insensitive."""
+    cases: list[dict] = []
+    cases.append({
+        "id": "core.gen.cite.empty-tokens",
+        "lane": "retrieval",
+        "brief": "No tokens means no citation, even with passages present.",
+        "passages": [{"id": "p1", "text": "Code ALPHA ceiling is 15."}],
+        "tokens": [],
+        "expect": {"cited": [], "refuses_when_empty": True},
+    })
+    cases.append({
+        "id": "core.gen.cite.duplicate-hits",
+        "lane": "retrieval",
+        "brief": "Two passages that both hold every token are both cited, in order.",
+        "passages": [
+            {"id": "p1", "text": "Code ALPHA ceiling is 15."},
+            {"id": "p2", "text": "Note: ALPHA ceiling 15 applies."},
+        ],
+        "tokens": ["ALPHA", "15"],
+        "expect": {"cited": ["p1", "p2"], "refuses_when_empty": True},
+    })
+    cases.append({
+        "id": "core.gen.cite.single-token",
+        "lane": "retrieval",
+        "brief": "One token cites only the passage that carries it.",
+        "passages": [
+            {"id": "p1", "text": "Code ALPHA ceiling is 15."},
+            {"id": "p2", "text": "Code BETA ceiling is 9."},
+        ],
+        "tokens": ["BETA"],
+        "expect": {"cited": ["p2"], "refuses_when_empty": True},
+    })
+    cases.append({
+        "id": "core.gen.cite.missing-one-of-three",
+        "lane": "retrieval",
+        "brief": "A passage missing one token of three is not cited.",
+        "passages": [
+            {"id": "hit", "text": "Code ALPHA ceiling is 15 units."},
+            {"id": "miss", "text": "Code ALPHA ceiling is 15."},
+        ],
+        "tokens": ["ALPHA", "15", "units"],
+        "expect": {"cited": ["hit"], "refuses_when_empty": True},
+    })
+    cases.append({
+        "id": "core.gen.cite.arabic-token",
+        "lane": "retrieval",
+        "brief": "Non-Latin tokens cite by substring, case-insensitively.",
+        "passages": [
+            {"id": "hit", "text": "رمز الفا والسقف 15."},
+            {"id": "decoy", "text": "رمز بيتا والسقف 9."},
+        ],
+        "tokens": ["الفا", "15"],
+        "expect": {"cited": ["hit"], "refuses_when_empty": True},
+    })
+    return cases
+
+
+def _core_toolsets() -> list[dict]:
+    """Roles and tool sets. A mutation tool on a readonly role is a trap."""
+    cases: list[dict] = []
+    for role in ("domain_specialist", "researcher", "planner", "critic"):
+        cases.append({
+            "id": f"core.gen.toolset.{role}.write-trap",
+            "lane": "agents",
+            "brief": f"A {role} that carries a write tool is a trap.",
+            "agents": [
+                {"role": "orchestrator", "tools": ["search_knowledge"], "mutation_tools": []},
+                {"role": role, "tools": ["search_knowledge", "write_record"], "mutation_tools": ["write_record"]},
+                {"role": "critic" if role != "critic" else "researcher", "tools": [], "mutation_tools": []},
+            ],
+            "expect": {"detects": "mutation_on_readonly", "readonly_roles": [role]},
+        })
+        cases.append({
+            "id": f"core.gen.toolset.{role}.readonly",
+            "lane": "agents",
+            "brief": f"{role} stays readonly with read tools only.",
+            "agents": [
+                {"role": "orchestrator", "tools": ["search_knowledge"], "mutation_tools": []},
+                {"role": role, "tools": ["read_record", "search_knowledge"], "mutation_tools": []},
+                {"role": "critic", "tools": [], "mutation_tools": []},
+            ],
+            "expect": {"readonly_roles": [role], "critic_tools": []},
+        })
+    cases.append({
+        "id": "core.gen.toolset.full-fanout-readonly",
+        "lane": "agents",
+        "brief": "The whole fan-out stays readonly. The critic holds no tools.",
+        "agents": [
+            {"role": "orchestrator", "tools": ["search_knowledge", "read_record"], "mutation_tools": []},
+            {"role": "researcher", "tools": ["search_knowledge"], "mutation_tools": []},
+            {"role": "planner", "tools": ["search_knowledge"], "mutation_tools": []},
+            {"role": "domain_specialist", "tools": ["read_record"], "mutation_tools": []},
+            {"role": "critic", "tools": [], "mutation_tools": []},
+        ],
+        "expect": {
+            "roles": ["orchestrator", "researcher", "planner", "domain_specialist", "critic"],
+            "readonly_roles": ["researcher", "critic"],
+            "critic_tools": [],
+        },
+    })
+    return cases
+
+
+def _core_compensate_core() -> list[dict]:
+    """A reversal is itself a mutation and still sits behind a human."""
+    return [
+        {
+            "id": "core.gen.compensate.gated",
+            "lane": "graph",
+            "brief": "Read, human, write, then a named reversal.",
+            "graph": {
+                "entry": "read",
+                "nodes": [
+                    {"id": "read", "node_type": "task", "tool_name": "read_record"},
+                    {"id": "ask", "node_type": "human"},
+                    {"id": "write", "node_type": "task", "tool_name": "write_record", "is_mutation": True, "compensation": "undo"},
+                    {"id": "undo", "node_type": "task", "tool_name": "undo_record", "is_mutation": True},
+                    {"id": "done", "node_type": "succeed"},
+                ],
+                "edges": [
+                    {"source": "read", "target": "ask"},
+                    {"source": "ask", "target": "write"},
+                    {"source": "write", "target": "done"},
+                    {"source": "write", "target": "undo", "guard": "undo == true"},
+                ],
+            },
+            "expect": {"valid": True, "path_has": ["ask", "write"], "compensation": {"write": "undo"}, "mutations_gated": True},
+        },
+        {
+            "id": "core.gen.compensate.ungated-trap",
+            "lane": "graph",
+            "brief": "A reversal with no human is a trap.",
+            "graph": {
+                "entry": "read",
+                "nodes": [
+                    {"id": "read", "node_type": "task", "tool_name": "read_record"},
+                    {"id": "write", "node_type": "task", "tool_name": "write_record", "is_mutation": True, "compensation": "undo"},
+                    {"id": "undo", "node_type": "task", "tool_name": "undo_record", "is_mutation": True},
+                    {"id": "done", "node_type": "succeed"},
+                ],
+                "edges": [
+                    {"source": "read", "target": "write"},
+                    {"source": "write", "target": "done"},
+                    {"source": "write", "target": "undo", "guard": "undo == true"},
+                ],
+            },
+            "expect": {"valid": True, "compensation": {"write": "undo"}, "detects": "ungated_mutation"},
+        },
+        {
+            "id": "core.gen.compensate.undo-taken-gated",
+            "lane": "graph",
+            "brief": "The reversal branch is walked and still sits behind the human.",
+            "context": {"undo": True},
+            "graph": {
+                "entry": "ask",
+                "nodes": [
+                    {"id": "ask", "node_type": "human"},
+                    {"id": "write", "node_type": "task", "tool_name": "write_record", "is_mutation": True, "compensation": "undo"},
+                    {"id": "undo", "node_type": "task", "tool_name": "undo_record", "is_mutation": True},
+                    {"id": "done", "node_type": "succeed"},
+                ],
+                "edges": [
+                    {"source": "ask", "target": "write"},
+                    {"source": "write", "target": "undo", "guard": "undo == true"},
+                    {"source": "write", "target": "done", "is_default": True},
+                    {"source": "undo", "target": "done"},
+                ],
+            },
+            "expect": {
+                "valid": True,
+                "path": ["ask", "write", "undo", "done"],
+                "compensation": {"write": "undo"},
+                "mutations_gated": True,
+            },
+        },
+    ]
+
+
+def _core_edit_consent() -> list[dict]:
+    """An edit may re-route the graph. Consent must follow the write."""
+    return [
+        {
+            "id": "core.gen.edit.reroute-past-consent",
+            "lane": "graph",
+            "brief": "An edit flips the guard so the write is reached without the human.",
+            "context": {"flag": True},
+            "edits": [{"op": "set_context", "context": {"flag": False}}],
+            "graph": {
+                "entry": "read",
+                "nodes": [
+                    {"id": "read", "node_type": "task", "tool_name": "read_record"},
+                    {"id": "gate", "node_type": "choice"},
+                    {"id": "ask", "node_type": "human"},
+                    {"id": "write", "node_type": "task", "tool_name": "write_record", "is_mutation": True},
+                    {"id": "done", "node_type": "succeed"},
+                ],
+                "edges": [
+                    {"source": "read", "target": "gate"},
+                    {"source": "gate", "target": "ask", "guard": "flag == true"},
+                    {"source": "gate", "target": "write", "is_default": True},
+                    {"source": "ask", "target": "write"},
+                    {"source": "write", "target": "done"},
+                ],
+            },
+            "expect": {"valid": True, "path": ["read", "gate", "write", "done"], "detects": "ungated_mutation"},
+        },
+        {
+            "id": "core.gen.edit.drop-consent-edge",
+            "lane": "graph",
+            "brief": "Dropping the consent edge leaves the write unreachable, so the edit is invalid.",
+            "context": {"flag": True},
+            "edits": [{"op": "drop_edge", "source": "ask", "target": "write"}],
+            "graph": {
+                "entry": "read",
+                "nodes": [
+                    {"id": "read", "node_type": "task", "tool_name": "read_record"},
+                    {"id": "ask", "node_type": "human"},
+                    {"id": "write", "node_type": "task", "tool_name": "write_record", "is_mutation": True},
+                    {"id": "done", "node_type": "succeed"},
+                ],
+                "edges": [
+                    {"source": "read", "target": "ask"},
+                    {"source": "ask", "target": "write"},
+                    {"source": "write", "target": "done"},
+                ],
+            },
+            "expect": {"valid": False, "invalid_has": "unreachable"},
+        },
+    ]
+
+
+def _core_hidden_broad() -> list[dict]:
+    """Sensitive fields never ride on read args."""
+    cases: list[dict] = []
+    for hidden in ("secret", "pay", "token", "hash", "ssn", "iban", "address", "salary"):
+        cases.append({
+            "id": f"core.gen.hidden2.{hidden}",
+            "lane": "graph",
+            "brief": f"{hidden} is not among the read fields.",
+            "graph": {
+                "entry": "read",
+                "nodes": [
+                    {"id": "read", "node_type": "task", "tool_name": "read_record", "tool_args": {"fields": ["id", "status"]}},
+                    {"id": "done", "node_type": "succeed"},
+                ],
+                "edges": [{"source": "read", "target": "done"}],
+            },
+            "expect": {
+                "valid": True,
+                "args": {"read": {"fields": ["id", "status"]}},
                 "hidden_on": {"read": [hidden]},
             },
         })

@@ -1,0 +1,66 @@
+# PL-02 — plan-revision continuity (PULSE-PLAN-CONTRACT §5, PF-03).
+#
+# Live Chat, read-only, Plan dial. A **precondition** the bank cannot seed
+# itself: an Agent plan exists and the FE "Discuss" handoff was opened for it,
+# so ``state.active_plans`` carries the plan id. Until an operator seeds that
+# plan on a nibras cell, this bank is **missing** — never zero-fail.
+#
+# The two-turn shape: the FE discuss seed (a message carrying the plan id) is
+# answered in Chat as a revision (typed ``plan_revision`` on state); "apply"
+# then hands the typed revision to Agent with 0 LLM calls and no host write
+# (ADR-0046). The revision itself lives in state, not in a plan card, so turn 1
+# only asserts "not degraded"; turn 2 asserts a plan/handoff with no writer.
+
+bank: PL-02
+purpose: "Plan revision is typed state — a discuss seed stays a revision and 'apply' is a 0-LLM handoff to Agent."
+tier: live_plan
+surface: chat_plan
+sample_threads: 4
+sample_turns: 8
+language_threads: {en: 2, ar: 2}
+threshold: "100% rows; apply -> plan/handoff with llm_calls=0; no host write"
+run: live_read
+precondition: "operator seeds an Agent plan and opens the FE Discuss handoff"
+
+threads:
+  - id: pl02-refine-en
+    no_host_write: true
+    mode: plan
+    turns:
+      - say: "I'd like to refine plan (plan 29e0cdbf-1aa4-4f1c-8b61-36c02312a045): \"Compute payroll variance\".\n\nDISCUSSION ONLY — reply in Chat with one improved brief."
+        not_degraded: true
+      - say: "apply"
+        plan_or_handoff: true
+        llm_calls_max: 0
+        not_degraded: true
+
+  - id: pl02-refine-en-2
+    no_host_write: true
+    mode: plan
+    turns:
+      - say: "I'd like to refine plan (plan 29e0cdbf-1aa4-4f1c-8b61-36c02312a045): \"Count employees by status\".\n\nDISCUSSION ONLY — reply in Chat with one improved brief."
+        not_degraded: true
+      - say: "why in a single step?!"
+        not_degraded: true
+
+  - id: pl02-refine-ar
+    no_host_write: true
+    mode: plan
+    turns:
+      - say: "أرغب في تحسين الخطة (plan 29e0cdbf-1aa4-4f1c-8b61-36c02312a045): \"احسب فرق الرواتب\".\n\nللنقاش فقط — ردّ في الدردشة بملخص محسّن."
+        not_degraded: true
+      - say: "اعتمدها"
+        plan_or_handoff: true
+        llm_calls_max: 0
+        not_degraded: true
+
+  - id: pl02-refine-ar-2
+    no_host_write: true
+    mode: plan
+    turns:
+      - say: "أرغب في تحسين الخطة (plan 29e0cdbf-1aa4-4f1c-8b61-36c02312a045): \"عدّ الموظفين\".\n\nللنقاش فقط — ردّ في الدردشة بملخص محسّن."
+        not_degraded: true
+      - say: "طبق"
+        plan_or_handoff: true
+        llm_calls_max: 0
+        not_degraded: true

@@ -29,6 +29,13 @@ from ai.eval.tasks_retest import (
 
 EVIDENCE = Path(__file__).resolve().parents[3] / "docs" / "pulse" / "evidence"
 KPI_IDS = ("R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9", "R10", "R11", "R12")
+#: R4 is only reachable from a committed Taskso browser file. The API bench never
+#: opens Taskso, so its absence keeps R4 `partial` (TB-08).
+TASKSO_BROWSER_GLOB = "PV2-tasks-taskso-*.json"
+#: A completed observe. Anything else is a failed Run and cannot pass (TL-4).
+_OBSERVE_STATUS_OK = frozenset({"completed", "completed_with_gaps"})
+#: Fields an unasked read must never echo (TL-5).
+_HIDDEN_PAY_FIELDS = ("basic_salary", "net_pay")
 
 
 def payroll_oracle(token: str) -> dict[str, Any]:
@@ -91,13 +98,23 @@ def _step_args(plan: dict) -> list[dict]:
 def check_host_grounded(kind: str, plan: dict, host: Host, token: str) -> list[str]:
     text = _blob(plan)
     misses = []
+    # TL-4: a Run that did not complete is a miss even when a tool name is present.
+    status = str(plan.get("status") or "")
+    if status and status not in _OBSERVE_STATUS_OK:
+        misses.append(f"status={status}")
+    # TL-5 / TF-05: an observe never carries a host mutation step.
+    for step in plan.get("steps") or []:
+        if isinstance(step, dict) and step.get("is_mutation"):
+            misses.append("mutation step in observe")
+            break
     if kind == "profile":
         name = str(host.me().get("full_name") or "")
-        pay = str(host.me().get("basic_salary") or "")
         if name and name not in text:
             misses.append("missing me.full_name")
-        if pay and pay in text:
-            misses.append("leaked me.basic_salary")
+        for field in _HIDDEN_PAY_FIELDS:
+            value = str(host.me().get(field) or "")
+            if value and value in text:
+                misses.append(f"leaked me.{field}")
         return misses
     if kind == "payroll":
         oracle = payroll_oracle(token)
@@ -145,9 +162,10 @@ def check_host_grounded(kind: str, plan: dict, host: Host, token: str) -> list[s
         if code != 200 or not rows:
             misses.append(f"host direct-reports {code}")
             return misses
-        pay = str(host.me().get("basic_salary") or "")
-        if pay and pay in text:
-            misses.append("leaked me.basic_salary")
+        for field in _HIDDEN_PAY_FIELDS:
+            value = str(host.me().get(field) or "")
+            if value and value in text:
+                misses.append(f"leaked me.{field}")
         for row in rows:
             if not isinstance(row, dict):
                 continue
@@ -232,8 +250,15 @@ def run_stability(token: str, n: int = 3) -> dict:
     }
 
 
-def _kpi(oid: str, name: str, honest: str, note: str) -> dict:
-    return {"id": oid, "name": name, "honest": honest, "note": note}
+def _kpi(oid: str, name: str, honest: str, note: str, *, falsified_by: str = "", tier: str = "live") -> dict:
+    return {
+        "id": oid,
+        "name": name,
+        "honest": honest,
+        "note": note,
+        "falsified_by": falsified_by,
+        "tier": tier,
+    }
 
 
 MY_USER = "emp_1067"
@@ -315,6 +340,46 @@ def score_r6(personas: dict | None) -> tuple[str, str]:
     )
 
 
+def score_r7(_rows: dict[str, Any] | None = None) -> tuple[str, str]:
+    """R7 write consent is `missing` without a STACK-HOLD write window (TB-06).
+
+    The production bench is observe/refuse only. It does not run a host write,
+    so it can never compute R7 from a case. A stub must not close it.
+    """
+    return (
+        "missing",
+        "Leave/loan/attendance write needs STACK-HOLD + PULSE_NIGHTLY_LIVE=1 as emp_1067. "
+        "The observe/refuse bench never runs the case; a host row must exist only after "
+        "Approve, Run and /steps/confirm/ 200.",
+    )
+
+
+def score_r8(_rows: dict[str, Any] | None = None) -> tuple[str, str]:
+    """R8 night cleanliness: night 2026-09-23 FAIL stays until a new live night PASSes."""
+    return (
+        "fail",
+        "Night 2026-09-23 FAIL stays. Dry-run / SKIP / FAIL do not clear it. A new live "
+        "night PASS on the 3 ESS journeys is required and is not run from this seat.",
+    )
+
+
+def score_r4(banner_bad: bool, taskso_file: str | None = None) -> tuple[str, str]:
+    """R4 cockpit honesty. The API bench cannot reach it; a Taskso file can (TB-08)."""
+    if banner_bad:
+        return (
+            "fail",
+            "final_response says “what changed” on a read.",
+        )
+    if taskso_file:
+        return ("reached", f"Taskso browser file {taskso_file} shows the read result line.")
+    return (
+        "partial",
+        "API final_response is read-shaped. This bench does not open Taskso, so R4 cannot be "
+        "reached here. Browser check 2026-09-27: Result line was “Finished. Here’s what I found.” "
+        "on the profile/leave read and the GOSI read.",
+    )
+
+
 def score_kpis(rows: dict[str, Any]) -> list[dict]:
     r1 = rows["grounded"]
     r2 = rows["bind"]
@@ -325,17 +390,28 @@ def score_kpis(rows: dict[str, Any]) -> list[dict]:
     r10 = rows["latency"]
     r11 = rows["chat"]
     kpis = [
-        _kpi("R1", "Host-grounded figures", r1["honest"], r1["note"]),
-        _kpi("R2", "Latest-period bind", r2["honest"], r2["note"]),
-        _kpi("R3", "First-turn Create", r3["honest"], r3["note"]),
-        _kpi("R4", "Cockpit honesty", r4["honest"], r4["note"]),
-        _kpi("R5", "Planner stability", r5["honest"], r5["note"]),
-        _kpi("R6", "Persona coverage", *score_r6(rows.get("personas"))),
-        _kpi("R7", "Write consent live", "missing", "Leave/loan/attendance write needs STACK-HOLD + emp_1067. Not run."),
-        _kpi("R8", "Night cleanliness", "fail", "Night 2026-09-23 FAIL stays. Dry-run / SKIP do not clear it."),
-        _kpi("R9", "Arabic Tasks", r9["honest"], r9["note"]),
-        _kpi("R10", "Production latency", r10["honest"], r10["note"]),
-        _kpi("R11", "Chat never writes", r11["honest"], r11["note"]),
+        _kpi("R1", "Host-grounded figures", r1["honest"], r1["note"],
+             falsified_by="an observe names a host field absent from the payload; failure = R1 'fail' (check_host_grounded misses)."),
+        _kpi("R2", "Latest-period bind", r2["honest"], r2["note"],
+             falsified_by="analyze_gosi_committed not bound to the latest committed period_end; failure = R2 'fail'."),
+        _kpi("R3", "First-turn Create", r3["honest"], r3["note"],
+             falsified_by="Plan dial draft does not commit to a pending_approval task; failure = R3 'fail'."),
+        _kpi("R4", "Cockpit honesty", r4["honest"], r4["note"], tier="live_browser",
+             falsified_by="a Result line says “what changed” on a read; failure = R4 'fail'. No Taskso file → R4 'partial', never 'reached'."),
+        _kpi("R5", "Planner stability", r5["honest"], r5["note"],
+             falsified_by="a human payroll brief binds a tool other than list_payroll_runs; failure = R5 'fail'."),
+        _kpi("R6", "Persona coverage", *score_r6(rows.get("personas")),
+             falsified_by="emp_1067/emp_1712 host_misses non-empty, payroll-runs not 403, or a null plan scored as a name miss; failure = R6 'fail'."),
+        _kpi("R7", "Write consent live", *score_r7(), tier="live_write",
+             falsified_by="R7 'reached' without a STACK-HOLD write window and a host row after /steps/confirm/ 200; failure = a 'reached' R7 with no write evidence."),
+        _kpi("R8", "Night cleanliness", *score_r8(),
+             falsified_by="night 2026-09-23 rewritten, or a dry-run/SKIP counted as a PASS; failure = R8 'reached' without a new live night PASS."),
+        _kpi("R9", "Arabic Tasks", r9["honest"], r9["note"],
+             falsified_by="an Arabic leave-balance brief does not bind get_my_leave_balance or does not complete; failure = R9 'fail'."),
+        _kpi("R10", "Production latency", r10["honest"], r10["note"],
+             falsified_by="observe+chat p50 > 8000 ms or any case > 30 s; failure = R10 'fail'."),
+        _kpi("R11", "Chat never writes", r11["honest"], r11["note"],
+             falsified_by="an ungated Chat leave intent changes the host leave count; failure = R11 'fail'."),
     ]
     reached = sum(1 for k in kpis if k["honest"] == "reached")
     failed = sum(1 for k in kpis if k["honest"] == "fail")
@@ -343,7 +419,8 @@ def score_kpis(rows: dict[str, Any]) -> list[dict]:
     r12_honest = "reached" if reached == 11 and failed == 0 and missing == 0 else "fail"
     kpis.append(_kpi(
         "R12", "Enterprise go-live", r12_honest,
-        "READY only when R1–R11 are reached. Lab T1–T10 never closes R12.",
+        "READY only when R1–R11 are reached on one full file. Lab T1–T10 never closes R12.",
+        falsified_by="R12 'reached' while any of R1–R11 is not reached on the same file; failure = R12 'fail'.",
     ))
     return kpis
 
@@ -435,6 +512,9 @@ def main(argv: list[str] | None = None) -> int:
         _, detail = _call("GET", f"/ai/plans/{profile['plan_id']}/", token=token, timeout=60)
         cockpit_text = str((detail or {}).get("final_response") or "")
     banner_bad = "what changed" in cockpit_text.lower()
+    taskso_files = sorted(EVIDENCE.glob(TASKSO_BROWSER_GLOB))
+    taskso_file = taskso_files[-1].name if taskso_files else None
+    cockpit_honest, cockpit_note = score_r4(banner_bad, taskso_file)
 
     rows = {
         "grounded": {
@@ -463,14 +543,8 @@ def main(argv: list[str] | None = None) -> int:
             ),
         },
         "cockpit": {
-            "honest": "fail" if banner_bad else "partial",
-            "note": (
-                "final_response says “what changed” on a read."
-                if banner_bad else
-                "API final_response is read-shaped. This bench does not open Taskso. "
-                "Browser check 2026-09-27: Result line was “Finished. Here’s what I found.” "
-                "on the profile/leave read and the GOSI read."
-            ),
+            "honest": cockpit_honest,
+            "note": cockpit_note,
         },
         "stability": {
             "honest": "reached" if stability.get("pass") else "fail",
@@ -520,7 +594,7 @@ def main(argv: list[str] | None = None) -> int:
         "n": 12,
         "rule": (
             "Production READY only when R1–R11 are reached. "
-            "Lab T1–T10 and structural 417/417 never close R12. "
+            "The lab meter T1–T10 and the structural workbench never close R12. "
             "Night 2026-09-23 FAIL stays. L6/L7 not scored."
         ),
         "kpis": kpis,

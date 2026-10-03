@@ -1,5 +1,6 @@
-# Agent / plan path bank — the surface G5 and G6 do not score.
-# Offline, no LLM. Scored by `python -m ai.eval.agent_plan_runner`.
+# Pulse Plan path bank — the read-vs-goal, revision, and boundary surface that
+# G5 / G6 do not score. Offline, no LLM. Scored by
+# `python -m ai.eval.agent_plan_runner`; contract `docs/pulse/PULSE-PLAN-CONTRACT.md`.
 #
 # What this holds:
 #   * A Discuss seed is the plan id the composer writes, not an English phrase.
@@ -7,8 +8,13 @@
 #   * "apply" / "accept" / "اعتمدها" commit that question into a 0-LLM handoff.
 #   * A longer sentence that merely contains those words does not commit.
 #   * Chat never calls edit_plan (ADR-0046). Agent applies via the Tasks panel.
+#   * A read is a question (no plan card); a goal is a plan — the planner decides.
+#   * await-user pauses the run; a guard asks a typed choice; a failed
+#     dependency blocks the export (ADR-0052 I3/I4).
 #
 # Adding a phrase list in engine/ to pass a case here is a failure of the bank.
+
+# ── Seed (plan id is the signal, not the prose) ──────────────────────────────
 
 - id: ap-001
   check: seed
@@ -49,6 +55,29 @@
   expect:
     discuss: false
 
+- id: ap-013
+  check: seed
+  note: "Arabic FE refine draft carries the same plan-id signal (language-independent)"
+  process: plan
+  message: |
+    أرغب في تحسين الخطة (plan e20c2937-7ece-45b0-8db6-3f40e89ee35d): "احسب فرق الرواتب".
+
+    للنقاش فقط — ردّ في الدردشة بملخص محسّن.
+  expect:
+    discuss: true
+    plan_id: e20c2937-7ece-45b0-8db6-3f40e89ee35d
+
+- id: ap-014
+  check: seed
+  note: "A pasted plan id still links even when the prose is not the FE marker"
+  process: plan
+  message: 'Plan e20c2937-7ece-45b0-8db6-3f40e89ee35d — refine the decomposition.'
+  expect:
+    discuss: true
+    plan_id: e20c2937-7ece-45b0-8db6-3f40e89ee35d
+
+# ── Continuity (typed state, not a transcript scan) ──────────────────────────
+
 - id: ap-005
   check: continuity
   note: "Follow-up has no plan id; the open question keeps the thread"
@@ -56,6 +85,24 @@
   expect:
     discuss: true
     resolved: false
+
+- id: ap-015
+  check: continuity
+  note: "A substantive refine turn stays in discuss (no apply)"
+  message: "think deeper, compare to latest online numbers and make a doc file report"
+  expect:
+    discuss: true
+    resolved: false
+
+- id: ap-016
+  check: continuity
+  note: "Off the Plan dial the open revision no longer applies"
+  process: ask
+  message: "why in a single step?!"
+  expect:
+    discuss: false
+
+# ── Commit (shared affirmation module; 0-LLM handoff) ────────────────────────
 
 - id: ap-006
   check: commit
@@ -94,6 +141,20 @@
   expect:
     resolved: false
 
+- id: ap-017
+  check: commit
+  message: "yes apply"
+  expect:
+    resolved: true
+    llm_calls: 0
+
+- id: ap-018
+  check: commit
+  message: "accept? are you sure"
+  expect:
+    resolved: false
+    discuss: true
+
 - id: ap-011
   check: ess_confirm
   note: "apply does not commit an ESS confirm question"
@@ -107,3 +168,231 @@
   expect:
     action: cancel
     flag: chat_no_host_mutation
+
+- id: ap-019
+  check: chat_guard
+  tool_name: approve_plan
+  note: "approve_plan is cancelled on Chat too — Chat proposes, Agent applies"
+  expect:
+    action: cancel
+    flag: chat_no_host_mutation
+
+# ── Proposal: read vs goal (the Plan/Ask boundary) ───────────────────────────
+
+- id: ap-020
+  check: proposal
+  note: "A single bound read is a question, not a task"
+  brief: "What is my leave balance?"
+  plan:
+    steps:
+      - {step_id: 1, intent: "Read my leave balance", tool_name: call_host_api, tool_args: {api_name: get_my_leave_balance}, is_mutation: false}
+  expect:
+    is_task: false
+    payload: false
+
+- id: ap-021
+  check: proposal
+  note: "On the Plan dial one host read is shown as a reviewable draft"
+  brief: "List my direct reports"
+  single_read: true
+  plan:
+    steps:
+      - {step_id: 1, intent: "List my direct reports", tool_name: call_host_api, tool_args: {api_name: list_my_direct_reports}, is_mutation: false}
+  expect:
+    is_task: false
+    payload: true
+    kind: plan_proposal
+    blocks_create: false
+
+- id: ap-022
+  check: proposal
+  note: "Two reads are a task worth a plan"
+  brief: "lowest 20 salaries and their jobs"
+  plan:
+    steps:
+      - {step_id: 1, intent: "Read the 20 lowest salaries", tool_name: call_host_api, tool_args: {api_name: list_payslip_lines, body: {limit: 20}}, is_mutation: false}
+      - {step_id: 2, intent: "Read their positions", tool_name: call_host_api, tool_args: {api_name: list_employees}, depends_on: [1], is_mutation: false}
+  expect:
+    is_task: true
+    payload: true
+    kind: plan_proposal
+    blocked_count: 0
+
+- id: ap-023
+  check: proposal
+  note: "A goal with an export is a task even at one step"
+  brief: "Export my leave balance as a workbook"
+  plan:
+    steps:
+      - {step_id: 1, intent: "Export the workbook", tool_name: export_document, tool_args: {format: xlsx}, is_mutation: true}
+  expect:
+    is_task: true
+    payload: true
+
+- id: ap-024
+  check: proposal
+  note: "An unnamed export over a catalog that declares no fields blocks Create"
+  brief: "Board pack with average"
+  contract: true
+  plan:
+    steps:
+      - {step_id: 0, intent: headcount, tool_name: call_host_api, tool_args: {api_name: analyze_employees, dimension: org_unit}}
+      - {step_id: 1, intent: export, tool_name: export_document, tool_args: {title: Report, columns: [average]}, depends_on: [0], is_mutation: true}
+  expect:
+    is_task: true
+    payload: true
+    blocked_count: 1
+    blocks_create: true
+
+- id: ap-025
+  check: proposal
+  note: "A short cancel drops the open draft"
+  message: "cancel"
+  expect:
+    cancelled: true
+
+- id: ap-026
+  check: proposal
+  note: "A question or a longer sentence is a new brief, not a cancel"
+  message: "why you approved it ?!"
+  expect:
+    cancelled: false
+
+# ── await-user ───────────────────────────────────────────────────────────────
+
+- id: ap-027
+  check: await_user
+  note: "An ask_clarification step pauses the run before later steps"
+  step: {step_id: 0, intent: "Own slips or the org?", tool_name: ask_clarification}
+  expect:
+    paused: true
+    executed: false
+    draft_text: "Own slips or the org?"
+
+- id: ap-028
+  check: await_user
+  note: "A clarification payload pauses even when the tool name was lost"
+  step: {step_id: 1, intent: scope}
+  tool_output: {type: clarification, question: "Own or org?", choices: [own, org]}
+  expect:
+    paused: true
+    executed: false
+    draft_text: "Own or org?"
+
+- id: ap-029
+  check: await_user
+  note: "An answered clarification finishes instead of asking again"
+  step: {step_id: 2, intent: "Confirm the draft", tool_name: ask_clarification}
+  answered_token: token-1
+  expect:
+    resumed: true
+    executed: true
+
+- id: ap-030
+  check: await_user
+  note: "A plain read never pauses"
+  step: {step_id: 2, intent: "list slips", tool_name: call_host_api}
+  expect:
+    paused: false
+
+# ── Guard typing (ADR-0052 I4) ───────────────────────────────────────────────
+
+- id: ap-031
+  check: guard
+  note: "guard field true → the branch runs"
+  step: {step_id: 6, intent: board pack, tool_name: export_document, guard: {step: 1, field: within_band, value: true}}
+  outputs: {1: {within_band: true}}
+  expect:
+    outcome: run
+
+- id: ap-032
+  check: guard
+  note: "guard field false → the branch is skipped"
+  step: {step_id: 6, intent: board pack, tool_name: export_document, guard: {step: 1, field: within_band, value: true}}
+  outputs: {1: {within_band: false}}
+  expect:
+    outcome: skip
+
+- id: ap-033
+  check: guard
+  note: "A missing guard field pauses for the operator"
+  step: {step_id: 6, intent: board pack, tool_name: export_document, guard: {step: 1, field: within_band, value: true}}
+  outputs: {1: {}}
+  expect:
+    outcome: pause
+
+- id: ap-034
+  check: guard
+  note: "An unresolved guard asks a typed True/False choice on the source step"
+  step: {step_id: 6, intent: board pack, tool_name: export_document, guard: {step: 1, field: within_band, value: true}}
+  expect:
+    choice_kind: guard
+    choice_step: 1
+    choice_values: [true, false]
+
+- id: ap-035
+  check: guard
+  note: "I3 consent card: a completed dependency is ok, a failed one is not"
+  depends_on: [3]
+  statuses:
+    3: {status: completed, failure_class: ""}
+  expect:
+    evidence_ok: [true]
+
+- id: ap-036
+  check: guard
+  note: "I3 consent card: failure_class on a dependency is not ok"
+  depends_on: [3]
+  statuses:
+    3: {status: failed, failure_class: missing_binding}
+  expect:
+    evidence_ok: [false]
+
+# ── Affirmation is typed, language-aware (dialogue/affirmation.py) ──────────
+
+- id: ap-037
+  check: affirmation
+  message: "yes"
+  expect:
+    is_affirmation: true
+    is_commit: true
+    starts_with: true
+
+- id: ap-038
+  check: affirmation
+  note: "The Arabic commit word is a commit affirmation, not a bare yes"
+  message: "اعتمدها"
+  expect:
+    is_affirmation: false
+    is_commit: true
+    starts_with: false
+
+- id: ap-039
+  check: affirmation
+  note: "A question is never an affirmation"
+  message: "what's my leave balance"
+  expect:
+    is_affirmation: false
+    is_commit: false
+    starts_with: false
+
+- id: ap-040
+  check: affirmation
+  note: "A negation disqualifies the whole message; the opener alone still agrees"
+  message: "yes but"
+  expect:
+    is_affirmation: false
+    is_commit: false
+    starts_with: true
+
+# ── Contract mutation seen from the path bank (tool stripping) ───────────────
+
+- id: ap-041
+  check: contract
+  note: "An invented host API is degraded to a gap, never a call"
+  brief: "escalate the variance to Finance"
+  steps:
+    - {step_id: 0, intent: escalate, tool_name: call_host_api, tool_args: {api_name: escalate_to_finance}}
+  blocking: [gap]
+  expect:
+    tool_names: {0: null}

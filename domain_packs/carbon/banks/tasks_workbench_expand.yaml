@@ -1,14 +1,125 @@
-# Compact Carbon data-trust expand spec. Domain words stay in this pack.
+# Compact Carbon data-trust + emissions expand spec. Domain words stay in this pack.
+# Extended 2026-10-03 with the real emissions read/write tool names (coverage,
+# campus intake, calculation, assurance, disclosure) and quotable GHG facts.
 prefix: carbon
 
 mutations:
+  # Data-trust pilot capabilities.
   - {id: attest, tool: attest_lineage, undo: revoke_attestation}
   - {id: publish, tool: publish_trust_pack}
+  # Emissions host writes (Agent + approval or a host screen; never Chat).
+  - id: coverage-row
+    tool: submit_coverage_row
+    sod: [campus_data_owner, inventory_lead]
+    after: [get_inventory_coverage, list_inventory_source_statuses]
+  - id: coverage-exclusion
+    tool: exclude_coverage_row
+    sod: [campus_data_owner, inventory_lead]
+    after: [get_inventory_coverage, list_inventory_source_statuses]
+  - id: calculation
+    tool: run_calculation
+    after: [get_calculation_summary, list_inventory_source_statuses]
+  - id: assurance
+    tool: record_assurance_engagement
+    sod: [requester, reviewer]
+    after: [get_onboarding_status, list_reporting_periods]
+  - id: campus-intake
+    tool: submit_campus_intake
+    after: [get_inventory_coverage, list_inventory_source_statuses]
+  - id: dq-rule
+    tool: create_dq_rule
+    sod: [process_owner, publisher]
+    after: [list_dq_rules, get_data_product_details]
 
 reads:
+  # Data-trust reads.
   - {id: lineage, tool: get_lineage}
   - {id: sources, tool: list_trust_sources}
   - {id: export, tool: export_document}
+  # Emissions reads (GET catalog entries).
+  - {id: factors, tool: list_emission_factors}
+  - {id: gwp, tool: list_gwp_gases}
+  - {id: periods, tool: list_reporting_periods}
+  - {id: summary, tool: get_calculation_summary}
+  - {id: chairman, tool: get_chairman_overview}
+  - {id: coverage, tool: get_inventory_coverage}
+  - {id: inventory-sources, tool: list_inventory_sources}
+  - {id: statuses, tool: list_inventory_source_statuses}
+  - {id: targets, tool: list_coverage_targets}
+  - {id: tasks, tool: list_coverage_tasks}
+  - {id: boundaries, tool: list_organizational_boundaries}
+  - {id: rules, tool: list_calculation_rules}
+  - {id: recalculation, tool: list_recalculation_triggers}
+  - {id: disclosure, tool: get_disclosure_export}
+  - {id: onboarding, tool: get_onboarding_status}
+  - {id: my-data, tool: get_my_data}
 
 citations:
   - {id: lineage, tokens: [lineage, attested], hit: "lineage is attested before publish", miss: "export is a read"}
+  - {id: scope2, tokens: [Scope, 2], hit: "Scope 2 has two methods: location-based and market-based", miss: "Scope 1 is direct emissions"}
+  - {id: missing-zero, tokens: [missing, 0], hit: "a missing stream is not 0 kg", miss: "a missing stream counts as zero"}
+  - {id: tiers, tokens: [tier, 5], hit: "tier 5 proxy may be stored but is not the academy footprint", miss: "tier 1 audited is the best data"}
+  - {id: offsets, tokens: [offset], hit: "inventory math is activity x emission factor and no offset is subtracted", miss: "a credit reduces the total"}
+  - {id: assurance, tokens: [ISO, 14064-3], hit: "the assurance standard is ISO 14064-3", miss: "assurance is a UI badge"}
+  # Decoys stay a tempting WRONG claim but omit a token, so a strict token match
+  # cannot cite them (the sibling miss strings follow the same shape).
+  - {id: coverage-complete, tokens: [coverage, complete], hit: "coverage never reads complete", miss: "coverage is fully populated once published"}
+  - {id: period-open, tokens: [period, open], hit: "exactly one period is open for data entry", miss: "two periods are available for data entry"}
+  - {id: gwp, tokens: [GWP, AR6], hit: "GWP values follow IPCC AR6", miss: "GWP values follow AR5"}
+  - {id: scope2-ar, tokens: [النطاق, 2], hit: "النطاق 2 له طريقتان: الموقع والسوق", miss: "النطاق 1 انبعاثات مباشرة"}
+  - {id: missing-ar, tokens: [ناقص, 0], hit: "التيار الناقص ليس 0 كغ", miss: "التيار الناقص يُحسب صفرا"}
+
+binds:
+  - id: period-summary
+    list: list_reporting_periods
+    detail: get_calculation_summary
+    key: reporting_period_id
+  - id: source-coverage
+    list: list_inventory_sources
+    detail: get_inventory_coverage
+    key: reporting_period
+
+observes:
+  - {id: summary, tool: get_calculation_summary}
+  - {id: coverage, tool: get_inventory_coverage}
+  - {id: factors, tool: list_emission_factors}
+  - {id: targets, tool: list_coverage_targets}
+  - {id: statuses, tool: list_inventory_source_statuses}
+
+stacks:
+  - id: coverage
+    read: get_inventory_coverage
+    write: submit_coverage_row
+    gate1: "required > 0"
+    gate2: "period_open == 1"
+    variants:
+      - {id: ok, required: 5, period_open: 1, expect: write}
+      - {id: empty, required: 0, period_open: 1, expect: short}
+      - {id: closed, required: 5, period_open: 0, expect: mismatch}
+  - id: calculation
+    read: get_calculation_summary
+    write: run_calculation
+    gate1: "rows > 0"
+    gate2: "period_open == 1"
+    variants:
+      - {id: ok, rows: 12, period_open: 1, expect: write}
+      - {id: no-rows, rows: 0, period_open: 1, expect: short}
+      - {id: closed, rows: 12, period_open: 0, expect: mismatch}
+  - id: assurance
+    read: get_onboarding_status
+    write: record_assurance_engagement
+    gate1: "period_open == 1"
+    gate2: "vvb_fields == 5"
+    variants:
+      - {id: ok, vvb_fields: 5, period_open: 1, expect: write}
+      - {id: closed, vvb_fields: 5, period_open: 0, expect: short}
+      - {id: partial, vvb_fields: 3, period_open: 1, expect: mismatch}
+  - id: dq-rule
+    read: list_dq_rules
+    write: create_dq_rule
+    gate1: "validated == 1"
+    gate2: "no_duplicate == 1"
+    variants:
+      - {id: ok, validated: 1, no_duplicate: 1, expect: write}
+      - {id: unvalidated, validated: 0, no_duplicate: 1, expect: short}
+      - {id: duplicate, validated: 1, no_duplicate: 0, expect: mismatch}
